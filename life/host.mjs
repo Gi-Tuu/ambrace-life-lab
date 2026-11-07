@@ -26,6 +26,9 @@ const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 
 const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(process.env.SEED ?? 7), brain: 'local' };
+// 调用预算闸门：线上审议路径必须与离线脚本同源受控，否则"MAX_CALLS"只是文档里的装饰（真实风险：无上限烧第三方余额）
+const BUDGET = Number(process.env.MAX_CALLS ?? 120);
+const ATTEMPT_CAP = 20;
 const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [] }, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
@@ -70,10 +73,12 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   ].filter(Boolean);
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
+  if (S.model.calls >= BUDGET) return null; // 预算用尽：退回确定性替身，世界照跑，不再发请求
+  const note = (msg) => { S.model.attempts.push(msg); if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift(); };
   for (let i = 0; i < CFG.providers.length; i++) {
     // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
     const mdl = CFG.models[i] ?? CFG.model;
-    if (!mdl) { S.model.attempts.push('NO_MODEL'); continue; }
+    if (!mdl) { note('NO_MODEL'); continue; }
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), 20000);
     try {
@@ -83,7 +88,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
         body: JSON.stringify({ model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }),
         signal: ac.signal,
       });
-      if (!res.ok) { S.model.attempts.push(`HTTP ${res.status}`); continue; }
+      if (!res.ok) { note(`HTTP ${res.status}`); continue; }
       const j = await res.json();
       S.model.calls += 1;
       S.model.tokens += j.usage?.total_tokens ?? 0;
@@ -93,7 +98,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
       agent.lastReason = p.reason ?? '';
       return { id: hit.id };
     } catch (e) {
-      S.model.attempts.push(String(e.message).slice(0, 40));
+      note(String(e.message).slice(0, 40));
     } finally {
       clearTimeout(to);
     }
