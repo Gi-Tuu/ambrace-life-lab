@@ -17,4 +17,4 @@ contest.txt
 /*.err
 /dom*.html
 /s3-*.json
-/server.pidms_deploy.json
+/server.pid
