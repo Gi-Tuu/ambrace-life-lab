@@ -12,7 +12,7 @@ process.env.SEED_FILE = join(DIR, 'no-seed.json'); // 其余测试保持 hermeti
 const CAP = Number(process.env.CATCHUP_CAP_MIN ?? 360);
 const PROD = resolve(process.cwd(), 'data', 'world.json');
 
-const { host } = await import('./host.mjs');
+const { host, budgetTick } = await import('./host.mjs');
 const snap = () => host.snapshot();
 
 test('存档只落在 DATA_DIR，不碰真实 ./data', async () => {
@@ -83,6 +83,17 @@ test('补时只补慢过程，不补决策；超过上限要如实标截断', as
   const big = await host.ctl({ action: 'catchup', minutes: CAP + 40 });
   assert.equal(big.missed.capped, true, '超过截断上限却没标 capped');
   assert.equal(big.missed.applied, CAP, `实际补时 ${big.missed.applied} 不等于上限 ${CAP}`);
+});
+
+test('每日预算：同日不重置，跨天归零（魔粒按天回血，预算必须同节奏）', () => {
+  const m = { calls: 60, tokens: 900, attempts: ['HTTP 402'], dayKey: '2026-11-07' };
+  budgetTick(m, '2026-11-07');
+  assert.equal(m.calls, 60, '同一天把预算重置了 ⇒ 一天内会被重复放行，烧钱无上限');
+  budgetTick(m, '2026-11-08');
+  assert.equal(m.calls, 0, '跨天后预算没归零 ⇒ 额度用完就永久停摆，与签到回血节奏不符');
+  assert.equal(m.tokens, 0);
+  assert.deepEqual(m.attempts, []);
+  assert.equal(m.dayKey, '2026-11-08');
 });
 
 test('容器重建无存档时载入内置种子；连种子也没有才新建世界', async () => {
