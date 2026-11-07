@@ -18,6 +18,8 @@ const PROVIDERS = (process.env.MODEL_PROVIDERS ?? process.env.MODEL_BASE_URL ?? 
   .filter(Boolean);
 const KEYS = (process.env.MODEL_KEYS ?? process.env.MODEL_KEY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const MODEL = process.env.MODEL_NAME ?? '';
+// 每家供应商的模型 id 前缀可能不同（魔搭 deepseek-ai/ vs 第三方 deepseek/）：按位对应，缺位退回 MODEL
+const MODELS = (process.env.MODEL_NAMES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const UP_TIMEOUT_MS = Number(process.env.UP_TIMEOUT_MS ?? 25000);
 const MAX_BODY = 64 * 1024;
 
@@ -78,7 +80,7 @@ async function chatProxy(req, res) {
       const up = await fetch(`${PROVIDERS[i]}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${KEYS[i] ?? KEYS[0]}` },
-        body: JSON.stringify({ model: MODEL, temperature: Math.min(1.2, Math.max(0, Number(body.temperature) || 0.85)), messages, response_format: { type: 'json_object' }, max_tokens: 120 }),
+        body: JSON.stringify({ model: MODELS[i] ?? MODEL, temperature: Math.min(1.2, Math.max(0, Number(body.temperature) || 0.85)), messages, response_format: { type: 'json_object' }, max_tokens: 120 }),
         signal: ac.signal,
       });
       const text = await up.text();
@@ -103,7 +105,7 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         model: MODEL,
-        providers: PROVIDERS.map((b, i) => ({ base: b, key: Boolean(KEYS[i] ?? KEYS[0]) })),
+        providers: PROVIDERS.map((b, i) => ({ base: b, key: Boolean(KEYS[i] ?? KEYS[0]), model: MODELS[i] ?? MODEL })),
         engine: 'life-architecture',
         listen: `${HOST}:${PORT}`,
         dataDir: process.env.DATA_DIR ?? 'data',
