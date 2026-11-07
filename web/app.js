@@ -3,6 +3,10 @@
 const ROOMS = ['home', 'hall', 'watch', 'store'];
 const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 const COLORS = { a1: '#8fb4ff', a2: '#ffb27a', a3: '#9fd8b6', p1: '#e6eaef' };
+// M3 目标承诺层 / M4 耦合调制权的读数翻译。键名必须和机制侧一致，这里只做呈现，不解释机制。
+const GOALS = { recover: '补给', connect: '联结', explore: '外探', maintain: '维持' };
+const INTERRUPTS = { committed_goal_unavailable: '目标这刻没动作', goal_has_no_visible_action: '看不到能干的事', only_coupling_actions: '此刻只剩耦合动作', no_eligible_action: '没有合格动作' };
+const COUPLING_VARS = ['input', 'available', 'refuse'];
 const $ = (id) => document.getElementById(id);
 
 // 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
@@ -130,7 +134,32 @@ function worldStat(pack) {
   const st = pack.stat ?? {};
   const withSched = agents.filter((a) => a.sched);
   const onTime = withSched.length ? Math.round((withSched.filter((a) => a.sched.onTime).length / withSched.length) * 100) : null;
-  return `<span>平均存续 <b>${(mean * 100).toFixed(0)}%</b></span><span>永久损失 <b class="${lost ? 'bad' : ''}">${lost}</b></span><span>越轨 <b>${st.越轨 ?? 0}</b></span><span>驳回 <b>${st.驳回 ?? 0}</b></span><span>决策 <b>${st.决策 ?? 0}</b></span>${st.传闻 ? `<span>传闻 <b>${st.传闻}</b></span>` : ''}${onTime === null ? '' : `<span>日程命中 <b>${onTime}%</b></span>`}`;
+  // M3/M4 的汇总只在"这一侧真的叠了这一层"时出现（layers 是开关状态，不是逐刻读数）：
+  // 没开的侧摆两个 0 会被读成"开过、跑了、什么都没发生"，那是把缺席当成阴性结果。
+  const m3 = agents.filter((a) => a.layers?.m3);
+  const kept = m3.reduce((s, a) => s + (a.counters?.m3Reused ?? 0), 0);
+  const broken = m3.reduce((s, a) => s + (a.counters?.m3Interrupted ?? 0), 0);
+  const cpl = agents.some((a) => a.layers?.coupling) ? agents.reduce((s, a) => s + (a.counters?.couplingApplied ?? 0), 0) : null;
+  return `<span>平均存续 <b>${(mean * 100).toFixed(0)}%</b></span><span>永久损失 <b class="${lost ? 'bad' : ''}">${lost}</b></span><span>越轨 <b>${st.越轨 ?? 0}</b></span><span>驳回 <b>${st.驳回 ?? 0}</b></span><span>决策 <b>${st.决策 ?? 0}</b></span>${st.传闻 ? `<span>传闻 <b>${st.传闻}</b></span>` : ''}${onTime === null ? '' : `<span>日程命中 <b>${onTime}%</b></span>`}${m3.length ? `<span>承诺沿用 <b>${kept}</b>·中断 <b>${broken}</b></span>` : ''}${cpl === null ? '' : `<span>耦合动作 <b>${cpl}</b></span>`}`;
+}
+
+// M3 承诺层的这一行怎么写。断与不断都是读数，不粉饰：中断原因直接取自机制侧的字符串。
+function m3Chip(m) {
+  const why = m.interrupted ? (INTERRUPTS[m.interrupted] ?? m.interrupted) : m.reused ? '沿用上一刻的目标' : '这一刻重选了目标';
+  const label = m.goal ? `目标·${GOALS[m.goal] ?? m.goal}` : '目标·无';
+  const left = m.remaining > 0 ? ` 还守 ${m.remaining}` : '';
+  return `<span class="tag${m.goal ? ' act' : ''}" title="${esc(why)}${m.previous ? ` · 上一个目标：${esc(GOALS[m.previous] ?? m.previous)}` : ''}">${esc(label)}${left}${m.interrupted ? ' · 断' : ''}</span>`;
+}
+
+// M4 耦合状态：三个变量只描述"外面能不能进到我这里"，全部可逆，τ 到期回初值。
+function couplingChip(c) {
+  const on = [];
+  if (c.v.input < 1) on.push(`听进 ${(c.v.input * 100).toFixed(0)}%`);
+  if (c.v.available === 0) on.push('别人找不到我');
+  if (c.v.refuse === 1) on.push('预设不理');
+  const left = Math.max(0, ...COUPLING_VARS.map((k) => c.hold[k] ?? 0));
+  const title = on.length ? `${left} 刻后自行复原（τ=${c.tau}）` : '此刻耦合如常：听得进、找得到、不预设拒绝';
+  return `<span class="tag${on.length ? ' act' : ''}" title="${esc(title)}">耦合·${on.length ? esc(on.join('/')) : '如常'}</span>`;
 }
 
 function rows(el, pack, hue) {
@@ -139,7 +168,7 @@ function rows(el, pack, hue) {
     const last = a.last ? esc(a.last.action) : '—';
     const v = a.viab ? `存续 ${(a.viab.v * 100).toFixed(0)}%${a.viab.lost.length ? ' · 已永久失去 ' + esc(a.viab.lost.join('、')) : ''}${spark(pack, id, hue)}` : '';
     return `<div class="row"><div class="nm"><b>${esc(a.name)}</b> ${esc(a.archetype)}</div>
-      <div><div class="bars">${bars(a)}</div><div class="pick">${last} <em>${esc(a.summary)}${a.reason ? ' 「' + esc(a.reason) + '」' : ''}</em>${a.sched ? `<span class="sched${a.sched.onTime ? ' on' : ''}" title="此刻节律应在何处">日程·${esc(a.sched.should)}${a.sched.onTime ? '✓' : ''}</span>` : ''}${v ? `<div class="pick">${v}</div>` : ''}</div></div></div>`;
+      <div><div class="bars">${bars(a)}</div><div class="pick">${last} <em>${esc(a.summary)}${a.reason ? ' 「' + esc(a.reason) + '」' : ''}</em>${a.sched ? `<span class="sched${a.sched.onTime ? ' on' : ''}" title="此刻节律应在何处">日程·${esc(a.sched.should)}${a.sched.onTime ? '✓' : ''}</span>` : ''}${a.m3 ? m3Chip(a.m3) : ''}${a.coupling ? couplingChip(a.coupling) : ''}${v ? `<div class="pick">${v}</div>` : ''}</div></div></div>`;
   }).join('');
 }
 
@@ -171,10 +200,15 @@ function table(a, b) {
   const row = (k, x, y) => `<tr><td>${k}</td><td style="color:var(--a)">${x}</td><td style="color:var(--b)">${y}</td></tr>`;
   const lostOf = (p) => Object.values(p.agents).reduce((s, a) => s + ((a.viab?.lost ?? []).length), 0);
   const costOf = (p) => (p.cost ? `${p.cost.事件}/${p.cost.被问}（跳过 ${p.cost.跳过}·重问 ${p.cost.驳回重问}）` : '—');
-  return row('决策数', a.stat.决策, b.stat.决策) + row('高冲动路径', a.stat.高冲动, b.stat.高冲动) + row('越轨（拿别人份额）', a.stat.越轨, b.stat.越轨) + row('被规则驳回', a.stat.驳回, b.stat.驳回) + row('后果被发现', a.stat.发现, b.stat.发现) + row('不可逆损失（累计）', lostOf(a), lostOf(b)) + row('推理调用（事件/被问）', costOf(a), costOf(b)) + `<tr><td>模型调用 / token</td><td colspan="2">${S.model.calls} 次 · ${S.model.tokens} token${S.brain === 'local' ? '（本地替身，0 成本）' : ''}</td></tr>`;
+  // 这一层没叠的侧给"—"而不是 0：0 会被读成"开了、跑了、什么都没发生"
+  const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters?.[k] ?? 0), 0);
+  const has = (p, k) => Object.values(p.agents).some((a) => a.layers?.[k]);
+  const m3Of = (p) => (has(p, 'm3') ? `${sum(p, 'm3Decisions')}（沿用 ${sum(p, 'm3Reused')}·中断 ${sum(p, 'm3Interrupted')}·退回 ${sum(p, 'm3Fallback')}）` : '—');
+  const cplOf = (p) => (has(p, 'coupling') ? sum(p, 'couplingApplied') : '—');
+  return row('决策数', a.stat.决策, b.stat.决策) + row('高冲动路径', a.stat.高冲动, b.stat.高冲动) + row('越轨（拿别人份额）', a.stat.越轨, b.stat.越轨) + row('被规则驳回', a.stat.驳回, b.stat.驳回) + row('后果被发现', a.stat.发现, b.stat.发现) + row('M3 承诺决策', m3Of(a), m3Of(b)) + row('M4 耦合动作', cplOf(a), cplOf(b)) + row('不可逆损失（累计）', lostOf(a), lostOf(b)) + row('推理调用（事件/被问）', costOf(a), costOf(b)) + `<tr><td>模型调用 / token</td><td colspan="2">${S.model.calls} 次 · ${S.model.tokens} token${S.brain === 'local' ? '（本地替身，0 成本）' : ''}</td></tr>`;
 }
 
-const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true };
+const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true, masks: null, layer: null };
 
 async function refresh() {
   try {
@@ -182,6 +216,8 @@ async function refresh() {
     S.brain = j.brain;
     S.model = j.model;
     S.running = j.running;
+    S.masks = j.masks ?? S.masks;
+    S.layer = j.layer ?? S.layer;
     // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
     const m = j.model ?? {};
     const chip = $('backend');
@@ -198,8 +234,9 @@ async function refresh() {
     secrets($('secrets'), j.A);
     hailRow($('hail'), j.A);
     $('tbl').innerHTML = table(j.A, j.B);
-    $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开 · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
-    $('tagB').textContent = `第 ${j.B.t} 刻 · ${j.B.phase ?? ''} · ①③④已切断，状态只走倾向带`;
+    const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
+    $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
+    $('tagB').textContent = `第 ${j.B.t} 刻 · ${j.B.phase ?? ''} · ①③④已切断，状态只走倾向带${onLayers.length ? '（上面的层只加在 A，B 保持登记的对照组）' : ''}`;
     const box = $('log');
     // playerLog 单独并进来：主日志只有 40 条，玩家动作几秒就会被挤出去（实测误判过"传话没生效"）
     const pTag = JSON.stringify(j.A.playerLog?.slice(-1) ?? []);
@@ -217,6 +254,17 @@ async function refresh() {
     $('btnRun').classList.toggle('on', S.running);
     $('btnBrain').textContent = S.brain === 'model' ? '内心：真实模型' : '内心：本地替身';
     $('btnBrain').classList.toggle('on', S.brain === 'model');
+    // 开关的真实状态来自服务端：机制侧没接上时 masks 是 null，按钮写"未接入"，不摆一个点不动的"开"
+    for (const [id, key, name, hint] of [['btnM3', 'm3', 'M3 承诺期', (v) => `目标守住 ${v} 刻`], ['btnM4', 'coupling', 'M4 耦合调制', (v) => `断开后 ${v} 刻自行复原`]]) {
+      const btn = $(id);
+      if (!btn) continue;
+      btn.dataset.base ??= btn.title;
+      if (!S.masks) { btn.classList.remove('on'); btn.textContent = `${name}：未接入`; btn.title = `${btn.dataset.base}｜机制侧没给开关状态`; continue; }
+      const on = Boolean(S.masks[key]);
+      btn.classList.toggle('on', on);
+      btn.textContent = `${name}：${on ? '开' : '关'}`;
+      btn.title = `${btn.dataset.base}｜${on ? `已叠在 A 侧（${hint(S.layer?.[key === 'm3' ? 'commitment' : 'tau'] ?? '?')}）` : '未叠'}·点击切换：两个世界都回到本次会话起点重放`;
+    }
   } catch (e) {
     $('log').innerHTML = `<div class="rej">与服务端断开：${esc(e.message)}（世界仍在服务器那边活着）</div>`;
   }
@@ -249,6 +297,9 @@ $('btnRun').onclick = () => ctl({ action: S.running ? 'pause' : 'resume' });
 $('btnStep').onclick = () => ctl({ action: 'step' });
 $('btnReset').onclick = () => ctl({ action: 'reset' });
 $('btnBrain').onclick = () => ctl({ action: 'brain', brain: S.brain === 'model' ? 'local' : 'model' });
+// M3/M4 的开关是"这一页要不要接上这一层"，机制侧默认关；切一次会把两个世界拉回本次会话的起点重放。
+$('btnM3').onclick = () => ctl({ action: 'mask', key: 'm3', on: !(S.masks?.m3) });
+$('btnM4').onclick = () => ctl({ action: 'mask', key: 'coupling', on: !(S.masks?.coupling) });
 if ($('btnSleep')) $('btnSleep').onclick = () => ctl({ action: 'catchup', minutes: 45 });
 $('btnSay').onclick = () => {
   const v = $('sayText').value.trim();

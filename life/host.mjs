@@ -47,7 +47,10 @@ export function budgetTick(model, dayKey) {
   model.attempts.length = 0;
   return model;
 }
-const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
+// 演示侧的 M3/M4 开关：机制侧默认关（channelMask 不传），这里只决定这一页要不要把这一层接上。
+// 不落地存档：刷新或重部署回到默认关，免得"默认关"这句只在文档里成立。
+// startRaw 是这次会话的世界起点快照，切开关时两个世界都回到这里（见 replayLayers）。
+const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -58,11 +61,19 @@ export function configure({ providers = [], keys = [], model = '', models = [], 
   if (brain) CFG.brain = brain;
 }
 
-function makePack(condition) {
+// 通道掩码：只有 A 侧可能被叠上 M3/M4。B 侧永远按登记的 C2-neg 定义走——
+// 承诺层与耦合动作的内容本身就是"内部状态进决策"，在 B 侧打开等于把已切断的通道又接回去，
+// 那一条负向对照就不再是负向对照了。
+function maskForA() {
+  const on = Object.fromEntries(Object.entries(S.masks).filter(([, v]) => v).map(([k]) => [k, 1]));
+  return Object.keys(on).length ? on : undefined;
+}
+
+function makePack(condition, channelMask) {
   const world = makeWorld({ pantries: 3, stash: 5 });
   const agents = {};
   for (const r of ROSTER) {
-    const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, deliberator: CFG.brain === 'model' ? modelBrain : null });
+    const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
     agents[r.id] = a;
     world.agents[r.id] = a;
     spawn(world, r.id, r.loc);
@@ -70,6 +81,16 @@ function makePack(condition) {
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
   spawn(world, 'p1', 'hall');
   return { world, agents, condition, log: [], series: [], stat: { 决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0, 传闻: 0 } };
+}
+
+// 切一次开关 = 换一个独立变量重跑，而不是在半路上改规则：
+// 两个世界都回到这次会话的起点，只有 A 侧带上这一层，页面上的 t 仍然对齐。
+function buildPacks() {
+  S.packs = { A: makePack('C2', maskForA()), B: makePack('C2-neg') };
+  if (S.startRaw) {
+    applyInto(S.packs.A, S.startRaw.A);
+    applyInto(S.packs.B, S.startRaw.B);
+  }
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
@@ -270,12 +291,13 @@ export const host = {
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
   touch: () => { S.lastVisitor = Date.now(); },
   async start() {
-    S.packs = { A: makePack('C2'), B: makePack('C2-neg') };
+    S.packs = { A: makePack('C2', maskForA()), B: makePack('C2-neg') };
     let note = '没有存档，新建世界';
     try {
       const raw = JSON.parse(await readFile(join(S.dir, 'world.json'), 'utf8'));
       applyInto(S.packs.A, raw.A);
       applyInto(S.packs.B, raw.B);
+      S.startRaw = raw;
       const mins = (Date.now() - (raw.savedAt ?? Date.now())) / 60000;
       S.model = raw.model ?? S.model;
       if (mins > 1) catchUp(mins);
@@ -288,12 +310,16 @@ export const host = {
         const raw = JSON.parse(await readFile(process.env.SEED_FILE ?? resolve('seed/world.json'), 'utf8'));
         applyInto(S.packs.A, raw.A);
         applyInto(S.packs.B, raw.B);
+        S.startRaw = raw;
         S.model = raw.model ?? S.model;
         note = `载入内置种子存档：从第 ${S.packs.A.world.t} 刻的历史起点继续（seed=${raw.seed}）`;
       } catch {
         /* 连种子也没有就是新世界的正常起点，交给应用层播报 */
       }
     }
+    // 起点没Load到任何东西时，把当前这份新建世界认成本次会话的起点：
+    // 否则切 M3/M4 开关会退回"从零刻重跑"，而重跑出来的世界取决于点了多久，读数没法解释。
+    S.startRaw ??= serialize();
     S.savedAt = Date.now();
     S.timer = setInterval(() => tick(), TICK_MS);
     process.on('SIGINT', async () => {
@@ -319,10 +345,10 @@ export const host = {
     if (S.timer) clearInterval(S.timer);
     S.timer = null;
   },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, masks: S.masks }),
   snapshot() {
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
-    const view = (p) => ({
+    const view = (p, layered) => ({
       t: p.world.t,
       phase: phaseOf(p.world.t), // L0 时钟：页面上"现在是什么时候"必须是世界事实，不是玩家猜的
       pantry: p.world.pantry,
@@ -334,10 +360,17 @@ export const host = {
       // 推理成本账（O11）：事件 / 被问 / 跳过 / 驳回重问 / 被告知
       cost: { 事件: sum(p, 'triggered'), 被问: sum(p, 'asked'), 跳过: sum(p, 'skipped'), 驳回重问: sum(p, 'askedRetry'), 被告知: sum(p, 'informed'), 反思: sum(p, 'reflect') },
       agents: Object.fromEntries(
-        Object.values(p.agents).map((a) => [
-          a.id,
-          { id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null) },
-        ]),
+        Object.values(p.agents).map((a) => {
+          // layers = 这一侧现在叠着哪些可选层（开关状态）；下面的承诺/耦合读数 = 它当时真的被调用过。
+          // 分开是必须的：刚切上开关还没走决策时 m3Last 仍是 null，此时不许摆一个空目标假装在运作。
+          const layers = layered ? Object.fromEntries(Object.entries(S.masks).filter(([, v]) => v).map(([k]) => [k, 1])) : {};
+          return [a.id, {
+            id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null),
+            layers,
+            m3: layers.m3 && a.m3Last ? { goal: a.m3Last.goal, previous: a.m3Last.previous, remaining: a.m3Last.remaining, reused: a.m3Last.reused, interrupted: a.m3Last.interrupted ?? null } : null,
+            coupling: layers.coupling ? a.coupling.dump() : null,
+          }];
+        }),
       ),
       log: p.log.slice(-40),
       playerLog: (p.playerLog ?? []).slice(-12), // 玩家自己的动作与驳回：主日志窗口会把它们挤掉
@@ -345,7 +378,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, A: view(S.packs.A), B: view(S.packs.B) };
+    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };
@@ -394,14 +427,18 @@ export const host = {
     return { ok: true, t: S.packs.A.world.t };
   },
   async ctl(body) {
+    const known = ['pause', 'resume', 'brain', 'reset', 'catchup', 'step', 'mask'];
     if (body.action === 'pause') S.running = false;
     if (body.action === 'resume') S.running = true;
     if (body.action === 'brain') {
       configure({ brain: body.brain });
-      S.packs = { A: makePack('C2'), B: makePack('C2-neg') };
+      buildPacks();
     }
     if (body.action === 'reset') {
-      S.packs = { A: makePack('C2'), B: makePack('C2-neg') };
+      // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
+      // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
+      S.packs = { A: makePack('C2', maskForA()), B: makePack('C2-neg') };
+      S.startRaw = serialize();
       // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
       // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。
       S.missed = { minutes: 0, applied: 0, capped: false };
@@ -410,7 +447,22 @@ export const host = {
     }
     if (body.action === 'catchup') catchUp(Number(body.minutes ?? 30));
     if (body.action === 'step') await tick();
-    return this.status();
+    if (body.action === 'mask') {
+      const key = body.key;
+      if (!(key in S.masks)) return { ...this.status(), ok: false, error: 'UNKNOWN_MASK' };
+      const next = Boolean(body.on);
+      if (next === S.masks[key]) return this.status();
+      S.masks[key] = next;
+      buildPacks();
+      const label = key === 'm3' ? 'M3 目标承诺层' : 'M4 耦合调制权';
+      const t = S.packs.A.world.t;
+      for (const k of ['A', 'B']) {
+        S.packs[k].log.push({ t, who: '系统', kind: 'mask', text: `${label}${next ? '开' : '关'}（只作用于 A 侧）· 两个世界回到第 ${t} 刻起点重放` });
+      }
+    }
+    // 未知动作必须明说：上一版这里对任何 action 都返回 status()，界面点了没反应也显示"成功"。
+    if (!known.includes(body.action)) return { ...this.status(), ok: false, error: 'UNKNOWN_ACTION' };
+    return { ...this.status(), ok: true };
   },
   save,
 };
