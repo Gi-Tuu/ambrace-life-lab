@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>拥爱生命实验室 · 仿生物 AI 生命架构 demo</title>
+<style>
+  :root {
+    --bg: #0e1013; --panel: #14171c; --line: #232830; --ink: #d7dbe2; --dim: #7f8896;
+    --a: #6ea8fe; --b: #f0a35e; --warn: #e06c75; --ok: #5fbf8f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 15px; letter-spacing: .04em; }
+  h1 span { color: var(--dim); font-weight: 400; margin-left: 10px; font-size: 12px; }
+  main { display: flex; gap: 14px; padding: 14px 18px; align-items: flex-start; }
+  .col { flex: 1 1 0; min-width: 0; }
+  .world { border: 1px solid var(--line); background: var(--panel); padding: 10px; }
+  .wtit { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .wtit b { font-size: 12.5px; letter-spacing: .03em; }
+  .wtit i { font-style: normal; color: var(--dim); font-size: 11px; }
+  canvas { display: block; width: 100%; height: auto; background: #0a0c0f; }
+  .rooms { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+  .rooms button { background: #1a1f26; color: var(--ink); border: 1px solid var(--line); padding: 4px 8px; font-size: 11.5px; cursor: pointer; }
+  .rooms button:hover { border-color: var(--dim); }
+  .rows { margin-top: 8px; display: grid; gap: 5px; }
+  .row { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: center; }
+  .nm { color: var(--dim); font-size: 11.5px; line-height: 1.25; }
+  .nm b { color: var(--ink); font-weight: 600; }
+  .bars { display: flex; gap: 3px; margin-bottom: 2px; }
+  .bar { position: relative; height: 9px; width: 34px; background: #1a1f26; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: #3d4757; }
+  .bar u { position: absolute; top: 0; bottom: 0; width: 1px; background: #6b7689; left: 50%; text-decoration: none; }
+  .pick { font-size: 11.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick em { font-style: normal; color: var(--dim); margin-left: 7px; }
+  .spark { vertical-align: middle; margin-left: 8px; opacity: .9; }
+  aside { width: 316px; flex: 0 0 316px; border: 1px solid var(--line); background: var(--panel); padding: 10px; }
+  aside h2 { font-size: 12px; margin: 0 0 8px; letter-spacing: .05em; color: var(--dim); font-weight: 600; }
+  .ctl { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ctl button { background: #1a1f26; color: var(--ink); border: 1px solid var(--line); padding: 5px 9px; font-size: 12px; cursor: pointer; }
+  .ctl button.on { border-color: var(--a); color: #fff; }
+  .say { display: flex; gap: 6px; margin-bottom: 10px; }
+  .say input { flex: 1; min-width: 0; background: #0f1216; color: var(--ink); border: 1px solid var(--line); padding: 6px 8px; font-size: 12px; }
+  .hailrow { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; font-size: 11.5px; align-items: center; }
+  .hailrow span { color: var(--dim); }
+  .hailrow button { background: #1a1f26; color: var(--ink); border: 1px solid var(--line); padding: 3px 9px; font-size: 11.5px; cursor: pointer; }
+  .hailrow button:hover { border-color: var(--a); }
+  .secrets { margin-bottom: 10px; font-size: 11.5px; }
+  .secrets .s { border-left: 2px solid var(--line); padding: 3px 0 3px 7px; margin-bottom: 4px; color: var(--dim); }
+  .secrets .s b { color: var(--ink); font-weight: 600; }
+  .secrets .who { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+  .secrets .who button { background: #1a1f26; color: var(--ink); border: 1px solid var(--line); padding: 1px 7px; font-size: 11px; cursor: pointer; }
+  .secrets .who button:hover { border-color: var(--a); }
+  .secrets .who button.done { opacity: .35; cursor: default; border-style: dashed; }
+  .secrets .empty { color: var(--dim); }
+  .log { height: 210px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 6px; font-size: 11.5px; }
+  .log div { padding: 1px 0; }
+  .log .A { color: var(--a); } .log .B { color: var(--b); }
+  .log .rej { color: var(--warn); } .log .disc { color: var(--ok); }
+  .log .P { color: #d7dde6; } .log .tell { color: #e7c26a; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11.5px; }
+  th, td { border-bottom: 1px solid var(--line); text-align: right; padding: 3px 0; }
+  th:first-child, td:first-child { text-align: left; color: var(--dim); }
+  .note { color: var(--dim); font-size: 11px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>拥爱生命实验室<span>仿生物 AI 生命架构 · 双世界对照 demo：同一颗种子，差别是承重通道开不开。状态主要经需求层改变行为（②的效用项本身是常数偏移，不进比较），另有⑤存续风险 / ⑥自我侵蚀两个开关（逐通道消融见 §27–§30）</span></h1>
+</header>
+<main>
+  <div class="col">
+    <div class="world">
+      <div class="wtit"><b style="color:var(--a)">A · 通道开</b><i id="tagA">内部状态进入可见性 / 效用 / 采样 / 检索</i></div>
+      <canvas id="cvA" width="300" height="200"></canvas>
+      <div class="rows" id="rowsA"></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="world">
+      <div class="wtit"><b style="color:var(--b)">B · 通道切断</b><i id="tagB">内部读数仍在演化，但不进决策，只作为文字给模型</i></div>
+      <canvas id="cvB" width="300" height="200"></canvas>
+      <div class="rows" id="rowsB"></div>
+    </div>
+  </div>
+  <aside>
+    <h2>控制</h2>
+    <div class="ctl">
+      <button id="btnRun" class="on">▶ 运行</button>
+      <button id="btnStep">单步</button>
+      <button id="btnBrain" title="切换内心来源">内心：本地替身</button>
+      <button id="btnSleep" title="假装容器休眠了 45 分钟，看内部状态把这段时间补上">休眠 45 分钟</button>
+      <button id="btnReset">重置世界</button>
+    </div>
+    <h2>你（玩家）</h2>
+    <div class="say">
+      <input id="sayText" placeholder="对他们说一句话，两个世界收到同一句" />
+      <button id="btnSay">说</button>
+    </div>
+    <div class="hailrow" id="hail"></div>
+    <h2>你知道的事</h2>
+    <div id="secrets" class="secrets"></div>
+    <h2>实时对照</h2>
+    <table id="tbl"></table>
+    <div class="note">点房间名可让「你」走过去；走过去本身对两个世界是同一个动作。高冲动路径 = 深夜摸到瞭台 / 拿别人门口的份额。</div>
+    <h2 style="margin-top:12px">事件</h2>
+    <div class="log" id="log"></div>
+  </aside>
+</main>
+<script type="module" src="/web/app.js"></script>
+</body>
+</html>
