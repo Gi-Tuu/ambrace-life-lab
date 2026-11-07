@@ -7,7 +7,7 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
-import { phaseOf } from './clock.mjs';
+import { phaseOf, scheduledLoc } from './clock.mjs';
 import { tell } from './gossip.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
@@ -154,7 +154,7 @@ function catchUp(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
+    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
     log: p.log,
     playerLog: p.playerLog ?? [],
     series: p.series,
@@ -193,7 +193,7 @@ function applyInto(pack, d) {
   pack.playerLog = d.playerLog ?? [];
   pack.series = d.series ?? []; // 曲线跟着存档走：重启后"谁先垮"的那段历史不能凭空消失
   pack.stat = d.stat ?? pack.stat; // 不存的话每次重启，页面上的对照计数都归零，实验读数就断了
-  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
+  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
   // 秘密是认知状态，必须活过重启：谁已经知道这件事不能因为重启就忘了，否则同一句话可以说第二遍
   pack.world.secrets = (d.world.secrets ?? []).map((s) => ({ ...s, known: new Set(s.known ?? []) }));
   pack.world.occupancy = {};
@@ -294,7 +294,7 @@ export const host = {
       agents: Object.fromEntries(
         Object.values(p.agents).map((a) => [
           a.id,
-          { id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '' },
+          { id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null) },
         ]),
       ),
       log: p.log.slice(-40),
