@@ -25,13 +25,14 @@ const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补
 const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 
-const CFG = { providers: [], keys: [], model: '', seed: Number(process.env.SEED ?? 7), brain: 'local' };
+const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(process.env.SEED ?? 7), brain: 'local' };
 const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [] }, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
 
-export function configure({ providers = [], keys = [], model = '', seed, brain } = {}) {
+export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
   if (keys.length) CFG.keys = keys.map((s) => s.trim()).filter(Boolean);
   if (model) CFG.model = model;
+  if (models.length) CFG.models = models.map((s) => String(s).trim()).filter(Boolean);
   if (seed) CFG.seed = seed;
   if (brain) CFG.brain = brain;
 }
@@ -70,13 +71,16 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   for (let i = 0; i < CFG.providers.length; i++) {
+    // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
+    const mdl = CFG.models[i] ?? CFG.model;
+    if (!mdl) { S.model.attempts.push('NO_MODEL'); continue; }
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), 20000);
     try {
       const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
-        body: JSON.stringify({ model: CFG.model, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }),
+        body: JSON.stringify({ model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }),
         signal: ac.signal,
       });
       if (!res.ok) { S.model.attempts.push(`HTTP ${res.status}`); continue; }

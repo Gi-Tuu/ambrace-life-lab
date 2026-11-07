@@ -127,7 +127,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-host.setBackend({ providers: PROVIDERS, keys: KEYS, model: MODEL, brain: process.env.BRAIN ?? 'local' });
+host.setBackend({ providers: PROVIDERS, keys: KEYS, model: MODEL, models: MODELS, brain: process.env.BRAIN ?? 'local' });
 // 播报归应用层：host 是库，往 stdout 写日志会干扰测试 runner 的消息通道
 const boot = await host.start();
 console.log(boot.note);
