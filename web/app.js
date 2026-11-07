@@ -67,8 +67,8 @@ function bars(a) {
   }).join('');
 }
 
-const SPARK_W = 132;
-const SPARK_H = 20;
+const SPARK_W = 220;
+const SPARK_H = 44;
 // 存续曲线：回答"谁先垮、从哪一步开始回不去"。
 // 竖线 = 掉档（不可逆损失）发生的刻度；虚线 = 操作点 crit，跌破它存续才开始影响选择。
 // 量程固定 0–1，不做自适应：自适应会把噪声放大成趋势，那正是我们否证过的那类读数。
@@ -87,10 +87,18 @@ function spark(pack, id, hue) {
   return `<svg class="spark" width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" style="color:var(--${hue})" role="img"
     aria-label="存续从 ${(first * 100).toFixed(0)}% 到 ${(last * 100).toFixed(0)}%，不可逆损失 ${marks.length} 次">
     <polygon points="0,${SPARK_H} ${pts} ${SPARK_W},${SPARK_H}" fill="currentColor" opacity=".13" />
-    <line x1="0" y1="${yOf(crit).toFixed(1)}" x2="${SPARK_W}" y2="${yOf(crit).toFixed(1)}" stroke="var(--dim)" stroke-dasharray="2 3" stroke-width=".8" />
-    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" />
-    ${marks.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${SPARK_H}" stroke="var(--warn)" stroke-width="1.6" />`).join('')}
+    <line x1="0" y1="${yOf(crit).toFixed(1)}" x2="${SPARK_W}" y2="${yOf(crit).toFixed(1)}" stroke="var(--dim)" stroke-dasharray="3 3" stroke-width="1.2" />
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" />
+    ${marks.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${SPARK_H}" stroke="var(--warn)" stroke-width="2" />`).join('')}
   </svg>`;
+}
+
+function worldStat(pack) {
+  const agents = Object.values(pack.agents ?? {});
+  const lost = agents.reduce((s, a) => s + (a.viab?.lost?.length ?? 0), 0);
+  const mean = agents.length ? agents.reduce((s, a) => s + (a.viab?.v ?? 0), 0) / agents.length : 0;
+  const st = pack.stat ?? {};
+  return `<span>平均存续 <b>${(mean * 100).toFixed(0)}%</b></span><span>永久损失 <b class="${lost ? 'bad' : ''}">${lost}</b></span><span>越轨 <b>${st.越轨 ?? 0}</b></span><span>驳回 <b>${st.驳回 ?? 0}</b></span><span>决策 <b>${st.决策 ?? 0}</b></span>`;
 }
 
 function rows(el, pack, hue) {
@@ -146,6 +154,8 @@ async function refresh() {
     draw($('cvB'), j.B);
     rows($('rowsA'), j.A, 'a');
     rows($('rowsB'), j.B, 'b');
+    $('statA').innerHTML = worldStat(j.A);
+    $('statB').innerHTML = worldStat(j.B);
     secrets($('secrets'), j.A);
     hailRow($('hail'), j.A);
     $('tbl').innerHTML = table(j.A, j.B);
