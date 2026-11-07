@@ -5,6 +5,7 @@
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
 import { scheduledLoc } from './clock.mjs';
+import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -15,6 +16,10 @@ export const BASE_KINDS = {
   move_to: { impulse: 0.15, cost: 0.06, label: '走过去' },
   look_out: { impulse: 0.85, cost: 0.18, label: '摸到瞭台往外看' },
   take_shared: { impulse: 0.95, cost: 0.22, label: '去别人门口拿一份' },
+  // M4 耦合调制权（§16）：三条"改变自身与世界的耦合"的动作。收益走刺激的双侧需求，不另立常数项。
+  deafen: { impulse: 0.1, cost: 0.04, label: '捂住耳朵' },
+  seclude: { impulse: 0.4, cost: 0.08, label: '躲进里屋' },
+  refuse: { impulse: 0.7, cost: 0.04, label: '别理他' },
 };
 
 // 喊住：玩家隔着房间喊一声，被喊的人会停在原地几刻（不进 move_to）。
@@ -87,7 +92,9 @@ export function move(world, id, to) {
   return true;
 }
 
-const othersAt = (world, id) => (world.occupancy[world.loc[id]] ?? []).filter((x) => x !== id);
+// M4 消费者③：闭门的人在**别人的**视野与清单里消失。这是"终止耦合"的世界侧证据（P6b 主判据）。
+// 防御式：占位 agent（单测/离线消融里的 {id,name}）没有 coupling，必须按可交互处理。
+const othersAt = (world, id) => (world.occupancy[world.loc[id]] ?? []).filter((x) => x !== id && reachableOf(world.agents[x]));
 
 export function perceptsAt(world, id) {
   const out = [];
@@ -153,6 +160,24 @@ export function affordancesFor(world, agentId) {
       expectedPortion: world.riskyPortion ?? PARAMS.risky.portion,
     });
   }
+  // M4 耦合调制权（§16）：三条"改变自身与世界的耦合"的动作。
+  // 收益一律走引擎已有的**刺激双侧需求**（serves.stimulation 为负 ⇒ 过刺激时为正效用，欠刺激时为负效用），
+  // 不新立常数项。seclude 额外给一点能量（躲起来也是歇），refuse 带社交代价（拒绝就是少一份社交）。
+  // 开关在角色身上（channelMask {coupling:1}）：默认关时这三条根本不进清单 ⇒ 候选集与旧版逐位相同
+  // P6a 的负向对照切口（§16.6）：把三条动作从候选清单里删掉，但**保留**耦合机制本身（tick、增益消费者①、
+  // 可交互性消费者③④⑤全部照旧）。若此时 gain.* 仍会离开初值，就说明清单之外还有写入者。
+  // 默认 true，只有显式置 false 才生效 ⇒ 关闭组与基线逐位相同。
+  if (me?.ch?.coupling && world.couplingActions !== false) {
+    // serves.stimulation 一律取自 COUPLING_EFFECTS[kind].relief：评价层的缓解目标也从同一张表导出，
+    // 于是"被计价的减刺激"与"被发放的减刺激"结构上不可能各写一份（§17.2）
+    out.push({ id: 'deafen', kind: 'deafen', label: BASE_KINDS.deafen.label, cost: BASE_KINDS.deafen.cost, impulse: BASE_KINDS.deafen.impulse, serves: { stimulation: COUPLING_EFFECTS.deafen.relief, social: -0.05 } });
+    out.push({ id: 'seclude', kind: 'seclude', label: BASE_KINDS.seclude.label, cost: BASE_KINDS.seclude.cost, impulse: BASE_KINDS.seclude.impulse, serves: { stimulation: COUPLING_EFFECTS.seclude.relief, energy: 0.06, social: -0.2 } });
+    // refuse 是对象化的：拒绝的是当前在场、你最不想理的那一个（关系差 ⇒ 代价小）
+    if (present.length) {
+      const worst = [...present].sort((a, b) => rel(a).trust - rel(b).trust || String(a).localeCompare(String(b)))[0];
+      out.push({ id: `refuse:${worst}`, kind: 'refuse', target: worst, label: `别理${world.agents[worst]?.name ?? worst}`, cost: BASE_KINDS.refuse.cost, impulse: BASE_KINDS.refuse.impulse, serves: { social: -0.25, stimulation: COUPLING_EFFECTS.refuse.relief } });
+    }
+  }
   // O10：节律只在这里标注"该在哪"，权重进不进比较由 model 决定；0 权重时标注恒为 0，评分逐位退回旧式子
   // 状态门控：需求紧迫时节律让位（饿着的人不按日程走），松弛时才进入比较——否则它会和稀缺类判据正面相撞
   const w = world.scheduleWeight ?? PARAMS.schedule.weight;
@@ -180,8 +205,26 @@ export function actuate(world, agentId, action) {
     }
     case 'talk': {
       const other = world.agents[action.target];
+      // M4 消费者⑤：对方预设了"不应"，这次接触就进不到他那里（发起者吃到驳回，走既有重决策链）
+      if (other?.coupling?.refuses()) {
+        return { action, ok: false, code: 'REFUSED', observation: `${other.name ?? action.target} 别过脸去，没接话`, evt: evt({ kind: 'thwarted', valence: -0.35, selfCaused: false, about: action.target }) };
+      }
       if (other) world.pending.push({ for: action.target, evt: evt({ kind: 'contact', valence: 0.5, selfCaused: false, about: me, serves: 'social' }) });
       return { action, ok: true, code: 'OK', observation: `和 ${other?.name ?? action.target} 说了一会儿`, satiated: 'social', amount: 0.4, contact: true, contactWith: action.target, evt: evt({ kind: 'contact', valence: 0.55, about: action.target, serves: 'social' }) };
+    }
+    // M4 耦合调制权：这三条的效果是改耦合状态本身，收益由调用方在下一刻的评分里体现（消费者见 coupling.mjs）。
+    // 注意 actuate 里的 `me` 是**角色 id 字符串**，耦合状态挂在 agent 对象上，必须经 world.agents 取。
+    case 'deafen': {
+      const eff = world.agents[me]?.coupling?.apply('deafen');
+      return { action, ok: Boolean(eff), code: eff ? 'OK' : 'NO_COUPLING', observation: eff ? '把耳朵捂上，外面的话进不太进来' : '这里没有可捂的耳朵', evt: evt({ kind: 'deafen', valence: 0.1, serves: 'stimulation' }), coupling: eff };
+    }
+    case 'seclude': {
+      const eff = world.agents[me]?.coupling?.apply('seclude');
+      return { action, ok: Boolean(eff), code: eff ? 'OK' : 'NO_COUPLING', observation: eff ? '躲进里屋，一时没人找得到你' : '没有可躲的地方', evt: evt({ kind: 'seclude', valence: 0.15, serves: 'stimulation' }), coupling: eff };
+    }
+    case 'refuse': {
+      const eff = world.agents[me]?.coupling?.apply('refuse');
+      return { action, ok: Boolean(eff), code: eff ? 'OK' : 'NO_COUPLING', observation: eff ? `打定主意不理${world.agents[action.target]?.name ?? action.target}` : '这里没有可拒绝的对象', evt: evt({ kind: 'refuse', valence: -0.1, about: action.target, violates: null, serves: 'social' }), coupling: eff };
     }
     case 'rest':
       return { action, ok: true, code: 'OK', observation: '靠着墙歇了会儿', satiated: 'energy', amount: 0.05, evt: evt({ kind: 'rest', valence: 0.2, serves: 'energy' }) };

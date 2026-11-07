@@ -199,7 +199,7 @@ function serialize() {
     agents: Object.fromEntries(
       Object.values(p.agents).map((a) => [
         a.id,
-        { m: a.bank.snapshot(), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), counters: a.counters },
+        { m: a.bank.snapshot(), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
       ]),
     ),
   });
@@ -258,6 +258,9 @@ function applyInto(pack, d) {
     a.habit.load(st.habit);
     a.forwardModel.load(st.forwardModel);
     a.viab.restore(st.viab);
+    a.m3Planner.load(st.m3); // 旧档没有这一项 ⇒ load(undefined) 走"无承诺"分支，行为与旧版一致
+    a.coupling.restore(st.coupling); // 同上：旧档没有耦合状态时按初值（听得进、找得到、不预设拒绝）
+    a.m3PrevGoal = st.m3PrevGoal ?? null;
     Object.assign(a.counters, st.counters ?? {});
   }
 }

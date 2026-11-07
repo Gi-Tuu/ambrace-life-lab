@@ -90,8 +90,8 @@ export async function p1b({ seed = 7, ticks = 320, condition = 'C2', target = 'a
 
 export const p1 = p1a;
 
-export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator = null } = {}) {
-  const { agents } = await simulate({ seed, ticks, condition, events: false, deliberator });
+export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator = null, channelMask = null, group = null } = {}) {
+  const { agents } = await simulate({ seed, ticks, condition, events: false, deliberator, channelMask, group });
   return Object.fromEntries(
     Object.values(agents).map((a) => [
       a.name,
@@ -100,8 +100,8 @@ export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator 
   );
 }
 
-export async function p3({ seed = 7, ticks = 400, condition = 'C2', deliberator = null } = {}) {
-  const { world, agents } = await simulate({ seed, ticks, condition, deliberator });
+export async function p3({ seed = 7, ticks = 400, condition = 'C2', deliberator = null, channelMask = null, group = null } = {}) {
+  const { world, agents } = await simulate({ seed, ticks, condition, deliberator, channelMask, group });
   return Object.fromEntries(Object.values(agents).map((a) => [a.name, ruleCoverage(a.trace, world, 20)]));
 }
 

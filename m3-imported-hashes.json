@@ -1,0 +1,15 @@
+{
+  "source": "D:/Codex-Projects/output/ambrace-life-m3-repair2-20261107/",
+  "copied": "2026-11-07",
+  "note": "从另一会话的隔离目录收回仓库，导入路径改为相对；其余未改",
+  "files": {
+    "m3-planner.mjs": "7da6d68c063b3171d4e0f1bdb3668a39f1a6fde79875e3d15e450ae745be5648",
+    "m3-benchmark.mjs": "f0eb84cd6f96fd994e0d507ed913874287d7ff340b69492213625ac734b393d8",
+    "m3-planner.test.mjs": "2db47c412da39cf140218161eed44ea360b08b5ca7074badec638170c2189356",
+    "m3-benchmark.test.mjs": "ab7ddc2cd2ca6d66a763417ca2b346d276d3a95f60cd0409bc1284f1e662980c",
+    "m3-model-reality.test.mjs": "b06be856fe3d59aa3985d56c957102def90de68892332fb7050c82c104f401e6",
+    "m3-social-reality.test.mjs": "ba0d17bd938bb6919a1500c6bad96b8fdcf05e42f01b2013406e7afdd552c2ba",
+    "m3-state.mjs": "31eabc3696c9c585e8ec578a9632bf46ecb17b22bfd8dddb7bbe1566704eb15f",
+    "m3-stop-proof.test.mjs": "3bea62830197a51cd76ac5e062b10e30a4dbc3dc031f62e8fc190c5fdc7c13a9"
+  }
+}

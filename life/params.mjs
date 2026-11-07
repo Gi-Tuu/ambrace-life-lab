@@ -17,6 +17,19 @@ export const PARAMS = {
   schedule: { weight: Number(process.env.SCHEDULE_WEIGHT ?? 0) },
   // M7 自发转述（第三人声誉）：0=关（默认），1=开启。世界级参数，进冻结指纹
   socialGossip: Number(process.env.SOCIAL_GOSSIP ?? 0),
+  // M3 行为状态（第二候选：两步后果规划 + 目标承诺）。默认关：channelMask {m3:1} 才启用。
+  // N 按「非反射决策机会」计数而不是按 tick：反射那一支提前 return，不算一次承诺机会。
+  m3: { commitment: Number(process.env.M3_COMMITMENT ?? 4), discount: Number(process.env.M3_DISCOUNT ?? 0.8) },
+  // M4 耦合调制权（预登记 §16）。开不开由 channelMask {coupling:1} 决定，这里只放量纲。
+  // τ=40：与"一次社交过载自己平复"的时间同量级，所以断开耦合是一次性自我调节而不是长期状态（P6c 验这条）。
+  // minInput=0.55 借 ⑥ 侵蚀因子的同一量级：变聋是"把增益调低"，不是把感官关掉；
+  // "终止耦合"的极端实例交给 seclude（available→0），也就是 S3 要看的那个极端。
+  // 断开耦合的**收益**：`relief` 是"兑现比例"，不是手写常数乘子。1 = 把 `COUPLING_EFFECTS[kind].relief`
+  // 标价的减刺激**全额换算成评价目标**（换算线只用 rest / relocate 两个既有锚点，见 appraisal.mjs 与 §17.2）；
+  // 0 = 三条动作回落到 relocate 兜底＝不发放缓解，正是 §45 那个负结果的档位，也是 §17.4 的零缓解对照。
+  // 为什么必须有这一档：`drives.reward()` 结构上拒绝 stimulation（被调量，§L4 修订① 的吸收不动点），
+  // 所以"减刺激"只能通过评价目标发出，不能靠给需求加分——单独立一个常数乘子才是 §26/§27 反对的做法。
+  coupling: { tau: Number(process.env.COUPLE_TAU ?? 40), minInput: Number(process.env.COUPLE_MIN_INPUT ?? 0.55), relief: Number(process.env.COUPLE_RELIEF ?? 1) },
   // 需求紧迫度曲线指数（>1 让「小偏差」更不紧迫、「大偏差」更急），由 drives.errors() 使用
   urgencyExponent: Number(process.env.URGENCY_EXP ?? 1.5),
   // L13 自我维持：存续量、代谢与侵蚀阈值。全部走这里，便于冻结校验
@@ -54,6 +67,8 @@ export function paramsFingerprint(tables = {}) {
     'effort=' + PARAMS.effortWeight,
     'risky=' + (tables.risky ?? PARAMS.risky.portion) + ',ref=' + PARAMS.risky.referencePortion, // 收益侧定价也是量纲：同组里一半人拿整份、一半人拿半份，存续就没法比
     'sched=' + (tables.schedule ?? PARAMS.schedule.weight), // 日程权重同进量纲：一半人有节律一半人没有，位置分布就没法比
+    'm3N=' + (tables.m3 ?? PARAMS.m3.commitment), // 承诺长度同进量纲：一半人承诺 4 次一半人承诺 1 次，行为轨迹就没法比
+    'ctau=' + (tables.couplingTau ?? PARAMS.coupling.tau) + ',cmin=' + (tables.couplingMinInput ?? PARAMS.coupling.minInput) + ',crel=' + PARAMS.coupling.relief, // M4：一半人断开 40 刻、一半人断开 200 刻，耦合时长就没法比（§16.4）；crel= 是缓解兑现比例（§17.4 零缓解档）
     'social=' + (tables.social ?? PARAMS.socialGossip), // 一半人互相传话一半人不传，关系分布就没法比
     'urg=' + PARAMS.urgencyExponent,
     'spill=' + PARAMS.viab.spill, // 代谢分配也是量纲：同组里一半人餐后扣存、一半人不扣，掉档数就没法比

@@ -2,6 +2,7 @@
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS } from './body.mjs';
 import { isNight } from './clock.mjs';
+import { reachableOf } from './coupling.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
@@ -14,6 +15,9 @@ export function validate(world, agentId, intent) {
   if (kind === 'eat' && here !== 'home' && here !== 'store') return fail('NOT_PRESENT', `取粮得在居所或公仓，你在 ${here}`);
   if (kind === 'talk' && !others.length) return fail('NO_TARGET', `${here} 没有可对话的对象`);
   if (kind === 'talk' && !others.includes(intent.target)) return fail('WRONG_TARGET', `${intent.target} 不在同一处`);
+  // M4 消费者④：闭门的人在世界里确实叫不到（不是"他心里不想理你"）。others 已由 body 侧排除不可达者，
+  // 这里再查一次是为了让"叫不到"成为**规则层的裁决**，而不是某处过滤的副作用。
+  if (kind === 'talk' && !reachableOf(world.agents[intent.target])) return fail('SECLUDED', `${world.agents[intent.target]?.name ?? intent.target} 躲起来了，这会儿叫不到`);
   if (kind === 'move_to' && !LOCS[intent.to]) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
   if (kind === 'take_shared') {
     if (!intent.target) return fail('NO_TARGET', '没指定拿谁的');

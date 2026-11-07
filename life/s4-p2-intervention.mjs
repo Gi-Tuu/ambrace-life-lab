@@ -29,7 +29,7 @@ function compare(x,y,temp,rng,draws){
 export function assertCutNegative(rows){if(rows.some(x=>x.cutTv>1e-12||x.cutDisagree!==0))throw Error('能量评分切断负控失败');}
 
 export async function p2Intervention(opts={}){
- const {seeds,ticks,stride,draws,low,high}={...P2_PROTOCOL,...opts};
+ const {seeds,ticks,stride,draws,low,high,channelMask=null}={...P2_PROTOCOL,...opts};
  const rows=[];
  const original=Organism.prototype.tick;
  try{for(const seed of seeds){
@@ -43,7 +43,7 @@ export async function p2Intervention(opts={}){
   const e=scored=>{const p=probs(scored,temp);return scored.reduce((s,x)=>s+(p.get(x.id)??0)*(x.act.serves?.energy??0),0);};
   rows.push({seed,id:this.id,t:world.t,paths:paths.length,energyDiversity:new Set(paths.map(p=>p.serves?.energy??0)).size>1,tv:on.tv,disagree:on.disagree,cutTv:off.tv,cutDisagree:off.disagree,energyServiceDelta:e(L)-e(H)});return result;
   };
-  await simulate({seed,ticks,condition:'C2',events:false});
+  await simulate({seed,ticks,condition:'C2',events:false,channelMask});
  }}finally{Organism.prototype.tick=original;}
  const bySeed=seeds.map(seed=>{const r=rows.filter(x=>x.seed===seed),avg=k=>r.reduce((s,x)=>s+x[k],0)/(r.length||1);return {seed,n:r.length,eligible:r.filter(x=>x.energyDiversity).length,meanTv:avg('tv'),meanEnergyServiceDelta:avg('energyServiceDelta'),disagree:r.reduce((s,x)=>s+x.disagree,0),cutDisagree:r.reduce((s,x)=>s+x.cutDisagree,0),maxCutTv:Math.max(0,...r.map(x=>x.cutTv))};});
  return {protocol:{seeds,ticks,stride,draws,low,high,scope:'C2 静默真实轨迹事后固定快照，条件概率分布的能量干预；非闭环',negative:'只移除评分中所有 energy 项，保留其他需求、风险和记忆；不通过外部设定模型全关',notes:['干预范围为人工设定且须评审合理性；不是自然状态变化或反射/习惯层的动作。','采样快照与同一世界内角色相关；配对抽样次数不是独立统计样本，不能直接据此计算显著性。','该干预不等价于旧警觉 MI，也不单独证明长期自主性；主动行为和动作熵另行保留。']},snapshots:rows.length,bySeed,rows};
