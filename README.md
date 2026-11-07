@@ -53,7 +53,7 @@ WORLD_STASH=
 ## 判据与复现
 
 ```bash
-node --test life/life.test.mjs life/host.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs
+node --test life/life.test.mjs life/host.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs
 node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
 node life/run.mjs --report     # 四条件消融矩阵
 node life/run.mjs --sweep      # 多 seed 复核
