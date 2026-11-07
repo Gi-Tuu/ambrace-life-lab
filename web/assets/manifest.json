@@ -1,0 +1,6 @@
+{
+  "_说明": "素材为空时界面用程序化矩形。把下面各项填成图片路径即启用；chars 的值可为单个 URL 或帧数组。参考 manifest.example.json。",
+  "chars": {},
+  "tiles": {},
+  "icons": {}
+}

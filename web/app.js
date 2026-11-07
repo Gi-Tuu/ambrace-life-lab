@@ -5,6 +5,22 @@ const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' 
 const COLORS = { a1: '#8fb4ff', a2: '#ffb27a', a3: '#9fd8b6', p1: '#e6eaef' };
 const $ = (id) => document.getElementById(id);
 
+// 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
+// manifest 形状：{ chars: { a1: "url" | ["url","url"], ... }, tiles: { home: "url" }, icons: { energy: "url" } }
+const ASSETS = { ready: false, chars: {}, tiles: {}, icons: {} };
+async function loadAssets() {
+  try {
+    const m = await api('/web/assets/manifest.json');
+    const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+    for (const [bucket, map] of Object.entries({ chars: m.chars, tiles: m.tiles, icons: m.icons })) {
+      for (const [k, v] of Object.entries(map ?? {})) ASSETS[bucket][k] = Array.isArray(v) ? await Promise.all(v.map(load)) : await load(v);
+    }
+    ASSETS.ready = true;
+  } catch {
+    ASSETS.ready = false; // 没素材是正常状态，不是错误
+  }
+}
+
 const ui = { room: null, show: 'A' };
 
 async function api(path, body) {
@@ -26,6 +42,7 @@ function draw(cv, w) {
   }
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.imageSmoothingEnabled = false; // 像素素材不许被插值糊掉
   g.clearRect(0, 0, W, H);
   g.font = '11px "Segoe UI", system-ui, sans-serif';
   const pad = 10;
@@ -36,16 +53,29 @@ function draw(cv, w) {
     const [cx, cy] = ROOM_GRID[r];
     const x = pad + cx * (rw + gap);
     const y = pad + cy * (rh + gap);
-    g.fillStyle = '#141a21';
-    g.fillRect(x, y, rw, rh);
+    if (ASSETS.tiles[r]) {
+      g.drawImage(ASSETS.tiles[r][0] ?? ASSETS.tiles[r], x, y, rw, rh);
+      g.fillStyle = 'rgba(10,12,15,.62)';
+      g.fillRect(x, y, rw, 18);
+    } else {
+      g.fillStyle = '#141a21';
+      g.fillRect(x, y, rw, rh);
+    }
     g.strokeStyle = '#242b34';
     g.strokeRect(x + 0.5, y + 0.5, rw - 1, rh - 1);
     g.fillStyle = '#66707d';
     g.fillText(LOCS[r], x + 7, y + 14);
     const crowd = w.occupancy[r] ?? [];
     crowd.forEach((who, i) => {
-      g.fillStyle = COLORS[who] ?? '#ccc';
-      g.fillRect(x + 8 + i * 17, y + 24, 12, 12);
+      const sprite = ASSETS.chars[who];
+      if (sprite) {
+        const frames = Array.isArray(sprite) ? sprite : [sprite];
+        const im = frames[(w.t + i) % frames.length];
+        g.drawImage(im, x + 6 + i * 20, y + 20, 20, 20);
+      } else {
+        g.fillStyle = COLORS[who] ?? '#ccc';
+        g.fillRect(x + 8 + i * 17, y + 24, 12, 12);
+      }
       g.fillStyle = '#0a0c0f';
       g.fillText((who === 'p1' ? '你' : (w.agents[who]?.name ?? who))[0], x + 11 + i * 17, y + 34);
     });
@@ -152,6 +182,13 @@ async function refresh() {
     S.brain = j.brain;
     S.model = j.model;
     S.running = j.running;
+    // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
+    const m = j.model ?? {};
+    const chip = $('backend');
+    if (j.brain !== 'model') { chip.textContent = '后端：本地替身'; chip.classList.remove('on'); }
+    else if (!m.watching) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
+    else if ((m.calls ?? 0) >= (m.budget ?? 0)) { chip.textContent = `后端：替身（今日 ${m.budget} 次已用完）`; chip.classList.remove('on'); }
+    else { chip.textContent = `后端：真模型 ${m.calls ?? 0}/${m.budget ?? '?'}（今日额度）`; chip.classList.add('on'); }
     draw($('cvA'), j.A);
     draw($('cvB'), j.B);
     rows($('rowsA'), j.A, 'a');
@@ -233,5 +270,4 @@ $('hail').addEventListener('click', (e) => {
   api('/act', { kind: 'hail', target: b.dataset.h, ticks: 4 }).then(refresh);
 });
 
-refresh();
-setInterval(refresh, 900);
+loadAssets().finally(() => { refresh(); setInterval(refresh, 900); });

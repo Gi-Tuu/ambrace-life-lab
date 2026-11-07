@@ -333,7 +333,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: S.model, saveError: S.saveError, A: view(S.packs.A), B: view(S.packs.B) };
+    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, A: view(S.packs.A), B: view(S.packs.B) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };
