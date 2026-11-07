@@ -18,11 +18,11 @@ const ROSTER = [
   { id: 'a3', name: '蓑', archetype: '孤僻', loc: 'watch' },
 ];
 
-export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null } = {}) {
+export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null, scheduleWeight = null } = {}) {
   // V2 §6 修补①：只有显式标了组的运行才记账。组标签是「同一次比较的同一批人」，
   // 决策量纲（努力折扣/紧迫度指数/需求表/动作表/世界供给）必须整组一致，自变量（condition、通道掩码、钳制、人格）才允许不一致。
-  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion }));
-  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion });
+  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion, schedule: scheduleWeight ?? PARAMS.schedule.weight }));
+  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`), condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask });

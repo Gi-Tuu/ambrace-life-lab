@@ -20,3 +20,13 @@ export const isSunset = (t) => t > 0 && isNight(t) && !isNight(t - 1);
 export function clockSummary(t) {
   return `第 ${dayOf(t) + 1} 天 · ${phaseOf(t)}`;
 }
+
+// O10 日程：谁何时在哪。这是世界侧的节律表，不是决策层——它只提供"该在哪"这一事实，
+// 权重进不进比较由 body/model 决定，所以关掉权重能精确退回旧行为。
+export const SCHEDULE = {
+  谨慎: { 晨: 'home', 昼: 'store', 暮: 'home', 夜: 'home' },
+  冲动: { 晨: 'hall', 昼: 'watch', 暮: 'hall', 夜: 'watch' },
+  孤僻: { 晨: 'watch', 昼: 'watch', 暮: 'hall', 夜: 'home' },
+};
+
+export const scheduledLoc = (archetype, t) => SCHEDULE[archetype]?.[phaseOf(t)] ?? null;

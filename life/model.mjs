@@ -96,7 +96,11 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     u += inhibitPen;
     const effortPen = -PARAMS.effortWeight * act.cost; // 努力折扣显式化：可调、可关（§27 成本支配 78.5% 的修法）
     u += effortPen;
+    // O10 日程项单独立项归因：藏在需求项里就看不见（§27 同一条教训）
+    const schedBonus = act.schedBonus ?? 0;
+    u += schedBonus;
     const cand = { ...bd, 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
+    if (schedBonus) cand.日程 = Number(schedBonus.toFixed(4));
     if (expectedDelta) cand.预期份量 = Number(expectedDelta.toFixed(4));
     if (viabDelta) cand.存续风险 = Number(viabDelta.toFixed(4)); // 风险为 0 时不挂这个标签，免得归因表里出现恒零的假来源
     const driver = Object.entries(cand).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ?? 'none';

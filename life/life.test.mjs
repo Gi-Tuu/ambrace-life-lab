@@ -6,6 +6,7 @@ import { p2Intervention } from './s4-p2-intervention.mjs';
 import { dist, kl, driverDist, mutualInfo, miNull, divergence, ruleCoverage, recoveryStats } from './metrics.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { makeWorld, spawn, affordancesFor, BASE_KINDS, actuate } from './body.mjs';
+import { scheduledLoc } from './clock.mjs';
 import { visibleActions, scoreAll, preferenceBands, channelsFor, BANDS } from './model.mjs';
 import { Organism } from './agent.mjs';
 import { EpisodicMemory } from './memory.mjs';
@@ -955,4 +956,33 @@ test('O17 规范代价进比较：同种子下 order 高者越轨更少', async 
   const nHi = hi.agents.a2.counters.normbreak;
   const nLo = lo.agents.a2.counters.normbreak;
   assert.ok(nLo > nHi, `order 0.05 越轨 ${nLo} 次应多于 order 0.95 的 ${nHi} 次 ⇒ 规范代价没进比较，O17 只是加了饭`);
+});
+
+test('O10 切断干净：权重为 0 时所有动作的日程标注恒为 0', async () => {
+  const r = await simulate({ seed: 7, ticks: 60, scheduleWeight: 0 });
+  const acts = affordancesFor(r.world, 'a1');
+  assert.ok(acts.length > 0, '没有可用动作 ⇒ 这道闸门没被检验到');
+  assert.ok(acts.every((x) => (x.schedBonus ?? 0) === 0), '权重 0 仍有非零标注 ⇒ 切断不干净，等价性核对会假绿');
+});
+
+test('O10 日程进比较：开权重后走动目的地更贴节律表，且行动序列真的改变', async () => {
+  const on = await simulate({ seed: 7, ticks: 600, scheduleWeight: 0.06 });
+  const off = await simulate({ seed: 7, ticks: 600, scheduleWeight: 0 });
+  // 测行为而非单点快照：整段轨迹里 move_to 的目的地命中该刻节律表位置的比例（trace.action 是 "kind:对象" 字符串）
+  const match = (x) => {
+    let hit = 0, total = 0;
+    for (const a of Object.values(x.agents)) {
+      for (const r of a.trace) {
+        if (r.kind !== 'move_to') continue;
+        const s = scheduledLoc(a.traits.archetype, r.t);
+        if (!s) continue;
+        total++;
+        if (String(r.action).split(':')[1] === s) hit++;
+      }
+    }
+    return total ? hit / total : 0;
+  };
+  const seq = (x) => Object.values(x.agents).map((a) => a.trace.filter((r) => r.kind).map((r) => r.kind).join('')).join('|');
+  assert.ok(match(on) > match(off), `开权重走动命中 ${(match(on) * 100).toFixed(0)}% 不高于关权重 ${(match(off) * 100).toFixed(0)}% ⇒ 节律没进比较，O10 只是画了张表`);
+  assert.notEqual(seq(on), seq(off), '开关节律的行动序列逐位相同 ⇒ 日程是装饰，不进后果');
 });

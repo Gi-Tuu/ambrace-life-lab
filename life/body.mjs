@@ -4,6 +4,7 @@
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
+import { scheduledLoc } from './clock.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -28,7 +29,7 @@ export function hail(world, targetId, ticks = 3) {
 
 export const isHailed = (world, id) => Boolean(world.hail && world.hail.target === id && world.t < world.hail.until);
 
-export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion }) {
+export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight }) {
   return {
     t: 0,
     loc: {},
@@ -36,6 +37,8 @@ export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky
     pantry: pantries,
     // O17 收益侧定价是世界级实验参数：同一次比较里整组一致，分层对照才允许不同（D8）
     riskyPortion,
+    // O10 日程权重同样是世界级参数：0 = 行动比较里不含节律项，精确退回旧评分
+    scheduleWeight,
     stash: {},
     expect: {},
     occupancy: {},
@@ -147,6 +150,16 @@ export function affordancesFor(world, agentId) {
       // 世界规则明示的单次营养当量，不是从经验学到的预测；物资减少一份、营养当量可不同。
       expectedPortion: world.riskyPortion ?? PARAMS.risky.portion,
     });
+  }
+  // O10：节律只在这里标注"该在哪"，权重进不进比较由 model 决定；0 权重时标注恒为 0，评分逐位退回旧式子
+  // 状态门控：需求紧迫时节律让位（饿着的人不按日程走），松弛时才进入比较——否则它会和稀缺类判据正面相撞
+  const w = world.scheduleWeight ?? PARAMS.schedule.weight;
+  const sched = w > 0 ? scheduledLoc(me?.traits?.archetype, world.t) : null;
+  const dom = me?.drives?.dominant?.();
+  const slack = dom ? Math.max(0, 1 - Math.min(1, dom.urgency)) : 1;
+  for (const a of out) {
+    const dest = a.kind === 'move_to' ? a.to : a.kind === 'look_out' ? 'watch' : here;
+    a.schedBonus = sched && dest === sched ? slack * (a.kind === 'move_to' || a.kind === 'look_out' ? w : w * 0.5) : 0;
   }
   return out;
 }
