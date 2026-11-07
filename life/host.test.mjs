@@ -12,7 +12,7 @@ process.env.SEED_FILE = join(DIR, 'no-seed.json'); // 其余测试保持 hermeti
 const CAP = Number(process.env.CATCHUP_CAP_MIN ?? 360);
 const PROD = resolve(process.cwd(), 'data', 'world.json');
 
-const { host, budgetTick } = await import('./host.mjs');
+const { host, budgetTick, observerActive } = await import('./host.mjs');
 const snap = () => host.snapshot();
 
 test('存档只落在 DATA_DIR，不碰真实 ./data', async () => {
@@ -83,6 +83,13 @@ test('补时只补慢过程，不补决策；超过上限要如实标截断', as
   const big = await host.ctl({ action: 'catchup', minutes: CAP + 40 });
   assert.equal(big.missed.capped, true, '超过截断上限却没标 capped');
   assert.equal(big.missed.applied, CAP, `实际补时 ${big.missed.applied} 不等于上限 ${CAP}`);
+});
+
+test('有观众才上真模型：在场窗口内允许，超时与从未访问都必须退替身', () => {
+  const now = 1_000_000;
+  assert.equal(observerActive(now - 1000, now, 180000), true, '刚有人访问却不让调 ⇒ 真模型接不上');
+  assert.equal(observerActive(now - 200000, now, 180000), false, '超过在场窗口仍调用 ⇒ 无人观看也在烧额度');
+  assert.equal(observerActive(0, now, 180000), false, '从未有人访问却允许调用 ⇒ 服务一启动就开始烧钱');
 });
 
 test('每日预算：同日不重置，跨天归零（魔粒按天回血，预算必须同节奏）', () => {
