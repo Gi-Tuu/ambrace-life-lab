@@ -22,3 +22,4 @@ contest.txt
 /dom*.html
 /s3-*.json
 /server.pid
+/ui-check*/

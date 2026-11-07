@@ -1,6 +1,7 @@
 // 最小原型跑动与判据报告。默认离线（确定性替身，不联网）；--live 时插真模型审议层。
 import { makeWorld, spawn, BASE_KINDS, scanSecrets } from './body.mjs';
 import { gossipRound } from './gossip.mjs';
+import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, makeRng } from './rng.mjs';
 import { dist, kl, ruleCoverage, spontaneous, mutualInfo, miNull, deliberationRate, actionEntropy, driverDist, recoveryStats } from './metrics.mjs';
@@ -18,11 +19,11 @@ const ROSTER = [
   { id: 'a3', name: '蓑', archetype: '孤僻', loc: 'watch' },
 ];
 
-export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null, scheduleWeight = null } = {}) {
+export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null, scheduleWeight = null, socialGossip = null } = {}) {
   // V2 §6 修补①：只有显式标了组的运行才记账。组标签是「同一次比较的同一批人」，
   // 决策量纲（努力折扣/紧迫度指数/需求表/动作表/世界供给）必须整组一致，自变量（condition、通道掩码、钳制、人格）才允许不一致。
-  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion, schedule: scheduleWeight ?? PARAMS.schedule.weight }));
-  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight });
+  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion, schedule: scheduleWeight ?? PARAMS.schedule.weight, social: socialGossip ?? PARAMS.socialGossip }));
+  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight, socialGossip: socialGossip ?? PARAMS.socialGossip });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`), condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask });
@@ -45,6 +46,8 @@ export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit 
       if (pin?.[id]) for (const [d, v] of Object.entries(pin[id])) agents[id].bank.m[d] = v; // 持续钳制：像光遗传按住
     }
   }
+  // M7：离线世界没有玩家实体 ⇒ presence:false（与 gossipRound 的离线口径一致）
+  if (world.socialGossip > 0) socialRound(world, { presence: false });
   return { world, agents };
 }
 
@@ -87,8 +90,8 @@ export async function p1b({ seed = 7, ticks = 320, condition = 'C2', target = 'a
 
 export const p1 = p1a;
 
-export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator = null } = {}) {
-  const { agents } = await simulate({ seed, ticks, condition, events: false, deliberator });
+export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator = null, channelMask = null, group = null } = {}) {
+  const { agents } = await simulate({ seed, ticks, condition, events: false, deliberator, channelMask, group });
   return Object.fromEntries(
     Object.values(agents).map((a) => [
       a.name,
@@ -97,8 +100,8 @@ export async function p2({ seed = 7, ticks = 400, condition = 'C2', deliberator 
   );
 }
 
-export async function p3({ seed = 7, ticks = 400, condition = 'C2', deliberator = null } = {}) {
-  const { world, agents } = await simulate({ seed, ticks, condition, deliberator });
+export async function p3({ seed = 7, ticks = 400, condition = 'C2', deliberator = null, channelMask = null, group = null } = {}) {
+  const { world, agents } = await simulate({ seed, ticks, condition, deliberator, channelMask, group });
   return Object.fromEntries(Object.values(agents).map((a) => [a.name, ruleCoverage(a.trace, world, 20)]));
 }
 
@@ -363,7 +366,7 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
       for (const a of Object.values(agents)) {
         const recs = a.trace.filter((r) => r.viab);
         if (recs.length < 2) continue;
-        const span = recs.at(-1).t;
+        const span = ticks; // 审计整个模拟窗口，即使最后一刻没有执行动作
         const aged = a.viab.age; // 账本自己老化了多少刻：反射提前 return 的那些刻没走 viab.tick()，基础代谢免付
         const sumCost = recs.reduce((s, r) => s + (r.viab.cost ?? 0), 0);
         // regen 自己有一道 mealMin 闸门（"歇一会儿"不算吃到东西），所以只有 ≥mealMin 的口才进收支
@@ -376,8 +379,10 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
         const nominalOut = P.costScale * sumCost;
         const income = recs.reduce((s, r) => s + (r.viab.fed ?? 0), 0);
         const actionPaid = recs.reduce((s, r) => s + (r.viab.paid ?? 0), 0);
-        const outflow = P.upkeep * aged + actionPaid;
-        const eEnd = recs.at(-1).viab.v + (recs.at(-1).viab.reserve ?? 0);
+        const nominalUpkeep = P.upkeep * aged;
+        const actualUpkeep = a.viab.upkeepPaid;
+        const outflow = actualUpkeep + actionPaid;
+        const eEnd = a.viab.v + a.viab.reserve; // 用模拟终点的真实余额，不假设末 tick 一定产生行动
         rows.push({
           seed,
           配置: c.配置,
@@ -395,12 +400,14 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
           实收到账: r3(income),
           顶满丢弃: r3(nominalIn - income),
           归零少付: r3(nominalOut - actionPaid),
+          基础代谢实付: r3(actualUpkeep),
+          基础代谢少付: r3(nominalUpkeep - actualUpkeep),
           支出: r3(outflow),
           收支差: r3(income - outflow),
           // crit=0.6 是"风险开始起作用"的操作点。若这个角色大部分时间都在 0.6 以下，⑤ 就不是"状态通道"而是常开偏置
           风险开启时长占比: r2(recs.filter((x) => (x.viab.risk ?? 0) > 0).length / recs.length),
           归零时长占比: r2(recs.filter((x) => x.viab.v <= 0.001).length / recs.length),
-          // 用实付实收之后，残差只剩一项：tick 里 upkeep 被 max(0,·) 截断的那部分，上界 = upkeep × 归零刻数
+          // 总收入与动作、基础代谢实付全部记账；残差仅含 trace 数值舍入。
           账面残差: r3(eEnd - 1 - (income - outflow)),
           打平需顿每百刻: perMeal ? r2(((P.upkeep + actionPaid / aged) / (P.mealYield * perMeal)) * 100) : null,
         });

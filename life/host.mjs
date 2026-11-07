@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
 import { phaseOf, scheduledLoc } from './clock.mjs';
 import { tell } from './gossip.mjs';
+import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
 import { DIMS } from './traits.mjs';
@@ -68,7 +69,7 @@ function makePack(condition) {
   }
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
   spawn(world, 'p1', 'hall');
-  return { world, agents, condition, log: [], series: [], stat: { 决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0 } };
+  return { world, agents, condition, log: [], series: [], stat: { 决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0, 传闻: 0 } };
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
@@ -149,6 +150,14 @@ async function tick() {
         }
       }
     }
+    // M7 自发转述：只在自己人之间发生，玩家不在场也照常（这是世界事实，不是玩家动作）
+    if (p.world.socialGossip > 0) {
+      const told = socialRound(p.world);
+      for (const x of told) {
+        p.stat.传闻 = (p.stat.传闻 ?? 0) + 1;
+        p.log.push({ t: p.world.t, who: '系统', kind: 'tell', text: `${p.agents[x.teller]?.name ?? x.teller} 把「${x.detail}」告诉了 ${p.agents[x.target]?.name ?? x.target}` });
+      }
+    }
     p.log = p.log.slice(-160);
     // 存续历史：曲线要能回答"谁先垮、从哪一步开始回不去"，所以除了 v 本身，还要把每次掉档记在同一个时间轴上
     p.series.push({
@@ -182,7 +191,7 @@ function catchUp(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
+    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
     log: p.log,
     playerLog: p.playerLog ?? [],
     series: p.series,
@@ -190,7 +199,7 @@ function serialize() {
     agents: Object.fromEntries(
       Object.values(p.agents).map((a) => [
         a.id,
-        { m: a.bank.snapshot(), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), counters: a.counters },
+        { m: a.bank.snapshot(), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
       ]),
     ),
   });
@@ -221,7 +230,7 @@ function applyInto(pack, d) {
   pack.playerLog = d.playerLog ?? [];
   pack.series = d.series ?? []; // 曲线跟着存档走：重启后"谁先垮"的那段历史不能凭空消失
   pack.stat = d.stat ?? pack.stat; // 不存的话每次重启，页面上的对照计数都归零，实验读数就断了
-  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
+  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, socialGossip: d.world.socialGossip ?? pack.world.socialGossip, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
   // 秘密是认知状态，必须活过重启：谁已经知道这件事不能因为重启就忘了，否则同一句话可以说第二遍
   pack.world.secrets = (d.world.secrets ?? []).map((s) => ({ ...s, known: new Set(s.known ?? []) }));
   pack.world.occupancy = {};
@@ -249,6 +258,9 @@ function applyInto(pack, d) {
     a.habit.load(st.habit);
     a.forwardModel.load(st.forwardModel);
     a.viab.restore(st.viab);
+    a.m3Planner.load(st.m3); // 旧档没有这一项 ⇒ load(undefined) 走"无承诺"分支，行为与旧版一致
+    a.coupling.restore(st.coupling); // 同上：旧档没有耦合状态时按初值（听得进、找得到、不预设拒绝）
+    a.m3PrevGoal = st.m3PrevGoal ?? null;
     Object.assign(a.counters, st.counters ?? {});
   }
 }
@@ -333,7 +345,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: S.model, saveError: S.saveError, A: view(S.packs.A), B: view(S.packs.B) };
+    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, A: view(S.packs.A), B: view(S.packs.B) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };

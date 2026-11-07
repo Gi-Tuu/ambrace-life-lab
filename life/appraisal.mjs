@@ -3,6 +3,8 @@
 // 上一版 u.arousal = k·相关性·意外性 恒为正 ⇒ 任何事件都在推高警觉、没有任何事件能降低它
 // ⇒ t3 就饱和在 arousal=1/inhibit=1，stimulation 误差翻向后「能降火」的 rest 成唯一正分 ⇒ 第二个吸收态。
 import { DIMS, EVENT_GOAL } from './traits.mjs';
+import { COUPLING_EFFECTS } from './coupling.mjs';
+import { PARAMS } from './params.mjs';
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const pull = (cur, target, rate) => target - cur; // 方向由差值给出，幅度在下面统一夹紧
@@ -20,7 +22,34 @@ const TARGETS = {
   normbreak: { arousal: 0.75, approach: 0.65, quiescence: 0.3 },
 };
 
+// M4-A（§17.2）：三条耦合动作的"减刺激"必须落到**评价目标**上才发得出去。
+// `drives.reward()` 显式拒绝 stimulation（它是被调量，直接推会掉进 §L4 修订① 记过的吸收不动点），
+// 而这三个 kind 原本不在 TARGETS 里 ⇒ 走 relocate 兜底（arousal 0.5）再被 relevance 往上加，
+// 于是"降火"的动作自己把警觉拉高，过载时间占比实测不降（§45 的负结果）。
+// 换算线只用引擎里已有的两个锚点，不新设常数：
+//   锚① TARGETS.rest     =（`serves.stimulation` −0.35 ⇒ arousal 0.28）
+//   锚② TARGETS.relocate =（move_to 的刺激标价中值 +0.25 ⇒ arousal 0.50）
+// relief=0 时三条全部回落至 relocate 兜底 ⇒ §17.4 的"零缓解档"是一个参数，不用改代码。
+const RELIEF_ANCHORS = { low: { s: -0.35, a: 0.28 }, high: { s: 0.25, a: 0.5 } };
+const arousalTargetFromRelief = (relief) => {
+  const { low, high } = RELIEF_ANCHORS;
+  const linear = low.a + ((high.a - low.a) * (relief - low.s)) / (high.s - low.s);
+  const blended = high.a + PARAMS.coupling.relief * (linear - high.a);
+  return Math.max(0, Math.min(1, blended));
+};
+// 参数是活的（§17.4 要在同一进程里跑"零缓解档"），所以这里做缓存重建，而不是模块加载时定死一次
+let reliefBuilt = null;
+export function buildCouplingTargets() {
+  if (reliefBuilt === PARAMS.coupling.relief) return TARGETS;
+  reliefBuilt = PARAMS.coupling.relief;
+  for (const [kind, eff] of Object.entries(COUPLING_EFFECTS)) {
+    TARGETS[kind] = { ...TARGETS.relocate, arousal: Number(arousalTargetFromRelief(eff.relief).toFixed(6)) };
+  }
+  return TARGETS;
+}
+
 export function appraise(evt, ctx) {
+  buildCouplingTargets();
   const { traits, drives, memory, relations, t, m } = ctx;
 
   // ① 目标相关性：事件挂在哪条目标轴上 × 该个体在这条轴上的目标强度 × 当前主导需求误差

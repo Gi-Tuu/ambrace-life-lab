@@ -13,7 +13,10 @@ import { makeRng } from './rng.mjs';
 import { sampleTraits } from './traits.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { ForwardModel } from './s4-predictor.mjs';
-import { DAY_TICKS, dayOf, isSunset, phaseOf } from './clock.mjs';
+import { DAY_TICKS, dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
+import { PARAMS } from './params.mjs';
+import { ShortHorizonPlanner } from './m3-planner.mjs';
+import { Coupling, COUPLING_KINDS } from './coupling.mjs';
 
 const REFLEXES = [
   { when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },
@@ -40,6 +43,12 @@ export class Organism {
     this.habit = makeHabit();
     // L13：存续量自己演化、自己花钱；它只能通过侵蚀上面三个部件来起作用（D1 不可逆降级）
     this.viab = new SelfMaintain({ organs: { habit: this.habit, memory: this.memory, social: this.relations }, agent: this, damage: Boolean(this.ch.erosion) });
+    // M3 行为状态：纯确定性规划器（无随机数）。构造不产生副作用，关闭时也不会被调用。
+    this.m3Planner = new ShortHorizonPlanner({ commitment: PARAMS.m3.commitment, discount: PARAMS.m3.discount, effortWeight: PARAMS.effortWeight });
+    this.m3Last = null;
+    this.m3PrevGoal = null;
+    // M4 耦合状态：构造即存在，但只有 ch.coupling 打开时才会被写入（关闭时三个变量恒为初值）
+    this.coupling = new Coupling();
     this.deliberator = deliberator;
     this.trace = [];
     this.counters = { actions: 0, reflex: 0, habit: 0, deliberation: 0, rejected: 0, spontaneous: 0, initiated: 0, externalEvents: 0, llmCalls: 0, normbreak: 0, erosion: 0, reflect: 0, asked: 0, skipped: 0, triggered: 0, informed: 0 };
@@ -68,10 +77,17 @@ export class Organism {
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
     this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
+    // M3 的目标只属于"本刻真的做过非反射决策"的那些刻：反射提前 return 时不得沿用上一次的目标，否则特征表会把反射刻当成 M3 决策
+    this.m3Last = null;
+    // M4：τ 按刻计（不按决策机会计）——"躲一阵子"是时间量，不是机会量。关闭时不写任何状态。
+    if (this.ch.coupling) this.coupling.tick(1);
 
     const incoming = world.pending.filter((p) => p.for === this.id);
     world.pending = world.pending.filter((p) => p.for !== this.id);
-    for (const inc of incoming) this.assess(inc.evt);
+    // 消费者①：输入增益决定这些事件能注入多少。gain=1 时 `valence * 1` 逐位等于原值 ⇒ 关闭时零影响
+    // world.couplingGainOff 是 §17.4 的对照切口：只切断 ①（保留三条动作与评价缓解），用来问"过载改善到底来自哪条通道"
+    const gain = this.ch.coupling && !world.couplingGainOff ? this.coupling.input : 1;
+    for (const inc of incoming) this.assess(gain === 1 ? inc.evt : { ...inc.evt, valence: inc.evt.valence * gain });
 
     const percepts = perceptsAt(world, this.id);
     const external = world.percepts.filter((p) => p.for === this.id || p.for === 'all');
@@ -131,8 +147,11 @@ export class Organism {
     const visible = visibleActions(affs, this.traits, ch, this.bank, weights);
     // 被喊住：这几刻不换地方（仍要决定做什么，只是去掉移动路径）。
     // 不用"冻结整个 tick"：那样它会连带停止吃喝与反应，测到的就不是"站着别动"而是"死机"。
-    const paths = isHailed(world, this.id) ? visible.filter((p) => p.kind !== 'move_to') : visible;
-    if (!paths.length) return null;
+    const paths0 = isHailed(world, this.id) ? visible.filter((p) => p.kind !== 'move_to') : visible;
+    if (!paths0.length) return null;
+    // M3 行为状态：在习惯/审议之前先定功能目标，承诺期内只保留落在该目标上的候选。
+    // 只过滤候选集——评分、习惯分支、真模型、驳回重决策、告知都还是原来的链条，所以它"承重"的方式是改变比较而不是加常数。
+    const paths = ch.m3 ? this.m3Choose(world, paths0) : paths0;
 
     const mem = this.condition === 'C0' ? { bonus: {}, retrieved: [] } : this.memory.stateBonus(this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights });
     const memBonus = mem.bonus;
@@ -254,6 +273,50 @@ export class Organism {
     this.trace.push({ t, id: this.id, name: this.name, layer: 'erosion', organ: row.organ, before: row.before, after: row.after, cause: row.cause, m: this.bank.snapshot(), cond: this.condition });
   }
 
+  // M3：快照只取公开可预测的量（位置、公仓、自身需求与设定点、同屋者熟悉度）；私人物资与他人未来行为不进预测。
+  m3Snapshot(world) {
+    const loc = world.loc[this.id];
+    const companions = {};
+    for (const id of world.occupancy[loc] ?? []) if (id !== this.id) companions[id] = this.relations.map.get(id)?.familiarity ?? 0;
+    // look_out/take_shared 的"可不可行"是当前可观察事实，不是对未来的预测：
+    // 夜禁来自时钟；可越轨的对象 = 不在场且门口还有货的人（在场会被规则层判 WITNESSED，先排除掉）。
+    const takeable = {};
+    for (const id of Object.keys(world.agents)) {
+      if (id === this.id || (world.stash[id] ?? 0) <= 0 || world.loc[id] === loc) continue;
+      takeable[id] = world.riskyPortion ?? PARAMS.risky.portion;
+    }
+    return { selfId: this.id, loc, energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
+  }
+
+  m3Choose(world, paths) {
+    // 决策②(a)：M4 的三条耦合动作不进 M3 的两步搜索（规划器的 kind 白名单是硬校验）。
+    // 局限要写清：闭门/捂耳朵期间 M3 不会把它们排进路径目标，两者的取舍仍由同一个评分器在同一刻比较，但不是同一个规划器规划。
+    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind));
+    if (!planned.length) {
+      this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
+      return paths;
+    }
+    const r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
+    const previous = this.m3PrevGoal;
+    this.m3PrevGoal = r.goal;
+    this.m3Last = { previous, goal: r.goal, remaining: r.remaining, reused: r.reused, interrupted: r.interrupted };
+    this.counters.m3Decisions = (this.counters.m3Decisions ?? 0) + 1;
+    if (r.reused) this.counters.m3Reused = (this.counters.m3Reused ?? 0) + 1;
+    if (r.interrupted) this.counters.m3Interrupted = (this.counters.m3Interrupted ?? 0) + 1;
+    // 目标内的可行首步由规划器自己的 plans 给出，不另写 kind→目标 的映射（否则又造出一张会漂移的表）
+    const keep = new Set(r.plans.filter((p) => p.goal === r.goal).map((p) => p.first.id));
+    // 耦合动作不进规划，但**仍然进比较**：把它们一并留在候选集里，否则"排除在 M3 之外"会变成"被 M3 否决"，
+    // 那是决策 ②(a) 没有授权的效果。
+    const filtered = paths.filter((p) => keep.has(p.id) || COUPLING_KINDS.includes(p.kind));
+    if (!filtered.length) {
+      // 这一刻这个目标没有可见动作：不许把人饿死，退回完整候选集，并把这次中断记进轨迹
+      this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
+      this.m3Last.interrupted ??= 'goal_has_no_visible_action';
+      return paths;
+    }
+    return filtered;
+  }
+
   execute(world, action, layer, t, silent, extra = {}) {
     const result = actuate(world, this.id, action);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
@@ -279,6 +342,9 @@ export class Organism {
       this.drives.reward(result.satiated, amount);
     }
     if (result.violates) this.counters.normbreak += 1;
+    // M4：耦合动作一旦被执行就记账（S1 看的就是这个数；按 kind 的分布从 trace 里数，不建嵌套计数器——
+    // ablationChannels 会对 counters 逐项求和，嵌套对象会把消融表加成 NaN）
+    if (result.coupling) this.counters.couplingApplied = (this.counters.couplingApplied ?? 0) + 1;
 
     const id = actionId(action);
     const uAtDecision = extra.scored?.find((s) => s.id === id)?.u ?? 0.1;
@@ -296,6 +362,7 @@ export class Organism {
       ok: result.ok, obs: result.observation, m: this.bank.snapshot(), drives: { ...this.drives.v }, dep: this.drives.describe(),
       driver: entry?.driver ?? (layer === 'reflex' ? '反射' : layer === 'habit' ? '习惯' : 'none'), parts: entry?.parts ?? null,
       appraisal: a.parts, importance: Number(a.importance.toFixed(3)), rel: this.relations.dump(t), summary: this.bank.summary(), cond: this.condition,
+      m3: this.ch.m3 ? this.m3Last : null,
       viab: { v: Number(this.viab.v.toFixed(3)), reserve: Number(this.viab.reserve.toFixed(3)), risk: Number((this.ch.viab ? this.viab.risk : 0).toFixed(3)), ledger: this.viab.ledger.length, cost: Number(actionCost.toFixed(3)), ate: Number(ateAmount.toFixed(3)), paid, fed },
       ...extra,
     });

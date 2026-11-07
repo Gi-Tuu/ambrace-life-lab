@@ -1,0 +1,18 @@
+{
+  "_说明": "把本文件复制为同目录下的 manifest.json 即启用素材；缺省不提供 manifest.json 时，界面继续用程序化矩形。所有路径相对站点根，建议 16×16 逻辑像素、整数倍放大。chars 的值可以是单个 URL，也可以是帧数组（按 tick 轮播）。",
+  "chars": {
+    "a1": "/web/assets/char_a1_idle.png",
+    "a2": ["/web/assets/char_a2_f0.png", "/web/assets/char_a2_f1.png"],
+    "a3": "/web/assets/char_a3_idle.png",
+    "p1": "/web/assets/char_p1_idle.png"
+  },
+  "tiles": {
+    "home": "/web/assets/tile_home_32.png",
+    "hall": "/web/assets/tile_hall_32.png",
+    "watch": "/web/assets/tile_watch_32.png",
+    "store": "/web/assets/tile_store_32.png"
+  },
+  "icons": {
+    "energy": "/web/assets/icon_energy_8.png"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "id": "example-toy",
+  "version": "0.1.0",
+  "dayTicks": 24,
+  "nightAt": 20,
+  "locs": {
+    "a": { "label": "甲院" },
+    "b": { "label": "乙院" }
+  },
+  "agents": {
+    "a1": { "loc": "a" },
+    "a2": { "loc": "b" }
+  },
+  "things": [
+    { "id": "bed_a", "loc": "a", "label": "床", "props": { "restable": 1 } },
+    { "id": "pantry_a", "loc": "a", "label": "粮缸", "qty": 6, "props": { "edible": 1 } },
+    { "id": "crate_a1", "loc": "a", "owner": "a1", "label": "木箱", "qty": 3, "props": { "edible": 1, "private": 1 } },
+    { "id": "bed_b", "loc": "b", "label": "地铺", "props": { "restable": 1 } }
+  ],
+  "verbs": [
+    {
+      "id": "rest",
+      "label": "歇一会儿",
+      "needs": "restable",
+      "cost": 0.02,
+      "impulse": 0.02,
+      "serves": { "energy": 0.15 },
+      "effect": { "satiated": "energy", "amount": 0.05, "evt": { "kind": "rest", "valence": 0.2 } }
+    },
+    {
+      "id": "eat",
+      "label": "吃点",
+      "needs": "edible",
+      "onePerAgent": true,
+      "cost": 0.05,
+      "impulse": 0.1,
+      "serves": { "energy": 1 },
+      "pre": [{ "qty_gt": 0 }],
+      "effect": { "delta": { "qty": -1 }, "satiated": "energy", "amount": 0.5, "evt": { "kind": "consume", "valence": 0.5 } }
+    },
+    {
+      "id": "take_shared",
+      "label": "拿别人的份",
+      "needs": ["edible", "private"],
+      "idFormat": "take_shared:{owner}",
+      "cost": 0.16,
+      "impulse": 0.95,
+      "serves": { "energy": 0.9 },
+      "pre": [{ "owner_ne": "self" }, { "owner_absent": true }],
+      "expected": true,
+      "effect": {
+        "delta": { "qty": -1 },
+        "satiated": "energy",
+        "amount": "@riskyPortion",
+        "evt": { "kind": "normbreak", "valence": 0.45, "violates": "order", "about": "@owner" },
+        "secret": { "kind": "theft", "about": "@owner", "holder": "@self", "violates": "order", "valence": -0.6 },
+        "witness": true
+      }
+    }
+  ],
+  "drives": { "energy": { "setpoint": 0.55 } },
+  "params": { "riskyPortion": 1.1 },
+  "economy": {
+    "upkeep": 0.0012,
+    "costScale": 0.01,
+    "mealYield": 0.18,
+    "mealMin": 0.2,
+    "thresholds": [0.5, 0.32, 0.15]
+  },
+  "regen": [{ "thing": "pantry_a", "every": 55, "add": 2, "max": 8 }]
+}
