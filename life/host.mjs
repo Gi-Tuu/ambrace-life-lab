@@ -30,6 +30,13 @@ const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(proce
 // 语义是**每日**额度：魔粒按天回血（签到 250），预算跟着按天归零，否则 60 次烧完整段剩余时间都是替身
 const BUDGET = Number(process.env.MAX_CALLS ?? 120);
 const ATTEMPT_CAP = 20;
+// 有观众才上真模型：无人访问时走替身（0 成本），有人打开页面才调模型。
+// 依据是 1 魔粒≈2 次旗舰调用、签到 250/天=500 次/天，全天不间断约需 2880 魔粒，必须按在场性省。
+const PRESENCE_MS = Number(process.env.PRESENCE_MS ?? 180000);
+// 纯函数便于闸门测试：最近有人在看才允许调用
+export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
+  return now - lastVisitor <= presenceMs;
+}
 // 纯函数便于闸门测试：跨天归零，同日原样返回
 export function budgetTick(model, dayKey) {
   if (model.dayKey === dayKey) return model;
@@ -39,7 +46,7 @@ export function budgetTick(model, dayKey) {
   model.attempts.length = 0;
   return model;
 }
-const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
+const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -85,6 +92,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   if (S.model.calls >= BUDGET) return null; // 预算用尽：退回确定性替身，世界照跑，不再发请求
+  if (!observerActive(S.lastVisitor, Date.now())) return null; // 无人观看：走替身，把额度留给真正的观众
   const note = (msg) => { S.model.attempts.push(msg); if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift(); };
   for (let i = 0; i < CFG.providers.length; i++) {
     // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
@@ -247,6 +255,8 @@ function applyInto(pack, d) {
 
 export const host = {
   setBackend: configure,
+  // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
+  touch: () => { S.lastVisitor = Date.now(); },
   async start() {
     S.packs = { A: makePack('C2'), B: makePack('C2-neg') };
     let note = '没有存档，新建世界';
@@ -297,7 +307,7 @@ export const host = {
     if (S.timer) clearInterval(S.timer);
     S.timer = null;
   },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, saveError: S.saveError }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError }),
   snapshot() {
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p) => ({

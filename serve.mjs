@@ -100,6 +100,8 @@ async function chatProxy(req, res) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
+  // 观众在场打点：只认应用路径。/healthz 不算——平台每 30 秒探活一次，算进去会让"有观众"恒真，白白烧额度
+  if (p === '/' || p === '/index.html' || p === '/world' || p === '/act' || p === '/ctl' || p === '/chat') host.touch();
   try {
     if (req.method === 'GET' && p === '/healthz') {
       return json(res, 200, {
