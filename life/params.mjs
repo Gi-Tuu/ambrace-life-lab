@@ -8,6 +8,10 @@ export const PARAMS = {
   // 定到 0.1 是扫出来的（§28）：这一档下「需求主导 66% / 努力折扣主导 19%」，
   // 成本进入比较但不支配比较；0.3 以上成本又反超，0 则这个参数变成装饰。
   effortWeight: Number(process.env.EFFORT_WEIGHT ?? 0.1),
+  // O17：越轨取食的收益侧定价。规范代价沿用既有机制（自制压高冲动、order 决定信任罚、秘密可被传话），
+  // 这里只把「去别人门口拿一份」从低于正餐改成高于正餐，让"能不能稳住"成为角色的选择而非常数判决。
+  // 份量 0.45 且 expectedYield 关闭时恢复旧评分；开启且接近饱和时仍按可用量裁剪。
+  risky: { portion: Number(process.env.RISKY_PORTION ?? 1.1), referencePortion: 0.45 }, // 0.45 是原有 0.9 energy 系数所对应的旧份量
   // 需求紧迫度曲线指数（>1 让「小偏差」更不紧迫、「大偏差」更急），由 drives.errors() 使用
   urgencyExponent: Number(process.env.URGENCY_EXP ?? 1.5),
   // L13 自我维持：存续量、代谢与侵蚀阈值。全部走这里，便于冻结校验
@@ -43,6 +47,7 @@ const stable = (v) => (v && typeof v === 'object' ? JSON.stringify(v, Object.key
 export function paramsFingerprint(tables = {}) {
   return [
     'effort=' + PARAMS.effortWeight,
+    'risky=' + (tables.risky ?? PARAMS.risky.portion) + ',ref=' + PARAMS.risky.referencePortion, // 收益侧定价也是量纲：同组里一半人拿整份、一半人拿半份，存续就没法比
     'urg=' + PARAMS.urgencyExponent,
     'spill=' + PARAMS.viab.spill, // 代谢分配也是量纲：同组里一半人餐后扣存、一半人不扣，掉档数就没法比
     'sp=' + stable(tables.setpoint ?? null),

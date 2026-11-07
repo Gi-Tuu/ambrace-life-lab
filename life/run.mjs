@@ -18,11 +18,11 @@ const ROSTER = [
   { id: 'a3', name: '蓑', archetype: '孤僻', loc: 'watch' },
 ];
 
-export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [] } = {}) {
+export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null } = {}) {
   // V2 §6 修补①：只有显式标了组的运行才记账。组标签是「同一次比较的同一批人」，
   // 决策量纲（努力折扣/紧迫度指数/需求表/动作表/世界供给）必须整组一致，自变量（condition、通道掩码、钳制、人格）才允许不一致。
-  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash }));
-  const world = makeWorld({ pantries: pantry, stash });
+  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion }));
+  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`), condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask });
@@ -382,6 +382,7 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
           seed,
           配置: c.配置,
           角色: a.name,
+          越轨次数: a.counters.normbreak ?? 0,
           动作数: recs.length,
           平均每次cost: r3(sumCost / recs.length),
           账本老化刻数: r3(aged),
@@ -423,6 +424,7 @@ if (process.argv[1]?.endsWith('run.mjs')) {
   const seed = Number(arg('seed', 7));
   const ticks = Number(arg('ticks', 400));
   const cond = arg('cond', 'C2');
+  if (has('report') || has('sweep') || has('p3') || !process.argv.slice(2).length) console.log('注意：旧 P3 覆盖使用终局位置与事后需求，且是样本内标签择优，仅供历史对照，不能当作留出预测率；新测量运行 node life/o18-heldout.mjs。');
   if (has('report') || !process.argv.slice(2).length) {
     console.log(`\n== 消融矩阵 seed=${seed} ticks=${ticks} ==`);
     console.table(await ablation({ seed, ticks }));

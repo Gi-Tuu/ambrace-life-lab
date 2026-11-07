@@ -10,7 +10,7 @@ export const CONDITIONS = ['C0', 'C1', 'C2', 'C2-neg'];
 // §24：全开/全关测到的只是四个通道的**净效应**，通道之间方向会互相抵消（离线③压过①，
 // 活模型实验里温度被我固定成 0.85 等于人为摘掉③，符号就翻了）。所以拆成独立开关。
 // mask 形如 { temp: 0 } 表示「在 condition 的基础上再关掉③」。
-export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '③采样', mem: '④检索', viab: '⑤存续风险', erosion: '⑥自我侵蚀', reflect: '⑦反思回合', ask: '⑧事件门控', gossip: '⑨告知通道' };
+export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '③采样', mem: '④检索', viab: '⑤存续风险', erosion: '⑥自我侵蚀', reflect: '⑦反思回合', ask: '⑧事件门控', gossip: '⑨告知通道', expectedYield: '⑩预期份量' };
 
 // viab / erosion 是 L13 的两个**独立**开关（V2 §6「独立开关」的要求）：
 //   ⑤ viab    = 存续风险进不进需求紧迫度（进比较才叫承重）
@@ -23,7 +23,7 @@ export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '�
 // 分开登记的理由与 §24 相同：捆在一起就回答不了"变化到底是哪一条带来的"。
 export function channelsFor(condition, mask) {
   const proc = { reflect: 1, ask: 1, gossip: 1 };
-  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0 };
+  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0 };
   return mask ? { ...on, ...mask } : on;
 }
 
@@ -67,7 +67,20 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     const base = Object.values(bd).reduce((a, b) => a + b, 0);
     const withV = risk > 0 ? drives.breakdown(act, risk) : bd;
     const viabDelta = risk > 0 ? Number((Object.values(withV).reduce((a, b) => a + b, 0) - base).toFixed(4)) : 0;
-    let u = base + viabDelta;
+    // 预期份量替换原有 energy 分量而非再加一份完整需求收益。
+    // 只比较行动后可进入 [0,1] 的需求增量；不预支存续收益、不预测成功率。
+    // 关开关或无已知份量时精确退回原评分。基准 .45 是旧系数对应的份量。
+    let expectedDelta = 0;
+    const currentEnergy = drives.v?.energy;
+    if (ch.expectedYield && act.kind === 'take_shared' && Number.isFinite(act.expectedPortion) && Number.isFinite(currentEnergy)) {
+      const capacity = Math.max(0, 1 - Math.max(0, Math.min(1, currentEnergy)));
+      const usable = Math.min(capacity, Math.max(0, act.expectedPortion));
+      const coefficient = (act.serves?.energy ?? 0) * usable / PARAMS.risky.referencePortion;
+      const alternative = { ...act, serves: { ...act.serves, energy: coefficient } };
+      const alt = drives.breakdown(alternative, risk);
+      expectedDelta = (alt.energy ?? 0) - (withV.energy ?? 0);
+    }
+    let u = base + viabDelta + expectedDelta;
     let discriminatingMod = 0;
     if (ch.util) {
       // 这一项对所有动作相同，改不了名次，因此**不计入行动来源**（§26 的常数偏移教训）
@@ -84,6 +97,7 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     const effortPen = -PARAMS.effortWeight * act.cost; // 努力折扣显式化：可调、可关（§27 成本支配 78.5% 的修法）
     u += effortPen;
     const cand = { ...bd, 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
+    if (expectedDelta) cand.预期份量 = Number(expectedDelta.toFixed(4));
     if (viabDelta) cand.存续风险 = Number(viabDelta.toFixed(4)); // 风险为 0 时不挂这个标签，免得归因表里出现恒零的假来源
     const driver = Object.entries(cand).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ?? 'none';
     out.push({
