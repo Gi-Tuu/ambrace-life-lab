@@ -1,0 +1,20 @@
+.env
+.env.*
+*.log
+node_modules/
+.DS_Store
+
+# 运行时存档与探针：缺失时应用自动新建世界
+data/
+data-probe/
+
+# 内部文档不入库：实验记录、台账、赛事底稿、手记活稿
+docs/
+contest.txt
+
+# 根目录临时产物（截图 / DOM dump / 世界 dump / 进程残留）
+/*.png
+/*.err
+/dom*.html
+/s3-*.json
+/server.pid
