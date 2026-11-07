@@ -15,6 +15,8 @@ export const PARAMS = {
   // O10 日程：昼夜节律进入行动比较的权重。0 = 精确退回旧评分（等价性闸门用 SCHEDULE_WEIGHT=0 复现旧读数）
   // 当前默认关：0.06 档实测撞四道判据（残差 0.083 未记账通道 / 饥馑=宽裕 / 需求主导 0.369 / order 分化反号），见 PLAN O10 交接块
   schedule: { weight: Number(process.env.SCHEDULE_WEIGHT ?? 0) },
+  // M7 自发转述（第三人声誉）：0=关（默认），1=开启。世界级参数，进冻结指纹
+  socialGossip: Number(process.env.SOCIAL_GOSSIP ?? 0),
   // 需求紧迫度曲线指数（>1 让「小偏差」更不紧迫、「大偏差」更急），由 drives.errors() 使用
   urgencyExponent: Number(process.env.URGENCY_EXP ?? 1.5),
   // L13 自我维持：存续量、代谢与侵蚀阈值。全部走这里，便于冻结校验
@@ -52,6 +54,7 @@ export function paramsFingerprint(tables = {}) {
     'effort=' + PARAMS.effortWeight,
     'risky=' + (tables.risky ?? PARAMS.risky.portion) + ',ref=' + PARAMS.risky.referencePortion, // 收益侧定价也是量纲：同组里一半人拿整份、一半人拿半份，存续就没法比
     'sched=' + (tables.schedule ?? PARAMS.schedule.weight), // 日程权重同进量纲：一半人有节律一半人没有，位置分布就没法比
+    'social=' + (tables.social ?? PARAMS.socialGossip), // 一半人互相传话一半人不传，关系分布就没法比
     'urg=' + PARAMS.urgencyExponent,
     'spill=' + PARAMS.viab.spill, // 代谢分配也是量纲：同组里一半人餐后扣存、一半人不扣，掉档数就没法比
     'sp=' + stable(tables.setpoint ?? null),

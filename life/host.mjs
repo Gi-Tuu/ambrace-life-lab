@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
 import { phaseOf, scheduledLoc } from './clock.mjs';
 import { tell } from './gossip.mjs';
+import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
 import { DIMS } from './traits.mjs';
@@ -68,7 +69,7 @@ function makePack(condition) {
   }
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
   spawn(world, 'p1', 'hall');
-  return { world, agents, condition, log: [], series: [], stat: { 决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0 } };
+  return { world, agents, condition, log: [], series: [], stat: { 决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0, 传闻: 0 } };
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
@@ -149,6 +150,14 @@ async function tick() {
         }
       }
     }
+    // M7 自发转述：只在自己人之间发生，玩家不在场也照常（这是世界事实，不是玩家动作）
+    if (p.world.socialGossip > 0) {
+      const told = socialRound(p.world);
+      for (const x of told) {
+        p.stat.传闻 = (p.stat.传闻 ?? 0) + 1;
+        p.log.push({ t: p.world.t, who: '系统', kind: 'tell', text: `${p.agents[x.teller]?.name ?? x.teller} 把「${x.detail}」告诉了 ${p.agents[x.target]?.name ?? x.target}` });
+      }
+    }
     p.log = p.log.slice(-160);
     // 存续历史：曲线要能回答"谁先垮、从哪一步开始回不去"，所以除了 v 本身，还要把每次掉档记在同一个时间轴上
     p.series.push({
@@ -182,7 +191,7 @@ function catchUp(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
+    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
     log: p.log,
     playerLog: p.playerLog ?? [],
     series: p.series,
@@ -221,7 +230,7 @@ function applyInto(pack, d) {
   pack.playerLog = d.playerLog ?? [];
   pack.series = d.series ?? []; // 曲线跟着存档走：重启后"谁先垮"的那段历史不能凭空消失
   pack.stat = d.stat ?? pack.stat; // 不存的话每次重启，页面上的对照计数都归零，实验读数就断了
-  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
+  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, socialGossip: d.world.socialGossip ?? pack.world.socialGossip, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
   // 秘密是认知状态，必须活过重启：谁已经知道这件事不能因为重启就忘了，否则同一句话可以说第二遍
   pack.world.secrets = (d.world.secrets ?? []).map((s) => ({ ...s, known: new Set(s.known ?? []) }));
   pack.world.occupancy = {};

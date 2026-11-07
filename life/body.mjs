@@ -29,7 +29,7 @@ export function hail(world, targetId, ticks = 3) {
 
 export const isHailed = (world, id) => Boolean(world.hail && world.hail.target === id && world.t < world.hail.until);
 
-export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight }) {
+export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip }) {
   return {
     t: 0,
     loc: {},
@@ -39,6 +39,8 @@ export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky
     riskyPortion,
     // O10 日程权重同样是世界级参数：0 = 行动比较里不含节律项，精确退回旧评分
     scheduleWeight,
+    // M7 自发转述开关：0 时不写任何状态，行为与基线逐位一致
+    socialGossip,
     stash: {},
     expect: {},
     occupancy: {},
@@ -198,7 +200,11 @@ export function actuate(world, agentId, action) {
       if (!victim || (world.stash[victim] ?? 0) <= 0) return { action, ok: false, code: 'EMPTY', observation: '那人门口已经空了', evt: evt({ kind: 'shortfall', valence: -0.5, selfCaused: false, serves: 'energy' }) };
       world.stash[victim] -= 1;
       // 越轨本身就是可被套利的事实：只有作案者天生知道（受害者当时不在场，这正是"秘密"成立的条件）
-      addSecret(world, { kind: 'theft', about: victim, holder: agentId, valence: -0.6, violates: 'order', detail: `${world.agents[agentId].name} 从 ${world.agents[victim].name} 门口拿走一份` });
+      const sec = addSecret(world, { kind: 'theft', about: victim, holder: agentId, valence: -0.6, violates: 'order', detail: `${world.agents[agentId].name} 从 ${world.agents[victim].name} 门口拿走一份` });
+      // M7 目击登记：作案时在场的人成为知情者（包括作案者自己），但**不在此刻改变态度**——
+      // 态度改变只发生在被转述（receive → assess）那一刻。没有这一条，"第三人声誉"没有任何输入源。
+      // 受 socialGossip 开关约束：默认关时必须与旧基线逐位一致。
+      if ((world.socialGossip ?? 0) > 0) for (const w of world.occupancy[world.loc[agentId]] ?? []) if (w !== victim) sec.known.add(w);
       return {
         action,
         ok: true,

@@ -1,6 +1,7 @@
 // 最小原型跑动与判据报告。默认离线（确定性替身，不联网）；--live 时插真模型审议层。
 import { makeWorld, spawn, BASE_KINDS, scanSecrets } from './body.mjs';
 import { gossipRound } from './gossip.mjs';
+import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, makeRng } from './rng.mjs';
 import { dist, kl, ruleCoverage, spontaneous, mutualInfo, miNull, deliberationRate, actionEntropy, driverDist, recoveryStats } from './metrics.mjs';
@@ -18,11 +19,11 @@ const ROSTER = [
   { id: 'a3', name: '蓑', archetype: '孤僻', loc: 'watch' },
 ];
 
-export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null, scheduleWeight = null } = {}) {
+export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit = null, events = true, deliberator = null, pin = null, traitsOverride = null, pantry = 6, stash = 3, channelMask = null, group = null, gossipAt = [], riskyPortion = null, scheduleWeight = null, socialGossip = null } = {}) {
   // V2 §6 修补①：只有显式标了组的运行才记账。组标签是「同一次比较的同一批人」，
   // 决策量纲（努力折扣/紧迫度指数/需求表/动作表/世界供给）必须整组一致，自变量（condition、通道掩码、钳制、人格）才允许不一致。
-  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion, schedule: scheduleWeight ?? PARAMS.schedule.weight }));
-  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight });
+  if (group) assertFrozen(group, paramsFingerprint({ setpoint: BASE_SETPOINT, needs: NEED_META, kinds: BASE_KINDS, pantry, stash, risky: riskyPortion ?? PARAMS.risky.portion, schedule: scheduleWeight ?? PARAMS.schedule.weight, social: socialGossip ?? PARAMS.socialGossip }));
+  const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight, socialGossip: socialGossip ?? PARAMS.socialGossip });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`), condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask });
@@ -45,6 +46,8 @@ export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit 
       if (pin?.[id]) for (const [d, v] of Object.entries(pin[id])) agents[id].bank.m[d] = v; // 持续钳制：像光遗传按住
     }
   }
+  // M7：离线世界没有玩家实体 ⇒ presence:false（与 gossipRound 的离线口径一致）
+  if (world.socialGossip > 0) socialRound(world, { presence: false });
   return { world, agents };
 }
 
