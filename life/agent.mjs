@@ -66,6 +66,8 @@ export class Organism {
   async tick(world) {
     this.world = world;
     const t = world.t;
+    // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
+    this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
 
     const incoming = world.pending.filter((p) => p.for === this.id);
     world.pending = world.pending.filter((p) => p.for !== this.id);
@@ -290,6 +292,7 @@ export class Organism {
     const entry = extra.scored?.find((s) => s.id === id);
     this.trace.push({
       t, id: this.id, name: this.name, layer, action: id, kind: action.kind, target: action.target ?? action.to ?? null,
+      tickStart: this.tickStart?.t === t ? this.tickStart : null,
       ok: result.ok, obs: result.observation, m: this.bank.snapshot(), drives: { ...this.drives.v }, dep: this.drives.describe(),
       driver: entry?.driver ?? (layer === 'reflex' ? '反射' : layer === 'habit' ? '习惯' : 'none'), parts: entry?.parts ?? null,
       appraisal: a.parts, importance: Number(a.importance.toFixed(3)), rel: this.relations.dump(t), summary: this.bank.summary(), cond: this.condition,

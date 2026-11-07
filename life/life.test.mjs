@@ -5,10 +5,11 @@ import { simulate, p1a, p1b, p2, p3, sweep, ablation, viabilityProfile, recovery
 import { p2Intervention } from './s4-p2-intervention.mjs';
 import { dist, kl, driverDist, mutualInfo, miNull, divergence, ruleCoverage, recoveryStats } from './metrics.mjs';
 import { SelfMaintain } from './viability.mjs';
-import { makeWorld, spawn, affordancesFor, BASE_KINDS } from './body.mjs';
+import { makeWorld, spawn, affordancesFor, BASE_KINDS, actuate } from './body.mjs';
 import { visibleActions, scoreAll, preferenceBands, channelsFor, BANDS } from './model.mjs';
 import { Organism } from './agent.mjs';
 import { EpisodicMemory } from './memory.mjs';
+import { evaluateTemporal } from './o18-metrics.mjs';
 import { appraise } from './appraisal.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
 import { BASE_SETPOINT, NEED_META, Drives } from './drives.mjs';
@@ -429,11 +430,13 @@ test('O16 收支账本必须闭合：账面残差归零，否则式子与实现�
   assert.ok(on.some((x) => x > 0 && x < 1), '没有任何一个样本是"有时开有时关"的 ⇒ ⑤ 的作用域没被计量到');
 });
 
-test('O16 稀缺是设定：27 个样本全部低于自己的打平线', async () => {
+test('O17/D8 稀缺仍在但越轨给活路：有人吃不够，也有人靠越轨吃够', async () => {
   const { rows } = await metab();
-  const under = rows.filter((r) => r.实测顿每百刻 < r.打平需顿每百刻).length;
-  assert.equal(under, rows.length, `${rows.length - under} 个样本吃够了打平线 ⇒ "谁都稳不住"这句主张要改写，世界不再稀缺`);
-  assert.ok(rows.every((r) => r.收支差 < 0), '有样本收支为正却仍在掉档 ⇒ 收支差不是恢复的判据，得重找解释量');
+  const under = rows.filter((r) => r.实测顿每百刻 < r.打平需顿每百刻);
+  const over = rows.filter((r) => r.实测顿每百刻 >= r.打平需顿每百刻);
+  assert.ok(under.length > 0, '所有样本都吃够 ⇒ 稀缺被 O17 消掉了，世界不再稀缺');
+  assert.ok(over.length > 0, '没有样本吃够打平线 ⇒ O17 没给出活路，主张退回旧的「谁都稳不住」');
+  assert.ok(over.some((r) => r.越轨次数 > 0), '吃够的样本里没有一个靠越轨 ⇒ 活路不是 O17 给的，归因错误');
 });
 
 test('D7 扣存通道不造能量：同一份进食日程，总能量轨迹与 spill=0 逐位相符', () => {
@@ -909,14 +912,47 @@ test('告知扣的是当事人（作案者）的信任，不是受害者的', as
   assert.ok(trustOf(a1, 'a2') < culpritBefore, `被告知后对作案者的信任没降（${culpritBefore} → ${trustOf(a1, 'a2')}）⇒ 这条消息没打进评价`);
   assert.equal(trustOf(a1, 'a1'), selfBefore, `受害者的自我关系被改了（${selfBefore} → ${trustOf(a1, 'a1')}）⇒ about 指错了人，和上一版同一类错误`);
 });
-test('告知之后，小规则表更难复现（玩法真的长进了架构里）', async () => {
-  const base = await simulate({ seed: 7, ticks: 400, condition: 'C2' });
-  const told = await simulate({ seed: 7, ticks: 400, condition: 'C2', gossipAt: [200] });
-  const cov = async (x) => {
-    const v = await Promise.all(Object.values(x.agents).map((a) => ruleCoverage(a.trace.filter((r) => r.t > 200), x.world, 20).coverage));
-    return v.reduce((s, y) => s + y, 0) / v.length;
-  };
-  const c0 = await cov(base);
-  const c1 = await cov(told);
-  assert.ok(c1 <= c0 + 0.02, `告知后覆盖率 ${c1.toFixed(3)} 反而高于对照 ${c0.toFixed(3)} ⇒ 传话没增加不可脚本性`);
+// 用户 2026-11-07 批准修订 D8：旧分层/样本内覆盖结论作为历史保留于 PLAN，
+// 新闸门分别检验两档真实传话、时间留出与相同 mask 切断；不预设准确率变化方向。
+test('D8 两档收益：传话有记录，事前特征可时间留出，切断后行为一致', async (t) => {
+  const bin = v => v < .35 ? 'low' : v < .6 ? 'mid' : 'high';
+  for (const riskyPortion of [.45, 1.1]) {
+    const base = await simulate({ seed: 7, ticks: 400, condition: 'C2', riskyPortion });
+    const told = await simulate({ seed: 7, ticks: 400, condition: 'C2', riskyPortion, gossipAt: [200] });
+    const cutBase = await simulate({ seed: 7, ticks: 400, condition: 'C2', riskyPortion, channelMask: { gossip: 0 } });
+    const cutTold = await simulate({ seed: 7, ticks: 400, condition: 'C2', riskyPortion, channelMask: { gossip: 0 }, gossipAt: [200] });
+    assert.ok(told.world.gossipLog.filter(x => x.ok).length >= 2, `份量 ${riskyPortion} 未发生足够告知`);
+    assert.equal(sigOf(cutBase.agents), sigOf(cutTold.agents), `份量 ${riskyPortion} 切断告知后仍改变行动`);
+    for (const run of [base, told]) for (const agent of Object.values(run.agents)) {
+      const rows = agent.trace.filter(r => r.action && r.t > 200).map(r => {
+        assert.ok(r.tickStart && r.tickStart.t === r.t, `缺少 ${agent.id}/${r.t} 事前快照`);
+        return { t: r.t, x: { energy: bin(r.tickStart.drives.energy), social: bin(r.tickStart.drives.social), loc: r.tickStart.loc }, y: r.action };
+      });
+      const r = evaluateTemporal(rows, { after: 200, split: 300, until: 400 });
+      assert.ok(r.train.n > 0 && r.test.n > 0 && Number.isFinite(r.test.accuracy));
+      t.diagnostic(`份量 ${riskyPortion} ${run === told ? '告知' : '基线'} ${agent.id} 留出准确率 ${r.test.accuracy.toFixed(3)}，多数类 ${r.baseline.accuracy.toFixed(3)}`);
+    }
+  }
+});
+
+test('O17 收益侧：越轨拿整份，份量高于正餐半碗', () => {
+  const w = makeWorld({ pantries: 6, stash: 3 });
+  spawn(w, 'a1', 'hall');
+  spawn(w, 'a2', 'home');
+  w.agents.a1 = { id: 'a1', name: '岑' };
+  w.agents.a2 = { id: 'a2', name: '绛' };
+  w.stash.a2 = 3;
+  const r = actuate(w, 'a1', { kind: 'take_shared', target: 'a2' });
+  assert.ok(r.ok, '越轨动作没执行成功 ⇒ 后面谈不上定价');
+  assert.equal(r.amount, PARAMS.risky.portion, '份量没走冻结参数 ⇒ 拨回旧值的等价性闸门失效');
+  assert.ok(r.amount > 0.5, `越轨份量 ${r.amount} 不高于正餐 0.5 ⇒ 收益侧没定价，没人会理性选它`);
+});
+
+test('O17 规范代价进比较：同种子下 order 高者越轨更少', async () => {
+  const goals = (order) => ({ goals: { order, safety: 0.7, novelty: 0.6, social: 0.4 } });
+  const hi = await simulate({ seed: 11, ticks: 600, traitsOverride: { a2: goals(0.95) } });
+  const lo = await simulate({ seed: 11, ticks: 600, traitsOverride: { a2: goals(0.05) } });
+  const nHi = hi.agents.a2.counters.normbreak;
+  const nLo = lo.agents.a2.counters.normbreak;
+  assert.ok(nLo > nHi, `order 0.05 越轨 ${nLo} 次应多于 order 0.95 的 ${nHi} 次 ⇒ 规范代价没进比较，O17 只是加了饭`);
 });

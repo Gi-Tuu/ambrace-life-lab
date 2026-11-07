@@ -3,6 +3,8 @@
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
+import { PARAMS } from './params.mjs';
+
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
 export const BASE_KINDS = {
@@ -26,12 +28,14 @@ export function hail(world, targetId, ticks = 3) {
 
 export const isHailed = (world, id) => Boolean(world.hail && world.hail.target === id && world.t < world.hail.until);
 
-export function makeWorld({ pantries = 6, stash = 3 }) {
+export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion }) {
   return {
     t: 0,
     loc: {},
     agents: {},
     pantry: pantries,
+    // O17 收益侧定价是世界级实验参数：同一次比较里整组一致，分层对照才允许不同（D8）
+    riskyPortion,
     stash: {},
     expect: {},
     occupancy: {},
@@ -140,6 +144,8 @@ export function affordancesFor(world, agentId) {
       cost: Number((0.16 + 0.16 * (r.trust / 100)).toFixed(3)),
       impulse: 0.95,
       serves: { energy: 0.9 },
+      // 世界规则明示的单次营养当量，不是从经验学到的预测；物资减少一份、营养当量可不同。
+      expectedPortion: world.riskyPortion ?? PARAMS.risky.portion,
     });
   }
   return out;
@@ -184,9 +190,10 @@ export function actuate(world, agentId, action) {
         action,
         ok: true,
         code: 'OK',
-        observation: `从 ${world.agents[victim].name} 门口拿走一份`,
+        observation: `从 ${world.agents[victim].name} 门口拿走一整份`,
         satiated: 'energy',
-        amount: 0.45,
+        // O17：越轨是整份（高于正餐半碗），收益侧定价；规范代价在评价/关系/秘密层照旧
+        amount: world.riskyPortion ?? PARAMS.risky.portion,
         violates: 'order',
         about: victim,
         evt: evt({ kind: 'normbreak', valence: 0.45, about: victim, violates: 'order', serves: 'energy' }),
