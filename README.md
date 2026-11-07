@@ -20,13 +20,16 @@
 | L5 需求 | 内稳态与操作点 | `life/drives.mjs` |
 | L6 认知评价 | 相关 / 意外 / 可控 / 规范 | `life/appraisal.mjs` |
 | L7 动机 | 逐动作归因 | `life/metrics.mjs` |
+| L8 行为状态 | 目标承诺期（可选层，默认关） | `life/m3-planner.mjs` |
+| 耦合调制权 | 变聋 / 离场 / 拒绝互动（可选层，默认关） | `life/coupling.mjs` |
 | L9 规则校验 | 合法性 + 驳回重决策 | `life/rules.mjs` |
 | L10 反应器 | 意图 → 世界改变 | `life/host.mjs` |
 | L11 记忆 | 情景 + 习惯 | `life/memory.mjs` |
 | L12 思考层 | 事件门控、按需接 LLM | `life/loop-real.mjs` |
 | L13 自我维持 | 存续账本 + 不可逆降级 | `life/viability.mjs` |
 
-L8（行为状态 + 承诺期）尚未实现；当前行为粒度是单个动作。
+L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask` 不传），关掉时不消费额外随机数、不写状态，轨迹与没有这两层时逐位相同。
+离线实验用 `channelMask` 打开它们并单独计量；演示页上的 `M3 承诺期 / M4 耦合调制` 两个开关只是同一件事的入口，且只叠加在 A 侧（B 侧是切断承重通道的负向对照，把内部状态接回决策就不再是对照）。
 
 ## 快速开始
 
@@ -53,7 +56,7 @@ WORLD_STASH=
 ## 判据与复现
 
 ```bash
-node --test life/life.test.mjs life/host.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs
+node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs
 node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
 node life/run.mjs --report     # 四条件消融矩阵
 node life/run.mjs --sweep      # 多 seed 复核
