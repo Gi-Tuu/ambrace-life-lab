@@ -59,6 +59,7 @@ node life/run.mjs --sweep      # 多 seed 复核
 node life/run.mjs --viab       # 受损速度
 node life/run.mjs --recover    # 恢复动力学
 node life/run.mjs --metab      # 代谢与进食实测账
+node life/seed-gen.mjs 600 seed-run   # 重新生成演示种子存档（离线实跑，固定 seed）
 node serve.mjs                 # 本地 demo
 ```
 
@@ -66,9 +67,11 @@ node serve.mjs                 # 本地 demo
 
 ## 部署
 
-`Dockerfile` 面向魔搭创空间：监听 `0.0.0.0:7860`，世界状态落在 `DATA_DIR`（容器内 `/data`）。镜像只包含 `serve.mjs`、`life/`、`web/` 三样；密钥走平台密文变量。
+`Dockerfile` 面向魔搭创空间：监听 `0.0.0.0:7860`，世界状态落在 `DATA_DIR`（容器内 `/data`）。镜像只包含 `serve.mjs`、`life/`、`web/`、`seed/` 四样；密钥走平台密文变量。
 
-世界状态必须在服务端持久化：放在浏览器里关标签页即重置，免费创空间休眠也会丢——两者都会直接否证「内部状态持续存在」这一主张。无持久卷时重启即新世界。
+世界状态必须在服务端持久化：放在浏览器里关标签页即重置，免费创空间休眠也会丢——两者都会直接否证「内部状态持续存在」这一主张。
+
+**固定历史起点**：免费创空间实测无跨容器重建持久卷（重新部署即清空 `/data`）。因此镜像内置 `seed/world.json`——一份由 `seed-gen.mjs` 离线实跑 600 刻产生的存档（seed=7，含不可逆损失与关系历史）。启动时 `/data` 有存档优先续跑（休眠补时），没有则载入种子：平台重置变成「回到同一个可复现的历史起点」，而非一个空白世界。种子是实跑产物，不是编造历史；载入种子不做休眠补时。
 
 ## 仓库边界
 

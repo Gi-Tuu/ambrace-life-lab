@@ -7,10 +7,14 @@ node_modules/
 # 运行时存档与探针：缺失时应用自动新建世界
 data/
 data-probe/
+/seed-run/
 
 # 内部文档不入库：实验记录、台账、赛事底稿、手记活稿
 docs/
 contest.txt
+
+# 创空间推送用的临时克隆（构建验证后删除）
+/ambrace-life-lab/
 
 # 根目录临时产物（截图 / DOM dump / 世界 dump / 进程残留）
 /*.png

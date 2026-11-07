@@ -1,11 +1,11 @@
 // 权威世界宿主：状态在服务器上持续演化，浏览器只是观察与介入的窗口。
 // 三件事是这里的核心，不是装饰：
-//   1) 持久化：容器文件系统随时可能没，所以状态落 DATA_DIR（创空间需挂持久卷）
+//   1) 持久化：状态落 DATA_DIR；平台无持久卷时（创空间实测）靠内置种子回到固定历史起点
 //   2) 时间差推进：免费创空间会休眠。醒来后必须把「没人看的那段时间」补进内部状态，
 //      否则「内部状态持续存在」这个主张在演示现场就会被戳穿。
 //   3) 只补状态、不补决策：休眠期间没有观察者，编造那段时刻的行为等于伪造历史。
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
 import { phaseOf } from './clock.mjs';
 import { tell } from './gossip.mjs';
@@ -239,7 +239,18 @@ export const host = {
       if (mins > 1) catchUp(mins);
       note = `载入存档：世界已跑到第 ${S.packs.A.world.t} 刻，休眠 ${mins.toFixed(1)} 分钟`;
     } catch {
-      /* 没有存档就是新世界的正常起点，交给应用层播报 */
+      // 免费创空间实测无跨容器重建持久卷（重新部署即清空 /data）。
+      // 没有存档时载入内置种子：一份实跑演化的固定历史起点，重置变成可复现的同一起点。
+      // 种子不走 catchUp——它是初始条件，不是休眠，补时会往固定起点里掺真实时间。
+      try {
+        const raw = JSON.parse(await readFile(process.env.SEED_FILE ?? resolve('seed/world.json'), 'utf8'));
+        applyInto(S.packs.A, raw.A);
+        applyInto(S.packs.B, raw.B);
+        S.model = raw.model ?? S.model;
+        note = `载入内置种子存档：从第 ${S.packs.A.world.t} 刻的历史起点继续（seed=${raw.seed}）`;
+      } catch {
+        /* 连种子也没有就是新世界的正常起点，交给应用层播报 */
+      }
     }
     S.savedAt = Date.now();
     S.timer = setInterval(() => tick(), TICK_MS);
