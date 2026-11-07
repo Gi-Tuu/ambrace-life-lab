@@ -2,12 +2,13 @@
 // DATA_DIR 必须在 import host 之前设好——host 在模块加载时就把它读成常量。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, existsSync, statSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const DIR = mkdtempSync(join(tmpdir(), 'ambrace-host-'));
 process.env.DATA_DIR = DIR;
+process.env.SEED_FILE = join(DIR, 'no-seed.json'); // 其余测试保持 hermetic：不吃仓库里的演示种子
 const CAP = Number(process.env.CATCHUP_CAP_MIN ?? 360);
 const PROD = resolve(process.cwd(), 'data', 'world.json');
 
@@ -82,4 +83,20 @@ test('补时只补慢过程，不补决策；超过上限要如实标截断', as
   const big = await host.ctl({ action: 'catchup', minutes: CAP + 40 });
   assert.equal(big.missed.capped, true, '超过截断上限却没标 capped');
   assert.equal(big.missed.applied, CAP, `实际补时 ${big.missed.applied} 不等于上限 ${CAP}`);
+});
+
+test('容器重建无存档时载入内置种子；连种子也没有才新建世界', async () => {
+  const seedFile = resolve(process.cwd(), 'seed', 'world.json');
+  const seedT = JSON.parse(readFileSync(seedFile, 'utf8')).A.world.t;
+  rmSync(join(DIR, 'world.json'), { force: true });
+  process.env.SEED_FILE = seedFile;
+  await host.start();
+  host.stop();
+  assert.equal(host.status().t, seedT, `无存档重启后 t=${host.status().t} ≠ 种子 ${seedT} ⇒ 固定历史起点没接上`);
+  assert.ok(Object.values(host.packs.A.agents).some((a) => a.viab.ledger.length > 0), '种子没带不可逆损失 ⇒ 开场看不到掉档历史');
+  rmSync(join(DIR, 'world.json'), { force: true });
+  process.env.SEED_FILE = join(DIR, 'missing.json');
+  await host.start();
+  host.stop();
+  assert.equal(host.status().t, 0, '种子缺失时没回到新建世界 ⇒ 兜底路径坏了');
 });
