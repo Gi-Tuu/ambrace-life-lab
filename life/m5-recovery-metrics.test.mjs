@@ -18,11 +18,27 @@ test('无有效冲击与无恢复分别识别，阈值边界归入带内',()=>{
  for(const invalid of [[],[.1,NaN],[.1,-.1]])assert.throws(()=>measureRecovery(invalid));
 });
 test('正例和可打红对照：双击必须在两个端点都严格晚于单击',()=>{
- const obs=(first,stable)=>({valid:true,first,stable});
+ const obs=(first,stable)=>({valid:true,impact:.1,first,stable,startTick:80,endTick:600,threshold:.02,minRun:5});
  assert.equal(compareRecovery(obs(2,3),obs(3,4)),'pass');
  assert.equal(compareRecovery(obs(2,3),obs(2,4)),'fail-first');
  assert.equal(compareRecovery(obs(2,3),obs(3,3)),'fail-stable');
  assert.equal(compareRecovery(obs(2,3),obs(3,null)),'unconfirmed');
  assert.equal(compareRecovery(obs(2,null),obs(3,4)),'unconfirmed');
  assert.equal(compareRecovery({valid:false},obs(3,4)),'invalid');
+});
+
+test('比较器拒绝窗口、阈值或连续长度不同，以及缺失协议',()=>{
+ const base={valid:true,impact:.1,first:2,stable:3,startTick:80,endTick:600,threshold:.02,minRun:5};
+ const late={...base,first:3,stable:4};
+ assert.equal(compareRecovery(base,late),'pass');
+ for(const [field,value] of [['startTick',81],['endTick',601],['threshold',.03],['minRun',6]]){
+  assert.equal(compareRecovery(base,{...late,[field]:value}),'invalid',field);
+  const missing={...late};delete missing[field];assert.equal(compareRecovery(base,missing),'invalid',field+' 缺失');
+ }
+});
+
+test('比较器拒绝伪造或越界的恢复端点及无效冲击',()=>{
+ const base={valid:true,impact:.1,first:2,stable:3,startTick:80,endTick:600,threshold:.02,minRun:5};
+ for(const bad of [{first:-1},{first:517},{stable:1},{first:null,stable:4},{first:'3'},{impact:.02}])
+  assert.equal(compareRecovery(base,{...base,...bad}),'invalid');
 });

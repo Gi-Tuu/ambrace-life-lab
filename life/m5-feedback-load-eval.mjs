@@ -1,5 +1,7 @@
 // 第二候选：负荷分别作用于回归目标与内源回馈增益。隔离验证，不接生产。
 import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+import {resolve} from 'node:path';
 import {ProbeBank} from './m5-bank-probe.mjs';
 import {run as oldRun} from './m5-setpoint-eval.mjs';
 import {hill} from './modulators.mjs';
@@ -7,7 +9,7 @@ import {M5_DEFAULTS} from './m5-slow.mjs';
 import {measureRecovery,compareRecovery} from './m5-recovery-metrics.mjs';
 import {DIMS,sampleTraits} from './traits.mjs';
 import {makeRng,gauss} from './rng.mjs';
-class FeedbackBank extends ProbeBank {
+export class FeedbackBank extends ProbeBank {
  constructor(traits,rng,{enabled=true,load=true,feedback=true,delay=8,setpoint=true,gain=true}={}){
   super(traits,rng,{enabled,load:false,feedback,delay});
   this.loadOn=load;this.setpointOn=setpoint;this.gainOn=gain;this.load=0;
@@ -63,6 +65,7 @@ function run({archetype,seed,align,config}){
  }
  return {archetype,seed,align,config,single:s,double:d,verdict:compareRecovery(s,d),identical,finalLoad:a.map(b=>b.load)};
 }
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
 const rows=[];
 for(const [sample,seeds] of [['development',[7,11,13,23,42]],['prior-known',[5,17,29,37,53]],['new-seeds',[2,19,41,61,73]]])
  for(const archetype of ['谨慎','冲动','孤僻'])for(const seed of seeds)for(const align of [true,false])
@@ -76,4 +79,5 @@ if(process.argv.includes('--gate')){
  assert.equal(selected.length,15,'新种子样本不完整');
  const bad=selected.filter(r=>r.verdict!=='pass');
  assert.equal(bad.length,0,`双端点闸门未通过：${bad.length}/${selected.length} 组不满足严格延长`);
+}
 }
