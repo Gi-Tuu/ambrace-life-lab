@@ -27,9 +27,19 @@ const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留�
 
 const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(process.env.SEED ?? 7), brain: 'local' };
 // 调用预算闸门：线上审议路径必须与离线脚本同源受控，否则"MAX_CALLS"只是文档里的装饰（真实风险：无上限烧第三方余额）
+// 语义是**每日**额度：魔粒按天回血（签到 250），预算跟着按天归零，否则 60 次烧完整段剩余时间都是替身
 const BUDGET = Number(process.env.MAX_CALLS ?? 120);
 const ATTEMPT_CAP = 20;
-const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [] }, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
+// 纯函数便于闸门测试：跨天归零，同日原样返回
+export function budgetTick(model, dayKey) {
+  if (model.dayKey === dayKey) return model;
+  model.dayKey = dayKey;
+  model.calls = 0;
+  model.tokens = 0;
+  model.attempts.length = 0;
+  return model;
+}
+const S = { packs: null, timer: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, saveError: null, dir: process.env.DATA_DIR ?? 'data' };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -73,6 +83,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   ].filter(Boolean);
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
+  budgetTick(S.model, new Date().toISOString().slice(0, 10));
   if (S.model.calls >= BUDGET) return null; // 预算用尽：退回确定性替身，世界照跑，不再发请求
   const note = (msg) => { S.model.attempts.push(msg); if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift(); };
   for (let i = 0; i < CFG.providers.length; i++) {
