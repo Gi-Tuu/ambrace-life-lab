@@ -15,6 +15,8 @@ export class SelfMaintain {
     this.reserve = 0; // 储能：进食的脉冲在这里被抹平成连续可用
     this.ledger = [];
     this.stage = 0; // 已经跌过几档；回升不退档，这是 D1 的核心
+    this.upkeepPaid = 0; // 累计实际支付的基础代谢，含零余额截断
+    this.upkeepAuditComplete = true; // 老存档若无此字段，历史实付无法追溯
     this.age = 0; // 账本自己老化了多少刻。反射那一支在 agent.tick 里提前 return，不走 viab.tick()，
     // 所以"被反射接管"是免付基础代谢的——这个补贴以前没法计量，只能靠残差暴露出来（§40）。
   }
@@ -37,7 +39,9 @@ export class SelfMaintain {
       this.reserve -= draw;
       this.v += draw;
     }
+    const beforeUpkeep = this.v;
     this.v = Math.max(0, this.v - v.upkeep * dt); // 维持自身组织要花钱：活着不花钱的话 viability 就是装饰
+    this.upkeepPaid += beforeUpkeep - this.v;
     return this.check();
   }
 
@@ -101,7 +105,7 @@ export class SelfMaintain {
   }
 
   dump() {
-    return { v: Number(this.v.toFixed(4)), reserve: Number(this.reserve.toFixed(4)), stage: this.stage, age: Number(this.age.toFixed(3)), ledger: this.ledger };
+    return { v: Number(this.v.toFixed(4)), reserve: Number(this.reserve.toFixed(4)), stage: this.stage, age: Number(this.age.toFixed(3)), upkeepPaid: this.upkeepPaid, upkeepAuditComplete: this.upkeepAuditComplete, ledger: this.ledger };
   }
 
   restore(d) {
@@ -110,6 +114,8 @@ export class SelfMaintain {
     this.reserve = d.reserve ?? 0;
     this.stage = d.stage ?? 0;
     this.age = d.age ?? 0; // 旧存档没有这一项：从 0 起算，只影响之后的代谢审计，不影响存续本身
+    this.upkeepPaid = Number.isFinite(d.upkeepPaid) ? d.upkeepPaid : 0;
+    this.upkeepAuditComplete = Number.isFinite(d.upkeepPaid) ? d.upkeepAuditComplete !== false : this.age === 0;
     this.ledger = d.ledger ?? [];
   }
 

@@ -363,7 +363,7 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
       for (const a of Object.values(agents)) {
         const recs = a.trace.filter((r) => r.viab);
         if (recs.length < 2) continue;
-        const span = recs.at(-1).t;
+        const span = ticks; // 审计整个模拟窗口，即使最后一刻没有执行动作
         const aged = a.viab.age; // 账本自己老化了多少刻：反射提前 return 的那些刻没走 viab.tick()，基础代谢免付
         const sumCost = recs.reduce((s, r) => s + (r.viab.cost ?? 0), 0);
         // regen 自己有一道 mealMin 闸门（"歇一会儿"不算吃到东西），所以只有 ≥mealMin 的口才进收支
@@ -376,8 +376,10 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
         const nominalOut = P.costScale * sumCost;
         const income = recs.reduce((s, r) => s + (r.viab.fed ?? 0), 0);
         const actionPaid = recs.reduce((s, r) => s + (r.viab.paid ?? 0), 0);
-        const outflow = P.upkeep * aged + actionPaid;
-        const eEnd = recs.at(-1).viab.v + (recs.at(-1).viab.reserve ?? 0);
+        const nominalUpkeep = P.upkeep * aged;
+        const actualUpkeep = a.viab.upkeepPaid;
+        const outflow = actualUpkeep + actionPaid;
+        const eEnd = a.viab.v + a.viab.reserve; // 用模拟终点的真实余额，不假设末 tick 一定产生行动
         rows.push({
           seed,
           配置: c.配置,
@@ -395,12 +397,14 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
           实收到账: r3(income),
           顶满丢弃: r3(nominalIn - income),
           归零少付: r3(nominalOut - actionPaid),
+          基础代谢实付: r3(actualUpkeep),
+          基础代谢少付: r3(nominalUpkeep - actualUpkeep),
           支出: r3(outflow),
           收支差: r3(income - outflow),
           // crit=0.6 是"风险开始起作用"的操作点。若这个角色大部分时间都在 0.6 以下，⑤ 就不是"状态通道"而是常开偏置
           风险开启时长占比: r2(recs.filter((x) => (x.viab.risk ?? 0) > 0).length / recs.length),
           归零时长占比: r2(recs.filter((x) => x.viab.v <= 0.001).length / recs.length),
-          // 用实付实收之后，残差只剩一项：tick 里 upkeep 被 max(0,·) 截断的那部分，上界 = upkeep × 归零刻数
+          // 总收入与动作、基础代谢实付全部记账；残差仅含 trace 数值舍入。
           账面残差: r3(eEnd - 1 - (income - outflow)),
           打平需顿每百刻: perMeal ? r2(((P.upkeep + actionPaid / aged) / (P.mealYield * perMeal)) * 100) : null,
         });
