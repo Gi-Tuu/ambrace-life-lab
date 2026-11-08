@@ -33,7 +33,9 @@ const PINONLY = (process.argv.find((a) => a.startsWith('--pin=')) ?? '').split('
 // 但不给数值也不给名次，只给三档倾向带。
 const MASK = process.argv.includes('--nobands') ? { band: 0 } : null;
 // 稀缺性：公仓少、个人门口多 ⇒ 越轨有动机、后果有多圈。上一轮 20 tick + 公仓 6 只转出 1 圈闭环。
-const WORLD = { pantry: Number(process.env.WORLD_PANTRY ?? 3), stash: Number(process.env.WORLD_STASH ?? 5) };
+// F1（PLAN §26）修复死旋钮后，显式 stash 会真实生效；这里默认必须回到 3，否则本脚本的供给条件
+// 会与全部历史日志（s5-*、loop-real*）不同，旧读数就无法同条件复现。
+const WORLD = { pantry: Number(process.env.WORLD_PANTRY ?? 3), stash: Number(process.env.WORLD_STASH ?? 3) };
 
 const st = { calls: 0, promptTokens: 0, completionTokens: 0, httpErrors: [], noJson: 0, outOfList: 0, degraded: 0, ms: [], bandTally: {}, bandSends: 0 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
