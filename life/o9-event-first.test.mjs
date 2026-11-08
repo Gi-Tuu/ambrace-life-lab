@@ -6,6 +6,25 @@ import { askAudit } from './o9-ask-audit.mjs';
 import { simulate } from './run.mjs';
 import { channelsFor } from './model.mjs';
 import { Organism } from './agent.mjs';
+import { makeWorld, spawn } from './body.mjs';
+import { makeRng } from './rng.mjs';
+
+// F2（PLAN §26）：同种子臂。simulate 把 channelMask 哈希进每角色种子，直接比 mask 两档是种子混杂
+// （§24.2 登记的 E2 恒真弱点）；这里两臂显式传相同 rng 流，只让开关不同。
+async function sameSeedArm(seed, mask, ticks = 300) {
+  const w = makeWorld({ pantries: 6, stash: 3 });
+  const agents = {};
+  [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']].forEach(([id, name, arch], i) => {
+    const a = new Organism({ id, name, archetype: arch, seed, condition: 'C2', channelMask: mask, rng: makeRng(seed * 100 + i) });
+    agents[id] = a; w.agents[id] = a; spawn(w, id, ['home', 'hall', 'watch'][i]);
+  });
+  for (let t = 1; t <= ticks; t++) {
+    w.t = t; w.percepts = [];
+    if (t % 55 === 0) w.pantry = Math.min(8, w.pantry + 2);
+    for (const a of Object.values(agents)) await a.tick(w);
+  }
+  return Object.values(agents).map((a) => a.trace.map((r) => `${r.t}|${r.action ?? r.layer}|${r.ok ?? ''}|${r.kind ?? ''}`).join('#')).join('@');
+}
 
 let cached = null;
 // 两臂**不能并行**：askAudit 会临时改写 Organism.prototype.triggerReason，并发时后一个包装会把前一个当"原始方法"，
@@ -26,14 +45,16 @@ test('E1 负控：关闭档必须回到"习惯截流"的老世界，否则开关
   assert.ok(off.nonSurvivalAskRate < 0.9, `关闭档 ask 率 ${(off.nonSurvivalAskRate * 100).toFixed(1)}% 已 ≥90% ⇒ 开关前后没差别，E1 是无约束的`);
 });
 
-test('E2 默认关：掩码默认 0；同种子两跑逐位相同；开档轨迹必须不同（开关真的起作用）', async () => {
+test('E2 默认关：掩码默认 0；同种子两跑逐位相同；同种子臂开/关必须不同（开关真的起作用）', async () => {
   assert.equal(channelsFor('C2').eventFirst, 0, 'C2 默认必须关（默认关等价的前提）');
   const digest = (agents) => Object.values(agents).map((a) => a.trace.map((r) => `${r.t}|${r.action ?? r.layer}|${r.ok ?? ''}|${r.kind ?? ''}`).join('#')).join('@');
   const a = await simulate({ seed: 7, ticks: 300, condition: 'C2' });
   const b = await simulate({ seed: 7, ticks: 300, condition: 'C2' });
   assert.equal(digest(a.agents), digest(b.agents), '同种子两跑不同 ⇒ 可复现性坏了');
-  const on = await simulate({ seed: 7, ticks: 300, condition: 'C2', channelMask: { eventFirst: 1 } });
-  assert.notEqual(digest(a.agents), digest(on.agents), '开档与关档轨迹一模一样 ⇒ 开关没有落到行为上（或根本没人读）');
+  // F2：同种子臂比较（旧版比 mask 两档，因 mask 进种子而恒真，no-op 开关也能绿）
+  const off = await sameSeedArm(7, {});
+  const on = await sameSeedArm(7, { eventFirst: 1 });
+  assert.notEqual(off, on, '同种子臂开/关轨迹一模一样 ⇒ 开关没有落到行为上（或根本没人读）');
 });
 
 test('E3 生存语义不被延迟：alarm 触发后同一刻到走廊，开档与关档的比例必须相同', async () => {

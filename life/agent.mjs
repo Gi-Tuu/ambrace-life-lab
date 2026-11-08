@@ -5,13 +5,13 @@ import { ModulatorBank } from './modulators.mjs';
 import { M5ModulatorBank } from './m5-bank.mjs';
 import { Drives } from './drives.mjs';
 import { EpisodicMemory } from './memory.mjs';
-import { Relations } from './relations.mjs';
+import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
-import { sampleTraits } from './traits.mjs';
+import { sampleTraits, DIMS } from './traits.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { ForwardModel } from './s4-predictor.mjs';
 import { DAY_TICKS, dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
@@ -139,11 +139,25 @@ export class Organism {
     // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
     const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
     const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
+    // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
+    // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
+    if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
     const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
     this.bank.tick(1);
     if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
+    // M6-L（PLAN §25.6）：在线相对进度 = 误差双 EMA 的 (slow−fast)/slow。只在 lpExplore 且 forwardLearn 开时写；
+    // 没学习就没有"进度"（L2 负控）。误差只用本次更新前的预测 mu，因果、无未来信息。
+    if (this.ch.lpExplore && this.ch.forwardLearn) {
+      const err = DIMS.reduce((s, d) => s + Math.abs(this.bank.m[d] - prediction.mu[d]), 0) / DIMS.length;
+      this.lpFast = this.lpFast === undefined ? err : this.lpFast + (err - this.lpFast) * PARAMS.lp.fast;
+      this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
+    }
     const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
     this.drives.tick(1, contact);
+    // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
+    if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[this.id])) {
+      this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008);
+    }
     const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
     if (erosion) this.noteErosion(erosion, t);
 
@@ -167,7 +181,7 @@ export class Organism {
     // 存续风险：⑤ 关着就传 0。注意 viab.tick() 在上面已经跑过了——**演化不受开关影响，只有"进不进比较"受**，
     // 和 C2-neg 让 m 照常演化是同一个口径，否则对照组连"它有没有撑不住"都测不出来。
     const risk = this.viabilityRisk();
-    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk });
+    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk, exploreGate: ch.lpExplore ? this.lpProgress() : 0, exploreIds: ch.lpExplore ? this.explorationIds(paths) : null });
     const temp = temperatureOf(this.traits, ch, this.bank);
     // O1-M（PLAN §23.1）：反事实影响度。默认关（cfUsage:0）⇒ 这一步与下面习惯分支里的计数都不执行，零开销、轨迹逐位不变。
     if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
@@ -305,13 +319,14 @@ export class Organism {
       if (id === this.id || (world.stash[id] ?? 0) <= 0 || world.loc[id] === loc) continue;
       takeable[id] = world.riskyPortion ?? PARAMS.risky.portion;
     }
-    return { selfId: this.id, loc, energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
+    // PLAN §28：房间表随世界预设走；规划器的合法性校验以这份为准（lab 下键集与原 KNOWN_LOCS 相同）。
+    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
   }
 
   m3Choose(world, paths) {
     // 决策②(a)：M4 的三条耦合动作不进 M3 的两步搜索（规划器的 kind 白名单是硬校验）。
     // 局限要写清：闭门/捂耳朵期间 M3 不会把它们排进路径目标，两者的取舍仍由同一个评分器在同一刻比较，但不是同一个规划器规划。
-    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind));
+    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind)); // PLAN §28：新动作不进 M3 两步搜索（规划器不认它们；取舍仍由同一评分器比较）
     if (!planned.length) {
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
       return paths;
@@ -337,6 +352,17 @@ export class Organism {
     return filtered;
   }
 
+  // M6-L（PLAN §25.6）：相对进度 g∈[0,1]；slow=0（还没样本）时 g=0 ⇒ 不加探索预算。
+  lpProgress() {
+    if (!this.lpSlow) return 0;
+    return Math.max(0, Math.min(1, (this.lpSlow - (this.lpFast ?? this.lpSlow)) / this.lpSlow));
+  }
+
+  // 探索类 = 瞭望 + 还算新的移动（习惯计数 ≤ noveltyMax）。只读，不改状态。
+  explorationIds(paths) {
+    return new Set(paths.filter((p) => p.kind === 'look_out' || (p.kind === 'move_to' && this.habit.count(p.id) <= PARAMS.lp.noveltyMax)).map((p) => p.id));
+  }
+
   // O1-M（PLAN §23.1）：三项"反事实改变率"里的记忆与关系在这里算；习惯那一项在它真正接管的时刻算。
   // 分母统一 = 非反射决策数（cfDecisions）⇒ 三项同量纲、可直接比较（旧公式的毛病就是三项不同量纲：§47.2）。
   // 默认关（cfUsage:0）时整段不执行 ⇒ 不消费随机数、不写状态、轨迹逐位不变。
@@ -351,12 +377,12 @@ export class Organism {
     // 对齐失败（例如对象化的 refuse 在中性信任下换了目标 id）就跳过这一次并计数，不许静默混进分子。
     const realRel = this.relations;
     try {
-      this.relations = { get: () => ({ familiarity: 0, trust: 50 }) }; // 中性值就是 Relations.get() 的既有初值，不是拟合值
+      this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) }; // C1：与真实初值同源，不再写死 50
       const visN = visibleActions(affordancesFor(world, this.id), this.traits, this.ch, this.bank, weights);
       const byId = new Map(visN.map((x) => [x.id, x]));
       const pathsN = paths.map((p) => byId.get(p.id)).filter(Boolean);
       if (pathsN.length !== paths.length) { this.counters.cfRelSkipped = (this.counters.cfRelSkipped ?? 0) + 1; return; }
-      const scoredN = scoreAll(pathsN, { drives: this.drives, traits: this.traits, bank: this.bank, ch: this.ch, memBonus, risk });
+      const scoredN = scoreAll(pathsN, { drives: this.drives, traits: this.traits, bank: this.bank, ch: this.ch, memBonus, risk, exploreGate: this.ch.lpExplore ? this.lpProgress() : 0, exploreIds: this.ch.lpExplore ? this.explorationIds(pathsN) : null });
       // 影子路径的活性读数：中性化到底有没有动过任何一个候选的效用。
       // 没有它的话，"cfRel 恒 0"分不清是"关系不影响第一名"（数据）还是"中性化没接上"（bug）——变异电池实测踩到过。
       const moved = pathsN.some((p) => {
@@ -403,7 +429,7 @@ export class Organism {
 
     const id = actionId(action);
     const uAtDecision = extra.scored?.find((s) => s.id === id)?.u ?? 0.1;
-    this.habit.observe(id, result.ok ? uAtDecision : -0.2);
+    this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
     if (silent && result.ok) {

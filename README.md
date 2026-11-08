@@ -14,12 +14,12 @@
 |---|---|---|
 | L0 时钟 | 昼夜节律 | `life/clock.mjs` |
 | L1 载体 | 位置、身体、库存、秘密 | `life/body.mjs` |
-| L2 感受器 | 感知筛选 + 逐维精度 | `life/model.mjs` |
+| L2 感受器 | 感知筛选 + 逐维精度 | `life/body.mjs`（筛选）+ `life/s4-predictor.mjs`（π） |
 | L3 反射弧 | 零成本快速反应 | `life/agent.mjs` |
 | L4 调制 | 内部状态 → 精度再分配 | `life/modulators.mjs` |
 | L5 需求 | 内稳态与操作点 | `life/drives.mjs` |
 | L6 认知评价 | 相关 / 意外 / 可控 / 规范 | `life/appraisal.mjs` |
-| L7 动机 | 逐动作归因 | `life/metrics.mjs` |
+| L7 动机 | 逐动作归因 | `life/model.mjs`（scoreAll 的逐项 parts）+ `life/metrics.mjs`（离线度量） |
 | L8 行为状态 | 目标承诺期（可选层，默认关） | `life/m3-planner.mjs` |
 | 耦合调制权 | 变聋 / 离场 / 拒绝互动（可选层，默认关） | `life/coupling.mjs` |
 | L9 规则校验 | 合法性 + 驳回重决策 | `life/rules.mjs` |
@@ -27,6 +27,10 @@
 | L11 记忆 | 情景 + 习惯 | `life/memory.mjs` |
 | L12 思考层 | 事件门控、按需接 LLM | `life/loop-real.mjs` |
 | L13 自我维持 | 存续账本 + 不可逆降级 | `life/viability.mjs` |
+
+**世界预设**：`lab`（4 房间，全部研究读数与五份面用它）与 `town`（演示用：8 房间、物件、天气、工作/换粮/接济/结伴、群体规范、自然语言台词）。离线 `simulate` 默认 `lab`；`serve` 演示默认 `town`；预设随存档走。美术资源接入时按 `rooms/grid/things` 数据挂图，不改逻辑。
+
+**语言层的边界**：NPC 的话是**状态条件化的确定性模板**；玩家的话走**关键词意图分类**（问候/讨食/警告/指责/道歉/分享，其余按中立），**不是语义理解**——交付文案按这个口径写。
 
 L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask` 不传），关掉时不消费额外随机数、不写状态，轨迹与没有这两层时逐位相同。
 离线实验用 `channelMask` 打开它们并单独计量；演示页上的 `M3 承诺期 / M4 耦合调制` 两个开关只是同一件事的入口，且只叠加在 A 侧（B 侧是切断承重通道的负向对照，把内部状态接回决策就不再是对照）。
@@ -39,15 +43,19 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 node serve.mjs          # http://localhost:7860
 ```
 
-未配置模型端点时世界自动退回本地替身，照常运行。接入真实模型用环境变量（或 `.env`，不入库）：
+未配置模型端点时世界自动退回本地替身，照常运行。接入真实模型用环境变量；从 `.env` 文件读（不入库）时用 Node 22+ 的参数：
+
+```bash
+node --env-file=.env serve.mjs
+```
 
 ```
 MODEL_BASE_URL=   # 供应商端点，逗号分隔可配多个，按序退回
 MODEL_NAME=
 MODEL_KEY=
 MAX_CALLS=        # 调用预算闸门
-SLEEP_MS=
-WORLD_PANTRY=     # 世界资源常数
+SLEEP_MS=         # 仅 life/loop-real.mjs（离线真模型循环）读取
+WORLD_PANTRY=     # 仅 life/loop-real.mjs 读取；演示世界的供给常量是硬编码的
 WORLD_STASH=
 ```
 
@@ -56,14 +64,22 @@ WORLD_STASH=
 ## 判据与复现
 
 ```bash
-node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/o9-event-first.test.mjs life/o1-counterfactual.test.mjs
+node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/o9-event-first.test.mjs life/o1-counterfactual.test.mjs life/m6-plastic.test.mjs life/m6-lp.test.mjs life/stash-initial.test.mjs life/memory-ids.test.mjs life/host-archive.test.mjs life/town.test.mjs
 node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
 node life/run.mjs --report     # 四条件消融矩阵
 node life/run.mjs --sweep      # 多 seed 复核
 node life/run.mjs --viab       # 受损速度
 node life/run.mjs --recover    # 恢复动力学
 node life/run.mjs --metab      # 代谢与进食实测账
-node life/seed-gen.mjs 600 seed-run   # 重新生成演示种子存档（离线实跑，固定 seed）
+node life/supply-tradeoff-sweep.mjs   # 供给常数取舍表（只测量，不改默认值）
+node life/o1-fallback-audit.mjs       # 影响度兜底窗口是否与侵蚀同窗
+node life/o1o9-mutation-battery.mjs   # 闸门变异电池：每条闸门都要能被变异打红
+node life/m6-device-probe.mjs         # M6 装置先验（巩固/睡眠压力/学习进度，只测量）
+node life/m6p-mutation-battery.mjs    # M6-P 精度门控可塑性闸门变异电池
+node life/m6-sl-round3.mjs            # M6 睡眠压力/学习进度 round3 装置（只测量）
+node life/m6lp-mutation-battery.mjs   # M6-L learning progress 闸门变异电池
+node life/seed-gen.mjs 600 seed-run   # 离线实跑生成种子到 seed-run/
+cp seed-run/world.json seed/world.json  # 再复制进镜像内置起点（否则镜像仍用旧种子）
 node serve.mjs                 # 本地 demo
 ```
 
@@ -86,6 +102,8 @@ node serve.mjs                 # 本地 demo
 ## 仓库边界
 
 内部实验记录、台账、赛事工作底稿与手记活稿不在本仓库（见 `.gitignore`）。研究全文与创作手记另行发布。根目录的日志、截图与 dump 均为临时产物，不入库。
+
+**外部基线**：部分 M5 训练/校准脚本需要本机基线目录 `D:/Codex-Projects/output/` 下的历史日志，仓库内不保证独立复现；M3 第一候选的停止证明日志与 M5 缩放的原始日志未随仓库发布（结论保留在台账 §1 行内）。
 
 ## License
 

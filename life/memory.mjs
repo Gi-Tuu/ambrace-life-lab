@@ -17,6 +17,9 @@ export class EpisodicMemory {
     this.rows = [];
     this.failures = new Map();
     this.kCap = 6; // L13 的可侵蚀量：能同时想起多少件事。存着的事没被删，是**取不到**
+    // F3（PLAN §26.2）：行 id 必须单调，不能用 rows.length——截断/存档往返后长度会回退，
+    // 旧实现会让新行复用旧 id，failures/touchHit 作用到错行（实证：载入后 200 次 add 出现 40 个重复 id）。
+    this.nextId = 0;
   }
 
   // 完整度读数：0~1。L13 用它决定"下一个削谁"，也写进账本做 before/after
@@ -32,13 +35,13 @@ export class EpisodicMemory {
   }
 
   add(t, { kind, actionKind = null, actionSucceeded = null, payload, mSnapshot, importance }) {
-    this.rows.push({ id: this.rows.length, t, kind, actionKind, actionSucceeded, payload, m: mSnapshot, importance: Math.min(1, importance) });
+    this.rows.push({ id: this.nextId++, t, kind, actionKind, actionSucceeded, payload, m: mSnapshot, importance: Math.min(1, importance) });
     if (this.rows.length > 400) this.rows.shift();
   }
 
   // L13 要求账本与受损状态必须持久：进程重启后"已经想不起来的事"不能因为重启就回来了。
   dump() {
-    return { rows: this.rows.slice(-120), kCap: this.kCap, failures: [...this.failures].filter(([, f]) => f > 0) };
+    return { rows: this.rows.slice(-120), kCap: this.kCap, failures: [...this.failures].filter(([, f]) => f > 0), nextId: this.nextId };
   }
 
   load(d) {
@@ -46,6 +49,9 @@ export class EpisodicMemory {
     this.rows = d.rows ?? [];
     this.kCap = d.kCap ?? 6;
     this.failures = new Map(d.failures ?? []);
+    // 旧档没有 nextId：从现存最大 id 之后继续，绝不与存量撞号
+    const maxRow = this.rows.reduce((m, r) => Math.max(m, Number.isFinite(r.id) ? r.id + 1 : 0), 0);
+    this.nextId = Math.max(Number.isFinite(d.nextId) ? d.nextId : 0, maxRow);
   }
 
   // 遗忘：检索长期失败 → 计数上升 → 参与衰减。不是删除，是取不到。

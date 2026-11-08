@@ -3,16 +3,18 @@ import {LOCS} from './body.mjs';
 // 近似只模拟位置、公开粮仓、能源及当前已知同屋对话；假设第二步其他人不移动，不预测事件、调制或存续。
 // actions 是本刻由调用方确定可用的动作；catalog 是公开、可预测的候选模板，不含私有库存。
 const KNOWN_LOCS = new Set(Object.keys(LOCS));
+// PLAN §28：世界预设可以给出自己的房间表；没有 locs 的旧快照仍回退到 lab 的 KNOWN_LOCS。
+const locSet = (s) => (Array.isArray(s?.locs) && s.locs.length ? new Set(s.locs) : KNOWN_LOCS);
 const clamp=x=>Math.max(0,Math.min(1,x));
 const finite=(x,fallback)=>Number.isFinite(x)?x:fallback;
 function cloneSnapshot(s){return {selfId:s.selfId,loc:s.loc,energy:s.energy,social:s.social,pantry:s.pantry,energySetpoint:s.energySetpoint,socialSetpoint:s.socialSetpoint,companions:{...(s.companions??{})},
  // 收益模型补的两项公开事实也必须跟着快照走，否则首步之后 takeable/夜禁信息就丢了（实测预测能量不变）
  lookOutLegal:s.lookOutLegal,takeable:{...(s.takeable??{})}};}
-function validateSnapshot(s){if(!s||typeof s.selfId!=='string'||!s.selfId||!KNOWN_LOCS.has(s.loc)||![s.energy,s.social,s.pantry,s.energySetpoint,s.socialSetpoint].every(Number.isFinite)||s.energy<0||s.energy>1||s.social<0||s.social>1||s.pantry<0||s.energySetpoint<0||s.energySetpoint>1||s.socialSetpoint<0||s.socialSetpoint>1||(s.companions!=null&&(typeof s.companions!=='object'||Array.isArray(s.companions)||Object.values(s.companions).some(x=>!Number.isFinite(x)||x<0||x>1))))throw new TypeError('预测需要合法的公开快照');}
+function validateSnapshot(s){if(!s||typeof s.selfId!=='string'||!s.selfId||!locSet(s).has(s.loc)||![s.energy,s.social,s.pantry,s.energySetpoint,s.socialSetpoint].every(Number.isFinite)||s.energy<0||s.energy>1||s.social<0||s.social>1||s.pantry<0||s.energySetpoint<0||s.energySetpoint>1||s.socialSetpoint<0||s.socialSetpoint>1||(s.companions!=null&&(typeof s.companions!=='object'||Array.isArray(s.companions)||Object.values(s.companions).some(x=>!Number.isFinite(x)||x<0||x>1))))throw new TypeError('预测需要合法的公开快照');}
 function allowed(s,a){
  if(!a||typeof a.id!=='string'||!a.id||typeof a.kind!=='string')return false;
  if(a.kind==='rest')return true;
- if(a.kind==='move_to')return KNOWN_LOCS.has(a.to)&&a.to!==s.loc;
+ if(a.kind==='move_to')return locSet(s).has(a.to)&&a.to!==s.loc;
  if(a.kind==='eat')return (s.loc==='home'||s.loc==='store')&&s.pantry>0;
  if(a.kind==='talk')return typeof a.target==='string'&&a.target!==s.selfId&&Object.hasOwn(s.companions??{},a.target);
  // look_out：真实效果是移动到瞭台并补社交（actuate: satiated social 0.12）。夜禁是规则层知识，

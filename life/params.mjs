@@ -22,6 +22,9 @@ export const PARAMS = {
   m3: { commitment: Number(process.env.M3_COMMITMENT ?? 4), discount: Number(process.env.M3_DISCOUNT ?? 0.8) },
   // M5 逐事件慢仓：开关走 channelMask；参数进冻结指纹。
   m5: { slowScale: 0.2, slowTau: 80, loadTau: 160, delay: 8, feedback: 0.02, loadGain: 4 },
+  // M6-L（PLAN §25.6）：learning progress → 探索预算。开关走 channelMask {lpExplore:1}；
+  // fast/slow 是误差 EMA 刻度、weight 是探索加成分额、noveltyMax 是"还算新"的动作计数上限——都是预登记刻度，非拟合。
+  lp: { weight: 0.05, fast: 1 / 20, slow: 1 / 120, noveltyMax: 2 },
   // M4 耦合调制权（预登记 §16）。开不开由 channelMask {coupling:1} 决定，这里只放量纲。
   // τ=40：与"一次社交过载自己平复"的时间同量级，所以断开耦合是一次性自我调节而不是长期状态（P6c 验这条）。
   // minInput=0.55 借 ⑥ 侵蚀因子的同一量级：变聋是"把增益调低"，不是把感官关掉；
@@ -72,6 +75,7 @@ export function paramsFingerprint(tables = {}) {
     'm3N=' + (tables.m3 ?? PARAMS.m3.commitment), // 承诺长度同进量纲：一半人承诺 4 次一半人承诺 1 次，行为轨迹就没法比
     'ctau=' + (tables.couplingTau ?? PARAMS.coupling.tau) + ',cmin=' + (tables.couplingMinInput ?? PARAMS.coupling.minInput) + ',crel=' + PARAMS.coupling.relief, // M4：一半人断开 40 刻、一半人断开 200 刻，耦合时长就没法比（§16.4）；crel= 是缓解兑现比例（§17.4 零缓解档）
     'm5=' + stable(tables.m5 ?? PARAMS.m5), // 独立开关是自变量，慢仓量纲必须冻结
+    'lp=' + stable(tables.lp ?? PARAMS.lp), // M6-L：探索加成分额与 EMA 刻度是决策量纲（§25.6 披露指纹变化）
     'social=' + (tables.social ?? PARAMS.socialGossip), // 一半人互相传话一半人不传，关系分布就没法比
     'urg=' + PARAMS.urgencyExponent,
     'spill=' + PARAMS.viab.spill, // 代谢分配也是量纲：同组里一半人餐后扣存、一半人不扣，掉档数就没法比

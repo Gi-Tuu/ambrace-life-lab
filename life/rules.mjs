@@ -6,6 +6,7 @@ import { reachableOf } from './coupling.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
+  const locs = world.locs ?? LOCS;
   const others = (world.occupancy[here] ?? []).filter((x) => x !== agentId);
   const kind = intent?.kind;
   const fail = (code, why) => ({ ok: false, code, why });
@@ -18,11 +19,21 @@ export function validate(world, agentId, intent) {
   // M4 消费者④：闭门的人在世界里确实叫不到（不是"他心里不想理你"）。others 已由 body 侧排除不可达者，
   // 这里再查一次是为了让"叫不到"成为**规则层的裁决**，而不是某处过滤的副作用。
   if (kind === 'talk' && !reachableOf(world.agents[intent.target])) return fail('SECLUDED', `${world.agents[intent.target]?.name ?? intent.target} 躲起来了，这会儿叫不到`);
-  if (kind === 'move_to' && !LOCS[intent.to]) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
+  if (kind === 'move_to' && !locs[intent.to]) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
   if (kind === 'take_shared') {
     if (!intent.target) return fail('NO_TARGET', '没指定拿谁的');
     if ((world.stash[intent.target] ?? 0) <= 0) return fail('DEPLETED', `${world.agents[intent.target]?.name} 门口已经空了`);
     if (world.loc[intent.target] === here) return fail('WITNESSED', `${world.agents[intent.target]?.name} 正在场，这条路走不通`);
+  }
+  // PLAN §28 B/C：town 动作的地方法/对象校验（lab 不会走到这些 kind）。
+  if (kind === 'work' && here !== 'workshop') return fail('NO_WORKSHOP', '这里没有可干的活');
+  if (kind === 'buy') {
+    if (here !== 'store') return fail('NOT_STORE', '换粮得在公仓');
+    if ((world.coins?.[agentId] ?? 0) < 2) return fail('NO_COINS', '铜币不够');
+  }
+  if (kind === 'trade' || kind === 'companion') {
+    if (!intent.target) return fail('NO_TARGET', '没指定对象');
+    if (!others.includes(intent.target)) return fail('WRONG_TARGET', `${intent.target} 不在同一处`);
   }
   if (intent.target === agentId) return fail('SELF_TARGET', '不能对自己执行该动作');
   // 行为层看不见的硬规则：保证校验层真的会变红，而不是永远绿灯

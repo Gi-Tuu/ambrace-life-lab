@@ -8,6 +8,9 @@ import { simulate } from './run.mjs';
 import { channelsFor } from './model.mjs';
 import { influenceFromTrace } from './o1-influence-probe.mjs';
 import { PARAMS } from './params.mjs';
+import { REL_NEUTRAL } from './relations.mjs';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const cfOf = (a) => ({
   decisions: a.counters.cfDecisions ?? 0,
@@ -43,16 +46,25 @@ test('C1 关系自证：关系本来就是中性时，影子路径必须一次�
   spawn(world, 'a1', 'home');
   spawn(world, 'a2', 'hall'); // 分房：不会发生 contact/meet，关系不会被事件抬走
   // 直接对着一次决策调用 noteInfluence（不跑世界循环），把"关系=中性"固定在评分那一刻
-  for (const a of Object.values(world.agents)) for (const other of Object.values(world.agents)) if (other.id !== a.id) { const r = a.relations.get(other.id); r.trust = 50; r.familiarity = 0; }
+  for (const a of Object.values(world.agents)) for (const other of Object.values(world.agents)) if (other.id !== a.id) { const r = a.relations.get(other.id); r.trust = REL_NEUTRAL.trust; r.familiarity = REL_NEUTRAL.familiarity; }
   const a1 = world.agents.a1;
   const affs = affordancesFor(world, 'a1');
   const paths = visibleActions(affs, a1.traits, a1.ch, a1.bank, null);
   const risk = a1.viabilityRisk();
   const scored = scoreAll(paths, { drives: a1.drives, traits: a1.traits, bank: a1.bank, ch: a1.ch, memBonus: {}, risk });
   a1.noteInfluence({ world, paths, scored, memBonus: {}, risk, weights: null });
-  assert.equal(a1.counters.cfRelMoved ?? 0, 0, `关系本来中性，影子路径却动了 ${a1.counters.cfRelMoved} 次候选效用 ⇒ 中性值写错了（应为 trust 50 / fam 0）`);
+  assert.equal(a1.counters.cfRelMoved ?? 0, 0, `关系本来中性，影子路径却动了 ${a1.counters.cfRelMoved} 次候选效用 ⇒ 中性值与真实初值不同源`);
   assert.equal(a1.counters.cfRel ?? 0, 0, `关系本来中性却测出 ${a1.counters.cfRel} 次关系改变 ⇒ 影子路径把别的东西也改了`);
   assert.equal(a1.counters.cfDecisions, 1, '这次调用没有计入分母 ⇒ 后面的率会偏');
+});
+
+test('C1a 中性值同源：关系初值 == REL_NEUTRAL，影子 stub 引用同一常量', () => {
+  const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 1, condition: 'C2', channelMask: { cfUsage: 1 } });
+  const r = a.relations.get('ghost');
+  assert.equal(r.trust, REL_NEUTRAL.trust, '关系初值与 REL_NEUTRAL 不一致 ⇒ 影子又会测到另一个世界');
+  assert.equal(r.familiarity, REL_NEUTRAL.familiarity);
+  const src = readFileSync(fileURLToPath(new URL('./agent.mjs', import.meta.url)), 'utf8');
+  assert.ok(/this\.relations = \{ get: \(\) => \(\{ familiarity: REL_NEUTRAL\.familiarity, trust: REL_NEUTRAL\.trust \}\) \}/.test(src), '影子 stub 没有引用 REL_NEUTRAL ⇒ 两个中性值会再次漂移');
 });
 
 test('C2 装置交叉核对：引擎内的计数与从 trace 独立重算的改变率一致（两条实现）', async () => {
