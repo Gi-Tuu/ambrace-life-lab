@@ -226,7 +226,7 @@ function serialize() {
     agents: Object.fromEntries(
       Object.values(p.agents).map((a) => [
         a.id,
-        { m: a.bank.snapshot(), ...(a.ch.m5 ? { m5: a.bank.dumpM5() } : a.m5Dormant ? { m5: { ...a.m5Dormant, fast: a.bank.snapshot() } } : {}), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
+        { m: a.bank.snapshot(), ...(a.ch.m5 ? { m5: a.bank.dumpM5() } : a.m5Dormant ? { m5: { ...a.m5Dormant, fast: a.bank.snapshot() } } : {}), ...(a.lpFast === undefined && a.lpSlow === undefined ? {} : { lp: { fast: a.lpFast, slow: a.lpSlow } }), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
       ]),
     ),
   });
@@ -305,6 +305,11 @@ function applyInto(pack, d) {
     a.coupling.restore(st.coupling); // 同上：旧档没有耦合状态时按初值（听得进、找得到、不预设拒绝）
     a.m3PrevGoal = st.m3PrevGoal ?? null;
     Object.assign(a.counters, st.counters ?? {});
+    // C2（PLAN §27）：旧档缺影响度计数 ⇒ 标"历史不完整"。标记放在 agent 上而不是 counters 里——
+    // 布尔值会污染 ablationChannels 对 counters 的数值求和。
+    if (!Object.hasOwn(st.counters ?? {}, 'cfDecisions')) a.cfHistoryIncomplete = true;
+    // C3（PLAN §27）：进度 EMA 随档走；旧档缺字段 ⇒ 从 0 重新积累（不把缺失冒充历史）。
+    if (st.lp) { a.lpFast = st.lp.fast; a.lpSlow = st.lp.slow; }
   }
 }
 
@@ -391,7 +396,7 @@ export const host = {
           // 分开是必须的：刚切上开关还没走决策时 m3Last 仍是 null，此时不许摆一个空目标假装在运作。
           const layers = layered ? Object.fromEntries(Object.entries(S.masks).filter(([, v]) => v).map(([k]) => [k, 1])) : {};
           return [a.id, {
-            id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null),
+            id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, cfHistory: a.cfHistoryIncomplete ? 'incomplete' : null, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null),
             layers,
             m3: layers.m3 && a.m3Last ? { goal: a.m3Last.goal, previous: a.m3Last.previous, remaining: a.m3Last.remaining, reused: a.m3Last.reused, interrupted: a.m3Last.interrupted ?? null } : null,
             coupling: layers.coupling ? a.coupling.dump() : null,

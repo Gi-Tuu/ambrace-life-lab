@@ -5,7 +5,7 @@ import { ModulatorBank } from './modulators.mjs';
 import { M5ModulatorBank } from './m5-bank.mjs';
 import { Drives } from './drives.mjs';
 import { EpisodicMemory } from './memory.mjs';
-import { Relations } from './relations.mjs';
+import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
@@ -372,7 +372,7 @@ export class Organism {
     // 对齐失败（例如对象化的 refuse 在中性信任下换了目标 id）就跳过这一次并计数，不许静默混进分子。
     const realRel = this.relations;
     try {
-      this.relations = { get: () => ({ familiarity: 0, trust: 50 }) }; // 中性值就是 Relations.get() 的既有初值，不是拟合值
+      this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) }; // C1：与真实初值同源，不再写死 50
       const visN = visibleActions(affordancesFor(world, this.id), this.traits, this.ch, this.bank, weights);
       const byId = new Map(visN.map((x) => [x.id, x]));
       const pathsN = paths.map((p) => byId.get(p.id)).filter(Boolean);

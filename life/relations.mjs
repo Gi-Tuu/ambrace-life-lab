@@ -1,5 +1,9 @@
 // 关系层：社交需求从此有了对象。
 // 之前 social 是个无主标量（“陪一下就行”），所以 §11 的 M4「关系进入 drive」是空的。
+// C1（PLAN §27）：中性关系只有一个来源。O1-M 的反事实影子此前写死 trust 50，与真实初值 30 不一致，
+// 测的其实是"信任=50 的世界"；这里导出唯一常量，get() 与影子共用。
+export const REL_NEUTRAL = Object.freeze({ familiarity: 0, trust: 30 });
+
 export class Relations {
   constructor(self) {
     this.self = self;
@@ -27,7 +31,7 @@ export class Relations {
   }
 
   get(otherId) {
-    if (!this.map.has(otherId)) this.map.set(otherId, { familiarity: 0, trust: 30, debt: 0, lastAt: -999 });
+    if (!this.map.has(otherId)) this.map.set(otherId, { familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust, debt: 0, lastAt: -999 });
     return this.map.get(otherId);
   }
 
