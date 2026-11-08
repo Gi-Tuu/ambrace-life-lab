@@ -22,6 +22,9 @@ test('C2a 旧档缺 cfDecisions ⇒ 标记 incomplete，且 snapshot 可见', as
   await host.start();
   host.stop();
   const s = snap();
+  // PLAN §28 C：关系与规范必须进载荷（页面"关系与规范"面板只读这两项）
+  assert.ok(Array.isArray(s.A.companions), 'snapshot 缺 companions');
+  assert.ok(Array.isArray(s.A.normLog), 'snapshot 缺 normLog');
   for (const key of ['A', 'B']) for (const a of agentsOf(s[key])) {
     assert.equal(a.cfHistory, 'incomplete', `${key}/${a.id} 载入缺 cf* 的存档却没标历史不完整`);
     const nums = Object.values(a.counters).filter((v) => typeof v === 'number');

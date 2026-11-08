@@ -302,6 +302,7 @@ export function actuate(world, agentId, action) {
       if (!(world.features ?? {}).work || world.loc[agentId] !== 'workshop') return { action, ok: false, code: 'NO_WORKSHOP', observation: '这里没有可干的活' };
       world.coins[agentId] = (world.coins[agentId] ?? 0) + 2;
       world.stash[agentId] = (world.stash[agentId] ?? 0) + 1; // 工钱口粮：让私人库存在这张经济里有补给源
+      world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]); // 合法进项同步抬预期，不然会被误登记成'私藏超额'
       // 工地管饭：干活当场补一份口粮（0.35），另得 2 枚铜币 + 一份口粮。这样即时效用与'吃饱'同源，不做两步规划的角色也会去打工。
       return { action, ok: true, code: 'OK', observation: '干完一段活，管了一顿饭，领到 2 枚铜币和一份口粮', satiated: 'energy', amount: 0.35, evt: evt({ kind: 'work', valence: 0.15, serves: 'energy' }) };
     }
@@ -310,6 +311,7 @@ export function actuate(world, agentId, action) {
       if (world.loc[agentId] !== 'store' || coins < 2) return { action, ok: false, code: 'NO_COINS', observation: '铜币不够或不在公仓' };
       world.coins[agentId] = coins - 2;
       world.stash[agentId] = (world.stash[agentId] ?? 0) + 1;
+      world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]);
       return { action, ok: true, code: 'OK', observation: '换来一份存粮', satiated: 'energy', amount: 0.05, evt: evt({ kind: 'buy', valence: 0.2, serves: 'energy' }) };
     }
     case 'trade': {
@@ -319,11 +321,13 @@ export function actuate(world, agentId, action) {
       const mineStash = world.stash[agentId] ?? 0;
       if (mineStash + 2 <= theirStash) {
         world.stash[other] = theirStash - 1; world.stash[agentId] = 1;
+        world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, 1);
         if (world.agents[agentId]?.relations) world.agents[agentId].relations.meet(other, world.t, { delta: { trust: 2, familiarity: 0.02 }, why: '接济' });
         return { action, ok: true, code: 'OK', observation: `向${world.agents[other]?.name ?? other}要了一份`, satiated: 'energy', amount: 0.35, evt: evt({ kind: 'trade', valence: 0.25, serves: 'energy', about: other }) };
       }
       if (theirStash + 2 <= mineStash) {
         world.stash[agentId] = mineStash - 1; world.stash[other] = 1;
+        world.expect[other] = Math.max(world.expect[other] ?? 0, 1);
         if (world.agents[other]?.relations) world.agents[other].relations.meet(agentId, world.t, { delta: { trust: 3, familiarity: 0.03 }, why: '受助' });
         return { action, ok: true, code: 'OK', observation: `给了${world.agents[other]?.name ?? other}一份`, satiated: 'social', amount: 0.05, evt: evt({ kind: 'trade', valence: 0.35, serves: 'social', about: other }) };
       }
@@ -350,7 +354,8 @@ export function actuate(world, agentId, action) {
       // PLAN §28 C：群体规范。≥2 人当场目击时，不只是"他们知道了"，而是在场者及其结伴者当场降低对行为人的信任，
       // 并记一条规范事件。只在 town（features.norms）执行；lab 的路径与旧版逐位相同。
       if ((world.features ?? {}).norms) {
-        const crowd = (world.occupancy[world.loc[agentId]] ?? []).filter((w) => w !== agentId && w !== victim && w !== 'p1');
+        // 玩家也算目击者（§28 C 的'≥2 人'含玩家；玩家没有关系模型，所以只计数不参与降信任循环）
+        const crowd = (world.occupancy[world.loc[agentId]] ?? []).filter((w) => w !== agentId && w !== victim);
         if (crowd.length >= 2) {
           world.normLog ??= [];
           world.normLog.push({ t: world.t, of: agentId, victim, witnesses: crowd.slice() });
