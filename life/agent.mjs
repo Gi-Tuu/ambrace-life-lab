@@ -154,6 +154,10 @@ export class Organism {
     }
     const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
     this.drives.tick(1, contact);
+    // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
+    if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[this.id])) {
+      this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008);
+    }
     const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
     if (erosion) this.noteErosion(erosion, t);
 
@@ -315,13 +319,14 @@ export class Organism {
       if (id === this.id || (world.stash[id] ?? 0) <= 0 || world.loc[id] === loc) continue;
       takeable[id] = world.riskyPortion ?? PARAMS.risky.portion;
     }
-    return { selfId: this.id, loc, energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
+    // PLAN §28：房间表随世界预设走；规划器的合法性校验以这份为准（lab 下键集与原 KNOWN_LOCS 相同）。
+    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
   }
 
   m3Choose(world, paths) {
     // 决策②(a)：M4 的三条耦合动作不进 M3 的两步搜索（规划器的 kind 白名单是硬校验）。
     // 局限要写清：闭门/捂耳朵期间 M3 不会把它们排进路径目标，两者的取舍仍由同一个评分器在同一刻比较，但不是同一个规划器规划。
-    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind));
+    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind)); // PLAN §28：新动作不进 M3 两步搜索（规划器不认它们；取舍仍由同一评分器比较）
     if (!planned.length) {
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
       return paths;

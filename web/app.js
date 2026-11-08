@@ -51,10 +51,15 @@ function draw(cv, w) {
   g.font = '11px "Segoe UI", system-ui, sans-serif';
   const pad = 10;
   const gap = 8;
-  const rw = (W - pad * 2 - gap) / 2;
-  const rh = (H - pad * 2 - gap) / 2;
-  for (const r of ROOMS) {
-    const [cx, cy] = ROOM_GRID[r];
+  // PLAN §28：房间表由服务端给（town 8 间）；老载荷没有 rooms/grid 时退回 lab 四间。
+  const rooms = Object.keys(w.rooms ?? LOCS);
+  const grid = w.grid ?? ROOM_GRID;
+  const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
+  const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
+  const rw = (W - pad * 2 - gap * (cols - 1)) / cols;
+  const rh = (H - pad * 2 - gap * (rows - 1)) / rows;
+  for (const r of rooms) {
+    const [cx, cy] = grid[r];
     const x = pad + cx * (rw + gap);
     const y = pad + cy * (rh + gap);
     if (ASSETS.tiles[r]) {
@@ -68,7 +73,7 @@ function draw(cv, w) {
     g.strokeStyle = '#242b34';
     g.strokeRect(x + 0.5, y + 0.5, rw - 1, rh - 1);
     g.fillStyle = '#66707d';
-    g.fillText(LOCS[r], x + 7, y + 14);
+    g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 7, y + 14);
     const crowd = w.occupancy[r] ?? [];
     crowd.forEach((who, i) => {
       const sprite = ASSETS.chars[who];
@@ -140,7 +145,7 @@ function worldStat(pack) {
   const kept = m3.reduce((s, a) => s + (a.counters?.m3Reused ?? 0), 0);
   const broken = m3.reduce((s, a) => s + (a.counters?.m3Interrupted ?? 0), 0);
   const cpl = agents.some((a) => a.layers?.coupling) ? agents.reduce((s, a) => s + (a.counters?.couplingApplied ?? 0), 0) : null;
-  return `<span>平均存续 <b>${(mean * 100).toFixed(0)}%</b></span><span>永久损失 <b class="${lost ? 'bad' : ''}">${lost}</b></span><span>越轨 <b>${st.越轨 ?? 0}</b></span><span>驳回 <b>${st.驳回 ?? 0}</b></span><span>决策 <b>${st.决策 ?? 0}</b></span>${st.传闻 ? `<span>传闻 <b>${st.传闻}</b></span>` : ''}${onTime === null ? '' : `<span>日程命中 <b>${onTime}%</b></span>`}${m3.length ? `<span>承诺沿用 <b>${kept}</b>·中断 <b>${broken}</b></span>` : ''}${cpl === null ? '' : `<span>耦合动作 <b>${cpl}</b></span>`}`;
+  return `<span>平均存续 <b>${(mean * 100).toFixed(0)}%</b></span><span>永久损失 <b class="${lost ? 'bad' : ''}">${lost}</b></span><span>越轨 <b>${st.越轨 ?? 0}</b></span><span>驳回 <b>${st.驳回 ?? 0}</b></span><span>决策 <b>${st.决策 ?? 0}</b></span>${st.传闻 ? `<span>传闻 <b>${st.传闻}</b></span>` : ''}${onTime === null ? '' : `<span>日程命中 <b>${onTime}%</b></span>`}${pack.weather && pack.weather !== 'clear' ? `<span>天气 <b>${pack.weather === 'rain' ? '雨' : '冷'}</b></span>` : ''}${pack.coins ? `<span>铜币 <b>${Object.values(pack.coins).reduce((x, v) => x + v, 0)}</b></span>` : ''}${m3.length ? `<span>承诺沿用 <b>${kept}</b>·中断 <b>${broken}</b></span>` : ''}${cpl === null ? '' : `<span>耦合动作 <b>${cpl}</b></span>`}`;
 }
 
 // M3 承诺层的这一行怎么写。断与不断都是读数，不粉饰：中断原因直接取自机制侧的字符串。
@@ -168,7 +173,7 @@ function rows(el, pack, hue) {
     const last = a.last ? esc(a.last.action) : '—';
     const v = a.viab ? `存续 ${(a.viab.v * 100).toFixed(0)}%${a.viab.lost.length ? ' · 已永久失去 ' + esc(a.viab.lost.join('、')) : ''}${spark(pack, id, hue)}` : '';
     return `<div class="row"><div class="nm"><b>${esc(a.name)}</b> ${esc(a.archetype)}</div>
-      <div><div class="bars">${bars(a)}</div><div class="pick">${last} <em>${esc(a.summary)}${a.reason ? ' 「' + esc(a.reason) + '」' : ''}</em>${a.sched ? `<span class="sched${a.sched.onTime ? ' on' : ''}" title="此刻节律应在何处">日程·${esc(a.sched.should)}${a.sched.onTime ? '✓' : ''}</span>` : ''}${a.m3 ? m3Chip(a.m3) : ''}${a.coupling ? couplingChip(a.coupling) : ''}${v ? `<div class="pick">${v}</div>` : ''}</div></div></div>`;
+      <div><div class="bars">${bars(a)}</div><div class="pick">${last} <em>${esc(a.summary)}${a.reason ? ' 「' + esc(a.reason) + '」' : ''}</em>${a.sched ? `<span class="sched${a.sched.onTime ? ' on' : ''}" title="此刻节律应在何处">日程·${esc(a.sched.should)}${a.sched.onTime ? '✓' : ''}</span>` : ''}${a.m3 ? m3Chip(a.m3) : ''}${a.coupling ? couplingChip(a.coupling) : ''}${pack.coins?.[a.id] != null ? `<span class="tag">铜币 ${pack.coins[a.id]}</span>` : ''}${(pack.companions ?? []).some((p) => p.includes(a.id)) ? '<span class="tag act">有伴</span>' : ''}${v ? `<div class="pick">${v}</div>` : ''}</div></div></div>`;
   }).join('');
 }
 
@@ -217,6 +222,7 @@ async function refresh() {
     S.model = j.model;
     S.running = j.running;
     S.masks = j.masks ?? S.masks;
+    S.view = j.A;
     S.layer = j.layer ?? S.layer;
     // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
     const m = j.model ?? {};
@@ -283,10 +289,15 @@ function pickRoom(ev, cv) {
   const y = ev.clientY - rect.top;
   const pad = 10;
   const gap = 8;
-  const rw = (rect.width - pad * 2 - gap) / 2;
-  const rh = (rect.height - pad * 2 - gap) / 2;
-  for (const r of ROOMS) {
-    const [cx, cy] = ROOM_GRID[r];
+  const v = S.view ?? {};
+  const rooms = Object.keys(v.rooms ?? LOCS);
+  const grid = v.grid ?? ROOM_GRID;
+  const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
+  const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
+  const rw = (rect.width - pad * 2 - gap * (cols - 1)) / cols;
+  const rh = (rect.height - pad * 2 - gap * (rows - 1)) / rows;
+  for (const r of rooms) {
+    const [cx, cy] = grid[r];
     const rx = pad + cx * (rw + gap);
     const ry = pad + cy * (rh + gap);
     if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) return api('/act', { kind: 'move', room: r }).then(refresh);

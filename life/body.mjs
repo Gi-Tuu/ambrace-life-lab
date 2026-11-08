@@ -4,8 +4,9 @@
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
-import { scheduledLoc } from './clock.mjs';
+import { scheduledLoc, weatherFor } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
+import { presetOf } from './presets.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -20,6 +21,11 @@ export const BASE_KINDS = {
   deafen: { impulse: 0.1, cost: 0.04, label: '捂住耳朵' },
   seclude: { impulse: 0.4, cost: 0.08, label: '躲进里屋' },
   refuse: { impulse: 0.7, cost: 0.04, label: '别理他' },
+  // PLAN §28 B：town 的动作。lab 的候选集里不会出现它们，所以加名不影响旧世界。
+  work: { impulse: 0.3, cost: 0.1, label: '在工坊干活换饭钱' },
+  buy: { impulse: 0.2, cost: 0.04, label: '用铜币换一份粮' },
+  trade: { impulse: 0.3, cost: 0.05, label: '接济/交换一份口粮' },
+  companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
 };
 
 // 喊住：玩家隔着房间喊一声，被喊的人会停在原地几刻（不进 move_to）。
@@ -34,9 +40,22 @@ export function hail(world, targetId, ticks = 3) {
 
 export const isHailed = (world, id) => Boolean(world.hail && world.hail.target === id && world.t < world.hail.until);
 
-export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip }) {
+export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip, preset = 'lab', seed = 0 }) {
+  const P = presetOf(preset);
   return {
     t: 0,
+    // PLAN §28：世界预设。lab 的房间表与顺序必须保持原样（候选顺序进轨迹）；town 才有多房间/天气/经济。
+    preset: P.id,
+    locs: P.locs,
+    grid: P.grid,
+    outdoor: P.outdoor,
+    weatherEnabled: P.weather,
+    weather: null,
+    speech: P.speech,
+    features: { work: P.work, trade: P.trade, companions: P.companions, norms: P.norms },
+    things: Object.fromEntries((P.things ?? []).map((x) => [x.id, { ...x }])),
+    coins: {},
+    seed,
     loc: {},
     agents: {},
     pantry: pantries,
@@ -83,6 +102,7 @@ export function spawn(world, id, loc) {
   world.loc[id] = loc;
   world.stash[id] = world.stash[id] ?? world.stashInitial ?? 3;
   world.expect[id] = world.stash[id];
+  world.coins[id] = world.coins[id] ?? 0;
   (world.occupancy[loc] ??= []).push(id);
 }
 
@@ -105,6 +125,10 @@ export function perceptsAt(world, id) {
   if (others.length) out.push({ kind: 'company', subject: others[0], salience: 0.5 });
   if ((world.loc[id] === 'home' || world.loc[id] === 'store') && world.pantry > 0) out.push({ kind: 'food_available', subject: 'pantry', salience: 0.6 });
   if (world.expect[id] - world.stash[id] > 0) out.push({ kind: 'shortfall_visible', subject: 'stash', salience: 0.75, deficit: world.expect[id] - world.stash[id] });
+  // PLAN §28 A：坏天气只对户外的人可见（室内感知不到），走既有评价管线产生后果。
+  if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[id])) {
+    out.push({ kind: 'weather', subject: world.weather, salience: 0.5 });
+  }
   for (const p of world.percepts) if (p.for === id || p.for === 'all') out.push({ kind: p.kind, subject: p.subject, salience: p.salience ?? 0.8 });
   return out;
 }
@@ -134,19 +158,52 @@ export function affordancesFor(world, agentId) {
       label: `和${world.agents[x]?.name ?? x}说话`,
       cost: Number((0.22 - 0.12 * (r.trust / 100) - 0.06 * r.familiarity).toFixed(3)),
       impulse: 0.4,
-      serves: { social: 0.7 + 0.6 * r.familiarity, stimulation: 0.35 },
+      serves: { social: 0.7 + 0.6 * r.familiarity + (Array.isArray(world.companions) && world.companions.some((p) => (p[0] === x && p[1] === agentId) || (p[1] === x && p[0] === agentId)) ? 0.2 : 0), stimulation: 0.35 },
     });
   }
 
   // 路径二：走到某处——目的地有谁，满足的需求就不同（这是原来 wander 完全没有的分岔）
-  for (const loc of Object.keys(LOCS)) {
+  const feats = world.features ?? {};
+  for (const loc of Object.keys(world.locs ?? LOCS)) {
     if (loc === here) continue;
     const crowd = (world.occupancy[loc] ?? []).filter((x) => x !== agentId);
-    const serves = crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : { stimulation: 0.25 };
-    out.push({ id: `move_to:${loc}`, kind: 'move_to', to: loc, label: `走到${LOCS[loc]}`, cost: 0.06, impulse: 0.15, serves });
+    const serves = crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
+    out.push({ id: `move_to:${loc}`, kind: 'move_to', to: loc, label: `走到${(world.locs ?? LOCS)[loc] ?? loc}`, cost: 0.06, impulse: 0.15, serves });
   }
 
   out.push({ id: 'look_out', kind: 'look_out', label: BASE_KINDS.look_out.label, cost: 0.18, impulse: 0.85, serves: { social: 0.3, stimulation: 1 } });
+
+  // PLAN §28 B/C：只在 town 出现的动作（lab 的候选集与旧版逐位相同）。
+  if (feats.work && here === 'workshop') {
+    // 工资的即时效用按'能换到的口粮'折算（建模选择，§28 披露）：否则只会做两步规划的角色永远不会去打工。
+    out.push({ id: 'work', kind: 'work', label: '在工坊干活换饭钱', cost: 0.1, impulse: 0.3, serves: { energy: 0.9, stimulation: 0.1 } });
+  }
+  if (feats.work && here === 'store' && (world.coins?.[agentId] ?? 0) >= 2) {
+    out.push({ id: 'buy', kind: 'buy', label: '用铜币换一份粮', cost: 0.04, impulse: 0.2, serves: { energy: 0.7 } });
+  }
+  if (feats.trade) {
+    for (const x of present) {
+      const theirStash = world.stash[x] ?? 0;
+      const mineStash = world.stash[agentId] ?? 0;
+      const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
+      const ally = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
+      // 小社区里的"交易"= 接济/交换口粮（币制市场由 work→buy 承担）：熟悉度或结伴是前提。
+      if (mineStash + 2 <= theirStash && (ally || r.trust >= 30)) {
+        out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `向${world.agents[x]?.name ?? x}要一份`, cost: 0.05, impulse: 0.3, serves: { energy: 0.9, social: 0.35 } });
+      } else if (theirStash + 2 <= mineStash && (ally || r.trust >= 30)) {
+        out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `给${world.agents[x]?.name ?? x}一份`, cost: 0.05, impulse: 0.25, serves: { energy: 0.05, social: 0.9 } });
+      }
+    }
+  }
+  if (feats.companions) {
+    for (const x of present) {
+      const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
+      const already = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
+      if (!already && r.familiarity >= 0.3 && r.trust >= 32) {
+        out.push({ id: `companion:${x}`, kind: 'companion', target: x, label: `和${world.agents[x]?.name ?? x}结伴`, cost: 0.08, impulse: 0.35, serves: { social: 0.95, stimulation: -0.05 } });
+      }
+    }
+  }
 
   // 路径三：不从公仓等，而是去不在场的人门口拿——高冲动、违约
   for (const x of away) {
@@ -235,11 +292,50 @@ export function actuate(world, agentId, action) {
       move(world, agentId, action.to);
       const crowd = othersAt(world, agentId);
       if (crowd.length) world.pending.push({ for: agentId, evt: evt({ kind: 'company_soon', valence: 0.15, selfCaused: false, about: crowd[0] }) });
-      return { action, ok: true, code: 'OK', observation: `走到${LOCS[action.to]}`, novel: true, evt: evt({ kind: 'relocate', valence: 0.05, serves: 'stimulation', novel: true }) };
+      return { action, ok: true, code: 'OK', observation: `走到${(world.locs ?? LOCS)[action.to] ?? action.to}`, novel: true, evt: evt({ kind: 'relocate', valence: 0.05, serves: 'stimulation', novel: true }) };
     }
     case 'look_out': {
       move(world, agentId, 'watch');
       return { action, ok: true, code: 'OK', observation: '外面还是那片灰', satiated: 'social', amount: 0.12, novel: true, evt: evt({ kind: 'observed', valence: 0.35, serves: 'stimulation', novel: true }) };
+    }
+    case 'work': {
+      if (!(world.features ?? {}).work || world.loc[agentId] !== 'workshop') return { action, ok: false, code: 'NO_WORKSHOP', observation: '这里没有可干的活' };
+      world.coins[agentId] = (world.coins[agentId] ?? 0) + 2;
+      world.stash[agentId] = (world.stash[agentId] ?? 0) + 1; // 工钱口粮：让私人库存在这张经济里有补给源
+      // 工地管饭：干活当场补一份口粮（0.35），另得 2 枚铜币 + 一份口粮。这样即时效用与'吃饱'同源，不做两步规划的角色也会去打工。
+      return { action, ok: true, code: 'OK', observation: '干完一段活，管了一顿饭，领到 2 枚铜币和一份口粮', satiated: 'energy', amount: 0.35, evt: evt({ kind: 'work', valence: 0.15, serves: 'energy' }) };
+    }
+    case 'buy': {
+      const coins = world.coins[agentId] ?? 0;
+      if (world.loc[agentId] !== 'store' || coins < 2) return { action, ok: false, code: 'NO_COINS', observation: '铜币不够或不在公仓' };
+      world.coins[agentId] = coins - 2;
+      world.stash[agentId] = (world.stash[agentId] ?? 0) + 1;
+      return { action, ok: true, code: 'OK', observation: '换来一份存粮', satiated: 'energy', amount: 0.05, evt: evt({ kind: 'buy', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'trade': {
+      const other = action.target;
+      if (!other || world.loc[other] !== world.loc[agentId]) return { action, ok: false, code: 'NOT_THERE', observation: '人不在旁边' };
+      const theirStash = world.stash[other] ?? 0;
+      const mineStash = world.stash[agentId] ?? 0;
+      if (mineStash + 2 <= theirStash) {
+        world.stash[other] = theirStash - 1; world.stash[agentId] = 1;
+        if (world.agents[agentId]?.relations) world.agents[agentId].relations.meet(other, world.t, { delta: { trust: 2, familiarity: 0.02 }, why: '接济' });
+        return { action, ok: true, code: 'OK', observation: `向${world.agents[other]?.name ?? other}要了一份`, satiated: 'energy', amount: 0.35, evt: evt({ kind: 'trade', valence: 0.25, serves: 'energy', about: other }) };
+      }
+      if (theirStash + 2 <= mineStash) {
+        world.stash[agentId] = mineStash - 1; world.stash[other] = 1;
+        if (world.agents[other]?.relations) world.agents[other].relations.meet(agentId, world.t, { delta: { trust: 3, familiarity: 0.03 }, why: '受助' });
+        return { action, ok: true, code: 'OK', observation: `给了${world.agents[other]?.name ?? other}一份`, satiated: 'social', amount: 0.05, evt: evt({ kind: 'trade', valence: 0.35, serves: 'social', about: other }) };
+      }
+      return { action, ok: false, code: 'NO_DEAL', observation: '这单接济不成立' };
+    }
+    case 'companion': {
+      const other = action.target;
+      if (!other || world.loc[other] !== world.loc[agentId]) return { action, ok: false, code: 'NOT_THERE', observation: '人不在旁边' };
+      world.companions ??= [];
+      const already = world.companions.some((p) => (p[0] === agentId && p[1] === other) || (p[1] === agentId && p[0] === other));
+      if (!already) world.companions.push([agentId, other]);
+      return { action, ok: true, code: 'OK', observation: `和${world.agents[other]?.name ?? other}结伴了`, satiated: 'social', amount: 0.15, evt: evt({ kind: 'companion', valence: 0.4, serves: 'social', about: other }) };
     }
     case 'take_shared': {
       const victim = action.target;
@@ -251,6 +347,20 @@ export function actuate(world, agentId, action) {
       // 态度改变只发生在被转述（receive → assess）那一刻。没有这一条，"第三人声誉"没有任何输入源。
       // 受 socialGossip 开关约束：默认关时必须与旧基线逐位一致。
       if ((world.socialGossip ?? 0) > 0) for (const w of world.occupancy[world.loc[agentId]] ?? []) if (w !== victim) sec.known.add(w);
+      // PLAN §28 C：群体规范。≥2 人当场目击时，不只是"他们知道了"，而是在场者及其结伴者当场降低对行为人的信任，
+      // 并记一条规范事件。只在 town（features.norms）执行；lab 的路径与旧版逐位相同。
+      if ((world.features ?? {}).norms) {
+        const crowd = (world.occupancy[world.loc[agentId]] ?? []).filter((w) => w !== agentId && w !== victim && w !== 'p1');
+        if (crowd.length >= 2) {
+          world.normLog ??= [];
+          world.normLog.push({ t: world.t, of: agentId, victim, witnesses: crowd.slice() });
+          for (const w of Object.keys(world.agents)) {
+            if (w === agentId || w === 'p1' || !world.agents[w]?.relations) continue;
+            const allied = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === w && p[1] === agentId) || (p[1] === w && p[0] === agentId));
+            world.agents[w].relations.meet(agentId, world.t, { delta: { trust: allied ? -2 : -1 }, why: '目击越轨的群体规范' });
+          }
+        }
+      }
       return {
         action,
         ok: true,

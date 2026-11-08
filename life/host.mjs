@@ -7,7 +7,9 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
-import { phaseOf, scheduledLoc } from './clock.mjs';
+import { phaseOf, scheduledLoc, weatherFor, dayOf } from './clock.mjs';
+import { presetOf } from './presets.mjs';
+import { speechLine, classifySay } from './speech.mjs';
 import { tell } from './gossip.mjs';
 import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
@@ -76,7 +78,8 @@ function makePack(condition, channelMask) {
   const engineMask = condition === 'C2' && M5_ENABLED ? { ...channelMask, m5: 1 } : channelMask;
   // F1（PLAN §26）：这里历史上写 stash:5 但它是死旋钮（实际恒 3），种子存档也按 3 生成；
   // 修复死旋钮后为保持演示逐位不变，去掉这个从未生效的参数，而不是把演示改成 5。
-  const world = makeWorld({ pantries: 3 });
+  // PLAN §28：演示世界用 town 预设（8 房间/物件/天气/台词/传闻）；lab 只给离线实验用。
+  const world = makeWorld({ pantries: 3, preset: 'town', seed: CFG.seed, socialGossip: 1 });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask: engineMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
@@ -158,6 +161,8 @@ async function tick() {
   for (const key of ['A', 'B']) {
     const p = S.packs[key];
     p.world.t += 1;
+    // PLAN §28：天气按 (seed, day) 确定性推进；lab 的 weatherEnabled=false。
+    if (p.world.weatherEnabled) p.world.weather = weatherFor(CFG.seed, dayOf(p.world.t));
     p.world.percepts = [];
     p.world.pending = p.world.pending.filter((x) => x.for !== 'p1');
     if (p.world.t % 90 === 0) p.world.pantry = Math.min(6, p.world.pantry + 2);
@@ -173,7 +178,7 @@ async function tick() {
           p.stat.决策 += 1;
           if (t.action === 'look_out' || t.action.startsWith('take_shared')) p.stat.高冲动 += 1;
           if (t.kind === 'take_shared' && t.ok) p.stat.越轨 += 1;
-          p.log.push({ t: p.world.t, who: a.name, kind: 'act', text: `${t.action}｜${a.bank.summary()}` });
+          p.log.push({ t: p.world.t, who: a.name, kind: 'act', text: p.world.speech ? speechLine(a, { world: p.world, kind: t.kind, actionId: t.action, t: p.world.t }) : `${t.action}｜${a.bank.summary()}` });
         }
       }
     }
@@ -218,7 +223,7 @@ function catchUp(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
+    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
     log: p.log,
     playerLog: p.playerLog ?? [],
     series: p.series,
@@ -268,7 +273,14 @@ function applyInto(pack, d) {
   pack.playerLog = d.playerLog ?? [];
   pack.series = d.series ?? []; // 曲线跟着存档走：重启后"谁先垮"的那段历史不能凭空消失
   pack.stat = d.stat ?? pack.stat; // 不存的话每次重启，页面上的对照计数都归零，实验读数就断了
-  Object.assign(pack.world, { t: d.world.t, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, socialGossip: d.world.socialGossip ?? pack.world.socialGossip, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
+  // PLAN §28：预设随档走；房间表/网格/户外集/开关按档重装（旧档无 preset ⇒ lab）。
+  // 旧档（含内置种子）没有 preset：保持当前世界预设（演示是 town），不要把它打回 lab。
+  const P = presetOf(d.world.preset ?? pack.world.preset ?? 'lab');
+  Object.assign(pack.world, { preset: P.id, locs: P.locs, grid: P.grid, outdoor: P.outdoor, weatherEnabled: P.weather, speech: P.speech, features: { work: P.work, trade: P.trade, companions: P.companions, norms: P.norms }, things: Object.fromEntries((P.things ?? []).map((x) => [x.id, { ...x }])) });
+  if (d.world.things) pack.world.things = structuredClone(d.world.things);
+  pack.world.companions = (d.world.companions ?? []).map((x) => x.slice());
+  pack.world.normLog = (d.world.normLog ?? []).slice(-20);
+  Object.assign(pack.world, { t: d.world.t, weather: d.world.weather ?? null, coins: { ...(d.world.coins ?? {}) }, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, socialGossip: d.world.socialGossip ?? pack.world.socialGossip, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
   // 秘密是认知状态，必须活过重启：谁已经知道这件事不能因为重启就忘了，否则同一句话可以说第二遍
   pack.world.secrets = (d.world.secrets ?? []).map((s) => ({ ...s, known: new Set(s.known ?? []) }));
   pack.world.occupancy = {};
@@ -383,6 +395,9 @@ export const host = {
       t: p.world.t,
       phase: phaseOf(p.world.t), // L0 时钟：页面上"现在是什么时候"必须是世界事实，不是玩家猜的
       pantry: p.world.pantry,
+      // PLAN §28：房间表/网格/天气/开关/铜币都是世界事实，前端按这份渲染（美术资源后接不影响结构）
+      rooms: p.world.locs, grid: p.world.grid, outdoor: p.world.outdoor,
+      weather: p.world.weather, features: p.world.features, coins: p.world.coins, things: p.world.things, companions: p.world.companions ?? [],
       loc: p.world.loc,
       occupancy: p.world.occupancy,
       stash: p.world.stash,
@@ -396,7 +411,7 @@ export const host = {
           // 分开是必须的：刚切上开关还没走决策时 m3Last 仍是 null，此时不许摆一个空目标假装在运作。
           const layers = layered ? Object.fromEntries(Object.entries(S.masks).filter(([, v]) => v).map(([k]) => [k, 1])) : {};
           return [a.id, {
-            id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, cfHistory: a.cfHistoryIncomplete ? 'incomplete' : null, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null),
+            id: a.id, name: a.name, archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, drives: { ...a.drives.v }, summary: a.bank.summary(), viab: { v: Number(a.viab.v.toFixed(3)), reserve: Number(a.viab.reserve.toFixed(3)), lost: a.viab.ledger.map((l) => l.organ) }, counters: a.counters, cfHistory: a.cfHistoryIncomplete ? 'incomplete' : null, coins: p.world.coins?.[a.id] ?? 0, rel: a.relations.dump(p.world.t), last: [...a.trace].reverse().find((r) => r.action) ?? null, reason: a.lastReason ?? '', sched: (p.world.scheduleWeight > 0 ? (() => { const s = scheduledLoc(a.traits.archetype, p.world.t); return s ? { should: LOCS[s], onTime: p.world.loc[a.id] === s } : null; })() : null),
             layers,
             m3: layers.m3 && a.m3Last ? { goal: a.m3Last.goal, previous: a.m3Last.previous, remaining: a.m3Last.remaining, reused: a.m3Last.reused, interrupted: a.m3Last.interrupted ?? null } : null,
             coupling: layers.coupling ? a.coupling.dump() : null,
@@ -417,14 +432,17 @@ export const host = {
       const w = S.packs[key].world;
       // 房间名必须真实存在：上一版这里不校验，脚本传了个 undefined 就把玩家从 loc 里写没了
       // （JSON 会丢掉 undefined 键），整局之后都找不到"你"。
-      if (body.kind === 'move' && LOCS[body.room] && w.loc.p1 !== body.room) {
+      if (body.kind === 'move' && (w.locs ?? LOCS)[body.room] && w.loc.p1 !== body.room) {
         w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
         w.loc.p1 = body.room;
         (w.occupancy[body.room] ??= []).push('p1');
       }
       if (body.kind === 'say') {
+        // PLAN §28 D：town 下按关键词意图映射为评价事件与信任增量；lab 保持旧的固定接触事件。
+        const intent = w.speech ? classifySay(body.text) : { kind: 'contact', valence: 0.4, trust: 0 };
         for (const who of (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1')) {
-          w.pending.push({ for: who, evt: { kind: 'contact', valence: 0.4, selfCaused: false, about: 'p1', serves: 'social' } });
+          w.pending.push({ for: who, evt: { kind: w.speech ? `say_${intent.kind}` : 'contact', valence: intent.valence, selfCaused: false, about: 'p1', serves: 'social' } });
+          if (w.speech && intent.trust && w.agents[who]?.relations) w.agents[who].relations.meet('p1', w.t, { delta: { trust: intent.trust, familiarity: 0.02 }, why: `玩家说话(${intent.kind})` });
         }
       }
       // 喊住：隔着一间屋也能喊，被喊的人几刻内不换地方。玩家因此能追上人再传话（O12）

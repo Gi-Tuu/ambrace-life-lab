@@ -21,6 +21,16 @@ export function clockSummary(t) {
   return `第 ${dayOf(t) + 1} 天 · ${phaseOf(t)}`;
 }
 
+// PLAN §28：天气是 (seed, day) 的确定性哈希，**不用 Math.random**——同种子同一天永远同一种天气。
+// lab 预设不启用；town 启用。坏天气只经感知→评价管线影响行为（body.perceptsAt），另在户外加一点能耗。
+export const WEATHERS = Object.freeze(['clear', 'rain', 'cold']);
+export function weatherFor(seed, day) {
+  let x = ((seed >>> 0) * 2654435761 ^ ((day + 1) >>> 0) * 40503) >>> 0;
+  x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+  const r = x / 4294967296;
+  return WEATHERS[r < 0.55 ? 0 : r < 0.8 ? 1 : 2];
+}
+
 // O10 日程：谁何时在哪。这是世界侧的节律表，不是决策层——它只提供"该在哪"这一事实，
 // 权重进不进比较由 body/model 决定，所以关掉权重能精确退回旧行为。
 export const SCHEDULE = {
