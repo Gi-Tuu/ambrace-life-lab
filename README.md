@@ -68,6 +68,7 @@ node life/o1-fallback-audit.mjs       # 影响度兜底窗口是否与侵蚀同�
 node life/o1o9-mutation-battery.mjs   # 闸门变异电池：每条闸门都要能被变异打红
 node life/m6-device-probe.mjs         # M6 装置先验（巩固/睡眠压力/学习进度，只测量）
 node life/m6p-mutation-battery.mjs    # M6-P 精度门控可塑性闸门变异电池
+node life/m6-sl-round3.mjs            # M6 睡眠压力/学习进度 round3 装置（只测量）
 node life/seed-gen.mjs 600 seed-run   # 重新生成演示种子存档（离线实跑，固定 seed）
 node serve.mjs                 # 本地 demo
 ```
