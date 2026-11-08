@@ -56,7 +56,7 @@ WORLD_STASH=
 ## 判据与复现
 
 ```bash
-node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/o9-event-first.test.mjs life/o1-counterfactual.test.mjs life/m6-plastic.test.mjs
+node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/o9-event-first.test.mjs life/o1-counterfactual.test.mjs life/m6-plastic.test.mjs life/m6-lp.test.mjs
 node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
 node life/run.mjs --report     # 四条件消融矩阵
 node life/run.mjs --sweep      # 多 seed 复核
@@ -69,6 +69,7 @@ node life/o1o9-mutation-battery.mjs   # 闸门变异电池：每条闸门都要�
 node life/m6-device-probe.mjs         # M6 装置先验（巩固/睡眠压力/学习进度，只测量）
 node life/m6p-mutation-battery.mjs    # M6-P 精度门控可塑性闸门变异电池
 node life/m6-sl-round3.mjs            # M6 睡眠压力/学习进度 round3 装置（只测量）
+node life/m6lp-mutation-battery.mjs   # M6-L learning progress 闸门变异电池
 node life/seed-gen.mjs 600 seed-run   # 重新生成演示种子存档（离线实跑，固定 seed）
 node serve.mjs                 # 本地 demo
 ```

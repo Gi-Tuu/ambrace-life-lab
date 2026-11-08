@@ -11,7 +11,7 @@ import { perceptsAt, affordancesFor, actuate, isHailed } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
-import { sampleTraits } from './traits.mjs';
+import { sampleTraits, DIMS } from './traits.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { ForwardModel } from './s4-predictor.mjs';
 import { DAY_TICKS, dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
@@ -145,6 +145,13 @@ export class Organism {
     const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
     this.bank.tick(1);
     if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
+    // M6-L（PLAN §25.6）：在线相对进度 = 误差双 EMA 的 (slow−fast)/slow。只在 lpExplore 且 forwardLearn 开时写；
+    // 没学习就没有"进度"（L2 负控）。误差只用本次更新前的预测 mu，因果、无未来信息。
+    if (this.ch.lpExplore && this.ch.forwardLearn) {
+      const err = DIMS.reduce((s, d) => s + Math.abs(this.bank.m[d] - prediction.mu[d]), 0) / DIMS.length;
+      this.lpFast = this.lpFast === undefined ? err : this.lpFast + (err - this.lpFast) * PARAMS.lp.fast;
+      this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
+    }
     const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
     this.drives.tick(1, contact);
     const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
@@ -170,7 +177,7 @@ export class Organism {
     // 存续风险：⑤ 关着就传 0。注意 viab.tick() 在上面已经跑过了——**演化不受开关影响，只有"进不进比较"受**，
     // 和 C2-neg 让 m 照常演化是同一个口径，否则对照组连"它有没有撑不住"都测不出来。
     const risk = this.viabilityRisk();
-    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk });
+    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk, exploreGate: ch.lpExplore ? this.lpProgress() : 0, exploreIds: ch.lpExplore ? this.explorationIds(paths) : null });
     const temp = temperatureOf(this.traits, ch, this.bank);
     // O1-M（PLAN §23.1）：反事实影响度。默认关（cfUsage:0）⇒ 这一步与下面习惯分支里的计数都不执行，零开销、轨迹逐位不变。
     if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
@@ -340,6 +347,17 @@ export class Organism {
     return filtered;
   }
 
+  // M6-L（PLAN §25.6）：相对进度 g∈[0,1]；slow=0（还没样本）时 g=0 ⇒ 不加探索预算。
+  lpProgress() {
+    if (!this.lpSlow) return 0;
+    return Math.max(0, Math.min(1, (this.lpSlow - (this.lpFast ?? this.lpSlow)) / this.lpSlow));
+  }
+
+  // 探索类 = 瞭望 + 还算新的移动（习惯计数 ≤ noveltyMax）。只读，不改状态。
+  explorationIds(paths) {
+    return new Set(paths.filter((p) => p.kind === 'look_out' || (p.kind === 'move_to' && this.habit.count(p.id) <= PARAMS.lp.noveltyMax)).map((p) => p.id));
+  }
+
   // O1-M（PLAN §23.1）：三项"反事实改变率"里的记忆与关系在这里算；习惯那一项在它真正接管的时刻算。
   // 分母统一 = 非反射决策数（cfDecisions）⇒ 三项同量纲、可直接比较（旧公式的毛病就是三项不同量纲：§47.2）。
   // 默认关（cfUsage:0）时整段不执行 ⇒ 不消费随机数、不写状态、轨迹逐位不变。
@@ -359,7 +377,7 @@ export class Organism {
       const byId = new Map(visN.map((x) => [x.id, x]));
       const pathsN = paths.map((p) => byId.get(p.id)).filter(Boolean);
       if (pathsN.length !== paths.length) { this.counters.cfRelSkipped = (this.counters.cfRelSkipped ?? 0) + 1; return; }
-      const scoredN = scoreAll(pathsN, { drives: this.drives, traits: this.traits, bank: this.bank, ch: this.ch, memBonus, risk });
+      const scoredN = scoreAll(pathsN, { drives: this.drives, traits: this.traits, bank: this.bank, ch: this.ch, memBonus, risk, exploreGate: this.ch.lpExplore ? this.lpProgress() : 0, exploreIds: this.ch.lpExplore ? this.explorationIds(pathsN) : null });
       // 影子路径的活性读数：中性化到底有没有动过任何一个候选的效用。
       // 没有它的话，"cfRel 恒 0"分不清是"关系不影响第一名"（数据）还是"中性化没接上"（bug）——变异电池实测踩到过。
       const moved = pathsN.some((p) => {

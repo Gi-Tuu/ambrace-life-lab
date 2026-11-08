@@ -23,7 +23,7 @@ export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '�
 // 分开登记的理由与 §24 相同：捆在一起就回答不了"变化到底是哪一条带来的"。
 export function channelsFor(condition, mask) {
   const proc = { reflect: 1, ask: 1, gossip: 1 };
-  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0 };
+  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0, lpExplore: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0, lpExplore: 0 };
   return mask ? { ...on, ...mask } : on;
 }
 
@@ -57,7 +57,7 @@ export function visibleActions(affs, traits, ch, bank, precision = null) {
 
 // 通道②：调制量进入效用；通道④：记忆加成（按 kind 加，路径共享）
 // risk：L13 存续风险。由调用方按 ch.viab 决定传不传（通道关着传 0），切断是结构性的而非判断性的
-export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0 }) {
+export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0, exploreGate = 0, exploreIds = null }) {
   const eff = mview(bank, traits, ch.util);
   const out = [];
   for (const act of actions) {
@@ -99,8 +99,13 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     // O10 日程项单独立项归因：藏在需求项里就看不见（§27 同一条教训）
     const schedBonus = act.schedBonus ?? 0;
     u += schedBonus;
+    // M6-L（§25.6）：learning progress 重分配探索预算。只加给探索类动作（look_out / 还算新的 move_to），
+    // 份额 = 在线相对进度 g × weight；单独立项 `探索`。关开关时 exploreGate=0 ⇒ 精确退回原评分。
+    const exploreBonus = exploreIds && exploreIds.has(act.id) ? exploreGate * PARAMS.lp.weight : 0;
+    u += exploreBonus;
     const cand = { ...bd, 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
     if (schedBonus) cand.日程 = Number(schedBonus.toFixed(4));
+    if (exploreBonus) cand.探索 = Number(exploreBonus.toFixed(4));
     if (expectedDelta) cand.预期份量 = Number(expectedDelta.toFixed(4));
     if (viabDelta) cand.存续风险 = Number(viabDelta.toFixed(4)); // 风险为 0 时不挂这个标签，免得归因表里出现恒零的假来源
     const driver = Object.entries(cand).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ?? 'none';
@@ -159,6 +164,10 @@ export function makeHabit() {
       let b = null;
       for (const [id, v] of table) if (v.n >= 3 && (!b || v.ema > b.ema)) b = { id, ema: v.ema, n: v.n };
       return b;
+    },
+    // M6-L（§25.6）：只读计数，给"还算新"的动作判定用；不改任何状态。
+    count(id) {
+      return table.get(id)?.n ?? 0;
     },
     // 不可逆：只削学习率与已固化的强度，任何恢复存续的路径都不许把它调回来
     erode(k) {
