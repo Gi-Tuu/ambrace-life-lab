@@ -63,6 +63,9 @@ node life/run.mjs --sweep      # 多 seed 复核
 node life/run.mjs --viab       # 受损速度
 node life/run.mjs --recover    # 恢复动力学
 node life/run.mjs --metab      # 代谢与进食实测账
+node life/supply-tradeoff-sweep.mjs   # 供给常数取舍表（只测量，不改默认值）
+node life/o1-fallback-audit.mjs       # 影响度兜底窗口是否与侵蚀同窗
+node life/o1o9-mutation-battery.mjs   # 闸门变异电池：每条闸门都要能被变异打红
 node life/seed-gen.mjs 600 seed-run   # 重新生成演示种子存档（离线实跑，固定 seed）
 node serve.mjs                 # 本地 demo
 ```
