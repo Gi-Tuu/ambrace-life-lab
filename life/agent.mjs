@@ -2,6 +2,7 @@
 // 身份粒度从 kind 升到**路径 id**（talk:绛 / move_to:hall）：习惯、记忆、trace、判据都按路径计，
 // 否则「同需求多路径」只是显示层的装饰。
 import { ModulatorBank } from './modulators.mjs';
+import { M5ModulatorBank } from './m5-bank.mjs';
 import { Drives } from './drives.mjs';
 import { EpisodicMemory } from './memory.mjs';
 import { Relations } from './relations.mjs';
@@ -30,12 +31,18 @@ export class Organism {
     this.name = name;
     this.condition = condition;
     this.ch = channelsFor(condition, channelMask);
+    // M5 只能显式加在 C2；C2-neg 不得被重新接通状态通道。
+    if (condition !== 'C2' && this.ch.m5) this.ch.m5 = 0;
     this.rng = rng ?? makeRng(seed);
     this.traits = sampleTraits(this.rng, archetype);
     // 覆盖必须在任何子模块构造之前落地：Drives 会把 social_setpoint 拷进自己的 setpoint，
     // 事后改 traits 它读不到（实测得到 KL 恰好为 0 的假阴性）
     if (traitsOverride) Object.assign(this.traits, traitsOverride);
-    this.bank = new ModulatorBank(this.traits, this.rng, mInit ? { ...this.traits.baseline, ...mInit } : undefined);
+    const bankInit = mInit ? { ...this.traits.baseline, ...mInit } : undefined;
+    this.bank = this.ch.m5 ? new M5ModulatorBank(this.traits, this.rng, bankInit, {
+      brake: this.ch.m5Brake !== 0, multidim: this.ch.m5Multi !== 0, symmetric: this.ch.m5Symmetric !== 0, read: this.ch.m5Read !== 0, slowInput: this.ch.m5SlowInput !== 0,
+      load: this.ch.m5Load !== 0, feedback: this.ch.m5Feedback !== 0, delay: this.ch.m5Delay ?? PARAMS.m5.delay, exposure: this.ch.m5Exposure !== 0,
+    }) : new ModulatorBank(this.traits, this.rng, bankInit);
     this.drives = new Drives(this.rng, this.traits);
     this.memory = new EpisodicMemory();
     this.forwardModel = new ForwardModel();
@@ -57,6 +64,7 @@ export class Organism {
   assess(evt, actionKind = null, actionSucceeded = null) {
     const a = appraise(evt, { traits: this.traits, drives: this.drives, memory: this.memory, relations: this.relations, t: this.world?.t ?? 0, m: this.bank.m });
     this.bank.inject(a.u);
+    if (this.ch.m5) this.bank.observeEvent(evt, a);
     this.memory.add(this.world?.t ?? 0, { kind: evt.kind, actionKind, actionSucceeded, payload: `来自${evt.about ?? '环境'}`, mSnapshot: this.bank.snapshot(), importance: a.importance });
     if (evt.about) {
       const r = this.relations.get(evt.about);

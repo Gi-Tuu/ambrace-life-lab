@@ -15,12 +15,15 @@ import { hashSeed } from './rng.mjs';
 import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { PARAMS } from './params.mjs';
+import { validateM5State } from './m5-bank.mjs';
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
   { id: 'a2', name: '绛', archetype: '冲动', loc: 'hall' },
   { id: 'a3', name: '蓑', archetype: '孤僻', loc: 'watch' },
 ];
+// 机制侧启动配置；默认关闭，不新增演示 masks/ctl，也不为 C2-neg 开启。
+const M5_ENABLED = process.env.M5_ENABLED === '1';
 const TICK_MS = Number(process.env.TICK_MS ?? 1200);
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SAVE_EVERY = 10;
@@ -70,10 +73,11 @@ function maskForA() {
 }
 
 function makePack(condition, channelMask) {
+  const engineMask = condition === 'C2' && M5_ENABLED ? { ...channelMask, m5: 1 } : channelMask;
   const world = makeWorld({ pantries: 3, stash: 5 });
   const agents = {};
   for (const r of ROSTER) {
-    const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
+    const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask: engineMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
     agents[r.id] = a;
     world.agents[r.id] = a;
     spawn(world, r.id, r.loc);
@@ -220,7 +224,7 @@ function serialize() {
     agents: Object.fromEntries(
       Object.values(p.agents).map((a) => [
         a.id,
-        { m: a.bank.snapshot(), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
+        { m: a.bank.snapshot(), ...(a.ch.m5 ? { m5: a.bank.dumpM5() } : a.m5Dormant ? { m5: { ...a.m5Dormant, fast: a.bank.snapshot() } } : {}), drives: { ...a.drives.v }, alone: a.drives.aloneTicks, memory: a.memory.dump(), rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling, habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(), m3: a.m3Planner.dump(), m3PrevGoal: a.m3PrevGoal, coupling: a.coupling.dump(), counters: a.counters },
       ]),
     ),
   });
@@ -241,6 +245,17 @@ async function save() {
     // 报 "Unable to deserialize cloned data"（实测同一份文件时而通过时而崩）。
     // 存档失败改成一个可查询的状态，由应用层决定要不要说、怎么说。
     S.saveError = String(e.message).slice(0, 80);
+  }
+}
+
+// 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
+function preflightM5Archive(raw) {
+  for (const key of ['A', 'B']) {
+    for (const [id, st] of Object.entries(raw?.[key]?.agents ?? {})) {
+      if (!st || !Object.hasOwn(st, 'm5')) continue;
+      try { validateM5State(st.m5, key === 'A' && M5_ENABLED ? PARAMS.m5.delay : null, key === 'A' && M5_ENABLED ? PARAMS.m5.slowScale : null); }
+      catch (cause) { const error = new Error(`M5_STATE_INVALID ${key}/${id}: ${cause.message}`); error.code = 'M5_STATE_INVALID'; throw error; }
+    }
   }
 }
 
@@ -268,7 +283,12 @@ function applyInto(pack, d) {
   for (const [id, st] of Object.entries(d.agents ?? {})) {
     const a = pack.agents[id];
     if (!a) continue;
-    Object.assign(a.bank.m, st.m ?? {});
+    if (a.ch.m5) a.bank.loadM5(st.m5, st.m);
+    else if (st.m5) {
+      // 关闭时保留但不演化慢仓；快仓从已存 fast 恢复，避免把慢分量重复叠入。
+      a.m5Dormant = structuredClone(st.m5);
+      Object.assign(a.bank.m, st.m5.fast ?? st.m ?? {});
+    } else Object.assign(a.bank.m, st.m ?? {});
     Object.assign(a.drives.v, st.drives ?? {});
     a.drives.aloneTicks = st.alone ?? 0;
     // L13 的不可逆损失必须活得比重启久：账本、掉档计数、被削过的部件完整度都要回来。
@@ -295,6 +315,7 @@ export const host = {
     let note = '没有存档，新建世界';
     try {
       const raw = JSON.parse(await readFile(join(S.dir, 'world.json'), 'utf8'));
+      preflightM5Archive(raw);
       applyInto(S.packs.A, raw.A);
       applyInto(S.packs.B, raw.B);
       S.startRaw = raw;
@@ -302,18 +323,21 @@ export const host = {
       S.model = raw.model ?? S.model;
       if (mins > 1) catchUp(mins);
       note = `载入存档：世界已跑到第 ${S.packs.A.world.t} 刻，休眠 ${mins.toFixed(1)} 分钟`;
-    } catch {
+    } catch (error) {
+      if (error?.code === 'M5_STATE_INVALID') { S.saveError = error.message; throw error; }
       // 免费创空间实测无跨容器重建持久卷（重新部署即清空 /data）。
       // 没有存档时载入内置种子：一份实跑演化的固定历史起点，重置变成可复现的同一起点。
       // 种子不走 catchUp——它是初始条件，不是休眠，补时会往固定起点里掺真实时间。
       try {
         const raw = JSON.parse(await readFile(process.env.SEED_FILE ?? resolve('seed/world.json'), 'utf8'));
+        preflightM5Archive(raw);
         applyInto(S.packs.A, raw.A);
         applyInto(S.packs.B, raw.B);
         S.startRaw = raw;
         S.model = raw.model ?? S.model;
         note = `载入内置种子存档：从第 ${S.packs.A.world.t} 刻的历史起点继续（seed=${raw.seed}）`;
-      } catch {
+      } catch (error) {
+        if (error?.code === 'M5_STATE_INVALID') { S.saveError = error.message; throw error; }
         /* 连种子也没有就是新世界的正常起点，交给应用层播报 */
       }
     }
