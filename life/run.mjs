@@ -294,6 +294,30 @@ export function recoveryMechanics({ ticks = 600 } = {}) {
   });
 }
 
+// 打平线（顿/百刻）：两处读数——`--recover` 的判定列与 `--metab` 的逐样本账——必须共用这一段实现。
+// 此前 recover 用的是"每刻一个普通动作 cost 0.06、每顿 0.5"两个**假设值**（算出 2.00），
+// 而 metab 早已换成实测（均值 1.858）⇒ 同一件事有两份会各自漂移的账（O13 修过同类问题）。
+// 入参一律取实测量：upkeepPerTick = 实付动作支出 / 账本老化刻数（反射提前 return 的刻免付基础代谢），
+// perMeal = 只数 ≥mealMin 的口（"歇一会儿"那种小口会被 regen 的 mealMin 闸门拒掉，不算吃到）。
+export function breakEvenPer100({ upkeepPerTick, perMeal, P = PARAMS.viab }) {
+  if (!perMeal) return null; // 一口都没吃到 ⇒ 没有"每顿补多少"可言，不许用假设值顶替
+  return ((P.upkeep + upkeepPerTick) / (P.mealYield * perMeal)) * 100;
+}
+
+// 从一条真实轨迹里取打平线所需的三个实测量。两个报告函数都走这里，口径不可能分叉。
+export function mealLedgerOf(agent, recs, { ticks, P = PARAMS.viab }) {
+  const credited = recs.filter((r) => (r.viab.ate ?? 0) >= P.mealMin);
+  const perMeal = credited.length ? credited.reduce((s, r) => s + r.viab.ate, 0) / credited.length : 0;
+  const paid = recs.reduce((s, r) => s + (r.viab.paid ?? 0), 0);
+  const aged = agent.viab.age;
+  return {
+    credited: credited.length,
+    perMeal,
+    mealsPer100: (credited.length / ticks) * 100,
+    line: breakEvenPer100({ upkeepPerTick: aged ? paid / aged : 0, perMeal, P }),
+  };
+}
+
 // O2 恢复动力学·观察侧：真实轨迹里"垮过的人后来怎么样了"。
 // 回升事件、能否重回操作点、末段斜率、储能到底有没有建立起来过——四个量都是对同一条 v 序列做的。
 export async function recoveryProfile({ seeds = [7, 11, 13], ticks = 1200 } = {}) {
@@ -307,11 +331,15 @@ export async function recoveryProfile({ seeds = [7, 11, 13], ticks = 1200 } = {}
     for (const c of CONFIGS) {
       const { agents } = await simulate({ seed, ticks, condition: 'C2', pantry: c.pantry, stash: c.stash, group: `恢复-${c.配置}` });
       for (const a of Object.values(agents)) {
-        const series = a.trace
-          .filter((r) => r.viab)
+        const recs = a.trace.filter((r) => r.viab);
+        const series = recs
           .map((r) => ({ t: r.t, v: r.viab.v, reserve: r.viab.reserve ?? 0, ledger: r.viab.ledger, ate: Boolean(r.ok) && (r.kind === 'eat' || r.kind === 'take_shared') }));
         const st = recoveryStats(series, { crit: PARAMS.viab.crit });
         if (!st || !st.samples) continue;
+        // 打平线与"吃到几顿"都走 mealLedgerOf（与 --metab 同一段实现、同一套口径）。
+        // 注意本行的 `进食每百刻` 仍是 recoveryStats 的**尝试次数**口径（含被 mealMin 拒掉的小口），
+        // 与新增的 `实测顿每百刻`（只数真到账的口）故意不同：前者答"它去吃了多少次"，后者答"它真吃到多少"。
+        const ml = mealLedgerOf(a, recs, { ticks });
         rows.push({
           seed,
           配置: c.配置,
@@ -324,23 +352,28 @@ export async function recoveryProfile({ seeds = [7, 11, 13], ticks = 1200 } = {}
           重回操作点: st.crossedCritAfterDrop ? '是' : '否',
           回升伴随进食: st.ateCoupledShare === null ? '—' : Number(st.ateCoupledShare.toFixed(2)),
           进食每百刻: Number(st.mealsPer100.toFixed(2)),
+          实测顿每百刻: Number(ml.mealsPer100.toFixed(2)),
+          打平需顿每百刻: ml.line === null ? null : Number(ml.line.toFixed(2)),
           末百刻斜率: Number(st.tailSlopePer100.toFixed(4)),
           储能时长占比: Number(st.reserveShare.toFixed(3)),
         });
       }
     }
   }
-  // 打平线：每刻花 upkeep + 一个普通动作的代谢（costScale×0.06），每顿补 mealYield×0.5 ⇒ 每百刻要几顿才不掉
-  const breakEven = ((PARAMS.viab.upkeep + PARAMS.viab.costScale * 0.06) / (PARAMS.viab.mealYield * 0.5)) * 100;
   const dropped = rows.filter((r) => r.掉档 > 0);
+  // 判定改成"每个样本跟**自己的**实测打平线比"（§40 A 的口径），不再拿一条全局假设线套所有人
+  const comparable = dropped.filter((r) => r.打平需顿每百刻 !== null);
+  const lines = rows.filter((r) => r.打平需顿每百刻 !== null).map((r) => r.打平需顿每百刻);
   const verdict = {
     样本: rows.length,
     垮过的样本: dropped.length,
     垮后有回升: dropped.filter((r) => r.垮后回升 > 0).length,
     重回操作点: dropped.filter((r) => r.重回操作点 === '是').length,
     末段仍在跌: dropped.filter((r) => r.末百刻斜率 < 0).length,
-    低于打平线: dropped.filter((r) => r.进食每百刻 < breakEven).length,
-    打平线每百刻顿数: Number(breakEven.toFixed(2)),
+    低于打平线: comparable.filter((r) => r.实测顿每百刻 < r.打平需顿每百刻).length,
+    可比样本: comparable.length,
+    打平线每百刻顿数: lines.length ? Number((lines.reduce((s, x) => s + x, 0) / lines.length).toFixed(2)) : null,
+    打平线口径: '实测·每样本自己的线（与 --metab 共用 breakEvenPer100/mealLedgerOf）',
     储能建立过的样本: rows.filter((r) => r.储能时长占比 > 0).length,
   };
   return { rows, verdict };
@@ -374,6 +407,8 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
         const rejected = recs.filter((r) => (r.viab.ate ?? 0) > 0 && r.viab.ate < P.mealMin);
         const sumAmount = credited.reduce((s, r) => s + r.viab.ate, 0);
         const perMeal = credited.length ? sumAmount / credited.length : 0;
+        // 打平线与"吃到几顿"改走与 --recover 共用的那一段实现（口径同源，输出逐位不变）
+        const ml = mealLedgerOf(a, recs, { ticks: span, P });
         // 名义量（动作表的价、口的大小）与实付/实收分开记：两个账户都满时这一口会被丢掉，v 归零时这一笔付不满
         const nominalIn = P.mealYield * sumAmount;
         const nominalOut = P.costScale * sumCost;
@@ -396,7 +431,7 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
           进食次数: credited.length,
           小口被拒: rejected.length,
           平均每顿量: r3(perMeal),
-          实测顿每百刻: r2((credited.length / span) * 100),
+          实测顿每百刻: r2(ml.mealsPer100),
           实收到账: r3(income),
           顶满丢弃: r3(nominalIn - income),
           归零少付: r3(nominalOut - actionPaid),
@@ -409,7 +444,7 @@ export async function metabolismAudit({ seeds = [7, 11, 13], ticks = 1200 } = {}
           归零时长占比: r2(recs.filter((x) => x.viab.v <= 0.001).length / recs.length),
           // 总收入与动作、基础代谢实付全部记账；残差仅含 trace 数值舍入。
           账面残差: r3(eEnd - 1 - (income - outflow)),
-          打平需顿每百刻: perMeal ? r2(((P.upkeep + actionPaid / aged) / (P.mealYield * perMeal)) * 100) : null,
+          打平需顿每百刻: ml.line === null ? null : r2(ml.line),
         });
       }
     }

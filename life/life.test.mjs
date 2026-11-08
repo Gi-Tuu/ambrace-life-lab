@@ -389,7 +389,33 @@ test('O2 观察侧接线：真实轨迹取得到存续序列，储能那一栏�
   assert.ok(rows.every((r) => r.末存续 >= 0 && r.末存续 <= 1), '末存续越界 ⇒ 序列取错了字段');
   // 这一条专门守新加的 reserve 字段：没接进 trace 的话，"储能时长占比"会恒为 0，看起来像个结论，其实是空断言
   assert.ok(rows.some((r) => r.储能时长占比 > 0), '400 刻里没有任何一个人攒到过储能 ⇒ viab.reserve 没进轨迹，储能那一栏是空读数');
-  assert.ok(verdict.打平线每百刻顿数 > 1.5 && verdict.打平线每百刻顿数 < 2.5, `打平线算出 ${verdict.打平线每百刻顿数} 顿/百刻，与"每 50 刻一顿"不符`);
+  assert.ok(verdict.打平线每百刻顿数 > 1.5 && verdict.打平线每百刻顿数 < 2.5, `打平线算出 ${verdict.打平线每百刻顿数} 顿/百刻，落在实测区间之外 ⇒ 口径可能又退回假设值（见下一条同源闸门）`);
+});
+
+// 打平线曾经有两份账：--recover 用"每刻 cost 0.06、每顿 0.5"两个假设值算出 2.00，
+// --metab 早已换成实测（均值 1.858）。同一件事两份读数会各自漂移，所以这条闸门钉的是**同源**：
+// 两个报告函数必须共用 breakEvenPer100/mealLedgerOf，逐样本的线与顿数必须逐位相等。
+test('打平线两处同源：--recover 与 --metab 的逐样本线与顿数逐位相等，且不是那条全局假设线', async () => {
+  const rec = await recoveryProfile({ seeds: [7], ticks: 400 });
+  const met = await metabolismAudit({ seeds: [7], ticks: 400 });
+  assert.equal(rec.rows.length, met.rows.length, '两个面的样本数不同 ⇒ 比的不是同一批人');
+  const key = (r) => `${r.seed}/${r.配置}/${r.角色}`;
+  const byKey = new Map(met.rows.map((r) => [key(r), r]));
+  for (const r of rec.rows) {
+    const m = byKey.get(key(r));
+    assert.ok(m, `--metab 里没有 ${key(r)} ⇒ 两面的配置表分叉了`);
+    assert.equal(r.打平需顿每百刻, m.打平需顿每百刻, `${key(r)} 的打平线两面不同（${r.打平需顿每百刻} vs ${m.打平需顿每百刻}）⇒ 又变成两份会各自漂移的账`);
+    assert.equal(r.实测顿每百刻, m.实测顿每百刻, `${key(r)} 的实测顿数两面不同 ⇒ mealMin 口径分叉（一面数尝试、一面数到账）`);
+  }
+  // 负向对照：旧的全局假设线必须与逐样本实测线**不同**，否则这条同源闸门是空的
+  // （谁把 recover 改回一条常数线，下面这行就会红）
+  const P = PARAMS.viab;
+  const assumed = Number((((P.upkeep + P.costScale * 0.06) / (P.mealYield * 0.5)) * 100).toFixed(2));
+  assert.ok(rec.rows.some((r) => r.打平需顿每百刻 !== null && r.打平需顿每百刻 !== assumed),
+    `所有样本的线都等于假设值 ${assumed} ⇒ 打平线又退回"每刻 0.06、每顿 0.5"，同源闸门失去意义`);
+  const lines = rec.rows.filter((r) => r.打平需顿每百刻 !== null).map((r) => r.打平需顿每百刻);
+  const mean = Number((lines.reduce((s, x) => s + x, 0) / lines.length).toFixed(2));
+  assert.equal(rec.verdict.打平线每百刻顿数, mean, '判定里的均值不是由逐样本线算出来的 ⇒ 判定与表格又是两套式子');
 });
 
 // —— D7 餐后扣存通道（spill）。预登记判据没过，所以默认是 0；下面这些闸门钉的是"它到底是什么"，
