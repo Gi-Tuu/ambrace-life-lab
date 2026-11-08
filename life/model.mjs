@@ -23,7 +23,7 @@ export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '�
 // 分开登记的理由与 §24 相同：捆在一起就回答不了"变化到底是哪一条带来的"。
 export function channelsFor(condition, mask) {
   const proc = { reflect: 1, ask: 1, gossip: 1 };
-  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0 };
+  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0, plasticGate: 0 };
   return mask ? { ...on, ...mask } : on;
 }
 
@@ -146,9 +146,11 @@ export function makeHabit() {
     get plasticity() {
       return plasticity;
     },
-    observe(id, gain) {
+    observe(id, gain, gate = 1) {
       const cur = table.get(id) ?? { ema: 0, n: 0 };
-      const lr = 0.3 * plasticity;
+      // M6-P（PLAN §25.2）：gate 是精度门控（最不可靠通道的相对精度），缺省 1 ⇒ 不传时逐位不变。
+      // 它只缩放学习率，不进效用——π 进效用就又是常数偏移那类错误。
+      const lr = 0.3 * plasticity * gate;
       cur.ema = cur.n === 0 ? gain : cur.ema * (1 - lr) + gain * lr;
       cur.n += 1;
       table.set(id, cur);

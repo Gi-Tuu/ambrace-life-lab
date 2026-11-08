@@ -139,6 +139,9 @@ export class Organism {
     // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
     const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
     const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
+    // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
+    // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
+    if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
     const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
     this.bank.tick(1);
     if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
@@ -403,7 +406,7 @@ export class Organism {
 
     const id = actionId(action);
     const uAtDecision = extra.scored?.find((s) => s.id === id)?.u ?? 0.1;
-    this.habit.observe(id, result.ok ? uAtDecision : -0.2);
+    this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
     if (silent && result.ok) {
