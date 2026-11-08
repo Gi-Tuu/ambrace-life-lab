@@ -4,7 +4,7 @@
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
-import { scheduledLoc, weatherFor } from './clock.mjs';
+import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 
@@ -34,6 +34,21 @@ export const BASE_KINDS = {
 // 覆盖值不进存档与 /world 载荷——扫描只服务 §30 的取舍表。
 export const TOWN_GATES = Object.freeze({ tradeTrust: 30, compFam: 0.3, compTrust: 32 });
 const townGates = (world) => (world.townGates ? { ...TOWN_GATES, ...world.townGates } : TOWN_GATES);
+
+// §33 工坊当日上限。`world.workCap` **不设＝无上限＝现行为逐位相同**（W0 中立性）。
+// 为什么必须是"次数上限"而不是"降价"：一次 work 换回的存续（≥0.063）远大于它的代谢代价
+// （costScale 0.01 × cost 0.1 = 0.001），所以砍收入只会被"再干一次"吸收——§32 与坏天预扫两次实测都是这个形状。
+// 额度记在 world.workLog[id]={day,n}，靠 dayOf(world.t) 自比对换天，不引入任何外部时钟；
+// 上限是"工坊一天收几次工"这条世界事实，不是角色的能力被削弱。
+export function workUsedToday(world, agentId) {
+  const rec = world.workLog?.[agentId];
+  return rec && rec.day === dayOf(world.t) ? rec.n : 0;
+}
+
+export function workCapLeft(world, agentId) {
+  if (world.workCap === undefined || world.workCap === null) return Infinity;
+  return Math.max(0, world.workCap - workUsedToday(world, agentId));
+}
 
 // 喊住：玩家隔着房间喊一声，被喊的人会停在原地几刻（不进 move_to）。
 // 为什么需要它：角色每刻都可能移动，玩家永远追不上，"同屋传话"就成了竞态（实测连追 20 秒没追上）。
@@ -181,7 +196,7 @@ export function affordancesFor(world, agentId) {
   out.push({ id: 'look_out', kind: 'look_out', label: BASE_KINDS.look_out.label, cost: 0.18, impulse: 0.85, serves: { social: 0.3, stimulation: 1 } });
 
   // PLAN §28 B/C：只在 town 出现的动作（lab 的候选集与旧版逐位相同）。
-  if (feats.work && here === 'workshop') {
+  if (feats.work && here === 'workshop' && workCapLeft(world, agentId) > 0) {
     // 工资的即时效用按'能换到的口粮'折算（建模选择，§28 披露）：否则只会做两步规划的角色永远不会去打工。
     out.push({ id: 'work', kind: 'work', label: '在工坊干活换饭钱', cost: 0.1, impulse: 0.3, serves: { energy: 0.9, stimulation: 0.1 } });
   }
@@ -312,6 +327,7 @@ export function actuate(world, agentId, action) {
       world.coins[agentId] = (world.coins[agentId] ?? 0) + 2;
       world.stash[agentId] = (world.stash[agentId] ?? 0) + 1; // 工钱口粮：让私人库存在这张经济里有补给源
       world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]); // 合法进项同步抬预期，不然会被误登记成'私藏超额'
+      (world.workLog ??= {})[agentId] = { day: dayOf(world.t), n: workUsedToday(world, agentId) + 1 }; // §33 记账：只有真干成了才占额度
       // 工地管饭：干活当场补一份口粮（0.35），另得 2 枚铜币 + 一份口粮。这样即时效用与'吃饱'同源，不做两步规划的角色也会去打工。
       return { action, ok: true, code: 'OK', observation: '干完一段活，管了一顿饭，领到 2 枚铜币和一份口粮', satiated: 'energy', amount: 0.35, evt: evt({ kind: 'work', valence: 0.15, serves: 'energy' }) };
     }

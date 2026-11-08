@@ -6,7 +6,7 @@
 //   3) 只补状态、不补决策：休眠期间没有观察者，编造那段时刻的行为等于伪造历史。
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { makeWorld, spawn, scanSecrets, LOCS, hail } from './body.mjs';
+import { makeWorld, spawn, scanSecrets, LOCS, hail, workUsedToday } from './body.mjs';
 import { phaseOf, scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { presetOf } from './presets.mjs';
 import { speechLine, classifySay } from './speech.mjs';
@@ -26,6 +26,9 @@ const ROSTER = [
 ];
 // 机制侧启动配置；默认关闭，不新增演示 masks/ctl，也不为 C2-neg 开启。
 const M5_ENABLED = process.env.M5_ENABLED === '1';
+// §33 工坊当日上限：不设（缺省）＝无上限＝现行为逐位相同。设成数字即"工坊一天收几次工"这条世界事实，
+// 它属于世界配置而非内部通道，所以 A/B 两侧同样生效（B 侧是内部状态切断的负向对照，不是规则差异的对照）。
+const WORK_CAP = process.env.WORK_CAP === undefined || process.env.WORK_CAP === '' ? undefined : Number(process.env.WORK_CAP);
 const TICK_MS = Number(process.env.TICK_MS ?? 1200);
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SAVE_EVERY = 10;
@@ -80,6 +83,7 @@ function makePack(condition, channelMask) {
   // 修复死旋钮后为保持演示逐位不变，去掉这个从未生效的参数，而不是把演示改成 5。
   // PLAN §28：演示世界用 town 预设（8 房间/物件/天气/台词/传闻）；lab 只给离线实验用。
   const world = makeWorld({ pantries: 3, preset: 'town', seed: CFG.seed, socialGossip: 1 });
+  if (WORK_CAP !== undefined) world.workCap = WORK_CAP; // 缺省不设 ⇒ 下面所有 workLog 相关载荷都不出现，页面与存档逐字节不变
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask: engineMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
@@ -232,7 +236,7 @@ function catchUp(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })) },
+    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })), ...(WORK_CAP === undefined ? {} : { workLog: { ...(p.world.workLog ?? {}) } }) },
     log: p.log,
     playerLog: p.playerLog ?? [],
     series: p.series,
@@ -289,6 +293,8 @@ function applyInto(pack, d) {
   if (d.world.things) pack.world.things = structuredClone(d.world.things);
   pack.world.companions = (d.world.companions ?? []).map((x) => x.slice());
   pack.world.normLog = (d.world.normLog ?? []).slice(-20);
+  // §33 W2：当日已用工数必须随档走，否则"每日上限"退化成"每次重启就回满"。旧档缺该字段 ⇒ 不赋值，从 0 开始计数（如实登记，不冒充历史）。
+  if (d.world.workLog) pack.world.workLog = { ...d.world.workLog };
   Object.assign(pack.world, { t: d.world.t, weather: d.world.weather ?? null, coins: { ...(d.world.coins ?? {}) }, pantry: d.world.pantry, riskyPortion: d.world.riskyPortion ?? pack.world.riskyPortion, scheduleWeight: d.world.scheduleWeight ?? pack.world.scheduleWeight, socialGossip: d.world.socialGossip ?? pack.world.socialGossip, loc: d.world.loc, stash: d.world.stash, expect: d.world.expect, flags: d.world.flags ?? {} });
   // 秘密是认知状态，必须活过重启：谁已经知道这件事不能因为重启就忘了，否则同一句话可以说第二遍
   pack.world.secrets = (d.world.secrets ?? []).map((s) => ({ ...s, known: new Set(s.known ?? []) }));
@@ -407,6 +413,7 @@ export const host = {
       // PLAN §28：房间表/网格/天气/开关/铜币都是世界事实，前端按这份渲染（美术资源后接不影响结构）
       rooms: p.world.locs, grid: p.world.grid, outdoor: p.world.outdoor,
       weather: p.world.weather, features: p.world.features, coins: p.world.coins, things: p.world.things, companions: p.world.companions ?? [],
+      ...(WORK_CAP === undefined ? {} : { workCap: WORK_CAP }), // §33 W3：上限是公开的世界事实，页面上要能追问"今天还收几次工"
       normLog: (p.world.normLog ?? []).slice(-10).map((e) => ({ t: e.t, of: p.agents[e.of]?.name ?? e.of, victim: p.agents[e.victim]?.name ?? e.victim, witnesses: (e.witnesses ?? []).map((w) => (w === 'p1' ? '你' : (p.agents[w]?.name ?? w))) })),
       loc: p.world.loc,
       occupancy: p.world.occupancy,
@@ -425,6 +432,7 @@ export const host = {
             layers,
             m3: layers.m3 && a.m3Last ? { goal: a.m3Last.goal, previous: a.m3Last.previous, remaining: a.m3Last.remaining, reused: a.m3Last.reused, interrupted: a.m3Last.interrupted ?? null } : null,
             coupling: layers.coupling ? a.coupling.dump() : null,
+            ...(WORK_CAP === undefined ? {} : { work: { cap: WORK_CAP, today: workUsedToday(p.world, a.id) } }),
           }];
         }),
       ),

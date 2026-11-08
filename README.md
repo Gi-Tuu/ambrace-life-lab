@@ -57,6 +57,7 @@ MAX_CALLS=        # 调用预算闸门
 SLEEP_MS=         # 仅 life/loop-real.mjs（离线真模型循环）读取
 WORLD_PANTRY=     # 仅 life/loop-real.mjs 读取；演示世界的供给常量是硬编码的
 WORLD_STASH=
+WORK_CAP=         # 工坊每天收几次工（世界事实，A/B 两侧同样生效）。**不设＝无上限＝默认行为逐位不变**；设为 0 即"工坊停产"情景
 ```
 
 密钥只留在服务端进程，不进前端、不进镜像、不进仓库。
@@ -64,7 +65,7 @@ WORLD_STASH=
 ## 判据与复现
 
 ```bash
-node --test life/life.test.mjs life/host.test.mjs life/host-layers.test.mjs life/s4-predictor.test.mjs life/s4-integration.test.mjs life/o18-metrics.test.mjs life/o18-integration.test.mjs life/social.test.mjs life/scene.test.mjs life/capability.test.mjs life/pack.test.mjs life/m3.test.mjs life/m3-planner.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-social-reality.test.mjs life/m3-yield.test.mjs life/m3-stop-proof.test.mjs life/coupling.test.mjs life/o10-ledger.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/o9-event-first.test.mjs life/o1-counterfactual.test.mjs life/m6-plastic.test.mjs life/m6-lp.test.mjs life/stash-initial.test.mjs life/memory-ids.test.mjs life/host-archive.test.mjs life/town.test.mjs
+node --test life/capability.test.mjs life/coupling.test.mjs life/host-archive.test.mjs life/host-layers.test.mjs life/host.test.mjs life/life.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-planner.test.mjs life/m3-social-reality.test.mjs life/m3-stop-proof.test.mjs life/m3-yield.test.mjs life/m3.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/m6-lp.test.mjs life/m6-plastic.test.mjs life/memory-ids.test.mjs life/o1-counterfactual.test.mjs life/o10-ledger.test.mjs life/o18-integration.test.mjs life/o18-metrics.test.mjs life/o9-event-first.test.mjs life/pack.test.mjs life/s4-integration.test.mjs life/s4-predictor.test.mjs life/scene.test.mjs life/social.test.mjs life/stash-initial.test.mjs life/town.test.mjs life/work-cap.test.mjs
 node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
 node life/run.mjs --report     # 四条件消融矩阵
 node life/run.mjs --sweep      # 多 seed 复核

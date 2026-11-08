@@ -1,6 +1,6 @@
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
-import { BASE_KINDS, LOCS } from './body.mjs';
+import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 
@@ -27,6 +27,9 @@ export function validate(world, agentId, intent) {
   }
   // PLAN §28 B/C：town 动作的地方法/对象校验（lab 不会走到这些 kind）。
   if (kind === 'work' && here !== 'workshop') return fail('NO_WORKSHOP', '这里没有可干的活');
+  // §33 W1：额度用尽既不在候选里出现（body 侧已滤掉），也要在规则层留一条可追问的裁决——
+  // 这样"今天不收人"是世界事实，不是某处过滤的副作用（与 talk 的 SECLUDED 同一条做法）。
+  if (kind === 'work' && workCapLeft(world, agentId) <= 0) return fail('DAY_CAP', `今天工坊已经收了 ${world.workCap} 次工，不收人了`);
   if (kind === 'buy') {
     if (here !== 'store') return fail('NOT_STORE', '换粮得在公仓');
     if ((world.coins?.[agentId] ?? 0) < 2) return fail('NO_COINS', '铜币不够');
