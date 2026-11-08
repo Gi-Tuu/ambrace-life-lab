@@ -23,7 +23,7 @@ export const CHANNEL_NAMES = { vis: '①可见性', util: '②效用', temp: '�
 // 分开登记的理由与 §24 相同：捆在一起就回答不了"变化到底是哪一条带来的"。
 export function channelsFor(condition, mask) {
   const proc = { reflect: 1, ask: 1, gossip: 1 };
-  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0 };
+  const on = condition === 'C2' ? { ...proc, vis: 1, util: 1, temp: 1, mem: 1, band: 1, viab: 1, erosion: 1, forwardModel: 1, forwardLearn: 1, precision: 1, expectedYield: 1, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0 } : { ...proc, vis: 0, util: 0, temp: 0, mem: 0, band: 0, viab: 0, erosion: 0, forwardModel: 0, forwardLearn: 0, precision: 0, expectedYield: 0, m3: 0, coupling: 0, eventFirst: 0, cfUsage: 0 };
   return mask ? { ...on, ...mask } : on;
 }
 

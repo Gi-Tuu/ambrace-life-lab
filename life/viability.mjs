@@ -88,10 +88,19 @@ export class SelfMaintain {
   usage() {
     const c = this.agent?.counters ?? { actions: 0, habit: 0 };
     const a = Math.max(1, c.actions);
+    // O1-M（PLAN §23.1）：cfUsage 开时三项都换成"反事实改变率"（同一货币，见 agent.noteInfluence）。
+    // 测量未积累或三项全零时退回旧公式并计数 cfFallback——否则 argmax 会按对象键序乱选一个器官。
+    // 关闭时 useCf 恒 false ⇒ 与旧式子逐位相同（默认关等价的前提）。
+    const cf = Boolean(this.agent?.ch?.cfUsage);
+    const decisions = c.cfDecisions ?? 0;
+    const rate = (n) => (decisions ? (n ?? 0) / decisions : 0);
+    const sum = rate(c.cfMem) + rate(c.cfRel) + rate(c.cfHabit);
+    const useCf = cf && decisions > 0 && sum > 0;
+    if (cf && !useCf && this.agent?.counters) this.agent.counters.cfFallback = (this.agent.counters.cfFallback ?? 0) + 1;
     return {
-      habit: (c.habit / a) * this.organs.habit.availability(),
-      memory: Math.min(1, this.organs.memory.rows.length / 20) * this.organs.memory.availability(),
-      social: Math.min(1, this.organs.social.closeness() * 2) * this.organs.social.availability(),
+      habit: (useCf ? rate(c.cfHabit) : c.habit / a) * this.organs.habit.availability(),
+      memory: (useCf ? rate(c.cfMem) : Math.min(1, this.organs.memory.rows.length / 20)) * this.organs.memory.availability(),
+      social: (useCf ? rate(c.cfRel) : Math.min(1, this.organs.social.closeness() * 2)) * this.organs.social.availability(),
     };
   }
 

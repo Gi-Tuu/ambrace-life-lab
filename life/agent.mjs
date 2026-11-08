@@ -166,11 +166,23 @@ export class Organism {
     this.lastMemories = mem.retrieved; // 通道④ 对模型可见的那一行：想起的事
     // 存续风险：⑤ 关着就传 0。注意 viab.tick() 在上面已经跑过了——**演化不受开关影响，只有"进不进比较"受**，
     // 和 C2-neg 让 m 照常演化是同一个口径，否则对照组连"它有没有撑不住"都测不出来。
-    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk: this.viabilityRisk() });
+    const risk = this.viabilityRisk();
+    const scored = scoreAll(paths, { drives: this.drives, traits: this.traits, bank: this.bank, ch, memBonus, risk });
     const temp = temperatureOf(this.traits, ch, this.bank);
+    // O1-M（PLAN §23.1）：反事实影响度。默认关（cfUsage:0）⇒ 这一步与下面习惯分支里的计数都不执行，零开销、轨迹逐位不变。
+    if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
 
     const hb = this.habit.best();
-    if (!told && hb && scored[0] && hb.ema >= scored[0].u - temp * 0.5 && scored.some((s) => s.id === hb.id) && this.rng() < 0.7) {
+    // O9-M（PLAN §23.2）：有登记在册的事件时，习惯不得抢先接管——否则"四类事件才问模型"实测只对一半成立
+    // （§47.3：587 次触发只有 294 次真问到，习惯截流 40.5%）。反射层**不动**：alarm/缺口是生存反应，
+    // 让它等一次模型往返在线上 6 秒/刻的世界里是可见退化，所以"关键事件"类仍由反射接管，这是设计不是缺陷。
+    if (!told && !(ch.eventFirst && reason) && hb && scored[0] && hb.ema >= scored[0].u - temp * 0.5 && scored.some((s) => s.id === hb.id) && this.rng() < 0.7) {
+      // 习惯的"改变"只在它真的接管时计：习惯选中 ≠ 评分第一名（PLAN §23.1 的基线口径：argmax，不是抽样结果）
+      if (ch.cfUsage) {
+        const pick = scored.find((s) => s.id === hb.id);
+        const top = scored.reduce((best, x) => (x.u > best.u ? x : best), scored[0]);
+        if (pick && pick.id !== top.id) this.counters.cfHabit = (this.counters.cfHabit ?? 0) + 1;
+      }
       this.counters.habit += 1;
       return this.execute(world, scored.find((s) => s.id === hb.id).act, 'habit', t, external.length === 0, { temp, scored });
     }
@@ -323,6 +335,41 @@ export class Organism {
       return paths;
     }
     return filtered;
+  }
+
+  // O1-M（PLAN §23.1）：三项"反事实改变率"里的记忆与关系在这里算；习惯那一项在它真正接管的时刻算。
+  // 分母统一 = 非反射决策数（cfDecisions）⇒ 三项同量纲、可直接比较（旧公式的毛病就是三项不同量纲：§47.2）。
+  // 默认关（cfUsage:0）时整段不执行 ⇒ 不消费随机数、不写状态、轨迹逐位不变。
+  noteInfluence({ world, paths, scored, memBonus, risk, weights }) {
+    this.counters.cfDecisions = (this.counters.cfDecisions ?? 0) + 1;
+    const top = scored.reduce((best, x) => (x.u > best.u ? x : best), scored[0]);
+    // 记忆：u 可加 ⇒ 直接减掉"记忆"那一项重排（精确，不引入影子重算）
+    const noMem = scored.map((s) => ({ id: s.id, u: s.u - (s.parts?.记忆 ?? 0) }));
+    const topNoMem = noMem.reduce((best, x) => (x.u > best.u ? x : best), noMem[0]);
+    if (topNoMem.id !== top.id) this.counters.cfMem = (this.counters.cfMem ?? 0) + 1;
+    // 关系：中性化后重建候选再重排。候选按 id 对齐，保证与基线是同一批候选；
+    // 对齐失败（例如对象化的 refuse 在中性信任下换了目标 id）就跳过这一次并计数，不许静默混进分子。
+    const realRel = this.relations;
+    try {
+      this.relations = { get: () => ({ familiarity: 0, trust: 50 }) }; // 中性值就是 Relations.get() 的既有初值，不是拟合值
+      const visN = visibleActions(affordancesFor(world, this.id), this.traits, this.ch, this.bank, weights);
+      const byId = new Map(visN.map((x) => [x.id, x]));
+      const pathsN = paths.map((p) => byId.get(p.id)).filter(Boolean);
+      if (pathsN.length !== paths.length) { this.counters.cfRelSkipped = (this.counters.cfRelSkipped ?? 0) + 1; return; }
+      const scoredN = scoreAll(pathsN, { drives: this.drives, traits: this.traits, bank: this.bank, ch: this.ch, memBonus, risk });
+      // 影子路径的活性读数：中性化到底有没有动过任何一个候选的效用。
+      // 没有它的话，"cfRel 恒 0"分不清是"关系不影响第一名"（数据）还是"中性化没接上"（bug）——变异电池实测踩到过。
+      const moved = pathsN.some((p) => {
+        const real = scored.find((s) => s.id === p.id);
+        const neu = scoredN.find((s) => s.id === p.id);
+        return real && neu && Math.abs(real.u - neu.u) > 1e-9;
+      });
+      if (moved) this.counters.cfRelMoved = (this.counters.cfRelMoved ?? 0) + 1;
+      const topN = scoredN.reduce((best, x) => (x.u > best.u ? x : best), scoredN[0]);
+      if (topN.id !== top.id) this.counters.cfRel = (this.counters.cfRel ?? 0) + 1;
+    } finally {
+      this.relations = realRel;
+    }
   }
 
   execute(world, action, layer, t, silent, extra = {}) {
