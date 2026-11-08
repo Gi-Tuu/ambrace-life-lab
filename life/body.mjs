@@ -47,6 +47,9 @@ export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky
     // M7 自发转述开关：0 时不写任何状态，行为与基线逐位一致
     socialGossip,
     stash: {},
+    // F1（PLAN §26）：初始私人库存的世界级刻度。此前 makeWorld 收下 stash 却不用、spawn 恒 ??3，
+    // 导致所有传 stash 0/5 的历史配置实际只变了 pantry（§24.1 死旋钮登记）。默认不传时仍为 3 ⇒ 默认路径逐位不变。
+    stashInitial: stash,
     expect: {},
     occupancy: {},
     percepts: [],
@@ -78,7 +81,7 @@ export function scanSecrets(world) {
 
 export function spawn(world, id, loc) {
   world.loc[id] = loc;
-  world.stash[id] = world.stash[id] ?? 3;
+  world.stash[id] = world.stash[id] ?? world.stashInitial ?? 3;
   world.expect[id] = world.stash[id];
   (world.occupancy[loc] ??= []).push(id);
 }

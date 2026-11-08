@@ -24,7 +24,7 @@ const MUTATIONS = [
   { id: 'o1-m7 默认关写反(cfUsage)', file: 'model.mjs', from: 'cfUsage: 0', to: 'cfUsage: 1', firstOnly: true, test: O1, expect: ['C5 默认关'] },
   { id: 'o1-m8 分母翻倍', file: 'agent.mjs', from: 'this.counters.cfDecisions = (this.counters.cfDecisions ?? 0) + 1;', to: 'this.counters.cfDecisions = (this.counters.cfDecisions ?? 0) + 2;', test: O1, expect: ['C2 装置交叉核对'] },
   { id: 'o9-m1 断开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: 'true', test: O9, expect: ['E1 事件优先'] },
-  { id: 'o9-m2 忽略开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: '!reason', test: O9, expect: ['E1 负控'] },
+  { id: 'o9-m2 忽略开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: '!reason', test: O9, expect: ['E1 负控', 'E2 默认关'] },
   { id: 'o9-m3 alarm改去home', file: 'agent.mjs', from: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },", to: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'home' }) },", test: O9, expect: ['E3 生存语义'] },
   { id: 'o9-m4 驳回不重问', file: 'agent.mjs', from: "const ask = Boolean(this.deliberator) && Boolean(ch.ask) && reason !== null;", to: "const ask = Boolean(this.deliberator) && Boolean(ch.ask) && reason !== null && reason !== '驳回重决策';", test: O9, expect: ['E5 不吞并'] },
   { id: 'o9-m5 默认关写反(eventFirst)', file: 'model.mjs', from: 'eventFirst: 0', to: 'eventFirst: 1', firstOnly: true, test: O9, expect: ['E2 默认关'] },
@@ -64,9 +64,7 @@ for (const m of MUTATIONS) {
   console.log(`${ok ? 'RED-OK' : 'MISS  '} ${m.id} exit=${r.code} 打红=[${r.failed.join(' | ')}] 期望命中=${hit.length}/${m.expect.length}`);
 }
 console.log(bad === 0 ? 'BATTERY PASS：对照全绿，13 条变异各自打红瞄准的闸门' : `BATTERY FAIL：${bad} 处不符合预期`);
-// 电池顺带量到的闸门弱点（如实报，不掩盖）：simulate 把 channelMask 哈希进每角色种子
-// （run.mjs 的 hashSeed(seed, `${id}:${condition}:${JSON.stringify(channelMask)}`)），
-// 所以"开/关档轨迹必须不同"这类断言在构造上就恒真——o9-m2 把开关变成行为_no-op 后 E2 仍绿。
-// E2 的覆盖靠 o9-m5（默认关写反）打红它的第一个断言；"开关真的起作用"应由同种子臂比较来验，留作后续闸门加强候选。
-console.log('NOTE E2 的 on/off 轨迹差异断言因 mask 进种子而恒真（o9-m2 no-op 开关后仍绿）；该闸门由 o9-m5 覆盖，加强候选另登记');
+// 历史弱点已修（F2，PLAN §26）：E2 第三断言改为同种子臂比较；o9-m2（no-op 开关）现在必须打红 E2。
+// 旧弱点记录保留在 PLAN §24.2：simulate 把 channelMask 哈希进每角色种子，mask 两档的"轨迹必须不同"曾恒真。
+console.log('NOTE E2 已按 F2 改为同种子臂；o9-m2 期望打红 E1负控+E2（旧恒真弱点见 PLAN §24.2/§26）');
 process.exit(bad === 0 ? 0 : 1);

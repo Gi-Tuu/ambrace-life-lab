@@ -74,7 +74,9 @@ function maskForA() {
 
 function makePack(condition, channelMask) {
   const engineMask = condition === 'C2' && M5_ENABLED ? { ...channelMask, m5: 1 } : channelMask;
-  const world = makeWorld({ pantries: 3, stash: 5 });
+  // F1（PLAN §26）：这里历史上写 stash:5 但它是死旋钮（实际恒 3），种子存档也按 3 生成；
+  // 修复死旋钮后为保持演示逐位不变，去掉这个从未生效的参数，而不是把演示改成 5。
+  const world = makeWorld({ pantries: 3 });
   const agents = {};
   for (const r of ROSTER) {
     const a = new Organism({ ...r, seed: hashSeed(CFG.seed, `${r.id}:${condition}`), condition, channelMask: engineMask, deliberator: CFG.brain === 'model' ? modelBrain : null });
