@@ -190,6 +190,15 @@ async function tick() {
         p.log.push({ t: p.world.t, who: '系统', kind: 'tell', text: `${p.agents[x.teller]?.name ?? x.teller} 把「${x.detail}」告诉了 ${p.agents[x.target]?.name ?? x.target}` });
       }
     }
+    // PLAN §28 C：群体规范事件进事件流（只做呈现，判定仍在 body.actuate 里）。
+    const normRows = p.world.normLog ?? [];
+    if ((p._normSeen ?? 0) < normRows.length) {
+      for (const e of normRows.slice(p._normSeen ?? 0)) {
+        const nm = (id) => (id === 'p1' ? '你' : (p.agents[id]?.name ?? id));
+        p.log.push({ t: e.t, who: '众人', kind: 'norm', text: `目击 ${nm(e.of)} 从 ${nm(e.victim)} 门口拿走一份（目击：${(e.witnesses ?? []).map(nm).join('、')}）⇒ 在场者对其信任下降` });
+      }
+      p._normSeen = normRows.length;
+    }
     p.log = p.log.slice(-160);
     // 存续历史：曲线要能回答"谁先垮、从哪一步开始回不去"，所以除了 v 本身，还要把每次掉档记在同一个时间轴上
     p.series.push({
@@ -398,6 +407,7 @@ export const host = {
       // PLAN §28：房间表/网格/天气/开关/铜币都是世界事实，前端按这份渲染（美术资源后接不影响结构）
       rooms: p.world.locs, grid: p.world.grid, outdoor: p.world.outdoor,
       weather: p.world.weather, features: p.world.features, coins: p.world.coins, things: p.world.things, companions: p.world.companions ?? [],
+      normLog: (p.world.normLog ?? []).slice(-10).map((e) => ({ t: e.t, of: p.agents[e.of]?.name ?? e.of, victim: p.agents[e.victim]?.name ?? e.victim, witnesses: (e.witnesses ?? []).map((w) => (w === 'p1' ? '你' : (p.agents[w]?.name ?? w))) })),
       loc: p.world.loc,
       occupancy: p.world.occupancy,
       stash: p.world.stash,
