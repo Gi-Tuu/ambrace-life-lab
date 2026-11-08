@@ -28,6 +28,13 @@ export const BASE_KINDS = {
   companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
 };
 
+// §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
+// 默认值与原式逐位相同；只有 world.townGates 显式给值时才偏离（产品默认档一个都不覆盖，§30 G4）。
+// 刻意不进 PARAMS/冻结指纹：它们是世界配置而非决策量纲，进指纹会让 lab 五份面报漂移。
+// 覆盖值不进存档与 /world 载荷——扫描只服务 §30 的取舍表。
+export const TOWN_GATES = Object.freeze({ tradeTrust: 30, compFam: 0.3, compTrust: 32 });
+const townGates = (world) => (world.townGates ? { ...TOWN_GATES, ...world.townGates } : TOWN_GATES);
+
 // 喊住：玩家隔着房间喊一声，被喊的人会停在原地几刻（不进 move_to）。
 // 为什么需要它：角色每刻都可能移动，玩家永远追不上，"同屋传话"就成了竞态（实测连追 20 秒没追上）。
 // 它是**路径过滤**而不是冻结：被喊住的人仍在做决定，只是这一小段时间里不换地方——所以它不是作弊，
@@ -182,24 +189,26 @@ export function affordancesFor(world, agentId) {
     out.push({ id: 'buy', kind: 'buy', label: '用铜币换一份粮', cost: 0.04, impulse: 0.2, serves: { energy: 0.7 } });
   }
   if (feats.trade) {
+    const TG = townGates(world);
     for (const x of present) {
       const theirStash = world.stash[x] ?? 0;
       const mineStash = world.stash[agentId] ?? 0;
       const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
       const ally = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
       // 小社区里的"交易"= 接济/交换口粮（币制市场由 work→buy 承担）：熟悉度或结伴是前提。
-      if (mineStash + 2 <= theirStash && (ally || r.trust >= 30)) {
+      if (mineStash + 2 <= theirStash && (ally || r.trust >= TG.tradeTrust)) {
         out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `向${world.agents[x]?.name ?? x}要一份`, cost: 0.05, impulse: 0.3, serves: { energy: 0.9, social: 0.35 } });
-      } else if (theirStash + 2 <= mineStash && (ally || r.trust >= 30)) {
+      } else if (theirStash + 2 <= mineStash && (ally || r.trust >= TG.tradeTrust)) {
         out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `给${world.agents[x]?.name ?? x}一份`, cost: 0.05, impulse: 0.25, serves: { energy: 0.05, social: 0.9 } });
       }
     }
   }
   if (feats.companions) {
+    const TG = townGates(world);
     for (const x of present) {
       const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
       const already = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
-      if (!already && r.familiarity >= 0.3 && r.trust >= 32) {
+      if (!already && r.familiarity >= TG.compFam && r.trust >= TG.compTrust) {
         out.push({ id: `companion:${x}`, kind: 'companion', target: x, label: `和${world.agents[x]?.name ?? x}结伴`, cost: 0.08, impulse: 0.35, serves: { social: 0.95, stimulation: -0.05 } });
       }
     }
