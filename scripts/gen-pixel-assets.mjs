@@ -45,72 +45,84 @@ const canvas = (w, h) => ({ w, h, px: new Array(w * h).fill(null) });
 const set = (c, x, y, v) => { if (x >= 0 && y >= 0 && x < c.w && y < c.h) c.px[y * c.w + x] = v; };
 const rect = (c, x, y, w, h, v) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(c, x + i, y + j, v); };
 const fromRows = (rows) => { const c = canvas(rows[0].length, rows.length); rows.forEach((r, y) => [...r].forEach((ch, x) => set(c, x, y, ch === '.' ? null : parseInt(ch, 16)))); return c; };
+// 带 outline + 顶光 + 底影的盒子（手绘风体积感）
+const box = (c, x, y, w, h, fill, light, dark) => {
+  rect(c, x, y, w, h, 0);
+  rect(c, x + 1, y + 1, w - 2, h - 2, fill);
+  if (light !== undefined) rect(c, x + 1, y + 1, w - 2, 1, light);
+  if (dark !== undefined) rect(c, x + 1, y + h - 2, w - 2, 1, dark);
+};
+// 抖动纹理（pixel-art dither，不引入中间色）
+const dither = (c, x, y, w, h, a, b) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(c, x + i, y + j, (i + j) % 2 ? a : b); };
 
-// ── 房间（96×64 = 6×4 tile）：地板格纹 + 墙边 + 家具母题 ──
+// ── 房间（96×64）：抖动地板 +  shaded 墙 + 带体积的家具 + 窗光 ──
 function room(kind) {
   const c = canvas(96, 64);
-  const floorA = 1, floorB = 5;
-  for (let y = 0; y < 64; y++) for (let x = 0; x < 96; x++) set(c, x, y, ((x >> 4) + (y >> 4)) % 2 ? floorA : floorB);
-  rect(c, 0, 0, 96, 4, 0); rect(c, 0, 60, 96, 4, 0); rect(c, 0, 0, 4, 64, 0); rect(c, 92, 0, 4, 64, 0);
-  rect(c, 4, 4, 88, 2, 13);
+  const F = { home: [4, 5], hall: [5, 6], store: [5, 4], workshop: [5, 4], garden: [3, 11], yard: [3, 4], watch: [1, 5], well: [5, 6] }[kind] ?? [1, 5];
+  dither(c, 0, 0, 96, 64, F[0], F[1]);
+  // 墙：外圈 + 顶墙高光 + 砖缝
+  rect(c, 0, 0, 96, 6, 0); rect(c, 0, 0, 96, 2, 13); rect(c, 0, 6, 96, 1, 5);
+  for (let x = 4; x < 96; x += 8) rect(c, x, 2, 1, 4, 5);
+  rect(c, 0, 60, 96, 4, 0); rect(c, 0, 0, 3, 64, 0); rect(c, 93, 0, 3, 64, 0);
+  // 窗光（左上斜投一块亮斑）
+  dither(c, 8, 8, 18, 10, 7, F[0]);
   const M = {
-    home: () => { rect(c, 10, 34, 26, 14, 4); rect(c, 10, 34, 26, 4, 15); rect(c, 12, 38, 8, 6, 7); rect(c, 60, 12, 20, 10, 5); rect(c, 62, 14, 16, 6, 6); },
-    yard: () => { rect(c, 12, 40, 72, 4, 3); rect(c, 20, 20, 6, 6, 11); rect(c, 44, 28, 6, 6, 11); rect(c, 68, 18, 6, 6, 11); rect(c, 30, 44, 4, 4, 10); },
-    hall: () => { rect(c, 8, 28, 80, 8, 5); rect(c, 8, 28, 80, 2, 6); rect(c, 40, 10, 16, 12, 4); rect(c, 42, 12, 12, 8, 9); },
-    store: () => { rect(c, 10, 12, 18, 18, 4); rect(c, 12, 14, 14, 4, 9); rect(c, 12, 22, 14, 4, 9); rect(c, 40, 12, 18, 18, 4); rect(c, 42, 14, 14, 4, 9); rect(c, 70, 34, 16, 14, 5); },
-    workshop: () => { rect(c, 12, 30, 30, 10, 4); rect(c, 12, 30, 30, 3, 15); rect(c, 16, 40, 4, 10, 5); rect(c, 34, 40, 4, 10, 5); rect(c, 60, 14, 16, 16, 5); rect(c, 64, 18, 8, 8, 12); },
-    garden: () => { for (let i = 0; i < 4; i++) { rect(c, 10 + i * 20, 16, 14, 32, 4); rect(c, 12 + i * 20, 18, 10, 4, 3); rect(c, 12 + i * 20, 26, 10, 4, 3); rect(c, 12 + i * 20, 34, 10, 4, 11); } },
-    watch: () => { rect(c, 30, 40, 36, 6, 5); rect(c, 34, 46, 4, 10, 5); rect(c, 58, 46, 4, 10, 5); rect(c, 44, 12, 8, 8, 12); rect(c, 46, 14, 4, 4, 7); },
-    well: () => { rect(c, 38, 26, 20, 14, 5); rect(c, 40, 28, 16, 8, 12); rect(c, 36, 12, 4, 14, 4); rect(c, 56, 12, 4, 14, 4); rect(c, 36, 10, 24, 4, 4); },
+    home: () => { box(c, 8, 34, 28, 16, 4, 15, 2); rect(c, 10, 36, 9, 6, 7); rect(c, 10, 36, 9, 2, 15); box(c, 60, 12, 22, 12, 5, 6, 0); rect(c, 63, 15, 16, 6, 12); box(c, 44, 40, 16, 10, 2, 14, 0); },
+    yard: () => { rect(c, 10, 44, 76, 3, 3); rect(c, 10, 44, 76, 1, 11); for (const [px, py] of [[18, 18], [42, 26], [66, 16]]) { box(c, px, py, 8, 8, 3, 11, 0); set(c, px + 3, py + 2, 10); } box(c, 30, 46, 10, 8, 4, 9, 2); },
+    hall: () => { box(c, 6, 28, 84, 10, 5, 6, 0); box(c, 40, 10, 18, 14, 4, 9, 2); rect(c, 43, 13, 12, 8, 9); rect(c, 43, 13, 12, 2, 10); box(c, 12, 44, 14, 8, 2, 14, 0); box(c, 70, 44, 14, 8, 2, 14, 0); },
+    store: () => { box(c, 8, 12, 20, 20, 4, 9, 2); rect(c, 11, 15, 14, 4, 9); rect(c, 11, 23, 14, 4, 9); box(c, 40, 12, 20, 20, 4, 9, 2); rect(c, 43, 15, 14, 4, 9); box(c, 70, 34, 18, 16, 5, 6, 0); rect(c, 73, 37, 12, 4, 9); },
+    workshop: () => { box(c, 10, 30, 34, 12, 4, 15, 2); rect(c, 14, 42, 4, 10, 5); rect(c, 36, 42, 4, 10, 5); box(c, 60, 14, 18, 18, 5, 6, 0); rect(c, 64, 18, 10, 10, 12); rect(c, 64, 18, 10, 2, 7); box(c, 50, 44, 12, 8, 2, 8, 0); },
+    garden: () => { for (let i = 0; i < 4; i++) { box(c, 8 + i * 22, 14, 16, 36, 4, 9, 2); for (let j = 0; j < 3; j++) { rect(c, 11 + i * 22, 18 + j * 10, 10, 4, 3); rect(c, 11 + i * 22, 18 + j * 10, 10, 1, 11); } } },
+    watch: () => { box(c, 28, 40, 40, 8, 5, 6, 0); rect(c, 32, 48, 4, 10, 5); rect(c, 60, 48, 4, 10, 5); box(c, 42, 10, 12, 12, 12, 7, 1); rect(c, 45, 13, 6, 6, 7); },
+    well: () => { box(c, 36, 26, 24, 16, 5, 6, 0); rect(c, 40, 29, 16, 8, 12); rect(c, 40, 29, 16, 2, 7); rect(c, 34, 12, 4, 14, 4); rect(c, 58, 12, 4, 14, 4); box(c, 34, 10, 28, 5, 4, 9, 2); },
   };
   (M[kind] ?? M.hall)();
   return c;
 }
 
-// ── 角色 16×16：一个模板 +  per-char 配色 + 4 帧（idle2/walk2）──
+// ── 角色 16×16：outline + 肤色/衣色双 tone + 发型高光 + 4 帧（idle/blink/walkA/walkB）──
 const CHAR_BASE = [
   '................',
-  '.....hhhhhh.....',
-  '....hhhhhhhh....',
-  '....hssssssh....',
-  '....ssessess....',
-  '....ssssssss....',
-  '.....ssmmss.....',
-  '....tttttttt....',
-  '...tttttttttt...',
-  '...tsttttttst...',
-  '...tsttttttst...',
-  '....tttttttt....',
-  '....pppppppp....',
-  '....pp....pp....',
-  '....pp....pp....',
-  '....bb....bb....',
+  '.....000000.....',
+  '....0hHhhhh0....',
+  '...0hHhhhhhh0...',
+  '...0hhsssshh0...',
+  '...0s0ss0ss0....',
+  '...0ssssssss0...',
+  '....0ss44ss0....',
+  '....0tTttt0.....',
+  '...0tTttttTt0...',
+  '...0tTttttTt0...',
+  '...0stttttts0...',
+  '....0tTttT0.....',
+  '....0pp0pp0.....',
+  '....0p0..0p0....',
+  '....00....00....',
 ];
 function charFrame(colors, frame) {
   const rows = CHAR_BASE.map((r) => [...r]);
-  // frame: 0 idle, 1 idle-blink, 2 walk-a, 3 walk-b
-  if (frame === 1) { rows[4] = [...'....ssssssss....']; }
-  if (frame === 2) { rows[13] = [...'...pp......pp...']; rows[14] = [...'...pp......pp...']; rows[15] = [...'...bb......bb...']; }
-  if (frame === 3) { rows[13] = [...'.....pp..pp.....']; rows[14] = [...'.....pp..pp.....']; rows[15] = [...'.....bb..bb.....']; }
-  const map = { h: colors.hair, s: colors.skin, e: 0, m: 4, t: colors.shirt, p: colors.pants, b: 0 };
+  if (frame === 1) { rows[5] = [...'...0ssssssss0...']; }           // blink
+  if (frame === 2) { rows[13] = [...'...0pp0..0pp0...']; rows[14] = [...'...0p0....0p0...']; rows[15] = [...'...00......00...']; }
+  if (frame === 3) { rows[13] = [...'.....0pp0pp0....']; rows[14] = [...'.....0p00p0.....']; rows[15] = [...'.....00..00.....']; }
+  const map = { h: colors.hair, H: 7, s: colors.skin, e: 0, m: 4, t: colors.shirt, T: colors.shirtLight, p: colors.pants, b: 0 };
   const c = canvas(16, 16);
-  rows.forEach((r, y) => r.forEach((ch, x) => set(c, x, y, ch === '.' ? null : map[ch])));
+  rows.forEach((r, y) => r.forEach((ch, x) => set(c, x, y, ch === '.' ? null : (map[ch] ?? 0))));
   return c;
 }
 const CHARS = {
-  a1: { hair: 1, skin: 15, shirt: 12, pants: 1 },
-  a2: { hair: 8, skin: 15, shirt: 9, pants: 4 },
-  a3: { hair: 5, skin: 15, shirt: 3, pants: 5 },
-  p1: { hair: 7, skin: 15, shirt: 6, pants: 1 },
+  a1: { hair: 1, skin: 15, shirt: 12, shirtLight: 7, pants: 1 },
+  a2: { hair: 8, skin: 15, shirt: 9, shirtLight: 10, pants: 4 },
+  a3: { hair: 5, skin: 15, shirt: 3, shirtLight: 11, pants: 5 },
+  p1: { hair: 7, skin: 15, shirt: 6, shirtLight: 7, pants: 1 },
 };
 
 // ── 物件 16×16 / 图标 8×8 ──
 const THINGS = {
-  bench: () => { const c = canvas(16, 16); rect(c, 1, 6, 14, 4, 4); rect(c, 1, 6, 14, 1, 15); rect(c, 2, 10, 2, 5, 5); rect(c, 12, 10, 2, 5, 5); rect(c, 5, 3, 6, 3, 12); return c; },
-  beds: () => { const c = canvas(16, 16); rect(c, 1, 6, 14, 8, 4); rect(c, 1, 6, 14, 3, 7); rect(c, 2, 9, 5, 3, 12); rect(c, 1, 14, 2, 2, 5); rect(c, 13, 14, 2, 2, 5); return c; },
-  crates: () => { const c = canvas(16, 16); rect(c, 2, 8, 8, 7, 4); rect(c, 2, 8, 8, 1, 9); rect(c, 8, 2, 7, 6, 4); rect(c, 8, 2, 7, 1, 9); return c; },
-  bedsG: () => { const c = canvas(16, 16); rect(c, 1, 10, 14, 4, 4); rect(c, 2, 6, 3, 4, 3); rect(c, 7, 5, 3, 5, 3); rect(c, 12, 6, 3, 4, 11); return c; },
-  bucket: () => { const c = canvas(16, 16); rect(c, 5, 6, 6, 8, 5); rect(c, 5, 6, 6, 2, 12); rect(c, 4, 4, 8, 1, 6); rect(c, 4, 4, 1, 3, 6); rect(c, 11, 4, 1, 3, 6); return c; },
+  bench: () => { const c = canvas(16, 16); box(c, 1, 6, 14, 5, 4, 15, 2); rect(c, 2, 11, 2, 4, 5); rect(c, 12, 11, 2, 4, 5); box(c, 5, 2, 6, 4, 12, 7, 1); return c; },
+  beds: () => { const c = canvas(16, 16); box(c, 1, 6, 14, 9, 4, 15, 2); rect(c, 2, 7, 12, 3, 7); rect(c, 2, 7, 12, 1, 15); box(c, 2, 10, 5, 3, 12, 7, 1); rect(c, 1, 15, 2, 1, 5); rect(c, 13, 15, 2, 1, 5); return c; },
+  crates: () => { const c = canvas(16, 16); box(c, 2, 8, 8, 7, 4, 9, 2); rect(c, 3, 11, 6, 1, 2); box(c, 8, 2, 7, 6, 4, 9, 2); rect(c, 9, 4, 5, 1, 2); return c; },
+  bedsG: () => { const c = canvas(16, 16); box(c, 1, 10, 14, 5, 4, 9, 2); for (const [px, py, col] of [[2, 5, 3], [7, 4, 3], [12, 5, 11]]) { rect(c, px, py, 3, 5, col); rect(c, px, py, 3, 1, 11); set(c, px + 1, py + 2, 10); } return c; },
+  bucket: () => { const c = canvas(16, 16); box(c, 5, 6, 6, 9, 5, 6, 0); rect(c, 6, 7, 4, 2, 12); rect(c, 6, 7, 4, 1, 7); rect(c, 4, 4, 8, 1, 6); rect(c, 4, 4, 1, 3, 6); rect(c, 11, 4, 1, 3, 6); return c; },
 };
 const ICONS = {
   energy: () => fromRows(['...10...', '..10....', '.10.....', '.11110..', '...10...', '..10....', '.10.....', '........']),
