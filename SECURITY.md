@@ -11,7 +11,7 @@
 
 | 配置 | 不配的后果 |
 |---|---|
-| `CTL_TOKEN` | `/act` 与 `/ctl` 只挡浏览器跨站请求（Content-Type + Origin）；**任何脚本一条 JSON 就能 `reset` 世界**。设了之后写路由要求 `authorization: Bearer <token>` 或 `x-ctl-token` |
+| `CTL_TOKEN` | 写路由（`/act` `//ctl`）默认姿态：**非 loopback** 的写请求必须出示浏览器同源证据（Origin / `sec-fetch-site: same-origin`）**或**有效令牌，二者皆无一律 403——堵掉"脚本一条无 Origin 的 JSON 就能 reset"的洞；loopback 保留无令牌的开发便利。设了 `CTL_TOKEN` 后，**所有**非浏览器写请求（含 loopback 脚本）都要带 `authorization: Bearer <token>` 或 `x-ctl-token`；浏览器同源请求不受影响。公开部署**建议设**，令牌只进密文变量 |
 | `CHAT_TOKEN` | `/chat` 转发默认**关闭**（返回 404）。不设就没人能用它烧你的模型额度（这是有意的默认） |
 | `MAX_CALLS` | 每日模型调用额度。不设默认 120；公开实例建议按预算设小 |
 | `PRESENCE_MS` | 无人观看时停调真模型的窗口。**单位是毫秒**：想 60 秒要写 `60000`，写 `60` 只有 60 毫秒 |

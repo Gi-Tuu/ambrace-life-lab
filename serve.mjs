@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
 import { host, modelGate, modelCharged, modelRelease } from './life/host.mjs';
+import { mutatingDenied, isJson } from './life/request-guard.mjs';
 
 const ROOT = resolve('.');
 // 魔搭创空间 Docker 约定监听 0.0.0.0:7860
@@ -98,51 +99,10 @@ function chatAuthorized(req) {
   return diff === 0;
 }
 
-// ─────────────────── 请求守卫（第二次审计 H-01 / H-02 / H-03）───────────────────
-// H-02：/ctl 与 /act 原先无鉴权、不校验 content-type 与来源。跨站页面用 text/plain 的
-// "simple request"（不触发 preflight）就能 POST {"action":"reset"} 把唯一历史档抹掉。
-// 这里三道一起上：必须是 JSON、必须同源、配了 CTL_TOKEN 还必须有令牌。
+// ─────────────────── 请求守卫（第二次审计 H-01 / H-02 / H-03；质量审查 §5.1 加固）───────────────────
+// 守卫本体在 life/request-guard.mjs（纯函数、可单测）；这里只读环境变量并调用。
+// 非 loopback 的写请求必须出示浏览器同源证据或 CTL_TOKEN，二者皆无一律拒（脚本无 Origin 也能 reset 的洞）。
 const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
-
-const isJson = (h) => String(h ?? '').toLowerCase().startsWith('application/json');
-
-// 同源判定：sec-fetch-site 明确 cross-site 一律拒；带 Origin 时必须与 Host 一致。
-// 浏览器之外的客户端（脚本/健康检查）没有 Origin，放行——它们本来就无法被 CSRF。
-function sameOrigin(req) {
-  const site = String(req.headers['sec-fetch-site'] ?? '').toLowerCase();
-  if (site === 'cross-site') return false;
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  try {
-    const o = new URL(String(origin));
-    const host = String(req.headers.host ?? '').toLowerCase();
-    return o.host.toLowerCase() === host;
-  } catch {
-    return false;
-  }
-}
-
-// 定长比较：避免用长度或前缀差异做旁路探测
-function tokenMatches(given, expected) {
-  if (!expected) return false;
-  const g = String(given ?? '');
-  if (g.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < g.length; i += 1) diff |= g.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
-}
-const bearerOf = (req) => {
-  const h = String(req.headers.authorization ?? '');
-  return h.startsWith('Bearer ') ? h.slice(7) : String(req.headers['x-ctl-token'] ?? '');
-};
-
-// 写路由的统一闸门。返回 null 表示放行，否则返回拒因字符串。
-function mutatingDenied(req) {
-  if (!isJson(req.headers['content-type'])) return 'NEED_JSON';
-  if (!sameOrigin(req)) return 'CROSS_SITE';
-  if (CTL_TOKEN && !tokenMatches(bearerOf(req), CTL_TOKEN)) return 'UNAUTHORIZED';
-  return null;
-}
 
 async function chatProxy(req, res) {
   if (!PROVIDERS.length || !KEYS.some(Boolean)) return json(res, 503, { error: 'NO_BACKEND', note: '未配置模型端点，世界自动退回本地替身' });
@@ -216,7 +176,7 @@ async function handle(req, res) {
   if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot());
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
-    const denied = mutatingDenied(req);
+    const denied = mutatingDenied(req, CTL_TOKEN);
     if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
     // H-30：读体失败要分清"超长"(413) 与"JSON 坏了"(400)。旧版把两者都包在同一个 catch 里 → 全变 400。
     let rawBody;
