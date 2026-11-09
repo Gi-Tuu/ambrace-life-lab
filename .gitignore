@@ -17,6 +17,9 @@ contest.txt
 # 创空间推送用的临时克隆（构建验证后删除）
 /ambrace-life-lab/
 
+# 外部协作工具的工作日志（不入库）
+.workbuddy/
+
 # 根目录临时产物（截图 / DOM dump / 世界 dump / 进程残留）
 /*.png
 /*.err

@@ -2,20 +2,28 @@
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 const ROOMS = ['home', 'hall', 'watch', 'store'];
 const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
-const COLORS = { a1: '#8fb4ff', a2: '#ffb27a', a3: '#9fd8b6', p1: '#e6eaef' };
+// 兜底色也必须 ⊆ palette.json 的 16 色（manifest 缺失时走这里，不能偷偷引入色板外颜色）。
+const COLORS = { a1: '#29ADFF', a2: '#FFA300', a3: '#00E436', p1: '#FFF1E8' };
+// 事件 emote 的取值同样只从锁色板里挑；键名对应 log.kind，不做语义解释。
+const EMOTE = { rej: '#FF004D', disc: '#00E436', tell: '#FFEC27', norm: '#FF77A8' };
 // M3 目标承诺层 / M4 耦合调制权的读数翻译。键名必须和机制侧一致，这里只做呈现，不解释机制。
 const GOALS = { recover: '补给', connect: '联结', explore: '外探', maintain: '维持' };
 const INTERRUPTS = { committed_goal_unavailable: '目标这刻没动作', goal_has_no_visible_action: '看不到能干的事', only_coupling_actions: '此刻只剩耦合动作', no_eligible_action: '没有合格动作' };
 const COUPLING_VARS = ['input', 'available', 'refuse'];
 const $ = (id) => document.getElementById(id);
 
+// 全套动作精灵 / 场景小动画：独立清单在 web/assets/actions/manifest.json（不动主 manifest schema）。
+// 帧号由独立动画循环递增，A/B 严格共用同一个值；不读 w.t、不消费 rng、不写世界状态 ⇒ 不污染研究读数。
+const ACT = { ready: false, chars: {}, fx: null, index: {}, rows: {}, fps: 6, frame: 0 };
+const ACTIONS_MANIFEST = '/web/assets/actions/manifest.json';
+
 // 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
 // manifest 形状：{ chars: { a1: "url" | ["url","url"], ... }, tiles: { home: "url" }, icons: { energy: "url" } }
 const ASSETS = { ready: false, chars: {}, tiles: {}, things: {}, icons: {} };
 async function loadAssets() {
+  const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
   try {
     const m = await api('/web/assets/manifest.json');
-    const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
     for (const [k, v] of Object.entries(m.tiles ?? {})) ASSETS.tiles[k] = await load(v);
     for (const [k, v] of Object.entries(m.things ?? {})) ASSETS.things[k] = await load(v);
     for (const [k, v] of Object.entries(m.icons ?? {})) ASSETS.icons[k] = await load(v);
@@ -27,9 +35,24 @@ async function loadAssets() {
   } catch {
     ASSETS.ready = false; // 没素材是正常状态，不是错误
   }
+  // 动作表独立加载：失败只退回原来的 4 帧 idle/walk，不影响页面与世界。
+  try {
+    const m = await api(ACTIONS_MANIFEST);
+    ACT.index = Object.fromEntries((m.actions ?? []).map((a, i) => [a.id, i]));
+    ACT.rows = Object.fromEntries((m.fxRows ?? []).map((r, i) => [r, i]));
+    ACT.fps = m.fps ?? 6;
+    for (const [k, v] of Object.entries(m.chars ?? {})) ACT.chars[k] = await load(v);
+    ACT.fx = await load(m.fx);
+    ACT.ready = true;
+  } catch {
+    ACT.ready = false;
+  }
 }
 
-const ui = { room: 'hall', show: 'A', overview: true };
+// 角色当前动作行：载荷里的 a.last.kind 是世界事实，不是前端猜的；找不到回退 idle。
+const actionRow = (a) => ACT.index[a?.last?.kind] ?? ACT.index.idle ?? 0;
+
+const ui = { room: 'hall', camRoom: null, show: 'A', overview: false };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -37,11 +60,57 @@ async function api(path, body) {
   return res.json();
 }
 
-const ROOM_GRID = { home: [0, 0], hall: [1, 0], watch: [0, 1], store: [1, 1] };
+// ── 自然世界地图 ──────────────────────────────────────────────────────────────
+// 引擎仍是「地点制」：w.rooms 是地点表、w.loc.p1 是玩家所在地点、w.occupancy 是各地点的人。
+// 载荷字段一个不动；这里只在表现层把地点摆进一张连续的自然地形，用相机视口取局部放大画面。
+// 全局依旧是完整一大片（1536×1024 逻辑像素），所有居民都在同一张图上跑，屏幕只是取景框。
+const TILE = 16;
+const WORLD_TW = 96, WORLD_TH = 64;
+const WORLD_W = WORLD_TW * TILE, WORLD_H = WORLD_TH * TILE;   // 1536×1024
+const VIEW_TW = 16, VIEW_TH = 15;                             // 视口 16×15 tile
+const VIEW_W = VIEW_TW * TILE, VIEW_H = VIEW_TH * TILE;        // 256×240 逻辑像素
+const ZOOM = 2;                                                // 整数倍放大 → 448×288 CSS
+const OV_W = 256, OV_H = 170;                                  // 全景微缩逻辑像素 → ×2 = 512×340 CSS
+const OV_SX = OV_W / WORLD_W, OV_SY = OV_H / WORLD_H;         // 世界 → 全景的换算比例
 
-// 像素渲染（ui-pixel-spec）：逻辑分辨率 + 整数倍放大 + nearest-neighbor。房间=96×64 tilemap，角色/物件=16×16。
-const ROOM_PX = [96, 64];
-const ROOM_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
+// 村落沿河两岸展开：河从北到南穿过中部，土路跨桥连接西岸的居所/院子/菜园
+// 与东岸的走廊/公仓/工坊/井台，东北是瞭台岩丘。相机默认落在走廊，能看到河与桥。
+const SITES = {
+  home: [26, 20], yard: [30, 30], hall: [50, 22], store: [58, 15],
+  workshop: [64, 31], garden: [28, 45], watch: [72, 9], well: [47, 37],
+};
+const SITE_FALLBACK = [[22, 20], [34, 16], [52, 20], [64, 30], [26, 42], [46, 44], [70, 10], [56, 38]];
+const SITE_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
+const ROAD_CHAIN = ['home', 'yard', 'well', 'hall', 'store', 'workshop'];
+const ROAD_BRANCH = [['yard', 'garden'], ['hall', 'watch'], ['well', 'garden']];
+
+// 确定性 hash（不用 Math.random：地图每次刷新必须逐位相同）。
+const hash2 = (x, y, s = 0) => {
+  let n = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 1274126177)) | 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+};
+const distSeg = (px, py, ax, ay, bx, by) => {
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+};
+const tileKey = (x, y) => `${x},${y}`;
+// 河从北到南穿过村落中部，随 y 蜿蜒；路与河相交处架桥。
+const riverX = (ty) => 40 + Math.sin(ty * 0.085) * 4 + Math.sin(ty * 0.031) * 2;
+function sitesOf(w) {
+  const keys = Object.keys(w.rooms ?? LOCS);
+  const out = {};
+  keys.forEach((r, i) => { out[r] = SITES[r] ?? SITE_FALLBACK[i % SITE_FALLBACK.length]; });
+  return out;
+}
+function slotsOf(w, sites) {
+  const slots = {};
+  for (const [r, [sx, sy]] of Object.entries(sites)) {
+    (w.occupancy?.[r] ?? []).forEach((who, i) => { slots[who] = [sx - 1 + (i % 3), sy + Math.floor(i / 3)]; });
+  }
+  return slots;
+}
 
 // 聚焦镜头：默认只画当前房间（角色放大 + 台词气泡），全景退为可选。
 function lastLine(w, who) {
@@ -52,84 +121,169 @@ function lastLine(w, who) {
   }
   return '';
 }
-function drawFocus(cv, w, room) {
-  const container = cv.parentElement?.clientWidth || 384;
-  const scale = Math.max(2, Math.min(6, Math.floor(container / ROOM_PX[0])));
-  if (cv.width !== ROOM_PX[0] * scale || cv.height !== ROOM_PX[1] * scale) {
-    cv.width = ROOM_PX[0] * scale; cv.height = ROOM_PX[1] * scale;
-    cv.style.width = `${ROOM_PX[0] * scale}px`; cv.style.height = `${ROOM_PX[1] * scale}px`;
-  }
+// 整张世界只生成一次（地点集合 / 素材就绪状态不变就复用），之后每帧只 blit 视口。
+// 地形按「自然村落」组织：西侧一条蜿蜒的河、连通各处的土路、南面田垄、北面岩丘、
+// 沿河与边缘的树林、每个地点一栋屋舍。没有盒子墙、没有门洞、没有房间边界。
+let worldCache = null;
+function buildWorld(w) {
+  const sites = sitesOf(w);
+  const sig = Object.keys(sites).join(',') + '|' + (ASSETS.ready ? 1 : 0);
+  if (worldCache && worldCache.sig === sig) return { ...worldCache, sites };
+  const cv = document.createElement('canvas');
+  cv.width = WORLD_W; cv.height = WORLD_H;
   const g = cv.getContext('2d');
-  g.setTransform(scale, 0, 0, scale, 0, 0);
   g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, ROOM_PX[0], ROOM_PX[1]);
-  const tile = ASSETS.tiles[room];
-  if (tile) g.drawImage(tile, 0, 0, ROOM_PX[0], ROOM_PX[1]);
-  else { g.fillStyle = '#1D2B53'; g.fillRect(0, 0, ROOM_PX[0], ROOM_PX[1]); }
-  const thing = ASSETS.things[ROOM_THING[room]];
-  if (thing) g.drawImage(thing, ROOM_PX[0] - 22, 12, 16, 16);
-  g.font = '6px fusion-pixel, monospace';
-  const crowd = w.occupancy[room] ?? [];
-  crowd.forEach((who, i) => {
-    const px = 8 + i * 24, py = ROOM_PX[1] - 24;
-    const sprite = ASSETS.chars[who];
-    if (sprite && sprite.frames.length) g.drawImage(sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length], px, py, 16, 16);
-    else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
-    g.fillStyle = '#FFCCAA';
-    g.fillText(who === 'p1' ? '你' : (w.agents[who]?.name ?? who), px, py + 22);
-    const line = lastLine(w, who);
-    if (line) {
-      const text = line.length > 12 ? line.slice(0, 12) + '…' : line;
-      const bw = text.length * 6 + 4;
-      const bx = Math.max(1, Math.min(ROOM_PX[0] - bw - 1, px - 4));
-      g.fillStyle = '#000000'; g.fillRect(bx, py - 10, bw, 9);
-      g.fillStyle = '#FFF1E8'; g.fillText(text, bx + 2, py - 3);
+  const blockers = new Set();
+  // fx 锚点：树冠 / 烟囱 / 屋舍，世界 tile 坐标。场景动画必须贴在这些真实物件上，
+  // 而不是随机撒点 —— 否则「草被吹动」会长到河面或屋顶上。
+  const trees = [];
+  const chimneys = [];
+
+  // 主路 / 支路：折线段（像素中心坐标），像素级判定距离，路宽约 28px 且边界带噪声。
+  // 只连当前预设里真实存在的地点（lab 只有 4 个，town 有 8 个），避免凭空画出通向空地的路。
+  const roads = [];
+  const toPx = (p) => p ? [p[0] * TILE + TILE / 2, p[1] * TILE + TILE / 2] : null;
+  const link = (u, v) => {
+    const a = sites[u] && sites[v] ? toPx(sites[u]) : null, b = sites[u] && sites[v] ? toPx(sites[v]) : null;
+    if (a && b) roads.push([a[0], a[1], b[0], b[1]]);
+  };
+  for (let i = 1; i < ROAD_CHAIN.length; i += 1) link(ROAD_CHAIN[i - 1], ROAD_CHAIN[i]);
+  for (const [u, v] of ROAD_BRANCH) link(u, v);
+  const roadDist = (px, py) => roads.reduce((d, r) => Math.min(d, distSeg(px, py, r[0], r[1], r[2], r[3])), Infinity);
+  const onRoad = (tx, ty) => roadDist(tx * TILE + 8, ty * TILE + 8) < 18;
+  const nearSite = (tx, ty, pad = 2) => Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < pad && Math.abs(ty - sy) < pad);
+  const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - riverX(ty) * TILE) < 34;
+
+  // 1) 草地底 + 低频斑块用 2×2 Bayer 抖动过渡（不整块填色，避免出现规整马赛克）
+  //    + 每 tile 的草簇 / 石 / 野花，全部硬像素、全部锁色板内。
+  g.fillStyle = '#008751'; g.fillRect(0, 0, WORLD_W, WORLD_H);
+  for (let gy = 0; gy < WORLD_H; gy += 2) for (let gx = 0; gx < WORLD_W; gx += 2) {
+    const patch = hash2(Math.floor(gx / 40), Math.floor(gy / 40), 11);
+    const q = BAYER[((gy / 2) % 4) * 4 + ((gx / 2) % 4)];
+    if (patch > 0.66 && q < 9) { g.fillStyle = '#00E436'; g.fillRect(gx, gy, 2, 2); }
+    else if (patch < 0.26 && q < 6) { g.fillStyle = '#5F574F'; g.fillRect(gx, gy, 2, 2); }
+  }
+  for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
+    const h = hash2(tx, ty, 1), px = tx * TILE, py = ty * TILE;
+    if (h > 0.62) { g.fillStyle = '#00E436'; g.fillRect(px + 2, py + 3, 2, 2); g.fillRect(px + 9, py + 10, 2, 2); }
+    else if (h < 0.09) { g.fillStyle = '#5F574F'; g.fillRect(px + 9, py + 11, 3, 2); }
+    if (h > 0.93) { g.fillStyle = '#FFEC27'; g.fillRect(px + 6, py + 7, 1, 1); }
+    else if (h < 0.035) { g.fillStyle = '#FF77A8'; g.fillRect(px + 12, py + 5, 1, 1); }
+  }
+
+  // 2) 蜿蜒的河：按 2px 行绘制，河宽随 y 与噪声变化，边界不规则；波纹 + 浅灰岸。
+  for (let py = 0; py < WORLD_H; py += 2) {
+    const ty = py / TILE;
+    const rx = riverX(ty) * TILE + Math.sin(py * 0.07) * 3;
+    const half = 17 + Math.sin(py * 0.021) * 3;
+    g.fillStyle = '#1D2B53'; g.fillRect(Math.round(rx - half), py, Math.round(half * 2), 2);
+    g.fillStyle = '#C2C3C7';
+    g.fillRect(Math.round(rx - half), py, 1, 2); g.fillRect(Math.round(rx + half) - 1, py, 1, 2);
+    if (py % 8 === 0) {
+      g.fillStyle = '#29ADFF';
+      g.fillRect(Math.round(rx - 9 + (py % 24) / 2), py, 7, 1);
+      g.fillRect(Math.round(rx + 2 - (py % 16) / 2), py + 1, 5, 1);
+    }
+  }
+
+  // 3) 土路：8px 网格，距路中心 <14px 铺棕底、<22px 用稀疏亮点/暗点做路肩；
+  //    边界由 hash 扰动，形成不规则锯齿而不是笔直矩形；过河段架木板桥。
+  for (let py = 0; py < WORLD_H; py += 8) for (let px = 0; px < WORLD_W; px += 8) {
+    const d = roadDist(px + 4, py + 4);
+    const h = hash2(Math.floor(px / 8), Math.floor(py / 8), 2);
+    const wet = Math.abs(px + 4 - riverX(py / TILE) * TILE) < 20;
+    if (d < 12 + h * 5) {
+      g.fillStyle = wet ? '#7E2553' : '#AB5236'; g.fillRect(px, py, 8, 8);
+      if (h > 0.86) { g.fillStyle = '#FFA300'; g.fillRect(px + 2, py + 2, 2, 1); }
+      else if (h < 0.1) { g.fillStyle = '#5F574F'; g.fillRect(px + 5, py + 5, 3, 1); }
+      if (wet) { g.fillStyle = '#FFCCAA'; g.fillRect(px, py, 8, 1); }
+    } else if (d < 21 + h * 5 && h > 0.7) {
+      g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 3, 2, 2);
+    }
+  }
+  // 桥：路中心落在河面时，横铺一排木板（每 4px 一条）。
+  for (let py = 0; py < WORLD_H; py += 16) {
+    const rx = riverX(py / TILE) * TILE;
+    if (roadDist(rx, py + 8) < 14) {
+      g.fillStyle = '#AB5236'; g.fillRect(Math.round(rx - 24), py, 48, 12);
+      g.fillStyle = '#FFCCAA'; g.fillRect(Math.round(rx - 24), py, 48, 1);
+      g.fillStyle = '#5F574F';
+      for (let k = 0; k < 48; k += 6) g.fillRect(Math.round(rx - 24) + k, py + 2, 1, 10);
+    }
+  }
+
+  // 4) 南面田垄（菜园一带）：横垄 + 苗；北面岩丘（瞭台一带）：灰岩 + 顶高光。
+  const garden = sites.garden ?? SITES.garden;
+  for (let ty = garden[1] - 3; ty <= garden[1] + 4; ty += 1) for (let tx = garden[0] - 7; tx <= garden[0] + 7; tx += 1) {
+    if (onRoad(tx, ty) || onRiver(tx, ty)) continue;
+    const d = Math.hypot((tx - garden[0]) / 8, (ty - garden[1]) / 5);
+    if (d > 1) continue;
+    const px = tx * TILE, py = ty * TILE;
+    g.fillStyle = '#AB5236'; g.fillRect(px, py + 2, TILE, 3); g.fillRect(px, py + 11, TILE, 2);
+    g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 1, 2, 2); g.fillRect(px + 11, py + 1, 2, 2);
+    g.fillStyle = '#008751'; g.fillRect(px + 6, py + 9, 2, 2);
+  }
+  const watch = sites.watch ?? SITES.watch;
+  for (let ty = watch[1] - 5; ty <= watch[1] + 5; ty += 1) for (let tx = watch[0] - 7; tx <= watch[0] + 7; tx += 1) {
+    const d = Math.hypot((tx - watch[0]) / 7, (ty - watch[1]) / 5);
+    if (d > 1 || hash2(tx, ty, 3) > 0.82 || onRoad(tx, ty)) continue;
+    const px = tx * TILE, py = ty * TILE;
+    g.fillStyle = '#5F574F'; g.fillRect(px + 1, py + 3, TILE - 2, TILE - 4);
+    g.fillStyle = '#83769C'; g.fillRect(px + 1, py + 3, TILE - 2, 2);
+    g.fillStyle = '#C2C3C7'; g.fillRect(px + 4, py + 6, 3, 1);
+    blockers.add(tileKey(tx, ty));
+  }
+
+  // 5) 树林：边缘密、村落内部疏；避开道路、河、田、岩与屋舍。树冠双 tone + 树干。
+  for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
+    if (onRoad(tx, ty) || onRiver(tx, ty) || blockers.has(tileKey(tx, ty))) continue;
+    const edge = Math.min(tx, WORLD_TW - 1 - tx, ty, WORLD_TH - 1 - ty);
+    const density = edge < 6 ? 0.42 : edge < 14 ? 0.16 : 0.055;
+    if (hash2(tx, ty, 4) > density || nearSite(tx, ty, 3)) continue;
+    const px = tx * TILE, py = ty * TILE;
+    g.fillStyle = '#1D2B53'; g.fillRect(px + 6, py + 11, 4, 5);
+    g.fillStyle = '#008751'; g.fillRect(px + 2, py + 2, 12, 9);
+    g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 2, 8, 3); g.fillRect(px + 7, py + 5, 3, 2);
+    g.fillStyle = '#AB5236'; g.fillRect(px + 7, py + 11, 2, 4);
+    blockers.add(tileKey(tx, ty));
+    trees.push([tx, ty]);
+  }
+
+  // 6) 屋舍：每地点一栋 3×2 tile 的小屋（屋顶/墙/门/窗），屋顶按地点换色便于辨识；
+  //    屋前摆对应设施 sprite。屋舍挡视线，周边留空地给角色站。
+  const ROOF = ['#7E2553', '#AB5236', '#1D2B53', '#FF004D', '#5F574F', '#008751', '#83769C', '#FFA300'];
+  Object.entries(sites).forEach(([r, [sx, sy]], i) => {
+    const bx = (sx - 1) * TILE, by = (sy - 5) * TILE;
+    g.fillStyle = '#000000'; g.fillRect(bx - 1, by + 8, 3 * TILE + 2, 2 * TILE - 7);
+    g.fillStyle = '#FFCCAA'; g.fillRect(bx, by + 10, 3 * TILE, TILE + 3);
+    g.fillStyle = '#C2C3C7'; g.fillRect(bx, by + 10, 3 * TILE, 2);
+    g.fillStyle = ROOF[i % ROOF.length]; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 9);
+    g.fillStyle = '#FF004D'; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 1);
+    g.fillStyle = '#5F574F'; g.fillRect(bx + TILE + 4, by + 17, 8, 15);
+    g.fillStyle = '#29ADFF'; g.fillRect(bx + 4, by + 15, 6, 5); g.fillRect(bx + 2 * TILE + 6, by + 15, 6, 5);
+    g.fillStyle = '#FFEC27'; g.fillRect(bx + 5, by + 16, 2, 2);
+    for (let dx = -1; dx <= 1; dx += 1) for (let dy = -5; dy <= -4; dy += 1) blockers.add(tileKey(sx + dx, sy + dy));
+    const thing = ASSETS.things[SITE_THING[r]];
+    if (thing) g.drawImage(thing, bx + 3 * TILE + 4, by + 14, TILE, TILE);
+    // 井台/院子加一圈栅栏，工坊加烟囱，使地点之间形状不同。
+    if (r === 'yard' || r === 'well') {
+      g.fillStyle = '#AB5236';
+      for (let k = 0; k < 6; k += 1) g.fillRect(bx - 14 + k * 12, by + 2 * TILE + 6, 2, 7);
+      g.fillRect(bx - 14, by + 2 * TILE + 8, 62, 2);
+    }
+    if (r === 'workshop') {
+      g.fillStyle = '#5F574F'; g.fillRect(bx + 2 * TILE, by - 6, 6, 10);
+      g.fillStyle = '#C2C3C7'; g.fillRect(bx + 2 * TILE, by - 8, 8, 2);
+      chimneys.push([sx + 1, sy - 6]);
     }
   });
-  if (!crowd.length) { g.fillStyle = '#5F574F'; g.fillText('这间现在没人', 30, 32); }
+
+  worldCache = { sig, canvas: cv, blockers, roads, trees, chimneys };
+  return { ...worldCache, sites };
 }
 
-// 连续全地图（有限区域、无转场）+ 玩家真实视野（光线 + 物体遮挡）。
-// 引擎仍是房间制（研究口径不动）；这里把房间铺成一张连续 tilemap，房间边界是带门洞的墙，
-// 角色/玩家落在房间内的 tile 槽位；视野=从玩家 tile 出发的光线投射，墙/物件挡视线，昼夜决定光半径。
-const TILE = 16;
-const RT_W = 6, RT_H = 4; // 每房间内部 tile 数
-function buildMap(w) {
-  const rooms = Object.keys(w.rooms ?? LOCS);
-  const grid = w.grid ?? ROOM_GRID;
-  const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
-  const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const tw = cols * RT_W + cols + 1;
-  const th = rows * RT_H + rows + 1;
-  const origin = {};
-  for (const r of rooms) origin[r] = [1 + grid[r][0] * (RT_W + 1), 1 + grid[r][1] * (RT_H + 1)];
-  const walls = new Set();
-  const key = (x, y) => `${x},${y}`;
-  for (let x = 0; x < tw; x++) { walls.add(key(x, 0)); walls.add(key(x, th - 1)); }
-  for (let y = 0; y < th; y++) { walls.add(key(0, y)); walls.add(key(tw - 1, y)); }
-  for (let cx = 1; cx < cols; cx++) for (let y = 0; y < th; y++) walls.add(key(cx * (RT_W + 1), y));
-  for (let cy = 1; cy < rows; cy++) for (let x = 0; x < tw; x++) walls.add(key(x, cy * (RT_H + 1)));
-  // 门洞：相邻房间之间的墙开一个口（横向在中行、纵向在中列）
-  for (const r of rooms) {
-    const [ox, oy] = origin[r];
-    const [cx, cy] = grid[r];
-    if (cx + 1 < cols) walls.delete(key(ox + RT_W, oy + 2));
-    if (cy + 1 < rows) walls.delete(key(ox + 3, oy + RT_H));
-  }
-  const things = new Map();
-  for (const r of rooms) {
-    const t = ROOM_THING[r];
-    if (t && ASSETS.things[t]) { const [ox, oy] = origin[r]; things.set(key(ox + 4, oy + 1), t); }
-  }
-  const slots = {};
-  for (const r of rooms) {
-    const [ox, oy] = origin[r];
-    (w.occupancy[r] ?? []).forEach((who, i) => { slots[who] = [ox + 1 + (i % 3) * 2, oy + 2 - Math.floor(i / 3)]; });
-  }
-  return { tw, th, walls, things, slots, origin, rooms, key };
-}
-function losClear(map, ax, ay, bx, by) {
-  // Bresenham；中间的墙/物件挡视线（端点不算）
+// 玩家真实视野：从玩家 tile 出发，光半径 + Bresenham 光线投射，树/岩/屋舍挡视线。
+function losClear(blockers, ax, ay, bx, by) {
   let x = ax, y = ay;
   const dx = Math.abs(bx - ax), dy = Math.abs(by - ay);
   const sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1;
@@ -139,74 +293,201 @@ function losClear(map, ax, ay, bx, by) {
     if (e2 > -dy) { err -= dy; x += sx; }
     if (e2 < dx) { err += dx; y += sy; }
     if (x === bx && y === by) break;
-    const k = map.key(x, y);
-    if (map.walls.has(k) || map.things.has(k)) return false;
+    if (blockers.has(tileKey(x, y))) return false;
   }
   return true;
 }
 function lightRadius(phase) {
   return phase === '夜' ? 5 : phase === '昼' ? 11 : 8;
 }
-function drawMap(cv, w) {
-  const map = buildMap(w);
-  const container = cv.parentElement?.clientWidth || map.tw * TILE;
-  const scale = Math.max(1, Math.floor(container / (map.tw * TILE)));
-  const LW = map.tw * TILE, LH = map.th * TILE;
-  if (cv.width !== LW * scale || cv.height !== LH * scale) {
-    cv.width = LW * scale; cv.height = LH * scale;
-    cv.style.width = `${LW * scale}px`; cv.style.height = `${LH * scale}px`;
+let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
+// 相机：默认跟随玩家所在地点（A/B 共用同一锚点，保证双世界在同一镜头下对照）；
+// 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
+function cameraOf(w, sites, slots, container) {
+  const anchor = (ui.camRoom && sites[ui.camRoom]) || sites[w.loc?.p1] || Object.values(sites)[0] || [48, 32];
+  const fallback = slots.p1 ?? anchor;
+  const p = anchor ?? fallback;
+  const x = Math.round(Math.max(0, Math.min(WORLD_W - VIEW_W, p[0] * TILE - VIEW_W / 2)));
+  // 屋舍在地点上方 3–5 tile，镜头再上抬 2 tile，保证屋顶不被视口上沿裁掉。
+  const y = Math.round(Math.max(0, Math.min(WORLD_H - VIEW_H, p[1] * TILE - VIEW_H / 2 - 2 * TILE)));
+  const zoom = Math.max(1, Math.min(3, Math.floor((container || VIEW_W * 2) / VIEW_W)));
+  return { x, y, zoom };
+}
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+// 局部视角：只渲染世界的一小块（224×144 逻辑像素），整数倍放大到屏幕。
+function drawViewport(cv, w) {
+  const world = buildWorld(w);
+  const slots = slotsOf(w, world.sites);
+  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth);
+  lastCam = { ...cam, mode: 'view' };
+  cv._cam = lastCam;
+  const CW = VIEW_W * cam.zoom, CH = VIEW_H * cam.zoom;
+  if (cv.width !== CW || cv.height !== CH) {
+    cv.width = CW; cv.height = CH;
+    cv.style.width = `${CW}px`; cv.style.height = `${CH}px`;
   }
   const g = cv.getContext('2d');
-  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.setTransform(cam.zoom, 0, 0, cam.zoom, 0, 0);
   g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, LW, LH);
-  g.font = '7px fusion-pixel, monospace';
-  // 地板：每房间 tilemap 拼到连续坐标
-  for (const r of map.rooms) {
-    const [ox, oy] = map.origin[r];
-    const tile = ASSETS.tiles[r];
-    if (tile) g.drawImage(tile, ox * TILE, oy * TILE, RT_W * TILE, RT_H * TILE);
-    else { g.fillStyle = '#1D2B53'; g.fillRect(ox * TILE, oy * TILE, RT_W * TILE, RT_H * TILE); }
+  g.clearRect(0, 0, VIEW_W, VIEW_H);
+  // 一整片世界只在离屏画一次，这里只取相机窗口 —— 全局始终完整在运行。
+  g.drawImage(world.canvas, cam.x, cam.y, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+  g.font = '6px fusion-pixel, monospace';
+  const t0x = Math.floor(cam.x / TILE), t0y = Math.floor(cam.y / TILE);
+
+  // 场景细节小动画：草摆动 / 水波 / 树冠 / 炊烟，按当前帧号只叠加「会动的像素」。
+  // 静止部分由离屏底图提供，fx 是 98.6% 透明的动态增量层，不会盖住地形或出现补丁方块。
+  // 锚点来自 buildWorld 记录的真实树/烟囱坐标与河面判定，不随机撒点。
+  if (ACT.ready && ACT.fx) {
+    const col = ACT.frame * 32;
+    const inView = (x, y) => x >= t0x - 2 && x <= t0x + VIEW_TW + 2 && y >= t0y - 2 && y <= t0y + VIEW_TH + 2;
+    const cell = (row, tx, ty) => g.drawImage(ACT.fx, col, row * 32, 32, 32, tx * TILE - cam.x - 8, ty * TILE - cam.y - 8, 32, 32);
+    const nearRoad = (tx, ty) => world.roads.some((r) => distSeg(tx * TILE + 8, ty * TILE + 8, r[0], r[1], r[2], r[3]) < 20);
+    const nearRiver = (tx, ty) => Math.abs((tx + 0.5) * TILE - riverX(ty) * TILE) < 22;
+    const nearSite = (tx, ty) => Object.values(world.sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && Math.abs(ty - sy) < 7);
+    const treeSet = new Set(world.trees.map(([x, y]) => tileKey(x, y)));
+    // 草：每 2 tile 一个候选，稀疏撒在草地上（避开路/河/树/屋/岩）
+    for (let ty = Math.floor(t0y / 2) * 2 - 2; ty <= t0y + VIEW_TH + 2; ty += 2) {
+      for (let tx = Math.floor(t0x / 2) * 2 - 2; tx <= t0x + VIEW_TW + 2; tx += 2) {
+        if (!inView(tx, ty) || nearRiver(tx, ty) || nearRoad(tx, ty) || nearSite(tx, ty) || treeSet.has(tileKey(tx, ty))) continue;
+        if (hash2(tx, ty, 9) > 0.62) cell(ACT.rows.grass ?? 0, tx, ty);
+      }
+    }
+    // 水波：河面每 2 tile 一段
+    for (let ty = Math.floor(t0y / 2) * 2 - 2; ty <= t0y + VIEW_TH + 2; ty += 2) {
+      for (let tx = Math.floor(t0x / 2) * 2 - 2; tx <= t0x + VIEW_TW + 2; tx += 2) {
+        if (!inView(tx, ty) || !nearRiver(tx, ty) || hash2(tx, ty, 10) < 0.45) continue;
+        cell(ACT.rows.water ?? 1, tx, ty);
+      }
+    }
+    // 树冠高光 / 炊烟：贴在真实锚点
+    for (const [tx, ty] of world.trees) if (inView(tx, ty)) cell(ACT.rows.tree ?? 2, tx, ty);
+    for (const [tx, ty] of world.chimneys) if (inView(tx, ty)) cell(ACT.rows.smoke ?? 3, tx, ty);
   }
-  // 墙
-  g.fillStyle = '#000000';
-  for (const k of map.walls) { const [x, y] = k.split(',').map(Number); g.fillRect(x * TILE, y * TILE, TILE, TILE); }
-  // 物件
-  for (const [k, t] of map.things) { const [x, y] = k.split(',').map(Number); g.drawImage(ASSETS.things[t], x * TILE, y * TILE, TILE, TILE); }
-  // 玩家视野：光半径 + 光线投射
-  const pt = map.slots.p1 ?? [1, 1];
+
+  const pt = slots.p1 ?? [Math.round((cam.x + VIEW_W / 2) / TILE), Math.round((cam.y + VIEW_H / 2) / TILE)];
   const radius = lightRadius(w.phase);
   const visible = new Set();
-  for (let y = 0; y < map.th; y++) for (let x = 0; x < map.tw; x++) {
-    const d = Math.hypot(x - pt[0], y - pt[1]);
-    if (d <= radius && losClear(map, pt[0], pt[1], x, y)) visible.add(map.key(x, y));
+  for (let y = t0y - 1; y <= t0y + VIEW_TH + 1; y += 1) for (let x = t0x - 1; x <= t0x + VIEW_TW + 1; x += 1) {
+    if (Math.hypot(x - pt[0], y - pt[1]) <= radius && losClear(world.blockers, pt[0], pt[1], x, y)) visible.add(tileKey(x, y));
   }
-  // 角色：只在视野内画（视野外藏起来，体现"真实视野"）
-  for (const [who, [tx, ty]] of Object.entries(map.slots)) {
-    if (!visible.has(map.key(tx, ty))) continue;
+  // 昼夜色温：视口外框按相位换色板映射（不新画资产、不叠半透明）。
+  g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
+  g.fillRect(0, 0, VIEW_W, 1); g.fillRect(0, VIEW_H - 1, VIEW_W, 1);
+  g.fillRect(0, 0, 1, VIEW_H); g.fillRect(VIEW_W - 1, 0, 1, VIEW_H);
+  // 玩家脚下 1px 虚线高亮圈（跟随相机坐标）。
+  const hx = pt[0] * TILE - cam.x, hy = pt[1] * TILE - cam.y;
+  g.fillStyle = '#FFEC27';
+  for (let i = 0; i < TILE; i += 4) {
+    g.fillRect(hx + i, hy, 2, 1); g.fillRect(hx + i, hy + TILE - 1, 2, 1);
+    g.fillRect(hx, hy + i, 1, 2); g.fillRect(hx + TILE - 1, hy + i, 1, 2);
+  }
+  // 事件 emote：最近日志里该角色的驳回/发现/传话/规范，头顶画 8×8 像素图标。
+  const recent = (w.log ?? []).slice(-12);
+  const emoteFor = (name) => {
+    for (let i = recent.length - 1; i >= 0; i -= 1) if (recent[i].who === name && EMOTE[recent[i].kind]) return EMOTE[recent[i].kind];
+    return null;
+  };
+  // 角色：只画落在视口内且处于视野中的人；站位来自各地点 occupancy，实打实落在世界坐标上。
+  for (const [who, [tx, ty]] of Object.entries(slots)) {
+    const px = tx * TILE - cam.x, py = ty * TILE - cam.y;
+    if (px < -TILE || px > VIEW_W || py < -TILE || py > VIEW_H + TILE) continue;
+    if (!visible.has(tileKey(tx, ty))) continue;
+    const sheet = ACT.chars[who];
     const sprite = ASSETS.chars[who];
-    const px = tx * TILE, py = ty * TILE;
-    if (sprite && sprite.frames.length) g.drawImage(sprite.frames[Math.floor(w.t / 2) % sprite.frames.length], px, py, TILE, TILE);
-    else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
-    g.fillStyle = '#FFCCAA';
-    g.fillText(who === 'p1' ? '你' : (w.agents[who]?.name ?? who), px, py + TILE + 6);
+    if (ACT.ready && sheet) {
+      // 动作行来自载荷 a.last.kind（世界事实），帧号来自独立时钟 ACT.frame（A/B 共用）。
+      g.drawImage(sheet, ACT.frame * 16, actionRow(w.agents?.[who]) * 16, 16, 16, px, py, TILE, TILE);
+    } else if (sprite && sprite.frames.length) {
+      g.drawImage(sprite.frames[ACT.frame % sprite.frames.length], px, py, TILE, TILE);
+    } else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
+    g.fillStyle = '#FFF1E8';
+    g.fillText(who === 'p1' ? '你' : (w.agents?.[who]?.name ?? who), px, py + TILE + 6);
+    const nm = who === 'p1' ? '你' : (w.agents?.[who]?.name ?? who);
+    const em = emoteFor(nm);
+    if (em) {
+      g.fillStyle = '#000000'; g.fillRect(px + 4, py - 9, 8, 8);
+      g.fillStyle = em; g.fillRect(px + 5, py - 8, 6, 6);
+      g.fillStyle = '#000000'; g.fillRect(px + 7, py - 7, 2, 3); g.fillRect(px + 7, py - 3, 2, 1);
+    }
   }
-  // 迷雾：视野外压暗（夜更暗）
-  g.fillStyle = w.phase === '夜' ? 'rgba(0,0,0,.88)' : 'rgba(0,0,0,.72)';
-  for (let y = 0; y < map.th; y++) for (let x = 0; x < map.tw; x++) {
-    if (!visible.has(map.key(x, y))) g.fillRect(x * TILE, y * TILE, TILE, TILE);
+  // 迷雾：2×2 细抖动的不透明像素压暗视野外，零 alpha、保留地形轮廓。
+  // 4×4 大块在 ×2 放大后会连成黑列像墙，这里改用 2×2 细点 + Bayer 平铺。
+  const night = w.phase === '夜';
+  for (let y = t0y; y <= t0y + VIEW_TH; y += 1) for (let x = t0x; x <= t0x + VIEW_TW; x += 1) {
+    if (visible.has(tileKey(x, y))) continue;
+    const edge = visible.has(tileKey(x - 1, y)) || visible.has(tileKey(x + 1, y))
+      || visible.has(tileKey(x, y - 1)) || visible.has(tileKey(x, y + 1));
+    const limit = edge ? 2 : night ? 11 : 7;
+    const bx = x * TILE - cam.x, by = y * TILE - cam.y;
+    g.fillStyle = '#000000';
+    for (let j = 0; j < TILE; j += 2) for (let i = 0; i < TILE; i += 2) {
+      if (BAYER[((j / 2) % 4) * 4 + ((i / 2) % 4)] < limit) g.fillRect(bx + i, by + j, 2, 2);
+    }
   }
-  // 房间名（只在可见时显示）
-  g.fillStyle = '#C2C3C7';
-  for (const r of map.rooms) {
-    const [ox, oy] = map.origin[r];
-    if (visible.has(map.key(ox + 1, oy))) g.fillText((w.rooms ?? LOCS)[r] ?? r, ox * TILE + 2, oy * TILE + 7);
+  // 地点名牌：屋舍进入视野时挂牌（黑底 + 1px 描边 + 白字），不写进图片。
+  for (const [r, [sx, sy]] of Object.entries(world.sites)) {
+    if (!visible.has(tileKey(sx, sy - 4))) continue;
+    const label = (w.rooms ?? LOCS)[r] ?? r;
+    const bw = label.length * 6 + 6;
+    // 名牌夹在视口内，避免贴近边界时被裁半截；始终挂在屋舍上方。
+    const bx = Math.max(2, Math.min(VIEW_W - bw - 2, sx * TILE - cam.x - bw / 2));
+    const by = Math.max(2, Math.min(VIEW_H - 11, (sy - 6) * TILE - cam.y));
+    g.fillStyle = '#000000'; g.fillRect(bx, by, bw, 9);
+    g.fillStyle = '#83769C'; g.fillRect(bx, by, bw, 1); g.fillRect(bx, by + 8, bw, 1);
+    g.fillStyle = night ? '#C2C3C7' : '#FFF1E8'; g.fillText(label, bx + 3, by + 7);
   }
+  return cam;
+}
+
+// 世界全景：把完整 96×64 格压成微缩总览，证明「全局依旧是完整一大片在运行」；
+// 当前相机窗口用黄虚线框标出，玩家位置用金点标出。
+function drawOverview(cv, w) {
+  const world = buildWorld(w);
+  const slots = slotsOf(w, world.sites);
+  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth);
+  lastCam = { ...cam, mode: 'overview' };
+  cv._cam = lastCam;
+  const CW = OV_W * ZOOM, CH = OV_H * ZOOM;
+  if (cv.width !== CW || cv.height !== CH) {
+    cv.width = CW; cv.height = CH;
+    cv.style.width = `${CW}px`; cv.style.height = `${CH}px`;
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(ZOOM, 0, 0, ZOOM, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, OV_W, OV_H);
+  g.drawImage(world.canvas, 0, 0, WORLD_W, WORLD_H, 0, 0, OV_W, OV_H);
+  // 地点标记 / 相机取景框 / 玩家点，全部按世界→全景比例换算。
+  for (const [sx, sy] of Object.values(world.sites)) {
+    const mx = Math.round(sx * TILE * OV_SX), my = Math.round(sy * TILE * OV_SY);
+    g.fillStyle = '#000000'; g.fillRect(mx - 2, my - 2, 5, 5);
+    g.fillStyle = '#FFEC27'; g.fillRect(mx - 1, my - 1, 3, 3);
+  }
+  // 相机窗口（黄虚线 1px 段）
+  const vx = Math.round(cam.x * OV_SX), vy = Math.round(cam.y * OV_SY);
+  const vw = Math.round(VIEW_W * OV_SX), vh = Math.round(VIEW_H * OV_SY);
+  g.fillStyle = '#FFF1E8';
+  for (let i = 0; i < vw; i += 4) { g.fillRect(vx + i, vy, 2, 1); g.fillRect(vx + i, vy + vh - 1, 2, 1); }
+  for (let j = 0; j < vh; j += 4) { g.fillRect(vx, vy + j, 1, 2); g.fillRect(vx + vw - 1, vy + j, 1, 2); }
+  // 玩家金点
+  if (slots.p1) {
+    const [px, py] = slots.p1;
+    const mx = Math.round(px * TILE * OV_SX), my = Math.round(py * TILE * OV_SY);
+    g.fillStyle = '#FF004D'; g.fillRect(mx - 1, my - 1, 4, 4);
+    g.fillStyle = '#FFF1E8'; g.fillRect(mx, my, 1, 1);
+  }
+  g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
+  g.fillRect(0, 0, OV_W, 1); g.fillRect(0, OV_H - 1, OV_W, 1);
+  g.fillRect(0, 0, 1, OV_H); g.fillRect(OV_W - 1, 0, 1, OV_H);
+  return cam;
 }
 
 function draw(cv, w) {
-  if (!ui.overview) { drawFocus(cv, w, ui.room); return; }
-  drawMap(cv, w);
+  cv._anim = ACT.frame;   // 渲染元数据：验收可核对 A/B 是否共用同一动画帧号
+  if (ui.overview) return drawOverview(cv, w);
+  return drawViewport(cv, w);
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -232,21 +513,29 @@ const SPARK_H = 44;
 function spark(pack, id, hue) {
   const s = pack.series ?? [];
   if (s.length < 2) return '';
-  const yOf = (v) => SPARK_H - Math.max(0, Math.min(1, v)) * (SPARK_H - 3) - 1.5;
-  const pts = s.map((r, i) => `${((i / (s.length - 1)) * SPARK_W).toFixed(1)},${yOf(r.v?.[id] ?? 0).toFixed(1)}`).join(' ');
+  const yOf = (v) => Math.round(SPARK_H - Math.max(0, Math.min(1, v)) * (SPARK_H - 3) - 1.5);
+  const xOf = (i) => Math.round((i / (s.length - 1)) * SPARK_W);
+  // 1px 阶梯线：先水平走再垂直走，坐标全部取整，避免小数坐标带来的插值描边。
+  const stair = [];
+  s.forEach((r, i) => {
+    const x = xOf(i), y = yOf(r.v?.[id] ?? 0);
+    if (i > 0) stair.push(`${x},${yOf(s[i - 1].v?.[id] ?? 0)}`);
+    stair.push(`${x},${y}`);
+  });
+  const pts = stair.join(' ');
   const marks = [];
   for (let i = 1; i < s.length; i++) {
-    if ((s[i].lost?.[id] ?? 0) > (s[i - 1].lost?.[id] ?? 0)) marks.push(((i / (s.length - 1)) * SPARK_W).toFixed(1));
+    if ((s[i].lost?.[id] ?? 0) > (s[i - 1].lost?.[id] ?? 0)) marks.push(xOf(i));
   }
   const first = s[0].v?.[id] ?? 1;
   const last = s[s.length - 1].v?.[id] ?? 0;
   const crit = Number.isFinite(pack.viabCrit) ? pack.viabCrit : 0.6;
   return `<svg class="spark" width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" style="color:var(--${hue})" role="img"
     aria-label="存续从 ${(first * 100).toFixed(0)}% 到 ${(last * 100).toFixed(0)}%，不可逆损失 ${marks.length} 次">
-    <polygon points="0,${SPARK_H} ${pts} ${SPARK_W},${SPARK_H}" fill="currentColor" opacity=".13" />
-    <line x1="0" y1="${yOf(crit).toFixed(1)}" x2="${SPARK_W}" y2="${yOf(crit).toFixed(1)}" stroke="var(--dim)" stroke-dasharray="3 3" stroke-width="1.2" />
-    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" />
-    ${marks.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${SPARK_H}" stroke="var(--warn)" stroke-width="2" />`).join('')}
+    <polygon points="0,${SPARK_H} ${pts} ${SPARK_W},${SPARK_H}" fill="#1D2B53" />
+    <line x1="0" y1="${yOf(crit)}" x2="${SPARK_W}" y2="${yOf(crit)}" stroke="var(--dim)" stroke-dasharray="2 2" stroke-width="1" />
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1" />
+    ${marks.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${SPARK_H}" stroke="var(--warn)" stroke-width="1" />`).join('')}
   </svg>`;
 }
 
@@ -341,7 +630,7 @@ function fillMinimap(pack) {
 }
 function fillOcc(el, pack) {
   const crowd = pack.occupancy[ui.room] ?? [];
-  if (!crowd.length) { el.innerHTML = '<div class="empty">这间现在没人——点上面的房间切镜头。</div>'; return; }
+  if (!crowd.length) { el.innerHTML = '<div class="empty">这处现在没人——点上面的地点把镜头移过去。</div>'; return; }
   el.innerHTML = crowd.map((who) => {
     const a = pack.agents[who];
     const sprite = ASSETS.chars[who];
@@ -389,6 +678,7 @@ async function refresh() {
     S.running = j.running;
     S.masks = j.masks ?? S.masks;
     S.view = j.A;
+    S.viewB = j.B;   // 动画循环重绘 B 侧用；不新增请求、不动载荷形状
     S.layer = j.layer ?? S.layer;
     // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
     const m = j.model ?? {};
@@ -426,9 +716,9 @@ async function refresh() {
     fillOcc($('occB'), j.B);
     pushToasts(j.A);
     $('btnOverview').classList.toggle('on', ui.overview);
-    $('btnOverview').textContent = ui.overview ? '聚焦当前房间' : '全地图';
+    $('btnOverview').textContent = ui.overview ? '返回局部视角' : '世界全景';
     const vi = $('visionInfo');
-    if (vi) vi.textContent = `视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）· 墙与物件挡视线`;
+    if (vi) vi.textContent = `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）`;
     $('tbl').innerHTML = table(j.A, j.B);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
@@ -477,21 +767,33 @@ $('minimap').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-room]');
   if (!b) return;
   ui.room = b.dataset.room;
+  ui.camRoom = b.dataset.room;   // 镜头移过去；玩家本人不动，世界状态不变
   refresh();
 });
 $('btnOverview').onclick = () => { ui.overview = !ui.overview; refresh(); };
+// 点击画面：把屏幕坐标反算成世界 tile，再落到最近的地点（走过去 / 切换镜头）。
+// 局部视角用相机偏移 + 整数倍缩放；全景用微缩比例。两个世界收到同一个动作。
 function pickRoom(ev, cv) {
-  if (!ui.overview) return api('/act', { kind: 'move', room: ui.room }).then(refresh);
-  const rect = cv.getBoundingClientRect();
   const v = S.view ?? {};
-  const map = buildMap(v);
-  const scale = rect.width / (map.tw * TILE);
-  const tx = Math.floor((ev.clientX - rect.left) / scale / TILE);
-  const ty = Math.floor((ev.clientY - rect.top) / scale / TILE);
-  for (const r of map.rooms) {
-    const [ox, oy] = map.origin[r];
-    if (tx >= ox && tx < ox + RT_W && ty >= oy && ty < oy + RT_H) return api('/act', { kind: 'move', room: r }).then(refresh);
+  const sites = sitesOf(v);
+  const cam = cv._cam ?? lastCam;
+  const rect = cv.getBoundingClientRect();
+  let tx, ty;
+  if (cam.mode === 'overview') {
+    tx = ((ev.clientX - rect.left) / rect.width) * WORLD_TW;
+    ty = ((ev.clientY - rect.top) / rect.height) * WORLD_TH;
+  } else {
+    tx = (cam.x + (ev.clientX - rect.left) / cam.zoom) / TILE;
+    ty = (cam.y + (ev.clientY - rect.top) / cam.zoom) / TILE;
   }
+  let best = null, bd = Infinity;
+  for (const [r, [sx, sy]] of Object.entries(sites)) {
+    const d = Math.hypot(tx - sx, ty - sy);
+    if (d < bd) { bd = d; best = r; }
+  }
+  if (!best) return;
+  if (bd <= 5) return api('/act', { kind: 'move', room: best }).then(() => { ui.room = best; ui.camRoom = null; refresh(); });
+  ui.room = best; ui.camRoom = best; refresh();
 }
 
 $('btnRun').onclick = () => ctl({ action: S.running ? 'pause' : 'resume' });
@@ -535,4 +837,13 @@ loadAssets().finally(() => {
   poll();
   setInterval(poll, 900);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  // 独立动画时钟：只推进帧号并重绘两个画布，与 900ms 的数据轮询完全解耦。
+  // 不读 w.t、不发请求、不消费 rng、不写世界状态；A/B 共用同一帧号；
+  // 后台标签页停绘，沿用「省额度 / 不空转」纪律。
+  setInterval(() => {
+    if (document.hidden || !S.view || !S.viewB) return;
+    ACT.frame = (ACT.frame + 1) % 4;
+    draw($('cvA'), S.view);
+    draw($('cvB'), S.viewB);
+  }, Math.round(1000 / ACT.fps));
 });

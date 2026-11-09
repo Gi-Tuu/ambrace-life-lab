@@ -1,0 +1,102 @@
+{
+  "version": "v1",
+  "frame": [
+    16,
+    16
+  ],
+  "anchor": [
+    8,
+    16
+  ],
+  "framesPerAction": 4,
+  "fps": 6,
+  "fxCell": [
+    32,
+    32
+  ],
+  "fxRows": [
+    "grass",
+    "water",
+    "tree",
+    "smoke"
+  ],
+  "palette": "/web/assets/palette.json",
+  "clock": "independent render clock; A/B share the same frame index; never derived from w.t",
+  "chars": {
+    "a1": "/web/assets/actions/a1.png",
+    "a2": "/web/assets/actions/a2.png",
+    "a3": "/web/assets/actions/a3.png",
+    "p1": "/web/assets/actions/p1.png"
+  },
+  "fx": "/web/assets/actions/fx.png",
+  "actions": [
+    {
+      "id": "idle",
+      "label": "待机"
+    },
+    {
+      "id": "walk",
+      "label": "行走"
+    },
+    {
+      "id": "move_to",
+      "label": "走过去"
+    },
+    {
+      "id": "eat",
+      "label": "吃点存粮"
+    },
+    {
+      "id": "talk",
+      "label": "说话"
+    },
+    {
+      "id": "rest",
+      "label": "靠着歇一会儿"
+    },
+    {
+      "id": "work",
+      "label": "在工坊干活"
+    },
+    {
+      "id": "look_out",
+      "label": "往外看"
+    },
+    {
+      "id": "take_shared",
+      "label": "去拿一份"
+    },
+    {
+      "id": "trade",
+      "label": "接济/交换"
+    },
+    {
+      "id": "buy",
+      "label": "用铜币换粮"
+    },
+    {
+      "id": "companion",
+      "label": "结伴"
+    },
+    {
+      "id": "deafen",
+      "label": "捂住耳朵"
+    },
+    {
+      "id": "seclude",
+      "label": "躲进里屋"
+    },
+    {
+      "id": "refuse",
+      "label": "别理他"
+    },
+    {
+      "id": "rej",
+      "label": "被规则驳回"
+    },
+    {
+      "id": "hail",
+      "label": "被喊住"
+    }
+  ]
+}
