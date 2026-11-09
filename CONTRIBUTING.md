@@ -11,7 +11,7 @@
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 39 个测试文件 / 299 条断言（发现式，自动点名 life/*.test.mjs）
+npm test          # 41 个测试文件 / 308 条断言（发现式，自动点名 life/*.test.mjs）
 npm run coverage  # 同上，附带 Node 内建覆盖率
 ```
 
