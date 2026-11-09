@@ -158,23 +158,32 @@ test('P6b 拒绝是世界侧的：refuse=1 时 talk 失败且不注入 contact�
 
 test('P6b 聚合后果：同随机流下开启组对话成功数减半以上、发起数下降（S2 的三项量）', async () => {
   const stat = async (coupling) => {
-    let talkRows = 0, talkOk = 0, initiated = 0, secluded = 0;
+    let talkRows = 0, talkOk = 0, initiated = 0, secluded = 0, refused = 0;
     for (const seedBase of [1, 2, 3]) {
       const r = await drive({ coupling, seedBase, ticks: 400 });
       for (const row of rowsOf(r)) {
         if (row.kind === 'talk' && row.action) { talkRows++; if (row.ok) talkOk++; }
         if (row.layer === 'rejected' && row.code === 'SECLUDED') secluded++;
+        // R1 之后非法动作不再进 actuate：REFUSED 现在落在**驳回行**上，而不是"执行了但失败"的 talk 行。
+        if (row.layer === 'rejected' && row.code === 'REFUSED') refused++;
       }
       initiated += Object.values(r.agents).reduce((s, a) => s + (a.counters.initiated ?? 0), 0);
     }
-    return { talkRows, talkOk, initiated, secluded };
+    return { talkRows, talkOk, initiated, secluded, refused };
   };
   const off = await stat(0);
   const on = await stat(1);
   assert.ok(on.talkOk < off.talkOk, `开启后对话成功数没下降（${off.talkOk} → ${on.talkOk}）⇒ 清单收缩没落到行为上`);
   assert.ok(on.talkOk / off.talkOk < 0.5, `下降不足一半（${off.talkOk} → ${on.talkOk}）：S2 要求 >5%，这里按实测口径收紧`);
   assert.ok(on.initiated < off.initiated, `主动发起数没变（${off.initiated} → ${on.initiated}）`);
-  assert.ok(on.talkRows > on.talkOk, '开启组从未出现被拒的 talk 尝试 ⇒ REFUSED 在实跑里没生效（只剩单测覆盖）');
+  // REFUSED 发生在 actuate 的 talk 分支（耦合把目标设成"预设不理"），不在规则层，
+  // 所以它表现为"执行了但 ok=false 的 talk 行"。R1 的 execute 兜底只拦**规则层非法**的动作，
+  // 不影响这条读数（实测补闸门时确认过：驳回行 0，talkRows > talkOk 仍成立）。
+  // 2026-11-09 复核（第二次审计后的装置更正）：自主链里"耦合拒绝"是通过 **③ 目标筛选** 落地的，
+  // talk 不会以"执行了但失败"的形式出现——实测两臂的失败 talk 都是 0（off 228/228、on 54/54），
+  // 原来"必须有失败的 talk 行"的断言依赖某条特定轨迹，重抽后就恒假。
+  // 真正承重的读数是**尝试数本身塌掉**：off 228 → on 54（−76%）。判据据此改为"尝试数必须塌掉一半以上"。
+  assert.ok(on.talkRows < off.talkRows * 0.5, `开启后 talk 尝试数没塌掉（${off.talkRows} → ${on.talkRows}）⇒ 拒绝没有真的挡住耦合`);
   // 如实登记的局限：自主链里 ③ 先过滤目标，所以 ④ 的 SECLUDED 在实跑中不出现，它只在"指名意图"时兜底（见上面两条单测）。
   // 这条断言的作用是：哪天 SECLUDED 进了自主链，这里会亮，逼台账重述 ③④ 的分工，而不是让局限悄悄变成主张。
   assert.equal(on.secluded, 0, `实跑出现 ${on.secluded} 次 SECLUDED 驳回 ⇒ ③ 过滤与 ④ 裁决的分工已变，需回 §16.3 重登记`);

@@ -10,8 +10,12 @@ import { PARAMS, assertFrozen, paramsFingerprint } from './params.mjs';
 import { ShortHorizonPlanner } from './m3-planner.mjs';
 import { digests } from './m3-baseline.mjs';
 
-test('M3 闸门③：默认关闭时 seed 7/11 的 400/1200 刻行为指纹与 e74af7d 逐位相同', async () => {
-  const base = JSON.parse(readFileSync(new URL('./m3-baseline-e74af7d.json', import.meta.url), 'utf8'));
+test('M3 闸门③：默认关闭时 seed 7/11 的 400/1200 刻行为指纹与 2026-11-09 装置更正后的基线逐位相同', async () => {
+  // 2026-11-09 装置更正（BUG-1：驳回重选后必须再过一次 validate）：这条修复改变了默认决策路径，
+  // 因此 e74af7d 那份指纹不再是当前引擎的基线。旧文件保留为历史读数，新基线由
+  // `node life/m3-baseline.mjs > life/m3-baseline-20261109.json` 在本树上重新生成。
+  // 本闸门的语义不变：它守的是"M3 这层默认关时不引入新行为"，而不是"引擎自 e74af7d 起没变过"。
+  const base = JSON.parse(readFileSync(new URL('./m3-baseline-20261109.json', import.meta.url), 'utf8'));
   const now = await digests({ seeds: [7, 11], ticks: 400 });
   for (const k of Object.keys(base)) {
     assert.equal(now[k]?.n, base[k].n, `${k} 动作数变了 ⇒ 默认关也产生了新行为`);

@@ -36,6 +36,10 @@ export class Coupling {
       if (this.hold[k] > 0) {
         this.hold[k] = Math.max(0, this.hold[k] - dt);
         if (this.hold[k] === 0) this.v[k] = COUPLING_DEFAULT[k];
+      } else if (this.v[k] !== COUPLING_DEFAULT[k]) {
+        // BUG-16：hold 已经归零、值却停在非默认（坏档 restore / tau=0 时 apply）⇒ 永远回不来。
+        // 正常路径（tau>0）走上面的分支，这里只是把'回不来'这个陷阱堵掉。
+        this.v[k] = COUPLING_DEFAULT[k];
       }
     }
   }

@@ -27,7 +27,12 @@ export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit 
   const world = makeWorld({ pantries: pantry, stash, riskyPortion: riskyPortion ?? PARAMS.risky.portion, scheduleWeight: scheduleWeight ?? PARAMS.schedule.weight, socialGossip: socialGossip ?? PARAMS.socialGossip, preset, seed });
   const agents = {};
   for (const r of ROSTER) {
-    const a = new Organism({ ...r, seed: hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`), condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask });
+    // PAIRED=1（--paired）：配对对照模式。旧行为把 condition/mask 哈希进种子，于是
+    // 「切通道」与「换一条随机流」在轨迹层面不可区分。配对模式下两臂用同一个种子、同一条 rng 起点，
+    // 只让通道不同 ⇒ 人格抽样与噪声序列完全一致，差异才能归因到通道。默认关（不设 PAIRED 时逐位不变）。
+    const pairedMode = process.env.PAIRED === '1';
+    const agentSeed = pairedMode ? hashSeed(seed, r.id) : hashSeed(seed, `${r.id}:${condition}:${JSON.stringify(channelMask ?? '')}`);
+    const a = new Organism({ ...r, seed: agentSeed, condition, mInit: mInit?.[r.id], deliberator, traitsOverride: traitsOverride?.[r.id], channelMask, ...(pairedMode ? { rng: makeRng(agentSeed) } : {}) });
     agents[r.id] = a;
     world.agents[r.id] = a;
     spawn(world, r.id, r.loc);
@@ -462,6 +467,7 @@ const arg = (k, d) => {
   return i > -1 ? process.argv[i + 1] : d;
 };
 const has = (k) => process.argv.includes(`--${k}`);
+if (has('paired')) process.env.PAIRED = '1'; // 配对对照（实现见 simulate 里的注释）
 
 const ap0 = (v) => (typeof v === 'number' ? v.toFixed(2) : String(v));
 
@@ -505,6 +511,12 @@ if (process.argv[1]?.endsWith('run.mjs')) {
       return v.length ? Math.min(...v) : null;
     };
     console.log(`到第一档最早时刻：常态 ${t1('常态 · ⑤⑥全开')} · 饥馑 ${t1('饥馑 · ⑤⑥全开')} · 宽裕 ${t1('宽裕 · ⑤⑥全开')}`);
+  // 第二次审计的披露项（原先只在台账里登记、输出不提，等于让读数看起来比实际更严格）：
+  // simulate() 每 55 刻无条件 world.pantry = min(8, pantry+2)。所以"饥馑"档（pantry:0）**只在头 55 刻真是饥馑**，
+  // 之后公仓自动回血 ⇒ 这一档的"受损速率/到第一档时刻"是"前 55 刻真饥馑 + 之后回血"的混合读数，
+  // 不能当成"长期缺粮下的损伤速度"来引用。
+  console.log('注：本表的"饥馑"档只在头 55 刻真饥馑——simulate() 每 55 刻无条件补粮 +2。');
+  console.log('    因此该档的损伤读数混合了"饥馑 + 回血"两种制度；要测长期缺粮需另设世界（见 o1-counterfactual 的每刻清零装置）。');
   }
   if (has('metab')) {
     const { rows, summary } = await metabolismAudit({ ticks: Number(arg('metab', 1200)) || 1200 });

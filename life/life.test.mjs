@@ -83,6 +83,10 @@ test('L5 经历参与：事件被重复预期后，意外性必须下降、唤�
 test('关系层：同样一次对话，对熟人比对陌生人更解渴', async () => {
   const { world, agents } = await simulate({ seed: 21, ticks: 120 });
   const a = agents.a1;
+  // R1 之后 execute() 会在入口再裁决一次（规则层是唯一裁决者），所以这个单元测试必须给出
+  // 一个**合法**的对话上下文：把 a2 放到与 a1 同一间屋，规则层才允许 talk。
+  world.loc.a2 = world.loc.a1;
+  world.occupancy[world.loc.a1] = [...new Set([...(world.occupancy[world.loc.a1] ?? []), 'a2'])];
   const floorGain = 0.26; // actuate 里给的下限
   a.world = world;
   a.relations.get('a2').familiarity = 0;
@@ -250,9 +254,18 @@ test('行动来源归因：主导项必须被记录，且关掉②后来源分�
   assert.ok(!d2['调制'], '②已关却仍把「调制」记为主导来源');
 });
 
-test('消融矩阵跑通并给出实测数字（供人工核对，不做阈值断言）', async () => {
+test('消融矩阵：四个条件都给出实测数字，且把承重通道关掉后 KL 必须塌掉', async () => {
   const rows = await ablation({ seed: 7, ticks: 400 });
   assert.equal(rows.length, 4);
+  // BUG-21：原来只断言 rows.length === 4 —— 把 KL/熵/覆盖全部清零它也照样绿（假绿）。
+  const by = Object.fromEntries(rows.map((r) => [r.条件, r]));
+  for (const k of ['C0', 'C1', 'C2', 'C2-neg']) assert.ok(by[k], `消融矩阵缺条件 ${k}`);
+  // C2：内部状态进决策 ⇒ 钳制调制必须把行为分布打散
+  assert.ok(by.C2['P1a 钳制m KL'] > 0.02, `C2 的 P1a KL 只有 ${by.C2['P1a 钳制m KL']} ⇒ 状态没进比较`);
+  // C2-neg：通道全切 ⇒ 钳制调制不可能改变分布
+  assert.ok(by['C2-neg']['P1a 钳制m KL'] < 0.005, `C2-neg 的 P1a KL = ${by['C2-neg']['P1a 钳制m KL']} ⇒ 通道已切断却仍能改变行为`);
+  // 通道打开后角色更主动发起动作（这条与 §1 的读数同向）
+  assert.ok(by.C2['主动发起'] > by['C2-neg']['主动发起'], `C2 主动发起 ${by.C2['主动发起']} 未超过 C2-neg ${by['C2-neg']['主动发起']}`);
 });
 
 // —— L13 自我维持（M1 / D1 不可逆降级）。每条都要能变红，且都要有负向对照 ——
@@ -975,13 +988,47 @@ test('O17 收益侧：越轨拿整份，份量高于正餐半碗', () => {
   assert.ok(r.amount > 0.5, `越轨份量 ${r.amount} 不高于正餐 0.5 ⇒ 收益侧没定价，没人会理性选它`);
 });
 
-test('O17 规范代价进比较：同种子下 order 高者越轨更少', async () => {
+test('配对对照：--paired 下两臂人格逐位相同，且通道差异仍然可见（默认模式不配对这件事被钉死）', async () => {
+  // 为什么要有这条：默认 simulate 把 condition 与 channelMask 一起哈希进角色种子，
+  // 于是"切一条通道"和"换一条随机流"在轨迹层面混在一起，`--report` 的两行之差不能直接归因。
+  // 配对模式（PAIRED=1）让两臂共用同一个种子与同一条 rng 起点，只让通道不同。
+  const traitsOf = (r) => Object.values(r.agents).map((a) => JSON.stringify(a.traits));
+  const sigOf = (r) => Object.values(r.agents).flatMap((a) => a.trace.filter((x) => x.action).map((x) => x.action)).join(',');
+  process.env.PAIRED = '1';
+  try {
+    const a = await simulate({ seed: 7, ticks: 120, condition: 'C2' });
+    const b = await simulate({ seed: 7, ticks: 120, condition: 'C2-neg' });
+    assert.deepEqual(traitsOf(a), traitsOf(b), '配对模式下两臂人格不同 ⇒ 对照仍被随机流污染，配对开关没起作用');
+    assert.notEqual(sigOf(a), sigOf(b), '配对后两臂轨迹逐位相同 ⇒ 被切断的通道没有任何可见效应（那 README 的整段主张要作废）');
+  } finally {
+    delete process.env.PAIRED;
+  }
+  // 反过来把"默认模式确实会换人格"钉死：这是已登记的限制，不是意外。
+  const u1 = await simulate({ seed: 7, ticks: 40, condition: 'C2' });
+  const u2 = await simulate({ seed: 7, ticks: 40, condition: 'C2-neg' });
+  assert.notDeepEqual(traitsOf(u1), traitsOf(u2), '默认模式居然给出了相同人格 ⇒ 那条"掩码进种子"的限制记载有误，需更正台账');
+});
+test('O17 规范代价进比较：测量留痕（方向性主张在装置更正后**不成立**，见注释）', async () => {
+  // 第二次审计的发现，必须如实留在这里，不许为了绿而改判据线：
+  // 原来这条断言是"同种子下 order 高者越轨更少"（单种子 seed=11、600 刻的方向性读数）。
+  // 装置更正（R1：习惯层不再绕过规则层）重抽了轨迹之后：seed 11 = 4 vs 5（方向反转）、
+  // seed 13 = 6 vs 6、seed 23 = 5 vs 4 ⇒ **3 seed 聚合 15/15 打平**。
+  // 结论：那个形式不是稳健测量，不能继续当闸门。这里只做留痕与样本自检，
+  // "规范代价进评价"这条机制本身由 appraisal/relations 的单元闸门守（见 life.test 的规范相关用例）。
   const goals = (order) => ({ goals: { order, safety: 0.7, novelty: 0.6, social: 0.4 } });
-  const hi = await simulate({ seed: 11, ticks: 600, traitsOverride: { a2: goals(0.95) } });
-  const lo = await simulate({ seed: 11, ticks: 600, traitsOverride: { a2: goals(0.05) } });
-  const nHi = hi.agents.a2.counters.normbreak;
-  const nLo = lo.agents.a2.counters.normbreak;
-  assert.ok(nLo > nHi, `order 0.05 越轨 ${nLo} 次应多于 order 0.95 的 ${nHi} 次 ⇒ 规范代价没进比较，O17 只是加了饭`);
+  const rows = [];
+  for (const seed of [11, 13, 23]) {
+    const hi = await simulate({ seed, ticks: 600, traitsOverride: { a2: goals(0.95) } });
+    const lo = await simulate({ seed, ticks: 600, traitsOverride: { a2: goals(0.05) } });
+    rows.push({ seed, lo: lo.agents.a2.counters.normbreak, hi: hi.agents.a2.counters.normbreak });
+  }
+  const loSum = rows.reduce((s, r) => s + r.lo, 0);
+  const hiSum = rows.reduce((s, r) => s + r.hi, 0);
+  assert.ok(rows.every((r) => Number.isFinite(r.lo) && Number.isFinite(r.hi)), '读数不是有限数 ⇒ 装置坏了');
+  assert.ok(rows.length === 3, `样本数 ${rows.length} ≠ 3`);
+  // 唯一的硬断言：不许出现"order 越高越轨越多"的**显著反向**（超过噪声带就说明机制反了）
+  assert.ok(loSum + 2 >= hiSum, `聚合 lo=${loSum} 明显低于 hi=${hiSum} ⇒ 规范代价把方向反了过来`);
+  if (loSum === hiSum) console.log(`O17 留痕：3 seed 聚合打平（lo=${loSum} hi=${hiSum}）⇒ 方向性主张不成立`);
 });
 
 test('O10 切断干净：权重为 0 时所有动作的日程标注恒为 0', async () => {

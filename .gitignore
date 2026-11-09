@@ -1,5 +1,6 @@
 .env
 .env.*
+!.env.example
 *.log
 node_modules/
 .DS_Store
@@ -23,3 +24,7 @@ contest.txt
 /s3-*.json
 /server.pid
 /ui-check*/
+
+# 研究读数留底随仓库发布（其余 *.log 仍忽略）
+!evidence/
+!evidence/**

@@ -4,7 +4,7 @@
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
-import { scheduledLoc, weatherFor } from './clock.mjs';
+import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 
@@ -28,13 +28,40 @@ export const BASE_KINDS = {
   companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
 };
 
+// §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
+// 默认值与原式逐位相同；只有 world.townGates 显式给值时才偏离（产品默认档一个都不覆盖，§30 G4）。
+// 刻意不进 PARAMS/冻结指纹：它们是世界配置而非决策量纲，进指纹会让 lab 五份面报漂移。
+// 覆盖值不进存档与 /world 载荷——扫描只服务 §30 的取舍表。
+export const TOWN_GATES = Object.freeze({ tradeTrust: 30, compFam: 0.3, compTrust: 32 });
+const townGates = (world) => (world.townGates ? { ...TOWN_GATES, ...world.townGates } : TOWN_GATES);
+
+// §33 工坊当日上限。`world.workCap` **不设＝无上限＝现行为逐位相同**（W0 中立性）。
+// 为什么必须是"次数上限"而不是"降价"：一次 work 换回的存续（≥0.063）远大于它的代谢代价
+// （costScale 0.01 × cost 0.1 = 0.001），所以砍收入只会被"再干一次"吸收——§32 与坏天预扫两次实测都是这个形状。
+// 额度记在 world.workLog[id]={day,n}，靠 dayOf(world.t) 自比对换天，不引入任何外部时钟；
+// 上限是"工坊一天收几次工"这条世界事实，不是角色的能力被削弱。
+export function workUsedToday(world, agentId) {
+  const rec = world.workLog?.[agentId];
+  return rec && rec.day === dayOf(world.t) ? rec.n : 0;
+}
+
+export function workCapLeft(world, agentId) {
+  if (world.workCap === undefined || world.workCap === null) return Infinity;
+  return Math.max(0, world.workCap - workUsedToday(world, agentId));
+}
+
 // 喊住：玩家隔着房间喊一声，被喊的人会停在原地几刻（不进 move_to）。
 // 为什么需要它：角色每刻都可能移动，玩家永远追不上，"同屋传话"就成了竞态（实测连追 20 秒没追上）。
 // 它是**路径过滤**而不是冻结：被喊住的人仍在做决定，只是这一小段时间里不换地方——所以它不是作弊，
 // 只是把"我叫你等一下"这件事变成可执行的动作。
 export function hail(world, targetId, ticks = 3) {
   if (!world.loc[targetId]) return { ok: false, code: 'NO_TARGET' };
-  world.hail = { target: targetId, until: world.t + Math.max(1, ticks) };
+  // BUG-20：ticks 来自 HTTP 载荷，Infinity / NaN 都会直接写进世界状态。
+  // Infinity ⇒ 目标永远不换地方；NaN ⇒ 静默无效但返回 ok。这里钳到 [1, 60]。
+  const n = Number(ticks);
+  if (!Number.isFinite(n)) return { ok: false, code: 'BAD_TICKS' };
+  const span = Math.min(60, Math.max(1, Math.round(n)));
+  world.hail = { target: targetId, until: world.t + span };
   return { ok: true, code: 'OK', target: targetId, until: world.hail.until };
 }
 
@@ -93,7 +120,10 @@ export function addSecret(world, { kind, about, holder, valence, violates, detai
 // 私藏超额：门口存粮明显高于自己以为该有的量。这是"他有多的"这条可被套利的事实
 export function scanSecrets(world) {
   for (const id of Object.keys(world.stash)) {
-    if (world.stash[id] - (world.expect[id] ?? 3) >= 2) addSecret(world, { kind: 'hoard', about: id, holder: id, valence: 0.3, violates: null, detail: `${world.agents[id]?.name ?? id} 门口比预期多 ${world.stash[id] - (world.expect[id] ?? 3)} 份` });
+    // B3：expect 缺失时不能假定 3 —— 旧档（或手工档）没有 expect 而 stash 很大时，`?? 3` 会凭空造出
+    // 「私藏超额」秘密（幻影套利事实）。缺失就按 stash 自身算，等于「没有超出预期」。
+    const expect = world.expect[id] ?? world.stash[id];
+    if (world.stash[id] - expect >= 2) addSecret(world, { kind: 'hoard', about: id, holder: id, valence: 0.3, violates: null, detail: `${world.agents[id]?.name ?? id} 门口比预期多 ${world.stash[id] - (world.expect[id] ?? 3)} 份` });
   }
   return world.secrets.length;
 }
@@ -174,7 +204,7 @@ export function affordancesFor(world, agentId) {
   out.push({ id: 'look_out', kind: 'look_out', label: BASE_KINDS.look_out.label, cost: 0.18, impulse: 0.85, serves: { social: 0.3, stimulation: 1 } });
 
   // PLAN §28 B/C：只在 town 出现的动作（lab 的候选集与旧版逐位相同）。
-  if (feats.work && here === 'workshop') {
+  if (feats.work && here === 'workshop' && workCapLeft(world, agentId) > 0) {
     // 工资的即时效用按'能换到的口粮'折算（建模选择，§28 披露）：否则只会做两步规划的角色永远不会去打工。
     out.push({ id: 'work', kind: 'work', label: '在工坊干活换饭钱', cost: 0.1, impulse: 0.3, serves: { energy: 0.9, stimulation: 0.1 } });
   }
@@ -182,24 +212,26 @@ export function affordancesFor(world, agentId) {
     out.push({ id: 'buy', kind: 'buy', label: '用铜币换一份粮', cost: 0.04, impulse: 0.2, serves: { energy: 0.7 } });
   }
   if (feats.trade) {
+    const TG = townGates(world);
     for (const x of present) {
       const theirStash = world.stash[x] ?? 0;
       const mineStash = world.stash[agentId] ?? 0;
       const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
       const ally = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
       // 小社区里的"交易"= 接济/交换口粮（币制市场由 work→buy 承担）：熟悉度或结伴是前提。
-      if (mineStash + 2 <= theirStash && (ally || r.trust >= 30)) {
+      if (mineStash + 2 <= theirStash && (ally || r.trust >= TG.tradeTrust)) {
         out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `向${world.agents[x]?.name ?? x}要一份`, cost: 0.05, impulse: 0.3, serves: { energy: 0.9, social: 0.35 } });
-      } else if (theirStash + 2 <= mineStash && (ally || r.trust >= 30)) {
+      } else if (theirStash + 2 <= mineStash && (ally || r.trust >= TG.tradeTrust)) {
         out.push({ id: `trade:${x}`, kind: 'trade', target: x, label: `给${world.agents[x]?.name ?? x}一份`, cost: 0.05, impulse: 0.25, serves: { energy: 0.05, social: 0.9 } });
       }
     }
   }
   if (feats.companions) {
+    const TG = townGates(world);
     for (const x of present) {
       const r = me?.relations ? me.relations.get(x) : { trust: 50, familiarity: 0 };
       const already = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === agentId && p[1] === x) || (p[1] === agentId && p[0] === x));
-      if (!already && r.familiarity >= 0.3 && r.trust >= 32) {
+      if (!already && r.familiarity >= TG.compFam && r.trust >= TG.compTrust) {
         out.push({ id: `companion:${x}`, kind: 'companion', target: x, label: `和${world.agents[x]?.name ?? x}结伴`, cost: 0.08, impulse: 0.35, serves: { social: 0.95, stimulation: -0.05 } });
       }
     }
@@ -303,6 +335,7 @@ export function actuate(world, agentId, action) {
       world.coins[agentId] = (world.coins[agentId] ?? 0) + 2;
       world.stash[agentId] = (world.stash[agentId] ?? 0) + 1; // 工钱口粮：让私人库存在这张经济里有补给源
       world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]); // 合法进项同步抬预期，不然会被误登记成'私藏超额'
+      (world.workLog ??= {})[agentId] = { day: dayOf(world.t), n: workUsedToday(world, agentId) + 1 }; // §33 记账：只有真干成了才占额度
       // 工地管饭：干活当场补一份口粮（0.35），另得 2 枚铜币 + 一份口粮。这样即时效用与'吃饱'同源，不做两步规划的角色也会去打工。
       return { action, ok: true, code: 'OK', observation: '干完一段活，管了一顿饭，领到 2 枚铜币和一份口粮', satiated: 'energy', amount: 0.35, evt: evt({ kind: 'work', valence: 0.15, serves: 'energy' }) };
     }
@@ -320,14 +353,18 @@ export function actuate(world, agentId, action) {
       const theirStash = world.stash[other] ?? 0;
       const mineStash = world.stash[agentId] ?? 0;
       if (mineStash + 2 <= theirStash) {
-        world.stash[other] = theirStash - 1; world.stash[agentId] = 1;
-        world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, 1);
+        // BUG-2：这里曾是 `= 1`（应为「原有 +1」）。候选门允许对方有 ≥2 份，于是接济一次会把他
+        // 手里的粮**赋值**成 1 份：有 5 份的人被接济后剩 1 份，世界总库存凭空蒸发。
+        world.stash[other] = theirStash - 1;
+        world.stash[agentId] = mineStash + 1;
+        world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]);
         if (world.agents[agentId]?.relations) world.agents[agentId].relations.meet(other, world.t, { delta: { trust: 2, familiarity: 0.02 }, why: '接济' });
         return { action, ok: true, code: 'OK', observation: `向${world.agents[other]?.name ?? other}要了一份`, satiated: 'energy', amount: 0.35, evt: evt({ kind: 'trade', valence: 0.25, serves: 'energy', about: other }) };
       }
       if (theirStash + 2 <= mineStash) {
-        world.stash[agentId] = mineStash - 1; world.stash[other] = 1;
-        world.expect[other] = Math.max(world.expect[other] ?? 0, 1);
+        world.stash[agentId] = mineStash - 1;
+        world.stash[other] = theirStash + 1; // BUG-2：同理，受助方是 +1 不是赋值 1
+        world.expect[other] = Math.max(world.expect[other] ?? 0, world.stash[other]);
         if (world.agents[other]?.relations) world.agents[other].relations.meet(agentId, world.t, { delta: { trust: 3, familiarity: 0.03 }, why: '受助' });
         return { action, ok: true, code: 'OK', observation: `给了${world.agents[other]?.name ?? other}一份`, satiated: 'social', amount: 0.05, evt: evt({ kind: 'trade', valence: 0.35, serves: 'social', about: other }) };
       }
@@ -359,8 +396,10 @@ export function actuate(world, agentId, action) {
         if (crowd.length >= 2) {
           world.normLog ??= [];
           world.normLog.push({ t: world.t, of: agentId, victim, witnesses: crowd.slice() });
-          for (const w of Object.keys(world.agents)) {
-            if (w === agentId || w === 'p1' || !world.agents[w]?.relations) continue;
+          // BUG-13：只罚**目击者**（当场在场的 crowd）。上一版遍历 Object.keys(world.agents)，
+          // 于是不在场、也没跟行为人结伴的人同样 −1，与上面这句注释和 §28 C 的设计不符。
+          for (const w of crowd) {
+            if (w === 'p1' || !world.agents[w]?.relations) continue;
             const allied = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === w && p[1] === agentId) || (p[1] === w && p[0] === agentId));
             world.agents[w].relations.meet(agentId, world.t, { delta: { trust: allied ? -2 : -1 }, why: '目击越轨的群体规范' });
           }

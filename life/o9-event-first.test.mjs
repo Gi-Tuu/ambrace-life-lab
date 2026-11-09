@@ -57,11 +57,16 @@ test('E2 默认关：掩码默认 0；同种子两跑逐位相同；同种子臂
   assert.notEqual(off, on, '同种子臂开/关轨迹一模一样 ⇒ 开关没有落到行为上（或根本没人读）');
 });
 
-test('E3 生存语义不被延迟：alarm 触发后同一刻到走廊，开档与关档的比例必须相同', async () => {
+test('E3 生存语义不被延迟：alarm 触发后同一刻到走廊，开档不许比关档差', async () => {
   const { off, on } = await audit();
   assert.ok(off.alarmCount > 0, '没有关键事件样本，E3 无从比较');
-  assert.equal(on.alarmToHall / on.alarmCount, off.alarmToHall / off.alarmCount, '开档改变了 alarm→走廊的同刻比例 ⇒ 反射被延迟（硬停损，立即回退）');
+  // 生存语义的硬要求：开档后**每一次** alarm 都必须在同一刻经反射走到走廊。
   assert.equal(on.alarmToHall, on.alarmCount, `开档有 ${on.alarmCount - on.alarmToHall} 次 alarm 没在同刻到走廊 ⇒ 生存反应被拖慢`);
+  // 并且开档不许比关档更差。原先这里要求"两臂比例完全相等"——但关档那臂允许习惯截流掉个别 alarm，
+  // 一旦轨迹重抽就会出现 53/54 vs 54/54 这种合法差异（实测），把"比例相等"当成判据会误报。
+  const onRatio = on.alarmToHall / on.alarmCount;
+  const offRatio = off.alarmToHall / off.alarmCount;
+  assert.ok(onRatio >= offRatio, `开档比例 ${onRatio.toFixed(4)} 低于关档 ${offRatio.toFixed(4)} ⇒ 反射被延迟`);
 });
 
 test('E5 不吞并：开档时被驳回仍必重问（askedRetry === rejected），且七/八/九通道读数不变', async () => {

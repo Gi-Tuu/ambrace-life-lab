@@ -40,15 +40,21 @@ export class EpisodicMemory {
   }
 
   // L13 要求账本与受损状态必须持久：进程重启后"已经想不起来的事"不能因为重启就回来了。
+  // D2：dump 原先只留 120 行，而运行期上限是 400 行 ⇒ 每次重启**永久丢掉约 70% 记忆**
+  // （实测 230 行 → 120；某一天的自传体记忆彻底消失），且 `frequency()` 的窗口统计随重启改变，
+  // 等于"重启"本身改变了评价层的意外性分量。现在落盘窗口与运行期上限对齐（同为 400），
+  // `failures` 只保留仍在 rows 里的 id（此前是无界 Map 且值恒 0）。
   dump() {
-    return { rows: this.rows.slice(-120), kCap: this.kCap, failures: [...this.failures].filter(([, f]) => f > 0), nextId: this.nextId };
+    const ids = new Set(this.rows.map((r) => r.id));
+    return { rows: this.rows.slice(-400), kCap: this.kCap, failures: [...this.failures].filter(([id, f]) => f > 0 && ids.has(id)), nextId: this.nextId };
   }
 
   load(d) {
     if (!d) return;
     this.rows = d.rows ?? [];
     this.kCap = d.kCap ?? 6;
-    this.failures = new Map(d.failures ?? []);
+    const ids = new Set(this.rows.map((r) => r.id));
+    this.failures = new Map((d.failures ?? []).filter(([id]) => ids.has(id)));
     // 旧档没有 nextId：从现存最大 id 之后继续，绝不与存量撞号
     const maxRow = this.rows.reduce((m, r) => Math.max(m, Number.isFinite(r.id) ? r.id + 1 : 0), 0);
     this.nextId = Math.max(Number.isFinite(d.nextId) ? d.nextId : 0, maxRow);
