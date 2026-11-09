@@ -1,6 +1,82 @@
 {
-  "_说明": "素材为空时界面用程序化矩形。把下面各项填成图片路径即启用；chars 的值可为单个 URL 或帧数组。参考 manifest.example.json。",
-  "chars": {},
-  "tiles": {},
-  "icons": {}
+  "chars": {
+    "a1": {
+      "frames": [
+        "/web/assets/char_a1_0.png",
+        "/web/assets/char_a1_1.png",
+        "/web/assets/char_a1_2.png",
+        "/web/assets/char_a1_3.png"
+      ],
+      "fps": 4,
+      "anchor": [
+        8,
+        16
+      ]
+    },
+    "a2": {
+      "frames": [
+        "/web/assets/char_a2_0.png",
+        "/web/assets/char_a2_1.png",
+        "/web/assets/char_a2_2.png",
+        "/web/assets/char_a2_3.png"
+      ],
+      "fps": 4,
+      "anchor": [
+        8,
+        16
+      ]
+    },
+    "a3": {
+      "frames": [
+        "/web/assets/char_a3_0.png",
+        "/web/assets/char_a3_1.png",
+        "/web/assets/char_a3_2.png",
+        "/web/assets/char_a3_3.png"
+      ],
+      "fps": 4,
+      "anchor": [
+        8,
+        16
+      ]
+    },
+    "p1": {
+      "frames": [
+        "/web/assets/char_p1_0.png",
+        "/web/assets/char_p1_1.png",
+        "/web/assets/char_p1_2.png",
+        "/web/assets/char_p1_3.png"
+      ],
+      "fps": 4,
+      "anchor": [
+        8,
+        16
+      ]
+    }
+  },
+  "tiles": {
+    "garden": "/web/assets/room_garden.png",
+    "hall": "/web/assets/room_hall.png",
+    "home": "/web/assets/room_home.png",
+    "store": "/web/assets/room_store.png",
+    "watch": "/web/assets/room_watch.png",
+    "well": "/web/assets/room_well.png",
+    "workshop": "/web/assets/room_workshop.png",
+    "yard": "/web/assets/room_yard.png"
+  },
+  "things": {
+    "beds": "/web/assets/thing_beds.png",
+    "bedsG": "/web/assets/thing_bedsG.png",
+    "bench": "/web/assets/thing_bench.png",
+    "bucket": "/web/assets/thing_bucket.png",
+    "crates": "/web/assets/thing_crates.png"
+  },
+  "icons": {
+    "coin": "/web/assets/icon_coin.png",
+    "energy": "/web/assets/icon_energy.png",
+    "social": "/web/assets/icon_social.png",
+    "viab": "/web/assets/icon_viab.png",
+    "weather": "/web/assets/icon_weather.png"
+  },
+  "palette": "palette.json",
+  "scale": 3
 }

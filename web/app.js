@@ -11,13 +11,17 @@ const $ = (id) => document.getElementById(id);
 
 // 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
 // manifest 形状：{ chars: { a1: "url" | ["url","url"], ... }, tiles: { home: "url" }, icons: { energy: "url" } }
-const ASSETS = { ready: false, chars: {}, tiles: {}, icons: {} };
+const ASSETS = { ready: false, chars: {}, tiles: {}, things: {}, icons: {} };
 async function loadAssets() {
   try {
     const m = await api('/web/assets/manifest.json');
     const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
-    for (const [bucket, map] of Object.entries({ chars: m.chars, tiles: m.tiles, icons: m.icons })) {
-      for (const [k, v] of Object.entries(map ?? {})) ASSETS[bucket][k] = Array.isArray(v) ? await Promise.all(v.map(load)) : await load(v);
+    for (const [k, v] of Object.entries(m.tiles ?? {})) ASSETS.tiles[k] = await load(v);
+    for (const [k, v] of Object.entries(m.things ?? {})) ASSETS.things[k] = await load(v);
+    for (const [k, v] of Object.entries(m.icons ?? {})) ASSETS.icons[k] = await load(v);
+    for (const [k, v] of Object.entries(m.chars ?? {})) {
+      const frames = Array.isArray(v) ? v : (v.frames ?? []);
+      ASSETS.chars[k] = { frames: await Promise.all(frames.map(load)), fps: v.fps ?? 4 };
     }
     ASSETS.ready = true;
   } catch {
@@ -35,64 +39,58 @@ async function api(path, body) {
 
 const ROOM_GRID = { home: [0, 0], hall: [1, 0], watch: [0, 1], store: [1, 1] };
 
+// 像素渲染（ui-pixel-spec）：逻辑分辨率 + 整数倍放大 + nearest-neighbor。房间=96×64 tilemap，角色/物件=16×16。
+const ROOM_PX = [96, 64];
+const ROOM_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
 function draw(cv, w) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = cv.clientWidth || 300;
-  const H = Math.round(W * 0.66);
-  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
-    cv.width = Math.round(W * dpr);
-    cv.height = Math.round(H * dpr);
-    cv.style.height = `${H}px`;
-  }
-  const g = cv.getContext('2d');
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.imageSmoothingEnabled = false; // 像素素材不许被插值糊掉
-  g.clearRect(0, 0, W, H);
-  g.font = '11px "Segoe UI", system-ui, sans-serif';
-  const pad = 10;
-  const gap = 8;
-  // PLAN §28：房间表由服务端给（town 8 间）；老载荷没有 rooms/grid 时退回 lab 四间。
   const rooms = Object.keys(w.rooms ?? LOCS);
   const grid = w.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
   const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const rw = (W - pad * 2 - gap * (cols - 1)) / cols;
-  const rh = (H - pad * 2 - gap * (rows - 1)) / rows;
+  const pad = 8, gap = 8;
+  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
+  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
+  const container = cv.parentElement?.clientWidth || LW;
+  const scale = Math.max(1, Math.floor(container / LW));
+  if (cv.width !== LW * scale || cv.height !== LH * scale) {
+    cv.width = LW * scale; cv.height = LH * scale;
+    cv.style.width = `${LW * scale}px`; cv.style.height = `${LH * scale}px`;
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, LW, LH);
+  g.font = '7px zpix, fusion-pixel, monospace';
   for (const r of rooms) {
     const [cx, cy] = grid[r];
-    const x = pad + cx * (rw + gap);
-    const y = pad + cy * (rh + gap);
-    if (ASSETS.tiles[r]) {
-      g.drawImage(ASSETS.tiles[r][0] ?? ASSETS.tiles[r], x, y, rw, rh);
-      g.fillStyle = 'rgba(10,12,15,.62)';
-      g.fillRect(x, y, rw, 18);
-    } else {
-      g.fillStyle = '#141a21';
-      g.fillRect(x, y, rw, rh);
-    }
-    g.strokeStyle = '#242b34';
-    g.strokeRect(x + 0.5, y + 0.5, rw - 1, rh - 1);
-    g.fillStyle = '#66707d';
-    g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 7, y + 14);
+    const x = pad + cx * (ROOM_PX[0] + gap);
+    const y = pad + cy * (ROOM_PX[1] + gap);
+    const tile = ASSETS.tiles[r];
+    if (tile) g.drawImage(tile, x, y, ROOM_PX[0], ROOM_PX[1]);
+    else { g.fillStyle = '#1D2B53'; g.fillRect(x, y, ROOM_PX[0], ROOM_PX[1]); }
+    g.fillStyle = '#000000'; g.fillRect(x, y, ROOM_PX[0], 8);
+    g.fillStyle = '#C2C3C7'; g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 2, y + 6);
+    const thing = ASSETS.things[ROOM_THING[r]];
+    if (thing) g.drawImage(thing, x + ROOM_PX[0] - 20, y + 10, 16, 16);
     const crowd = w.occupancy[r] ?? [];
     crowd.forEach((who, i) => {
       const sprite = ASSETS.chars[who];
-      if (sprite) {
-        const frames = Array.isArray(sprite) ? sprite : [sprite];
-        const im = frames[(w.t + i) % frames.length];
-        g.drawImage(im, x + 6 + i * 20, y + 20, 20, 20);
+      const px = x + 6 + i * 20, py = y + ROOM_PX[1] - 22;
+      if (sprite && sprite.frames.length) {
+        const im = sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length];
+        g.drawImage(im, px, py, 16, 16);
       } else {
-        g.fillStyle = COLORS[who] ?? '#ccc';
-        g.fillRect(x + 8 + i * 17, y + 24, 12, 12);
+        g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12);
       }
-      g.fillStyle = '#0a0c0f';
-      g.fillText((who === 'p1' ? '你' : (w.agents[who]?.name ?? who))[0], x + 11 + i * 17, y + 34);
     });
-    if (r === 'home' || r === 'store') { g.fillStyle = '#525d6a'; g.fillText(`公仓 ${w.pantry}`, x + 7, y + rh - 7); }
+    g.fillStyle = '#FFCCAA';
+    if (r === 'home' || r === 'store') g.fillText(`公仓 ${w.pantry}`, x + 2, y + ROOM_PX[1] - 2);
+    let sx = x + ROOM_PX[0] - 2;
     for (const who of crowd) {
       if (w.stash[who] == null) continue;
-      g.fillStyle = who === 'p1' ? '#8ea2b8' : '#525d6a';
-      g.fillText(`${who === 'p1' ? '你' : w.agents[who]?.name}门口 ${w.stash[who]}`, x + rw - 62, y + rh - 7);
+      const label = `${who === 'p1' ? '你' : (w.agents[who]?.name ?? who)}:${w.stash[who]}`;
+      sx -= label.length * 4 + 4;
+      g.fillText(label, sx, y + ROOM_PX[1] - 2);
     }
   }
 }
@@ -309,22 +307,22 @@ $('cvA').addEventListener('click', (ev) => pickRoom(ev, $('cvA')));
 $('cvB').addEventListener('click', (ev) => pickRoom(ev, $('cvB')));
 function pickRoom(ev, cv) {
   const rect = cv.getBoundingClientRect();
-  const x = ev.clientX - rect.left;
-  const y = ev.clientY - rect.top;
-  const pad = 10;
-  const gap = 8;
   const v = S.view ?? {};
   const rooms = Object.keys(v.rooms ?? LOCS);
   const grid = v.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
   const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const rw = (rect.width - pad * 2 - gap * (cols - 1)) / cols;
-  const rh = (rect.height - pad * 2 - gap * (rows - 1)) / rows;
+  const pad = 8, gap = 8;
+  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
+  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
+  const scale = rect.width / LW;
+  const x = (ev.clientX - rect.left) / scale;
+  const y = (ev.clientY - rect.top) / scale;
   for (const r of rooms) {
     const [cx, cy] = grid[r];
-    const rx = pad + cx * (rw + gap);
-    const ry = pad + cy * (rh + gap);
-    if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) return api('/act', { kind: 'move', room: r }).then(refresh);
+    const rx = pad + cx * (ROOM_PX[0] + gap);
+    const ry = pad + cy * (ROOM_PX[1] + gap);
+    if (x >= rx && x <= rx + ROOM_PX[0] && y >= ry && y <= ry + ROOM_PX[1]) return api('/act', { kind: 'move', room: r }).then(refresh);
   }
 }
 
