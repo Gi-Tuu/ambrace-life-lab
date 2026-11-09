@@ -2,11 +2,11 @@
   "version": "v1",
   "frame": [
     16,
-    16
+    24
   ],
   "anchor": [
     8,
-    16
+    24
   ],
   "framesPerAction": 4,
   "fps": 6,

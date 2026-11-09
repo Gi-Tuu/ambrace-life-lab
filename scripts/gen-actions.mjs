@@ -31,7 +31,7 @@ const CHARS = {
   p1: { hair: 7, hi: 7, skin: 15, shirt: 6, shirtHi: 7, pants: 1 },
 };
 
-const W = 16, H = 16;
+const W = 16, H = 24;   // 2.5D 加高：角色 16×24，脚底锚点 (8,24)，头顶留出 emote 空位
 const blank = () => Array.from({ length: H }, () => Array(W).fill(null));
 const set = (c, x, y, v) => { if (x >= 0 && y >= 0 && x < W && y < H) c[y][x] = v; };
 const rect = (c, x, y, w, h, v) => { for (let j = 0; j < h; j += 1) for (let i = 0; i < w; i += 1) set(c, x + i, y + j, v); };
@@ -52,10 +52,13 @@ function body(A) {
   rect(c, 3, 10, 10, 1, K.outline); rect(c, 4, 10, 8, 1, A.skin);
   rect(c, 4, 11, 8, 1, K.outline); rect(c, 5, 11, 6, 1, A.shirt);
   rect(c, 4, 12, 8, 1, K.outline); rect(c, 5, 12, 6, 1, A.pants);
-  rect(c, 4, 13, 3, 1, K.outline); rect(c, 9, 13, 3, 1, K.outline);
-  rect(c, 5, 13, 2, 1, A.pants); rect(c, 9, 13, 2, 1, A.pants);
-  rect(c, 4, 14, 2, 1, K.outline); rect(c, 7, 14, 2, 1, K.outline); rect(c, 10, 14, 2, 1, K.outline);
-  rect(c, 4, 15, 3, 1, K.outline); rect(c, 9, 15, 3, 1, K.outline);
+  // 加长双腿：两条腿 x4..6 与 x9..11，行 13..22，脚底行 23（2.5D 更高剪影）
+  for (let y = 13; y <= 22; y += 1) {
+    rect(c, 4, y, 3, 1, K.outline); rect(c, 5, y, 2, 1, A.pants);
+    rect(c, 9, y, 3, 1, K.outline); rect(c, 10, y, 2, 1, A.pants);
+  }
+  rect(c, 3, 23, 4, 1, K.outline); rect(c, 4, 23, 2, 1, A.pants);
+  rect(c, 9, 23, 4, 1, K.outline); rect(c, 10, 23, 2, 1, A.pants);
   return c;
 }
 const armUp = (c, side, up, A) => {
@@ -65,8 +68,8 @@ const armUp = (c, side, up, A) => {
 };
 const legs = (c, phase, A) => {
   const s = phase % 2 ? 1 : 0;
-  rect(c, 4 + s, 13, 2, 2, K.outline); rect(c, 9 - s, 13, 2, 2, K.outline);
-  rect(c, 4 + s, 15, 3, 1, K.outline); rect(c, 9 - s, 15, 3, 1, K.outline);
+  rect(c, 4 + s, 22, 3, 2, K.outline); rect(c, 9 - s, 22, 3, 2, K.outline);
+  rect(c, 4 + s, 23, 3, 1, K.outline); rect(c, 9 - s, 23, 3, 1, K.outline);
 };
 
 // 17 个动作 = life/body.mjs 的 BASE_KINDS 13 个真实动作 + idle/walk/rej/hail。
@@ -92,8 +95,8 @@ export const ACTIONS = [
   { id: 'deafen', label: '捂住耳朵', f: (c, n, A) => { rect(c, 2, 5, 2, 3, A.skin); rect(c, 12, 5, 2, 3, A.skin); if (n % 2) { set(c, 1, 4, K.mauve); set(c, 14, 4, K.mauve); } } },
   { id: 'seclude', label: '躲进里屋', f: (c, n, A) => {
     rect(c, 4, 2, 8, 5, A.hair); rect(c, 5, 3, 6, 1, K.mauve);
-    rect(c, 4, 7, 8, 5, K.mauve); set(c, 6, 8 + n % 2, K.light);
-    rect(c, 4, 12, 8, 1, A.hair); rect(c, 5, 13, 2, 2, A.hair); rect(c, 9, 13, 2, 2, A.hair);
+    rect(c, 4, 7, 8, 13, K.mauve); set(c, 6, 8 + n % 2, K.light);
+    rect(c, 4, 20, 8, 1, A.hair); rect(c, 5, 21, 2, 2, A.hair); rect(c, 9, 21, 2, 2, A.hair);
   } },
   { id: 'refuse', label: '别理他', f: (c, n, A) => {
     rect(c, 4, 2, 8, 5, A.hair); set(c, 5, 3, K.mauve);
@@ -170,7 +173,7 @@ export function generate(outDir) {
   files.push('fx.png');
   const manifest = {
     version: 'v1',
-    frame: [W, H], anchor: [8, 16], framesPerAction: FRAMES_PER_ACTION, fps: FPS,
+    frame: [W, H], anchor: [8, 24], framesPerAction: FRAMES_PER_ACTION, fps: FPS,
     fxCell: [FW, FH], fxRows: FX_ROWS,
     palette: '/web/assets/palette.json',
     clock: 'independent render clock; A/B share the same frame index; never derived from w.t',

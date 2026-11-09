@@ -1,5 +1,6 @@
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
+import { astar, isWalkable, stepWalker } from './walk.mjs';
 const ROOMS = ['home', 'hall', 'watch', 'store'];
 const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 // 兜底色也必须 ⊆ palette.json 的 16 色（manifest 缺失时走这里，不能偷偷引入色板外颜色）。
@@ -138,6 +139,8 @@ function buildWorld(w) {
   // 而不是随机撒点 —— 否则「草被吹动」会长到河面或屋顶上。
   const trees = [];
   const chimneys = [];
+  // 高个可遮挡物（树 / 屋舍）不再烘进静态底图，而是各自记录为对象，交给 drawViewport 按脚底 Y 深度排序绘制。
+  const objects = [];
 
   // 主路 / 支路：折线段（像素中心坐标），像素级判定距离，路宽约 28px 且边界带噪声。
   // 只连当前预设里真实存在的地点（lab 只有 4 个，town 有 8 个），避免凭空画出通向空地的路。
@@ -171,14 +174,29 @@ function buildWorld(w) {
     else if (h < 0.035) { g.fillStyle = '#FF77A8'; g.fillRect(px + 12, py + 5, 1, 1); }
   }
 
-  // 2) 蜿蜒的河：按 2px 行绘制，河宽随 y 与噪声变化，边界不规则；波纹 + 浅灰岸。
+  // 2) 河：沙砾岸 → 浅水（亮蓝抖动）→ 深水（藏蓝）→ 泡沫线。逐 2px 行，边界随噪声起伏，岸线不再是一条硬灰边。
   for (let py = 0; py < WORLD_H; py += 2) {
     const ty = py / TILE;
     const rx = riverX(ty) * TILE + Math.sin(py * 0.07) * 3;
     const half = 17 + Math.sin(py * 0.021) * 3;
-    g.fillStyle = '#1D2B53'; g.fillRect(Math.round(rx - half), py, Math.round(half * 2), 2);
-    g.fillStyle = '#C2C3C7';
-    g.fillRect(Math.round(rx - half), py, 1, 2); g.fillRect(Math.round(rx + half) - 1, py, 1, 2);
+    const L = Math.round(rx - half), R = Math.round(rx + half);
+    const row = ((py / 2) % 4) * 4;
+    // 岸带：内侧沙、外侧砾，抖动过渡到草（各 5px）
+    for (let s = 0; s < 5; s += 1) {
+      const q = BAYER[row + (s % 4)];
+      const c = s >= 3 ? '#FFCCAA' : (q < 6 ? '#FFCCAA' : '#C2C3C7');
+      g.fillStyle = c;
+      g.fillRect(L - s - 1, py, 1, 2); g.fillRect(R + s, py, 1, 2);
+    }
+    // 水体：藏蓝底 + 贴岸浅水亮蓝抖动
+    g.fillStyle = '#1D2B53'; g.fillRect(L, py, R - L, 2);
+    g.fillStyle = '#29ADFF';
+    for (let x = L; x < R; x += 2) {
+      if (Math.min(x - L, R - x) < 5 && BAYER[row + ((x / 2) % 4)] < 8) g.fillRect(x, py, 2, 2);
+    }
+    // 泡沫线：水陆交界 1px 白，按帧位置抖动
+    if (BAYER[row] < 10) { g.fillStyle = '#FFF1E8'; g.fillRect(L, py, 1, 2); g.fillRect(R - 1, py, 1, 2); }
+    // 波光：稀疏亮蓝短线
     if (py % 8 === 0) {
       g.fillStyle = '#29ADFF';
       g.fillRect(Math.round(rx - 9 + (py % 24) / 2), py, 7, 1);
@@ -186,19 +204,23 @@ function buildWorld(w) {
     }
   }
 
-  // 3) 土路：8px 网格，距路中心 <14px 铺棕底、<22px 用稀疏亮点/暗点做路肩；
-  //    边界由 hash 扰动，形成不规则锯齿而不是笔直矩形；过河段架木板桥。
+  // 3) 土路：中心磨损深棕 + 抖动土↔草过渡肩（内侧散土粒、外侧草侵入）+ 砾石；过河段架木板桥。
   for (let py = 0; py < WORLD_H; py += 8) for (let px = 0; px < WORLD_W; px += 8) {
     const d = roadDist(px + 4, py + 4);
     const h = hash2(Math.floor(px / 8), Math.floor(py / 8), 2);
+    const q = BAYER[((py / 8) % 4) * 4 + ((px / 8) % 4)];
     const wet = Math.abs(px + 4 - riverX(py / TILE) * TILE) < 20;
-    if (d < 12 + h * 5) {
+    const core = 11 + h * 4;
+    if (d < core) {
       g.fillStyle = wet ? '#7E2553' : '#AB5236'; g.fillRect(px, py, 8, 8);
+      if (d < 3) { g.fillStyle = wet ? '#5F574F' : '#7E2553'; g.fillRect(px + 2, py + 2, 4, 4); }
       if (h > 0.86) { g.fillStyle = '#FFA300'; g.fillRect(px + 2, py + 2, 2, 1); }
       else if (h < 0.1) { g.fillStyle = '#5F574F'; g.fillRect(px + 5, py + 5, 3, 1); }
       if (wet) { g.fillStyle = '#FFCCAA'; g.fillRect(px, py, 8, 1); }
-    } else if (d < 21 + h * 5 && h > 0.7) {
-      g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 3, 2, 2);
+    } else if (d < core + 6) {
+      const t = (d - core) / 6;                                   // 0..1，越外越草
+      if (q < (1 - t) * 16) { g.fillStyle = wet ? '#7E2553' : '#AB5236'; g.fillRect(px + (q % 4) * 2, py + ((q >> 2) % 4) * 2, 2, 2); }
+      else if (h > 0.5) { g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 3, 2, 2); }
     }
   }
   // 桥：路中心落在河面时，横铺一排木板（每 4px 一条）。
@@ -214,20 +236,23 @@ function buildWorld(w) {
 
   // 4) 南面田垄（菜园一带）：横垄 + 苗；北面岩丘（瞭台一带）：灰岩 + 顶高光。
   const garden = sites.garden ?? SITES.garden;
-  for (let ty = garden[1] - 3; ty <= garden[1] + 4; ty += 1) for (let tx = garden[0] - 7; tx <= garden[0] + 7; tx += 1) {
+  for (let ty = garden[1] - 4; ty <= garden[1] + 5; ty += 1) for (let tx = garden[0] - 8; tx <= garden[0] + 8; tx += 1) {
     if (onRoad(tx, ty) || onRiver(tx, ty)) continue;
     const d = Math.hypot((tx - garden[0]) / 8, (ty - garden[1]) / 5);
-    if (d > 1) continue;
+    if (d > 1.3) continue;
     const px = tx * TILE, py = ty * TILE;
+    if (d > 1) { if (hash2(tx, ty, 7) > 0.5) { g.fillStyle = '#AB5236'; g.fillRect(px + 4, py + 6, 3, 3); } continue; }
     g.fillStyle = '#AB5236'; g.fillRect(px, py + 2, TILE, 3); g.fillRect(px, py + 11, TILE, 2);
     g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 1, 2, 2); g.fillRect(px + 11, py + 1, 2, 2);
     g.fillStyle = '#008751'; g.fillRect(px + 6, py + 9, 2, 2);
   }
   const watch = sites.watch ?? SITES.watch;
-  for (let ty = watch[1] - 5; ty <= watch[1] + 5; ty += 1) for (let tx = watch[0] - 7; tx <= watch[0] + 7; tx += 1) {
+  for (let ty = watch[1] - 6; ty <= watch[1] + 6; ty += 1) for (let tx = watch[0] - 8; tx <= watch[0] + 8; tx += 1) {
+    if (onRoad(tx, ty)) continue;
     const d = Math.hypot((tx - watch[0]) / 7, (ty - watch[1]) / 5);
-    if (d > 1 || hash2(tx, ty, 3) > 0.82 || onRoad(tx, ty)) continue;
+    if (d > 1.25 || (d <= 1 && hash2(tx, ty, 3) > 0.82)) continue;
     const px = tx * TILE, py = ty * TILE;
+    if (d > 1) { if (hash2(tx, ty, 3) > 0.55) { g.fillStyle = '#5F574F'; g.fillRect(px + 6, py + 7, 4, 3); } continue; }
     g.fillStyle = '#5F574F'; g.fillRect(px + 1, py + 3, TILE - 2, TILE - 4);
     g.fillStyle = '#83769C'; g.fillRect(px + 1, py + 3, TILE - 2, 2);
     g.fillStyle = '#C2C3C7'; g.fillRect(px + 4, py + 6, 3, 1);
@@ -240,45 +265,36 @@ function buildWorld(w) {
     const edge = Math.min(tx, WORLD_TW - 1 - tx, ty, WORLD_TH - 1 - ty);
     const density = edge < 6 ? 0.42 : edge < 14 ? 0.16 : 0.055;
     if (hash2(tx, ty, 4) > density || nearSite(tx, ty, 3)) continue;
-    const px = tx * TILE, py = ty * TILE;
-    g.fillStyle = '#1D2B53'; g.fillRect(px + 6, py + 11, 4, 5);
-    g.fillStyle = '#008751'; g.fillRect(px + 2, py + 2, 12, 9);
-    g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 2, 8, 3); g.fillRect(px + 7, py + 5, 3, 2);
-    g.fillStyle = '#AB5236'; g.fillRect(px + 7, py + 11, 2, 4);
     blockers.add(tileKey(tx, ty));
     trees.push([tx, ty]);
+    objects.push({ kind: 'tree', tx, ty });
   }
 
   // 6) 屋舍：每地点一栋 3×2 tile 的小屋（屋顶/墙/门/窗），屋顶按地点换色便于辨识；
   //    屋前摆对应设施 sprite。屋舍挡视线，周边留空地给角色站。
   const ROOF = ['#7E2553', '#AB5236', '#1D2B53', '#FF004D', '#5F574F', '#008751', '#83769C', '#FFA300'];
   Object.entries(sites).forEach(([r, [sx, sy]], i) => {
-    const bx = (sx - 1) * TILE, by = (sy - 5) * TILE;
-    g.fillStyle = '#000000'; g.fillRect(bx - 1, by + 8, 3 * TILE + 2, 2 * TILE - 7);
-    g.fillStyle = '#FFCCAA'; g.fillRect(bx, by + 10, 3 * TILE, TILE + 3);
-    g.fillStyle = '#C2C3C7'; g.fillRect(bx, by + 10, 3 * TILE, 2);
-    g.fillStyle = ROOF[i % ROOF.length]; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 9);
-    g.fillStyle = '#FF004D'; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 1);
-    g.fillStyle = '#5F574F'; g.fillRect(bx + TILE + 4, by + 17, 8, 15);
-    g.fillStyle = '#29ADFF'; g.fillRect(bx + 4, by + 15, 6, 5); g.fillRect(bx + 2 * TILE + 6, by + 15, 6, 5);
-    g.fillStyle = '#FFEC27'; g.fillRect(bx + 5, by + 16, 2, 2);
     for (let dx = -1; dx <= 1; dx += 1) for (let dy = -5; dy <= -4; dy += 1) blockers.add(tileKey(sx + dx, sy + dy));
-    const thing = ASSETS.things[SITE_THING[r]];
-    if (thing) g.drawImage(thing, bx + 3 * TILE + 4, by + 14, TILE, TILE);
-    // 井台/院子加一圈栅栏，工坊加烟囱，使地点之间形状不同。
-    if (r === 'yard' || r === 'well') {
-      g.fillStyle = '#AB5236';
-      for (let k = 0; k < 6; k += 1) g.fillRect(bx - 14 + k * 12, by + 2 * TILE + 6, 2, 7);
-      g.fillRect(bx - 14, by + 2 * TILE + 8, 62, 2);
-    }
-    if (r === 'workshop') {
-      g.fillStyle = '#5F574F'; g.fillRect(bx + 2 * TILE, by - 6, 6, 10);
-      g.fillStyle = '#C2C3C7'; g.fillRect(bx + 2 * TILE, by - 8, 8, 2);
-      chimneys.push([sx + 1, sy - 6]);
-    }
+    const chimney = r === 'workshop';
+    // 屋舍几何 / 屋顶色 / 门前设施 / 栅栏 / 烟囱，全部记录为对象，绘制交给 drawHouseObj（视口）与全景简化块。
+    objects.push({
+      kind: 'house', sx, sy, roof: ROOF[i % ROOF.length],
+      thing: SITE_THING[r], fence: r === 'yard' || r === 'well', chimney,
+    });
+    if (chimney) chimneys.push([sx + 1, sy - 6]);
   });
 
-  worldCache = { sig, canvas: cv, blockers, roads, trees, chimneys };
+  // 可行走栅格：非阻挡（树/岩/屋）且（非河面 或 正落在桥上）。供 web/walk.mjs 的 A* 直接读取。
+  const walk = new Uint8Array(WORLD_TW * WORLD_TH);
+  for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
+    let ok = !blockers.has(tileKey(tx, ty));
+    if (ok && Math.abs(tx * TILE + 8 - riverX(ty) * TILE) < 16) {
+      ok = roads.some((r) => distSeg(tx * TILE + 8, ty * TILE + 8, r[0], r[1], r[2], r[3]) < 16);
+    }
+    walk[ty * WORLD_TW + tx] = ok ? 1 : 0;
+  }
+
+  worldCache = { sig, canvas: cv, blockers, roads, trees, chimneys, objects, walk, tw: WORLD_TW, th: WORLD_TH };
   return { ...worldCache, sites };
 }
 
@@ -303,10 +319,10 @@ function lightRadius(phase) {
 let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
 // 相机：默认跟随玩家所在地点（A/B 共用同一锚点，保证双世界在同一镜头下对照）；
 // 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
-function cameraOf(w, sites, slots, container) {
-  const anchor = (ui.camRoom && sites[ui.camRoom]) || sites[w.loc?.p1] || Object.values(sites)[0] || [48, 32];
-  const fallback = slots.p1 ?? anchor;
-  const p = anchor ?? fallback;
+function cameraOf(w, sites, slots, container, follow) {
+  const manual = ui.camRoom && sites[ui.camRoom];
+  const anchor = manual || follow || sites[w.loc?.p1] || slots.p1 || Object.values(sites)[0] || [48, 32];
+  const p = anchor;
   const x = Math.round(Math.max(0, Math.min(WORLD_W - VIEW_W, p[0] * TILE - VIEW_W / 2)));
   // 屋舍在地点上方 3–5 tile，镜头再上抬 2 tile，保证屋顶不被视口上沿裁掉。
   const y = Math.round(Math.max(0, Math.min(WORLD_H - VIEW_H, p[1] * TILE - VIEW_H / 2 - 2 * TILE)));
@@ -315,11 +331,80 @@ function cameraOf(w, sites, slots, container) {
 }
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-// 局部视角：只渲染世界的一小块（224×144 逻辑像素），整数倍放大到屏幕。
+// 深度排序绘制件：落影 / 树 / 屋舍。坐标一律「世界像素 − 相机像素」换算到视口。
+// 全部硬像素、全部锁色板内；落影用 #000000 抖动点而非半透明，遵守无 alpha 纪律。
+function drawShadow(g, cx, footY, halfW) {
+  g.fillStyle = '#000000';
+  for (let i = -halfW; i <= halfW; i += 1) {
+    const t = Math.abs(i) / halfW;
+    if (t <= 0.5) g.fillRect(cx + i, footY, 1, 2);
+    else if (t <= 0.9 && (i & 1) === 0) g.fillRect(cx + i, footY, 1, 1);
+  }
+}
+function drawTreeObj(g, o, cam) {
+  const px = o.tx * TILE - cam.x, py = o.ty * TILE - cam.y;
+  g.fillStyle = '#1D2B53'; g.fillRect(px + 6, py + 11, 4, 5);
+  g.fillStyle = '#008751'; g.fillRect(px + 2, py + 2, 12, 9);
+  g.fillStyle = '#00E436'; g.fillRect(px + 3, py + 2, 8, 3); g.fillRect(px + 7, py + 5, 3, 2);
+  g.fillStyle = '#AB5236'; g.fillRect(px + 7, py + 11, 2, 4);
+}
+function drawHouseObj(g, o, cam) {
+  const bx = (o.sx - 1) * TILE - cam.x, by = (o.sy - 5) * TILE - cam.y;
+  g.fillStyle = '#000000'; g.fillRect(bx - 1, by + 8, 3 * TILE + 2, 2 * TILE - 7);
+  g.fillStyle = '#FFCCAA'; g.fillRect(bx, by + 10, 3 * TILE, TILE + 3);
+  g.fillStyle = '#C2C3C7'; g.fillRect(bx, by + 10, 3 * TILE, 2);
+  g.fillStyle = o.roof; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 9);
+  g.fillStyle = '#FF004D'; g.fillRect(bx - 2, by + 2, 3 * TILE + 4, 1);
+  g.fillStyle = '#5F574F'; g.fillRect(bx + TILE + 4, by + 17, 8, 15);
+  g.fillStyle = '#29ADFF'; g.fillRect(bx + 4, by + 15, 6, 5); g.fillRect(bx + 2 * TILE + 6, by + 15, 6, 5);
+  g.fillStyle = '#FFEC27'; g.fillRect(bx + 5, by + 16, 2, 2);
+  const thing = ASSETS.things[o.thing];
+  if (thing) g.drawImage(thing, bx + 3 * TILE + 4, by + 14, TILE, TILE);
+  if (o.fence) {
+    g.fillStyle = '#AB5236';
+    for (let k = 0; k < 6; k += 1) g.fillRect(bx - 14 + k * 12, by + 2 * TILE + 6, 2, 7);
+    g.fillRect(bx - 14, by + 2 * TILE + 8, 62, 2);
+  }
+  if (o.chimney) {
+    g.fillStyle = '#5F574F'; g.fillRect(bx + 2 * TILE, by - 6, 6, 10);
+    g.fillStyle = '#C2C3C7'; g.fillRect(bx + 2 * TILE, by - 8, 8, 2);
+  }
+}
+
+// ── 点哪走哪（纯表现层）───────────────────────────────────────────────────────
+// 引擎是「地点制」：w.occupancy 决定 p1 在哪个地点，/act move 也只把人挪到某个地点。
+// 这里不改世界状态、不发请求、不消费 rng —— 只是把「角色此刻画在哪」从「瞬移到地点」
+// 变成「沿 A* 路径走过去」。点击空地 = 一个纯视觉的临时目标；引擎一旦把人挪走（auth 变化），
+// 角色就重新规划、走回引擎认定的地点。读数完全不受影响。
+const WALK = {};                 // `${cvId}:${who}` -> {x,y,path,pi,moving,face,auth}
+const SPEED = 0.5;               // 每动画帧推进的 tile 数（6fps ⇒ 约 3 tile/秒）
+const walkKey = (cvId, who) => `${cvId}:${who}`;
+// isWalkable / astar / stepWalker 都在 web/walk.mjs（纯函数、可单测）。这里只保留行走器状态表与接线。
+function ensureWalker(cvId, who, world, slots) {
+  const auth = slots[who];
+  if (!auth) return null;
+  const k = walkKey(cvId, who);
+  let s = WALK[k];
+  if (!s) { s = WALK[k] = { x: auth[0], y: auth[1], path: [], pi: 0, moving: false, face: 1, auth: [auth[0], auth[1]] }; return s; }
+  if (s.auth[0] !== auth[0] || s.auth[1] !== auth[1]) {   // 引擎把人挪了 ⇒ 走回认定地点
+    s.auth = [auth[0], auth[1]];
+    s.path = astar(world, [s.x, s.y], auth) || [];
+    s.pi = 0;
+  }
+  return s;
+}
+let camFollow = null;   // A 侧玩家行走位置，供两个画布共用同一镜头（保持对照同框）
+// 脚步尘：每个画布一小撮瞬态粒子，纯渲染层，由动画循环推进/老化；不入世界状态、不消费 rng。
+const DUST = {};        // cvId -> [{x, y, age}]（tile 坐标）
+
 function drawViewport(cv, w) {
   const world = buildWorld(w);
   const slots = slotsOf(w, world.sites);
-  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth);
+  for (const who of Object.keys(slots)) ensureWalker(cv.id, who, world, slots);
+  const pw = WALK[walkKey(cv.id, 'p1')];
+  const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
+  if (cv.id === 'cvA') camFollow = pTile;   // A 侧玩家位置驱动镜头；B 共用同一镜头，保持对照同框
+  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth, cv.id === 'cvA' ? pTile : camFollow);
   lastCam = { ...cam, mode: 'view' };
   cv._cam = lastCam;
   const CW = VIEW_W * cam.zoom, CH = VIEW_H * cam.zoom;
@@ -366,11 +451,12 @@ function drawViewport(cv, w) {
     for (const [tx, ty] of world.chimneys) if (inView(tx, ty)) cell(ACT.rows.smoke ?? 3, tx, ty);
   }
 
-  const pt = slots.p1 ?? [Math.round((cam.x + VIEW_W / 2) / TILE), Math.round((cam.y + VIEW_H / 2) / TILE)];
+  const pt = pTile ?? [Math.round((cam.x + VIEW_W / 2) / TILE), Math.round((cam.y + VIEW_H / 2) / TILE)];
+  const oTile = [Math.round(pt[0]), Math.round(pt[1])];   // LOS 原点取整，保证 Bresenham 一定终止
   const radius = lightRadius(w.phase);
   const visible = new Set();
   for (let y = t0y - 1; y <= t0y + VIEW_TH + 1; y += 1) for (let x = t0x - 1; x <= t0x + VIEW_TW + 1; x += 1) {
-    if (Math.hypot(x - pt[0], y - pt[1]) <= radius && losClear(world.blockers, pt[0], pt[1], x, y)) visible.add(tileKey(x, y));
+    if (Math.hypot(x - oTile[0], y - oTile[1]) <= radius && losClear(world.blockers, oTile[0], oTile[1], x, y)) visible.add(tileKey(x, y));
   }
   // 昼夜色温：视口外框按相位换色板映射（不新画资产、不叠半透明）。
   g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
@@ -389,27 +475,54 @@ function drawViewport(cv, w) {
     for (let i = recent.length - 1; i >= 0; i -= 1) if (recent[i].who === name && EMOTE[recent[i].kind]) return EMOTE[recent[i].kind];
     return null;
   };
-  // 角色：只画落在视口内且处于视野中的人；站位来自各地点 occupancy，实打实落在世界坐标上。
-  for (const [who, [tx, ty]] of Object.entries(slots)) {
-    const px = tx * TILE - cam.x, py = ty * TILE - cam.y;
-    if (px < -TILE || px > VIEW_W || py < -TILE || py > VIEW_H + TILE) continue;
-    if (!visible.has(tileKey(tx, ty))) continue;
-    const sheet = ACT.chars[who];
-    const sprite = ASSETS.chars[who];
+  // 深度排序：树 / 屋舍 / 角色放进同一张列表，按脚底所在屏幕 Y 升序绘制 ⇒ 近处盖住远处、
+  // 屋后的人被屋挡住（2.5D 空间关系由此而来）。视野外（LOS 挡住）的整件不画，避免穿雾显形。
+  const drawables = [];
+  for (const o of world.objects) {
+    const footTy = o.kind === 'house' ? o.sy - 3 : o.ty;
+    const footTx = o.kind === 'house' ? o.sx : o.tx;
+    const fy = (footTy + 1) * TILE - cam.y;
+    if (fy < -2 * TILE || fy > VIEW_H + 3 * TILE) continue;
+    if (!visible.has(tileKey(footTx, footTy))) continue;
+    drawables.push({ sy: fy, o });
+  }
+  for (const who of Object.keys(slots)) {
+    const s = WALK[walkKey(cv.id, who)];
+    const wx = s ? s.x : slots[who][0], wy = s ? s.y : slots[who][1];
+    if (!visible.has(tileKey(Math.round(wx), Math.round(wy)))) continue;
+    drawables.push({ sy: (wy + 1) * TILE - cam.y, who, wx, wy, moving: s && s.moving, face: s ? s.face : 1 });
+  }
+  drawables.sort((a, b) => a.sy - b.sy);
+  for (const d of drawables) {
+    if (d.o) {
+      if (d.o.kind === 'tree') { drawShadow(g, d.o.tx * TILE - cam.x + 8, d.o.ty * TILE - cam.y + TILE - 1, 4); drawTreeObj(g, d.o, cam); }
+      else drawHouseObj(g, d.o, cam);
+      continue;
+    }
+    const px = d.wx * TILE - cam.x, py = d.wy * TILE - cam.y;
+    drawShadow(g, px + 8, py + TILE - 1, 4);
+    const sheet = ACT.chars[d.who];
+    const sprite = ASSETS.chars[d.who];
+    // 行走中固定用 move_to 帧；停下时回到载荷里的真实动作（idle/talk/work…）。
+    const row = d.moving ? (ACT.index.move_to ?? ACT.index.walk ?? actionRow(w.agents?.[d.who])) : actionRow(w.agents?.[d.who]);
+    g.save();
+    if (d.face < 0) { const cx = px + TILE / 2; g.translate(cx, 0); g.scale(-1, 1); g.translate(-cx, 0); }
     if (ACT.ready && sheet) {
-      // 动作行来自载荷 a.last.kind（世界事实），帧号来自独立时钟 ACT.frame（A/B 共用）。
-      g.drawImage(sheet, ACT.frame * 16, actionRow(w.agents?.[who]) * 16, 16, 16, px, py, TILE, TILE);
+      // 帧号来自独立时钟 ACT.frame（A/B 共用）；16×24，脚底对齐 tile 底边。
+      g.drawImage(sheet, ACT.frame * 16, row * 24, 16, 24, px, py - 8, 16, 24);
     } else if (sprite && sprite.frames.length) {
       g.drawImage(sprite.frames[ACT.frame % sprite.frames.length], px, py, TILE, TILE);
-    } else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
+    } else { g.fillStyle = COLORS[d.who] ?? '#C2C3C7'; g.fillRect(px + 2, py - 8, 12, 22); }
+    g.restore();
+    const nm = d.who === 'p1' ? '你' : (w.agents?.[d.who]?.name ?? d.who);
     g.fillStyle = '#FFF1E8';
-    g.fillText(who === 'p1' ? '你' : (w.agents?.[who]?.name ?? who), px, py + TILE + 6);
-    const nm = who === 'p1' ? '你' : (w.agents?.[who]?.name ?? who);
+    g.fillText(nm, px, py + TILE + 6);
     const em = emoteFor(nm);
     if (em) {
-      g.fillStyle = '#000000'; g.fillRect(px + 4, py - 9, 8, 8);
-      g.fillStyle = em; g.fillRect(px + 5, py - 8, 6, 6);
-      g.fillStyle = '#000000'; g.fillRect(px + 7, py - 7, 2, 3); g.fillRect(px + 7, py - 3, 2, 1);
+      const ey = py - 21;
+      g.fillStyle = '#000000'; g.fillRect(px + 4, ey, 8, 8);
+      g.fillStyle = em; g.fillRect(px + 5, ey + 1, 6, 6);
+      g.fillStyle = '#000000'; g.fillRect(px + 7, ey + 2, 2, 3); g.fillRect(px + 7, ey + 6, 2, 1);
     }
   }
   // 迷雾：2×2 细抖动的不透明像素压暗视野外，零 alpha、保留地形轮廓。
@@ -438,6 +551,32 @@ function drawViewport(cv, w) {
     g.fillStyle = '#83769C'; g.fillRect(bx, by, bw, 1); g.fillRect(bx, by + 8, bw, 1);
     g.fillStyle = night ? '#C2C3C7' : '#FFF1E8'; g.fillText(label, bx + 3, by + 7);
   }
+  // ── P4 环境特效（纯渲染层 · 确定性 · 锁色板 · LOS 门控）────────────────────
+  // 夜：萤火虫。贴草地/树缘，避开河与阻挡物；漂移与闪烁由 hash2 + ACT.frame 决定，不引随机、不动读数。
+  if (night) {
+    for (let y = t0y - 1; y <= t0y + VIEW_TH + 1; y += 1) for (let x = t0x - 1; x <= t0x + VIEW_TW + 1; x += 1) {
+      if (!visible.has(tileKey(x, y)) || world.blockers.has(tileKey(x, y))) continue;
+      if (Math.abs((x + 0.5) * TILE - riverX(y) * TILE) < 16) continue;
+      const seed = hash2(x, y, 21);
+      if (seed < 0.9) continue;
+      const fx = Math.round(x * TILE - cam.x + 8 + Math.sin((ACT.frame + x * 2 + y) * 0.7) * 3);
+      const fy = Math.round(y * TILE - cam.y + 6 + Math.cos((ACT.frame + x) * 0.5) * 2);
+      g.fillStyle = (ACT.frame + Math.floor(seed * 4)) % 4 < 2 ? '#FFEC27' : '#00E436';
+      g.fillRect(fx, fy, 1, 1);
+    }
+  }
+  // 脚步尘：移动角色脚下留下的瞬态小点，随 age 上飘、变稀、转暗（无 alpha，靠数量与色阶淡出）。
+  for (const p of DUST[cv.id] ?? []) {
+    if (!visible.has(tileKey(Math.floor(p.x), Math.floor(p.y)))) continue;
+    const dx = Math.round(p.x * TILE - cam.x), dy = Math.round(p.y * TILE - cam.y);
+    if (dx < -4 || dx > VIEW_W + 4 || dy < -4 || dy > VIEW_H + 4) continue;
+    g.fillStyle = p.age < 3 ? '#C2C3C7' : '#83769C';
+    const n = Math.max(1, 3 - Math.floor(p.age / 2));
+    for (let i = 0; i < n; i += 1) {
+      const ox = Math.round(hash2(Math.round(p.x * 16) + i, p.age, 30) * 5) - 2;
+      g.fillRect(dx + ox, dy - Math.round(p.age * 0.6), 1, 1);
+    }
+  }
   return cam;
 }
 
@@ -446,7 +585,11 @@ function drawViewport(cv, w) {
 function drawOverview(cv, w) {
   const world = buildWorld(w);
   const slots = slotsOf(w, world.sites);
-  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth);
+  for (const who of Object.keys(slots)) ensureWalker(cv.id, who, world, slots);
+  const pw = WALK[walkKey(cv.id, 'p1')];
+  const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
+  if (cv.id === 'cvA') camFollow = pTile;
+  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth, cv.id === 'cvA' ? pTile : camFollow);
   lastCam = { ...cam, mode: 'overview' };
   cv._cam = lastCam;
   const CW = OV_W * ZOOM, CH = OV_H * ZOOM;
@@ -459,6 +602,17 @@ function drawOverview(cv, w) {
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, OV_W, OV_H);
   g.drawImage(world.canvas, 0, 0, WORLD_W, WORLD_H, 0, 0, OV_W, OV_H);
+  // 树 / 屋舍已改到视口层动态绘制，全景里用简化色块补上，保证总览仍看得出村落形状。
+  for (const o of world.objects) {
+    if (o.kind === 'tree') {
+      const mx = Math.round(o.tx * TILE * OV_SX), my = Math.round(o.ty * TILE * OV_SY);
+      g.fillStyle = '#008751'; g.fillRect(mx, my, 2, 2);
+    } else {
+      const mx = Math.round((o.sx - 1) * TILE * OV_SX), my = Math.round((o.sy - 5) * TILE * OV_SY);
+      const bw = Math.max(2, Math.round(3 * TILE * OV_SX)), bh = Math.max(2, Math.round(2 * TILE * OV_SY));
+      g.fillStyle = o.roof; g.fillRect(mx, my, bw, bh);
+    }
+  }
   // 地点标记 / 相机取景框 / 玩家点，全部按世界→全景比例换算。
   for (const [sx, sy] of Object.values(world.sites)) {
     const mx = Math.round(sx * TILE * OV_SX), my = Math.round(sy * TILE * OV_SY);
@@ -471,9 +625,9 @@ function drawOverview(cv, w) {
   g.fillStyle = '#FFF1E8';
   for (let i = 0; i < vw; i += 4) { g.fillRect(vx + i, vy, 2, 1); g.fillRect(vx + i, vy + vh - 1, 2, 1); }
   for (let j = 0; j < vh; j += 4) { g.fillRect(vx, vy + j, 1, 2); g.fillRect(vx + vw - 1, vy + j, 1, 2); }
-  // 玩家金点
-  if (slots.p1) {
-    const [px, py] = slots.p1;
+  // 玩家金点（跟随行走位置）
+  if (pTile) {
+    const [px, py] = pTile;
     const mx = Math.round(px * TILE * OV_SX), my = Math.round(py * TILE * OV_SY);
     g.fillStyle = '#FF004D'; g.fillRect(mx - 1, my - 1, 4, 4);
     g.fillStyle = '#FFF1E8'; g.fillRect(mx, my, 1, 1);
@@ -792,8 +946,18 @@ function pickRoom(ev, cv) {
     if (d < bd) { bd = d; best = r; }
   }
   if (!best) return;
+  // 点哪走哪（纯表现层）：把玩家画布行走器目标设到点中的可行走 tile，镜头交回跟随玩家。
+  const world = buildWorld(v);
+  const cTile = [Math.floor(tx), Math.floor(ty)];
+  const k = walkKey(cv.id, 'p1');
+  if (!WALK[k]) ensureWalker(cv.id, 'p1', world, slotsOf(v, world.sites));
+  const s = WALK[k];
+  const walkable = isWalkable(world, cTile[0], cTile[1]);
+  if (s && walkable) { const path = astar(world, [s.x, s.y], cTile); if (path && path.length) { s.path = path; s.pi = 0; } ui.camRoom = null; }
   if (bd <= 5) return api('/act', { kind: 'move', room: best }).then(() => { ui.room = best; ui.camRoom = null; refresh(); });
-  ui.room = best; ui.camRoom = best; refresh();
+  ui.room = best;
+  if (!walkable) ui.camRoom = best;   // 点到水 / 屋 / 岩等不可走处：仅把镜头移过去
+  refresh();
 }
 
 $('btnRun').onclick = () => ctl({ action: S.running ? 'pause' : 'resume' });
@@ -843,6 +1007,14 @@ loadAssets().finally(() => {
   setInterval(() => {
     if (document.hidden || !S.view || !S.viewB) return;
     ACT.frame = (ACT.frame + 1) % 4;
+    for (const k in WALK) stepWalker(WALK[k], SPEED);   // 沿 A* 路径推进各画布角色（纯表现层）
+    // 脚步尘：移动中的角色每隔一帧在脚下留一粒；所有粒子老化，6 帧后消失。
+    for (const k in WALK) {
+      const s = WALK[k]; if (!s || !s.moving) continue;
+      const cvId = k.slice(0, k.indexOf(':'));
+      (DUST[cvId] ??= []).push({ x: s.x, y: s.y + 0.8, age: 0 });
+    }
+    for (const cvId in DUST) DUST[cvId] = DUST[cvId].map((p) => ({ ...p, age: p.age + 1 })).filter((p) => p.age < 6);
     draw($('cvA'), S.view);
     draw($('cvB'), S.viewB);
   }, Math.round(1000 / ACT.fps));
