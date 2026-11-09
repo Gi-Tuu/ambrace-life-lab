@@ -12,6 +12,7 @@
     "coverage": "node scripts/test.mjs --coverage",
     "lint": "node scripts/check.mjs",
     "check": "npm run lint && npm test",
+    "assets": "node scripts/gen-pixel-assets.mjs && node scripts/pack-assets.mjs",
     "serve": "node serve.mjs"
   }
 }

@@ -11,13 +11,17 @@ const $ = (id) => document.getElementById(id);
 
 // 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
 // manifest 形状：{ chars: { a1: "url" | ["url","url"], ... }, tiles: { home: "url" }, icons: { energy: "url" } }
-const ASSETS = { ready: false, chars: {}, tiles: {}, icons: {} };
+const ASSETS = { ready: false, chars: {}, tiles: {}, things: {}, icons: {} };
 async function loadAssets() {
   try {
     const m = await api('/web/assets/manifest.json');
     const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
-    for (const [bucket, map] of Object.entries({ chars: m.chars, tiles: m.tiles, icons: m.icons })) {
-      for (const [k, v] of Object.entries(map ?? {})) ASSETS[bucket][k] = Array.isArray(v) ? await Promise.all(v.map(load)) : await load(v);
+    for (const [k, v] of Object.entries(m.tiles ?? {})) ASSETS.tiles[k] = await load(v);
+    for (const [k, v] of Object.entries(m.things ?? {})) ASSETS.things[k] = await load(v);
+    for (const [k, v] of Object.entries(m.icons ?? {})) ASSETS.icons[k] = await load(v);
+    for (const [k, v] of Object.entries(m.chars ?? {})) {
+      const frames = Array.isArray(v) ? v : (v.frames ?? []);
+      ASSETS.chars[k] = { frames: await Promise.all(frames.map(load)), fps: v.fps ?? 4 };
     }
     ASSETS.ready = true;
   } catch {
@@ -25,7 +29,7 @@ async function loadAssets() {
   }
 }
 
-const ui = { room: null, show: 'A' };
+const ui = { room: 'hall', show: 'A', overview: false };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -35,64 +39,106 @@ async function api(path, body) {
 
 const ROOM_GRID = { home: [0, 0], hall: [1, 0], watch: [0, 1], store: [1, 1] };
 
-function draw(cv, w) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = cv.clientWidth || 300;
-  const H = Math.round(W * 0.66);
-  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
-    cv.width = Math.round(W * dpr);
-    cv.height = Math.round(H * dpr);
-    cv.style.height = `${H}px`;
+// 像素渲染（ui-pixel-spec）：逻辑分辨率 + 整数倍放大 + nearest-neighbor。房间=96×64 tilemap，角色/物件=16×16。
+const ROOM_PX = [96, 64];
+const ROOM_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
+
+// 聚焦镜头：默认只画当前房间（角色放大 + 台词气泡），全景退为可选。
+function lastLine(w, who) {
+  const name = who === 'p1' ? '你' : (w.agents[who]?.name ?? who);
+  for (let i = (w.log ?? []).length - 1; i >= 0; i--) {
+    const e = w.log[i];
+    if (e.who === name && e.kind === 'act') return e.text;
+  }
+  return '';
+}
+function drawFocus(cv, w, room) {
+  const container = cv.parentElement?.clientWidth || 384;
+  const scale = Math.max(2, Math.min(6, Math.floor(container / ROOM_PX[0])));
+  if (cv.width !== ROOM_PX[0] * scale || cv.height !== ROOM_PX[1] * scale) {
+    cv.width = ROOM_PX[0] * scale; cv.height = ROOM_PX[1] * scale;
+    cv.style.width = `${ROOM_PX[0] * scale}px`; cv.style.height = `${ROOM_PX[1] * scale}px`;
   }
   const g = cv.getContext('2d');
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.imageSmoothingEnabled = false; // 像素素材不许被插值糊掉
-  g.clearRect(0, 0, W, H);
-  g.font = '11px "Segoe UI", system-ui, sans-serif';
-  const pad = 10;
-  const gap = 8;
-  // PLAN §28：房间表由服务端给（town 8 间）；老载荷没有 rooms/grid 时退回 lab 四间。
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, ROOM_PX[0], ROOM_PX[1]);
+  const tile = ASSETS.tiles[room];
+  if (tile) g.drawImage(tile, 0, 0, ROOM_PX[0], ROOM_PX[1]);
+  else { g.fillStyle = '#1D2B53'; g.fillRect(0, 0, ROOM_PX[0], ROOM_PX[1]); }
+  const thing = ASSETS.things[ROOM_THING[room]];
+  if (thing) g.drawImage(thing, ROOM_PX[0] - 22, 12, 16, 16);
+  g.font = '6px fusion-pixel, monospace';
+  const crowd = w.occupancy[room] ?? [];
+  crowd.forEach((who, i) => {
+    const px = 8 + i * 24, py = ROOM_PX[1] - 24;
+    const sprite = ASSETS.chars[who];
+    if (sprite && sprite.frames.length) g.drawImage(sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length], px, py, 16, 16);
+    else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
+    g.fillStyle = '#FFCCAA';
+    g.fillText(who === 'p1' ? '你' : (w.agents[who]?.name ?? who), px, py + 22);
+    const line = lastLine(w, who);
+    if (line) {
+      const text = line.length > 12 ? line.slice(0, 12) + '…' : line;
+      const bw = text.length * 6 + 4;
+      const bx = Math.max(1, Math.min(ROOM_PX[0] - bw - 1, px - 4));
+      g.fillStyle = '#000000'; g.fillRect(bx, py - 10, bw, 9);
+      g.fillStyle = '#FFF1E8'; g.fillText(text, bx + 2, py - 3);
+    }
+  });
+  if (!crowd.length) { g.fillStyle = '#5F574F'; g.fillText('这间现在没人', 30, 32); }
+}
+
+function draw(cv, w) {
+  if (!ui.overview) { drawFocus(cv, w, ui.room); return; }
   const rooms = Object.keys(w.rooms ?? LOCS);
   const grid = w.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
   const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const rw = (W - pad * 2 - gap * (cols - 1)) / cols;
-  const rh = (H - pad * 2 - gap * (rows - 1)) / rows;
+  const pad = 8, gap = 8;
+  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
+  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
+  const container = cv.parentElement?.clientWidth || LW;
+  const scale = Math.max(1, Math.floor(container / LW));
+  if (cv.width !== LW * scale || cv.height !== LH * scale) {
+    cv.width = LW * scale; cv.height = LH * scale;
+    cv.style.width = `${LW * scale}px`; cv.style.height = `${LH * scale}px`;
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, LW, LH);
+  g.font = '7px fusion-pixel, monospace';
   for (const r of rooms) {
     const [cx, cy] = grid[r];
-    const x = pad + cx * (rw + gap);
-    const y = pad + cy * (rh + gap);
-    if (ASSETS.tiles[r]) {
-      g.drawImage(ASSETS.tiles[r][0] ?? ASSETS.tiles[r], x, y, rw, rh);
-      g.fillStyle = 'rgba(10,12,15,.62)';
-      g.fillRect(x, y, rw, 18);
-    } else {
-      g.fillStyle = '#141a21';
-      g.fillRect(x, y, rw, rh);
-    }
-    g.strokeStyle = '#242b34';
-    g.strokeRect(x + 0.5, y + 0.5, rw - 1, rh - 1);
-    g.fillStyle = '#66707d';
-    g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 7, y + 14);
+    const x = pad + cx * (ROOM_PX[0] + gap);
+    const y = pad + cy * (ROOM_PX[1] + gap);
+    const tile = ASSETS.tiles[r];
+    if (tile) g.drawImage(tile, x, y, ROOM_PX[0], ROOM_PX[1]);
+    else { g.fillStyle = '#1D2B53'; g.fillRect(x, y, ROOM_PX[0], ROOM_PX[1]); }
+    g.fillStyle = '#000000'; g.fillRect(x, y, ROOM_PX[0], 8);
+    g.fillStyle = '#C2C3C7'; g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 2, y + 6);
+    const thing = ASSETS.things[ROOM_THING[r]];
+    if (thing) g.drawImage(thing, x + ROOM_PX[0] - 20, y + 10, 16, 16);
     const crowd = w.occupancy[r] ?? [];
     crowd.forEach((who, i) => {
       const sprite = ASSETS.chars[who];
-      if (sprite) {
-        const frames = Array.isArray(sprite) ? sprite : [sprite];
-        const im = frames[(w.t + i) % frames.length];
-        g.drawImage(im, x + 6 + i * 20, y + 20, 20, 20);
+      const px = x + 6 + i * 20, py = y + ROOM_PX[1] - 22;
+      if (sprite && sprite.frames.length) {
+        const im = sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length];
+        g.drawImage(im, px, py, 16, 16);
       } else {
-        g.fillStyle = COLORS[who] ?? '#ccc';
-        g.fillRect(x + 8 + i * 17, y + 24, 12, 12);
+        g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12);
       }
-      g.fillStyle = '#0a0c0f';
-      g.fillText((who === 'p1' ? '你' : (w.agents[who]?.name ?? who))[0], x + 11 + i * 17, y + 34);
     });
-    if (r === 'home' || r === 'store') { g.fillStyle = '#525d6a'; g.fillText(`公仓 ${w.pantry}`, x + 7, y + rh - 7); }
+    g.fillStyle = '#FFCCAA';
+    if (r === 'home' || r === 'store') g.fillText(`公仓 ${w.pantry}`, x + 2, y + ROOM_PX[1] - 2);
+    let sx = x + ROOM_PX[0] - 2;
     for (const who of crowd) {
       if (w.stash[who] == null) continue;
-      g.fillStyle = who === 'p1' ? '#8ea2b8' : '#525d6a';
-      g.fillText(`${who === 'p1' ? '你' : w.agents[who]?.name}门口 ${w.stash[who]}`, x + rw - 62, y + rh - 7);
+      const label = `${who === 'p1' ? '你' : (w.agents[who]?.name ?? who)}:${w.stash[who]}`;
+      sx -= label.length * 4 + 4;
+      g.fillText(label, sx, y + ROOM_PX[1] - 2);
     }
   }
 }
@@ -100,9 +146,15 @@ function draw(cv, w) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function bars(a) {
+  // 分段像素格：10 格，亮格=当前值，描边格=基线位置（不再用连续渐变条）
   return Object.entries(a.m).map(([d, v]) => {
     const b = a.baseline[d] ?? 0.5;
-    return `<div class="bar" title="${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）"><i style="width:${(v * 100).toFixed(0)}%"></i><u style="left:${(b * 100).toFixed(0)}%"></u></div>`;
+    const cells = Array.from({ length: 10 }, (_, i) => {
+      const on = (i + 0.5) / 10 <= v;
+      const base = Math.round(b * 10) === i + 1;
+      return `<b class="${on ? 'on' : ''}${base ? ' base' : ''}"></b>`;
+    }).join('');
+    return `<div class="bar" title="${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）">${cells}</div>`;
   }).join('');
 }
 
@@ -212,6 +264,43 @@ function hailRow(el, pack) {
   el.innerHTML = '<span>喊住：</span>' + npc.map(([id, a]) => `<button data-h="${esc(id)}" title="让对方 4 刻内不换地方">${esc(a.name)}</button>`).join('');
 }
 
+// 聚焦镜头 HUD：小地图（点房间切镜头）、当前房间角色卡（头像+台词）、事件 toast。
+function fillMinimap(pack) {
+  const el = $('minimap');
+  const rooms = Object.keys(pack.rooms ?? LOCS);
+  el.innerHTML = rooms.map((r) => {
+    const n = (pack.occupancy[r] ?? []).length;
+    return `<button data-room="${esc(r)}" class="${r === ui.room ? 'on' : ''}">${esc((pack.rooms ?? LOCS)[r] ?? r)}<span class="n">${n}</span></button>`;
+  }).join('');
+}
+function fillOcc(el, pack) {
+  const crowd = pack.occupancy[ui.room] ?? [];
+  if (!crowd.length) { el.innerHTML = '<div class="empty">这间现在没人——点上面的房间切镜头。</div>'; return; }
+  el.innerHTML = crowd.map((who) => {
+    const a = pack.agents[who];
+    const sprite = ASSETS.chars[who];
+    const img = sprite && sprite.frames[0] ? `<img src="${sprite.frames[0].src}" alt="" />` : '';
+    const name = who === 'p1' ? '你' : (a?.name ?? who);
+    const mood = a ? esc(a.summary ?? '') : '玩家';
+    const line = esc(lastLine(pack, who) || '…');
+    return `<div class="card">${img}<div class="who"><b>${esc(name)}</b><span>${mood}</span><div class="sayline">「${line}」</div></div></div>`;
+  }).join('');
+}
+let toastSeen = 0;
+function pushToasts(pack) {
+  const norms = (pack.normLog ?? []).filter((e) => e.t > toastSeen);
+  if (!norms.length) return;
+  toastSeen = Math.max(toastSeen, ...norms.map((e) => e.t));
+  const box = $('toasts');
+  for (const e of norms.slice(-3)) {
+    const d = document.createElement('div');
+    d.className = 'toast';
+    d.textContent = `t${e.t} 群体规范：${esc(e.of)} 从 ${esc(e.victim)} 门口拿走一份（目击 ${(e.witnesses ?? []).map(esc).join('、')}）⇒ 信任下降`;
+    box.appendChild(d);
+    setTimeout(() => d.remove(), 6000);
+  }
+}
+
 function table(a, b) {
   const row = (k, x, y) => `<tr><td>${k}</td><td style="color:var(--a)">${x}</td><td style="color:var(--b)">${y}</td></tr>`;
   const lostOf = (p) => Object.values(p.agents).reduce((s, a) => s + ((a.viab?.lost ?? []).length), 0);
@@ -263,6 +352,14 @@ async function refresh() {
     secrets($('secrets'), j.A);
     hailRow($('hail'), j.A);
     social($('social'), j.A);
+    // 聚焦镜头 HUD：小地图 / 当前房间角色卡 / 事件 toast
+    const roomKeys = Object.keys(j.A.rooms ?? LOCS);
+    if (!roomKeys.includes(ui.room)) ui.room = roomKeys[0];
+    fillMinimap(j.A);
+    fillOcc($('occA'), j.A);
+    fillOcc($('occB'), j.B);
+    pushToasts(j.A);
+    $('btnOverview').classList.toggle('on', ui.overview);
     $('tbl').innerHTML = table(j.A, j.B);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
@@ -307,24 +404,32 @@ async function ctl(body) {
 
 $('cvA').addEventListener('click', (ev) => pickRoom(ev, $('cvA')));
 $('cvB').addEventListener('click', (ev) => pickRoom(ev, $('cvB')));
+$('minimap').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-room]');
+  if (!b) return;
+  ui.room = b.dataset.room;
+  refresh();
+});
+$('btnOverview').onclick = () => { ui.overview = !ui.overview; refresh(); };
 function pickRoom(ev, cv) {
+  if (!ui.overview) return api('/act', { kind: 'move', room: ui.room }).then(refresh);
   const rect = cv.getBoundingClientRect();
-  const x = ev.clientX - rect.left;
-  const y = ev.clientY - rect.top;
-  const pad = 10;
-  const gap = 8;
   const v = S.view ?? {};
   const rooms = Object.keys(v.rooms ?? LOCS);
   const grid = v.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
   const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const rw = (rect.width - pad * 2 - gap * (cols - 1)) / cols;
-  const rh = (rect.height - pad * 2 - gap * (rows - 1)) / rows;
+  const pad = 8, gap = 8;
+  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
+  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
+  const scale = rect.width / LW;
+  const x = (ev.clientX - rect.left) / scale;
+  const y = (ev.clientY - rect.top) / scale;
   for (const r of rooms) {
     const [cx, cy] = grid[r];
-    const rx = pad + cx * (rw + gap);
-    const ry = pad + cy * (rh + gap);
-    if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) return api('/act', { kind: 'move', room: r }).then(refresh);
+    const rx = pad + cx * (ROOM_PX[0] + gap);
+    const ry = pad + cy * (ROOM_PX[1] + gap);
+    if (x >= rx && x <= rx + ROOM_PX[0] && y >= ry && y <= ry + ROOM_PX[1]) return api('/act', { kind: 'move', room: r }).then(refresh);
   }
 }
 
