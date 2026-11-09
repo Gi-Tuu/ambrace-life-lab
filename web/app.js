@@ -29,7 +29,7 @@ async function loadAssets() {
   }
 }
 
-const ui = { room: 'hall', show: 'A', overview: false };
+const ui = { room: 'hall', show: 'A', overview: true };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -89,17 +89,69 @@ function drawFocus(cv, w, room) {
   if (!crowd.length) { g.fillStyle = '#5F574F'; g.fillText('这间现在没人', 30, 32); }
 }
 
-function draw(cv, w) {
-  if (!ui.overview) { drawFocus(cv, w, ui.room); return; }
+// 连续全地图（有限区域、无转场）+ 玩家真实视野（光线 + 物体遮挡）。
+// 引擎仍是房间制（研究口径不动）；这里把房间铺成一张连续 tilemap，房间边界是带门洞的墙，
+// 角色/玩家落在房间内的 tile 槽位；视野=从玩家 tile 出发的光线投射，墙/物件挡视线，昼夜决定光半径。
+const TILE = 16;
+const RT_W = 6, RT_H = 4; // 每房间内部 tile 数
+function buildMap(w) {
   const rooms = Object.keys(w.rooms ?? LOCS);
   const grid = w.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
   const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const pad = 8, gap = 8;
-  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
-  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
-  const container = cv.parentElement?.clientWidth || LW;
-  const scale = Math.max(1, Math.floor(container / LW));
+  const tw = cols * RT_W + cols + 1;
+  const th = rows * RT_H + rows + 1;
+  const origin = {};
+  for (const r of rooms) origin[r] = [1 + grid[r][0] * (RT_W + 1), 1 + grid[r][1] * (RT_H + 1)];
+  const walls = new Set();
+  const key = (x, y) => `${x},${y}`;
+  for (let x = 0; x < tw; x++) { walls.add(key(x, 0)); walls.add(key(x, th - 1)); }
+  for (let y = 0; y < th; y++) { walls.add(key(0, y)); walls.add(key(tw - 1, y)); }
+  for (let cx = 1; cx < cols; cx++) for (let y = 0; y < th; y++) walls.add(key(cx * (RT_W + 1), y));
+  for (let cy = 1; cy < rows; cy++) for (let x = 0; x < tw; x++) walls.add(key(x, cy * (RT_H + 1)));
+  // 门洞：相邻房间之间的墙开一个口（横向在中行、纵向在中列）
+  for (const r of rooms) {
+    const [ox, oy] = origin[r];
+    const [cx, cy] = grid[r];
+    if (cx + 1 < cols) walls.delete(key(ox + RT_W, oy + 2));
+    if (cy + 1 < rows) walls.delete(key(ox + 3, oy + RT_H));
+  }
+  const things = new Map();
+  for (const r of rooms) {
+    const t = ROOM_THING[r];
+    if (t && ASSETS.things[t]) { const [ox, oy] = origin[r]; things.set(key(ox + 4, oy + 1), t); }
+  }
+  const slots = {};
+  for (const r of rooms) {
+    const [ox, oy] = origin[r];
+    (w.occupancy[r] ?? []).forEach((who, i) => { slots[who] = [ox + 1 + (i % 3) * 2, oy + 2 - Math.floor(i / 3)]; });
+  }
+  return { tw, th, walls, things, slots, origin, rooms, key };
+}
+function losClear(map, ax, ay, bx, by) {
+  // Bresenham；中间的墙/物件挡视线（端点不算）
+  let x = ax, y = ay;
+  const dx = Math.abs(bx - ax), dy = Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1;
+  let err = dx - dy;
+  while (!(x === bx && y === by)) {
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x += sx; }
+    if (e2 < dx) { err += dx; y += sy; }
+    if (x === bx && y === by) break;
+    const k = map.key(x, y);
+    if (map.walls.has(k) || map.things.has(k)) return false;
+  }
+  return true;
+}
+function lightRadius(phase) {
+  return phase === '夜' ? 5 : phase === '昼' ? 11 : 8;
+}
+function drawMap(cv, w) {
+  const map = buildMap(w);
+  const container = cv.parentElement?.clientWidth || map.tw * TILE;
+  const scale = Math.max(1, Math.floor(container / (map.tw * TILE)));
+  const LW = map.tw * TILE, LH = map.th * TILE;
   if (cv.width !== LW * scale || cv.height !== LH * scale) {
     cv.width = LW * scale; cv.height = LH * scale;
     cv.style.width = `${LW * scale}px`; cv.style.height = `${LH * scale}px`;
@@ -109,38 +161,52 @@ function draw(cv, w) {
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, LW, LH);
   g.font = '7px fusion-pixel, monospace';
-  for (const r of rooms) {
-    const [cx, cy] = grid[r];
-    const x = pad + cx * (ROOM_PX[0] + gap);
-    const y = pad + cy * (ROOM_PX[1] + gap);
+  // 地板：每房间 tilemap 拼到连续坐标
+  for (const r of map.rooms) {
+    const [ox, oy] = map.origin[r];
     const tile = ASSETS.tiles[r];
-    if (tile) g.drawImage(tile, x, y, ROOM_PX[0], ROOM_PX[1]);
-    else { g.fillStyle = '#1D2B53'; g.fillRect(x, y, ROOM_PX[0], ROOM_PX[1]); }
-    g.fillStyle = '#000000'; g.fillRect(x, y, ROOM_PX[0], 8);
-    g.fillStyle = '#C2C3C7'; g.fillText((w.rooms ?? LOCS)[r] ?? r, x + 2, y + 6);
-    const thing = ASSETS.things[ROOM_THING[r]];
-    if (thing) g.drawImage(thing, x + ROOM_PX[0] - 20, y + 10, 16, 16);
-    const crowd = w.occupancy[r] ?? [];
-    crowd.forEach((who, i) => {
-      const sprite = ASSETS.chars[who];
-      const px = x + 6 + i * 20, py = y + ROOM_PX[1] - 22;
-      if (sprite && sprite.frames.length) {
-        const im = sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length];
-        g.drawImage(im, px, py, 16, 16);
-      } else {
-        g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12);
-      }
-    });
-    g.fillStyle = '#FFCCAA';
-    if (r === 'home' || r === 'store') g.fillText(`公仓 ${w.pantry}`, x + 2, y + ROOM_PX[1] - 2);
-    let sx = x + ROOM_PX[0] - 2;
-    for (const who of crowd) {
-      if (w.stash[who] == null) continue;
-      const label = `${who === 'p1' ? '你' : (w.agents[who]?.name ?? who)}:${w.stash[who]}`;
-      sx -= label.length * 4 + 4;
-      g.fillText(label, sx, y + ROOM_PX[1] - 2);
-    }
+    if (tile) g.drawImage(tile, ox * TILE, oy * TILE, RT_W * TILE, RT_H * TILE);
+    else { g.fillStyle = '#1D2B53'; g.fillRect(ox * TILE, oy * TILE, RT_W * TILE, RT_H * TILE); }
   }
+  // 墙
+  g.fillStyle = '#000000';
+  for (const k of map.walls) { const [x, y] = k.split(',').map(Number); g.fillRect(x * TILE, y * TILE, TILE, TILE); }
+  // 物件
+  for (const [k, t] of map.things) { const [x, y] = k.split(',').map(Number); g.drawImage(ASSETS.things[t], x * TILE, y * TILE, TILE, TILE); }
+  // 玩家视野：光半径 + 光线投射
+  const pt = map.slots.p1 ?? [1, 1];
+  const radius = lightRadius(w.phase);
+  const visible = new Set();
+  for (let y = 0; y < map.th; y++) for (let x = 0; x < map.tw; x++) {
+    const d = Math.hypot(x - pt[0], y - pt[1]);
+    if (d <= radius && losClear(map, pt[0], pt[1], x, y)) visible.add(map.key(x, y));
+  }
+  // 角色：只在视野内画（视野外藏起来，体现"真实视野"）
+  for (const [who, [tx, ty]] of Object.entries(map.slots)) {
+    if (!visible.has(map.key(tx, ty))) continue;
+    const sprite = ASSETS.chars[who];
+    const px = tx * TILE, py = ty * TILE;
+    if (sprite && sprite.frames.length) g.drawImage(sprite.frames[Math.floor(w.t / 2) % sprite.frames.length], px, py, TILE, TILE);
+    else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
+    g.fillStyle = '#FFCCAA';
+    g.fillText(who === 'p1' ? '你' : (w.agents[who]?.name ?? who), px, py + TILE + 6);
+  }
+  // 迷雾：视野外压暗（夜更暗）
+  g.fillStyle = w.phase === '夜' ? 'rgba(0,0,0,.88)' : 'rgba(0,0,0,.72)';
+  for (let y = 0; y < map.th; y++) for (let x = 0; x < map.tw; x++) {
+    if (!visible.has(map.key(x, y))) g.fillRect(x * TILE, y * TILE, TILE, TILE);
+  }
+  // 房间名（只在可见时显示）
+  g.fillStyle = '#C2C3C7';
+  for (const r of map.rooms) {
+    const [ox, oy] = map.origin[r];
+    if (visible.has(map.key(ox + 1, oy))) g.fillText((w.rooms ?? LOCS)[r] ?? r, ox * TILE + 2, oy * TILE + 7);
+  }
+}
+
+function draw(cv, w) {
+  if (!ui.overview) { drawFocus(cv, w, ui.room); return; }
+  drawMap(cv, w);
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -360,6 +426,9 @@ async function refresh() {
     fillOcc($('occB'), j.B);
     pushToasts(j.A);
     $('btnOverview').classList.toggle('on', ui.overview);
+    $('btnOverview').textContent = ui.overview ? '聚焦当前房间' : '全地图';
+    const vi = $('visionInfo');
+    if (vi) vi.textContent = `视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）· 墙与物件挡视线`;
     $('tbl').innerHTML = table(j.A, j.B);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
@@ -415,21 +484,13 @@ function pickRoom(ev, cv) {
   if (!ui.overview) return api('/act', { kind: 'move', room: ui.room }).then(refresh);
   const rect = cv.getBoundingClientRect();
   const v = S.view ?? {};
-  const rooms = Object.keys(v.rooms ?? LOCS);
-  const grid = v.grid ?? ROOM_GRID;
-  const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
-  const rows = Math.max(...rooms.map((r) => grid[r][1])) + 1;
-  const pad = 8, gap = 8;
-  const LW = pad * 2 + cols * ROOM_PX[0] + (cols - 1) * gap;
-  const LH = pad * 2 + rows * ROOM_PX[1] + (rows - 1) * gap;
-  const scale = rect.width / LW;
-  const x = (ev.clientX - rect.left) / scale;
-  const y = (ev.clientY - rect.top) / scale;
-  for (const r of rooms) {
-    const [cx, cy] = grid[r];
-    const rx = pad + cx * (ROOM_PX[0] + gap);
-    const ry = pad + cy * (ROOM_PX[1] + gap);
-    if (x >= rx && x <= rx + ROOM_PX[0] && y >= ry && y <= ry + ROOM_PX[1]) return api('/act', { kind: 'move', room: r }).then(refresh);
+  const map = buildMap(v);
+  const scale = rect.width / (map.tw * TILE);
+  const tx = Math.floor((ev.clientX - rect.left) / scale / TILE);
+  const ty = Math.floor((ev.clientY - rect.top) / scale / TILE);
+  for (const r of map.rooms) {
+    const [ox, oy] = map.origin[r];
+    if (tx >= ox && tx < ox + RT_W && ty >= oy && ty < oy + RT_H) return api('/act', { kind: 'move', room: r }).then(refresh);
   }
 }
 
