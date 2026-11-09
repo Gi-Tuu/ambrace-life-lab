@@ -29,7 +29,7 @@ async function loadAssets() {
   }
 }
 
-const ui = { room: null, show: 'A' };
+const ui = { room: 'hall', show: 'A', overview: false };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -42,7 +42,55 @@ const ROOM_GRID = { home: [0, 0], hall: [1, 0], watch: [0, 1], store: [1, 1] };
 // 像素渲染（ui-pixel-spec）：逻辑分辨率 + 整数倍放大 + nearest-neighbor。房间=96×64 tilemap，角色/物件=16×16。
 const ROOM_PX = [96, 64];
 const ROOM_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
+
+// 聚焦镜头：默认只画当前房间（角色放大 + 台词气泡），全景退为可选。
+function lastLine(w, who) {
+  const name = who === 'p1' ? '你' : (w.agents[who]?.name ?? who);
+  for (let i = (w.log ?? []).length - 1; i >= 0; i--) {
+    const e = w.log[i];
+    if (e.who === name && e.kind === 'act') return e.text;
+  }
+  return '';
+}
+function drawFocus(cv, w, room) {
+  const container = cv.parentElement?.clientWidth || 384;
+  const scale = Math.max(2, Math.min(6, Math.floor(container / ROOM_PX[0])));
+  if (cv.width !== ROOM_PX[0] * scale || cv.height !== ROOM_PX[1] * scale) {
+    cv.width = ROOM_PX[0] * scale; cv.height = ROOM_PX[1] * scale;
+    cv.style.width = `${ROOM_PX[0] * scale}px`; cv.style.height = `${ROOM_PX[1] * scale}px`;
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, ROOM_PX[0], ROOM_PX[1]);
+  const tile = ASSETS.tiles[room];
+  if (tile) g.drawImage(tile, 0, 0, ROOM_PX[0], ROOM_PX[1]);
+  else { g.fillStyle = '#1D2B53'; g.fillRect(0, 0, ROOM_PX[0], ROOM_PX[1]); }
+  const thing = ASSETS.things[ROOM_THING[room]];
+  if (thing) g.drawImage(thing, ROOM_PX[0] - 22, 12, 16, 16);
+  g.font = '6px zpix, fusion-pixel, monospace';
+  const crowd = w.occupancy[room] ?? [];
+  crowd.forEach((who, i) => {
+    const px = 8 + i * 24, py = ROOM_PX[1] - 24;
+    const sprite = ASSETS.chars[who];
+    if (sprite && sprite.frames.length) g.drawImage(sprite.frames[Math.floor(w.t / 2 + i) % sprite.frames.length], px, py, 16, 16);
+    else { g.fillStyle = COLORS[who] ?? '#C2C3C7'; g.fillRect(px + 2, py + 2, 12, 12); }
+    g.fillStyle = '#FFCCAA';
+    g.fillText(who === 'p1' ? '你' : (w.agents[who]?.name ?? who), px, py + 22);
+    const line = lastLine(w, who);
+    if (line) {
+      const text = line.length > 12 ? line.slice(0, 12) + '…' : line;
+      const bw = text.length * 6 + 4;
+      const bx = Math.max(1, Math.min(ROOM_PX[0] - bw - 1, px - 4));
+      g.fillStyle = '#000000'; g.fillRect(bx, py - 10, bw, 9);
+      g.fillStyle = '#FFF1E8'; g.fillText(text, bx + 2, py - 3);
+    }
+  });
+  if (!crowd.length) { g.fillStyle = '#5F574F'; g.fillText('这间现在没人', 30, 32); }
+}
+
 function draw(cv, w) {
+  if (!ui.overview) { drawFocus(cv, w, ui.room); return; }
   const rooms = Object.keys(w.rooms ?? LOCS);
   const grid = w.grid ?? ROOM_GRID;
   const cols = Math.max(...rooms.map((r) => grid[r][0])) + 1;
@@ -210,6 +258,43 @@ function hailRow(el, pack) {
   el.innerHTML = '<span>喊住：</span>' + npc.map(([id, a]) => `<button data-h="${esc(id)}" title="让对方 4 刻内不换地方">${esc(a.name)}</button>`).join('');
 }
 
+// 聚焦镜头 HUD：小地图（点房间切镜头）、当前房间角色卡（头像+台词）、事件 toast。
+function fillMinimap(pack) {
+  const el = $('minimap');
+  const rooms = Object.keys(pack.rooms ?? LOCS);
+  el.innerHTML = rooms.map((r) => {
+    const n = (pack.occupancy[r] ?? []).length;
+    return `<button data-room="${esc(r)}" class="${r === ui.room ? 'on' : ''}">${esc((pack.rooms ?? LOCS)[r] ?? r)}<span class="n">${n}</span></button>`;
+  }).join('');
+}
+function fillOcc(el, pack) {
+  const crowd = pack.occupancy[ui.room] ?? [];
+  if (!crowd.length) { el.innerHTML = '<div class="empty">这间现在没人——点上面的房间切镜头。</div>'; return; }
+  el.innerHTML = crowd.map((who) => {
+    const a = pack.agents[who];
+    const sprite = ASSETS.chars[who];
+    const img = sprite && sprite.frames[0] ? `<img src="${sprite.frames[0].src}" alt="" />` : '';
+    const name = who === 'p1' ? '你' : (a?.name ?? who);
+    const mood = a ? esc(a.summary ?? '') : '玩家';
+    const line = esc(lastLine(pack, who) || '…');
+    return `<div class="card">${img}<div class="who"><b>${esc(name)}</b><span>${mood}</span><div class="sayline">「${line}」</div></div></div>`;
+  }).join('');
+}
+let toastSeen = 0;
+function pushToasts(pack) {
+  const norms = (pack.normLog ?? []).filter((e) => e.t > toastSeen);
+  if (!norms.length) return;
+  toastSeen = Math.max(toastSeen, ...norms.map((e) => e.t));
+  const box = $('toasts');
+  for (const e of norms.slice(-3)) {
+    const d = document.createElement('div');
+    d.className = 'toast';
+    d.textContent = `t${e.t} 群体规范：${esc(e.of)} 从 ${esc(e.victim)} 门口拿走一份（目击 ${(e.witnesses ?? []).map(esc).join('、')}）⇒ 信任下降`;
+    box.appendChild(d);
+    setTimeout(() => d.remove(), 6000);
+  }
+}
+
 function table(a, b) {
   const row = (k, x, y) => `<tr><td>${k}</td><td style="color:var(--a)">${x}</td><td style="color:var(--b)">${y}</td></tr>`;
   const lostOf = (p) => Object.values(p.agents).reduce((s, a) => s + ((a.viab?.lost ?? []).length), 0);
@@ -261,6 +346,14 @@ async function refresh() {
     secrets($('secrets'), j.A);
     hailRow($('hail'), j.A);
     social($('social'), j.A);
+    // 聚焦镜头 HUD：小地图 / 当前房间角色卡 / 事件 toast
+    const roomKeys = Object.keys(j.A.rooms ?? LOCS);
+    if (!roomKeys.includes(ui.room)) ui.room = roomKeys[0];
+    fillMinimap(j.A);
+    fillOcc($('occA'), j.A);
+    fillOcc($('occB'), j.B);
+    pushToasts(j.A);
+    $('btnOverview').classList.toggle('on', ui.overview);
     $('tbl').innerHTML = table(j.A, j.B);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
@@ -305,7 +398,15 @@ async function ctl(body) {
 
 $('cvA').addEventListener('click', (ev) => pickRoom(ev, $('cvA')));
 $('cvB').addEventListener('click', (ev) => pickRoom(ev, $('cvB')));
+$('minimap').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-room]');
+  if (!b) return;
+  ui.room = b.dataset.room;
+  refresh();
+});
+$('btnOverview').onclick = () => { ui.overview = !ui.overview; refresh(); };
 function pickRoom(ev, cv) {
+  if (!ui.overview) return api('/act', { kind: 'move', room: ui.room }).then(refresh);
   const rect = cv.getBoundingClientRect();
   const v = S.view ?? {};
   const rooms = Object.keys(v.rooms ?? LOCS);
