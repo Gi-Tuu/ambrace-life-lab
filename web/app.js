@@ -68,7 +68,7 @@ function drawFocus(cv, w, room) {
   else { g.fillStyle = '#1D2B53'; g.fillRect(0, 0, ROOM_PX[0], ROOM_PX[1]); }
   const thing = ASSETS.things[ROOM_THING[room]];
   if (thing) g.drawImage(thing, ROOM_PX[0] - 22, 12, 16, 16);
-  g.font = '6px zpix, fusion-pixel, monospace';
+  g.font = '6px fusion-pixel, monospace';
   const crowd = w.occupancy[room] ?? [];
   crowd.forEach((who, i) => {
     const px = 8 + i * 24, py = ROOM_PX[1] - 24;
@@ -108,7 +108,7 @@ function draw(cv, w) {
   g.setTransform(scale, 0, 0, scale, 0, 0);
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, LW, LH);
-  g.font = '7px zpix, fusion-pixel, monospace';
+  g.font = '7px fusion-pixel, monospace';
   for (const r of rooms) {
     const [cx, cy] = grid[r];
     const x = pad + cx * (ROOM_PX[0] + gap);
@@ -146,9 +146,15 @@ function draw(cv, w) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function bars(a) {
+  // 分段像素格：10 格，亮格=当前值，描边格=基线位置（不再用连续渐变条）
   return Object.entries(a.m).map(([d, v]) => {
     const b = a.baseline[d] ?? 0.5;
-    return `<div class="bar" title="${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）"><i style="width:${(v * 100).toFixed(0)}%"></i><u style="left:${(b * 100).toFixed(0)}%"></u></div>`;
+    const cells = Array.from({ length: 10 }, (_, i) => {
+      const on = (i + 0.5) / 10 <= v;
+      const base = Math.round(b * 10) === i + 1;
+      return `<b class="${on ? 'on' : ''}${base ? ' base' : ''}"></b>`;
+    }).join('');
+    return `<div class="bar" title="${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）">${cells}</div>`;
   }).join('');
 }
 
