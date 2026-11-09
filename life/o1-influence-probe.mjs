@@ -12,7 +12,10 @@ export function influenceFromTrace(agents) {
   let scoredRows = 0, memChanged = 0, habitRows = 0, habitChanged = 0;
   for (const a of Object.values(agents)) {
     for (const r of a.trace) {
-      if (!r.scored || !r.action) continue; // 反射刻没有 scored；它们不属于"非反射决策机会"
+      // 只认"做过一次完整评分"的行：反射刻没有 scored（不属于决策机会）。
+      // 不看 r.action —— 重选后仍非法而被中止的刻（layer:'aborted'）同样是一次被引擎计过数的
+      // 非反射决策，只是没有产生行动；把它排掉会让这里的分母小于引擎的 cfDecisions。
+      if (!r.scored) continue;
       scoredRows++;
       const u = r.scored.map((s) => ({ id: s.id, u: s.u }));
       const top = argmaxOf(u);

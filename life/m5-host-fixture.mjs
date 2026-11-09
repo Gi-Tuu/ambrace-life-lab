@@ -7,12 +7,15 @@ const {host}=await import('./host.mjs');
 if(mode==='bad'||mode==='badseed'){
  const path=mode==='badseed'?process.env.SEED_FILE:join(dir,'world.json');
  const before=await readFile(path);
- await assert.rejects(host.start(),/M5_STATE_INVALID/);
- assert.match(host.status().saveError,/M5_STATE_INVALID/);
- assert.equal(host.status().t,0,'损坏档案不能部分载入世界');
+ // H-05 之后 start() 不再因为 M5 状态不符而 rethrow（旧行为会让 serve 顶层 await 崩、容器无限重启、
+ // 而 world.json 原封不动 ⇒ 不可自愈）。新契约：**禁用 M5 降级装载、历史保留**，降级原因进 saveError。
+ // 判据仍是"坏档没被静默接受"：saveError 必须点名 M5_STATE_INVALID，且档案文件不得被改名/覆盖。
+ await host.start();
+ assert.match(String(host.status().saveError),/M5_STATE_INVALID/,'降级没有点名 M5_STATE_INVALID');
+ assert.ok(host.status().t>0,'降级装载没有保留历史（t 归零 = 把历史丢了）');
  host.stop();assert.deepEqual(await readFile(path),before,'坏档被覆盖');
  if(mode==='badseed')await assert.rejects(readFile(join(dir,'world.json')),{code:'ENOENT'});
- console.log(JSON.stringify({mode,error:host.status().saveError}));
+ console.log(JSON.stringify({mode,error:host.status().saveError,t:host.status().t}));
 }else{
 await host.start();host.stop();
 const p=host.packs.A,a=p.agents.a1,b=host.packs.B.agents.a1;

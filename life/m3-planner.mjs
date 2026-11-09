@@ -98,7 +98,14 @@ export class ShortHorizonPlanner{
  dump(){return {state:this.state?{goal:this.state.goal}:null,remaining:this.remaining};}
  load(d){
   if(!d||d.state==null){this.state=null;this.remaining=0;return;}
-  if(!['recover','connect','explore','maintain'].includes(d.state.goal)||!Number.isSafeInteger(d.remaining)||d.remaining<0||d.remaining>=this.commitment)throw new TypeError('无效的规划存档');
-  this.state={goal:d.state.goal};this.remaining=d.remaining;
+  // D8：旧版对越界 remaining 直接 throw。而"合法旧档 + 之后把 M3_COMMITMENT 调小"是**迁移**场景，
+  // 不是数据损坏 —— host 会把 throw 当成坏档隔离并标"存档损坏"，整段历史被丢弃（已用 40 刻合法档复现）。
+  // 因此 remaining 改为夹进合法区间；但 **goal 不认识仍然是错的数据**，照旧抛错（不静默吞）。
+  if(!d||d.state==null){this.state=null;this.remaining=0;return;}
+  if(typeof d!=='object'||!d.state||typeof d.state.goal!=='string')throw new TypeError('无效的规划存档');
+  if(!['recover','connect','explore','maintain'].includes(d.state.goal))throw new TypeError('无效的规划存档');
+  const rem=Number(d.remaining);
+  this.state={goal:d.state.goal};
+  this.remaining=Number.isSafeInteger(rem)?Math.min(Math.max(rem,0),Math.max(0,this.commitment-1)):Math.max(0,this.commitment-1);
  }
 }

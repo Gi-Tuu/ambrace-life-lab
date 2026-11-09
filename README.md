@@ -4,6 +4,8 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
+**版本 `0.1.0`** · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+
 ## 它不是什么
 
 不是对话式 NPC。角色的行为由内部状态驱动，经规则层校验合法性后实际改变世界状态；切断某条内部通道后行为分布随之变化，且该变化可复现、可对照。每条判据都配负向对照——不能变红的闸门不算闸门。
@@ -14,19 +16,25 @@
 |---|---|---|
 | L0 时钟 | 昼夜节律 | `life/clock.mjs` |
 | L1 载体 | 位置、身体、库存、秘密 | `life/body.mjs` |
-| L2 感受器 | 感知筛选 + 逐维精度 | `life/body.mjs`（筛选）+ `life/s4-predictor.mjs`（π） |
-| L3 反射弧 | 零成本快速反应 | `life/agent.mjs` |
-| L4 调制 | 内部状态 → 精度再分配 | `life/modulators.mjs` |
+| L2 感受器 | 感知筛选 + 逐维精度 π | `life/body.mjs`（`perceptsAt` 筛选）+ `life/s4-predictor.mjs`（残差→精度→权重） |
+| L3 反射弧 | 快速反应（3 条硬编码反射，先过规则层） | `life/agent.mjs` |
+| L4 调制 | 调制量积分（衰减 / 交叉 / 注入 / 噪声） | `life/modulators.mjs` |
 | L5 需求 | 内稳态与操作点 | `life/drives.mjs` |
 | L6 认知评价 | 相关 / 意外 / 可控 / 规范 | `life/appraisal.mjs` |
-| L7 动机 | 逐动作归因 | `life/model.mjs`（scoreAll 的逐项 parts）+ `life/metrics.mjs`（离线度量） |
+| L7 动机 | 逐动作归因（`scoreAll` 的逐项 `parts`） | `life/model.mjs` |
 | L8 行为状态 | 目标承诺期（可选层，默认关） | `life/m3-planner.mjs` |
 | 耦合调制权 | 变聋 / 离场 / 拒绝互动（可选层，默认关） | `life/coupling.mjs` |
-| L9 规则校验 | 合法性 + 驳回重决策 | `life/rules.mjs` |
-| L10 反应器 | 意图 → 世界改变 | `life/host.mjs` |
-| L11 记忆 | 情景 + 习惯 | `life/memory.mjs` |
-| L12 思考层 | 事件门控、按需接 LLM | `life/loop-real.mjs` |
+| L9 规则校验 | 合法性 + 驳回重决策（唯一裁决点） | `life/rules.mjs` |
+| L10 反应器（效应器） | 意图 → 世界改变 | `life/body.mjs` 的 `actuate`（**不是** `host.mjs`） |
+| — 世界宿主 | 持久化 / tick 调度 / 玩家面 / 载荷 | `life/host.mjs`（含线上思考层 `modelBrain`）+ `serve.mjs`（HTTP） |
+| L11 记忆 | 情景记忆 + 习惯表 | `life/memory.mjs`（情景）+ `life/model.mjs` 的 `makeHabit`（习惯） |
+| L12 思考层 | 事件门控、按需接 LLM | 线上：`life/host.mjs` 的 `modelBrain` + `life/agent.mjs` 的 `choose`；离线实验：`life/loop-real.mjs`（**CLI 脚本，服务端不加载**） |
 | L13 自我维持 | 存续账本 + 不可逆降级 | `life/viability.mjs` |
+
+> **未接线模块**（读代码时请注意）：`life/capability.mjs`、`life/pack.mjs`、`life/scene.mjs` 只被各自测试引用，
+> 运行路径不加载，镜像里也不含 `packs/`。它们是"换题材时形状该长什么样"的设计物，不是可用扩展点。
+> `life/metrics.mjs` 是离线度量库（`run.mjs` 调用），不属于在线动机层。
+> 模块头部的 `Lx` 编号沿用的是 README 插入 L3 反射弧之前的旧编号，比本表小一档。
 
 **世界预设**：`lab`（4 房间，全部研究读数与五份面用它）与 `town`（演示用：8 房间、物件、天气、工作/换粮/接济/结伴、群体规范、自然语言台词）。离线 `simulate` 默认 `lab`；`serve` 演示默认 `town`；预设随存档走。美术资源接入时按 `rooms/grid/things` 数据挂图，不改逻辑。
 
@@ -37,27 +45,33 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 
 ## 快速开始
 
-需要 Node 22+，零第三方依赖。
+需要 Node **22+**，零第三方依赖（不需要 `npm install`，没有 lock 文件）。
 
 ```bash
 node serve.mjs          # http://localhost:7860
 ```
 
-未配置模型端点时世界自动退回本地替身，照常运行。接入真实模型用环境变量；从 `.env` 文件读（不入库）时用 Node 22+ 的参数：
+未配置模型端点时世界自动退回本地确定性替身，照常运行。接入真实模型：
 
 ```bash
+cp .env.example .env               # 然后填 MODEL_PROVIDERS / MODEL_KEYS / MODEL_NAME
 node --env-file=.env serve.mjs
 ```
 
+环境变量的完整清单（含每个开关的"不设＝什么行为"）见 [`.env.example`](./.env.example)。
+
 ```
-MODEL_BASE_URL=   # 供应商端点，逗号分隔可配多个，按序退回
-MODEL_NAME=
-MODEL_KEY=
-MAX_CALLS=        # 调用预算闸门
-SLEEP_MS=         # 仅 life/loop-real.mjs（离线真模型循环）读取
-WORLD_PANTRY=     # 仅 life/loop-real.mjs 读取；演示世界的供给常量是硬编码的
-WORLD_STASH=
-WORK_CAP=         # 工坊每天收几次工（世界事实，A/B 两侧同样生效）。**不设＝无上限＝默认行为逐位不变**；设为 0 即"工坊停产"情景
+MODEL_PROVIDERS=  # 供应商端点，逗号分隔可配多个，按序退回（兼容旧名 MODEL_BASE_URL）
+MODEL_KEYS=       # 与端点按位对应的密钥（兼容旧名 MODEL_KEY）
+MODEL_NAME=       # 单供应商模型 id；多供应商用 MODEL_NAMES 按位对应
+MAX_CALLS=        # 每日调用预算闸门（跨天归零）
+BRAIN=            # local（默认，0 成本）| model
+TICK_MS=          # 每拍间隔，毫秒
+PRESENCE_MS=      # 无人观看多久后停调真模型。**单位是毫秒**：60 秒要写 60000
+CTL_TOKEN=        # 公开部署必设，否则任何脚本一条 JSON 就能重置世界（见 SECURITY.md）
+CHAT_TOKEN=       # 不设时 /chat 转发整体关闭（默认）
+WORK_CAP=         # 工坊每日收工次数；不设＝无上限＝默认行为逐位不变
+MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 ```
 
 密钥只留在服务端进程，不进前端、不进镜像、不进仓库。
@@ -65,28 +79,48 @@ WORK_CAP=         # 工坊每天收几次工（世界事实，A/B 两侧同样�
 ## 判据与复现
 
 ```bash
-node --test life/capability.test.mjs life/coupling.test.mjs life/host-archive.test.mjs life/host-layers.test.mjs life/host.test.mjs life/life.test.mjs life/m3-benchmark.test.mjs life/m3-model-reality.test.mjs life/m3-planner.test.mjs life/m3-social-reality.test.mjs life/m3-stop-proof.test.mjs life/m3-yield.test.mjs life/m3.test.mjs life/m5-event-exposure.test.mjs life/m5-host.test.mjs life/m5-integration.test.mjs life/m5-mechanics.test.mjs life/m5-pin.test.mjs life/m5-recovery-metrics.test.mjs life/m6-lp.test.mjs life/m6-plastic.test.mjs life/memory-ids.test.mjs life/o1-counterfactual.test.mjs life/o10-ledger.test.mjs life/o18-integration.test.mjs life/o18-metrics.test.mjs life/o9-event-first.test.mjs life/pack.test.mjs life/s4-integration.test.mjs life/s4-predictor.test.mjs life/scene.test.mjs life/social.test.mjs life/stash-initial.test.mjs life/town.test.mjs life/work-cap.test.mjs
-node life/o18-heldout.mjs       # 事前特征、时间留出和传话切断对照
-node life/run.mjs --report     # 四条件消融矩阵
-node life/run.mjs --sweep      # 多 seed 复核
-node life/run.mjs --viab       # 受损速度
-node life/run.mjs --recover    # 恢复动力学
-node life/run.mjs --metab      # 代谢与进食实测账
-node life/supply-tradeoff-sweep.mjs   # 供给常数取舍表（只测量，不改默认值）
-node life/o1-fallback-audit.mjs       # 影响度兜底窗口是否与侵蚀同窗
-node life/o1o9-mutation-battery.mjs   # 闸门变异电池：每条闸门都要能被变异打红
-node life/m6-device-probe.mjs         # M6 装置先验（巩固/睡眠压力/学习进度，只测量）
-node life/m6p-mutation-battery.mjs    # M6-P 精度门控可塑性闸门变异电池
-node life/m6-sl-round3.mjs            # M6 睡眠压力/学习进度 round3 装置（只测量）
-node life/m6lp-mutation-battery.mjs   # M6-L learning progress 闸门变异电池
-node life/seed-gen.mjs 600 seed-run   # 离线实跑生成种子到 seed-run/
-cp seed-run/world.json seed/world.json  # 再复制进镜像内置起点（否则镜像仍用旧种子）
-node serve.mjs                 # 本地 demo
+npm run lint      # 静态检查：语法 166 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
+npm test          # 39 个测试文件 / 299 条断言（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
+npm run check     # lint + test
 ```
 
-旧 P3 覆盖使用终局位置、事后需求与样本内标签择优，仅保留历史对照，不代表可执行规则的留出预测率。越轨份量是世界明示的营养当量；预期份量只影响越轨能量评分，支持独立切断，并非已学会后果或完整风险权衡。
+研究读数（五份面随仓库发布在 `evidence/`，md5 与复现方法见 [`EVIDENCE.md`](./EVIDENCE.md)）：
 
-套件必须逐个点名文件；`node --test life/` 不给文件名在部分 Node 版本下不通。
+```bash
+node life/run.mjs --report     # 四条件消融矩阵
+node life/run.mjs --sweep      # 多 seed 复核（打印实际跑了几档）
+node life/run.mjs --viab       # 受损速度
+node life/run.mjs --recover    # 恢复动力学：机械侧 + 观察侧
+node life/run.mjs --metab      # 代谢与进食实测账
+node life/o18-heldout.mjs      # 事前特征、时间留出、传话切断对照
+```
+
+闸门有效性（"不能变红的闸门不算闸门"的机械证明；每条都要求未变异对照先全绿、锚点唯一命中、变异必须打红指定闸门）：
+
+```bash
+node life/o1o9-mutation-battery.mjs   # 13 条
+node life/m6p-mutation-battery.mjs    # 4 条
+node life/m6lp-mutation-battery.mjs   # 4 条
+node life/m4-mutation-battery.mjs     # 7 条
+```
+
+**口径限制（必须一起读，否则会把弱证据当强证据）**：
+
+- `--report` 默认**不是**同随机流对照（`condition` 与 `channelMask` 会一起哈希进角色种子）。
+  要归因到通道，请加 `--paired`：两臂共用同一种子与同一条 rng 起点，只让通道不同。实测（seed=7, 400 刻）
+  C2 vs C2-neg 为 KL 0.6032 vs 0、主动发起 975 vs 573、驳回 84 vs 42——这条差异可以归因。
+  另外配对后 C0 / C1 / C2-neg 三行逐位相同（`channelsFor` 只区分 `'C2'` 与"其他"），
+  所以四条件矩阵实际是"C2 对三个同一张表的对照"。留底：`evidence/report-paired.log`。
+- 旧 P3 覆盖使用终局位置、事后需求与样本内标签择优，仅保留历史对照，不代表可执行规则的留出预测率。
+- 越轨份量是世界明示的营养当量；预期份量只影响越轨能量评分，支持独立切断，并非已学会后果或完整风险权衡。
+- `--viab` 的"饥馑"档只在头 55 刻真是饥馑（`simulate` 每 55 刻无条件补粮 +2），输出已带披露行。
+
+## 反馈
+
+- **缺陷 / 复现问题**：通过部署所在平台的作品页留言，或直接联系作者（见仓库根 `LICENSE` 的版权人）。
+- **安全相关问题**：按 [SECURITY.md](./SECURITY.md) 的方式私下报告，不要开公开 issue 写利用细节。
+- 单人项目，没有工单委员会与值班表；能保证的是：坏了会修、修了会配一条能变红的闸门。
 
 ## 部署
 

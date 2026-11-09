@@ -1,0 +1,14 @@
+# 统一编辑约定（格式基线）。零依赖项目不装格式化器，这里只是声明，
+# 由 `npm run lint`（scripts/check.mjs）做语法与纪律层面的强制。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

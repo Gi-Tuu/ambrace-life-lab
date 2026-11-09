@@ -56,7 +56,12 @@ export function workCapLeft(world, agentId) {
 // 只是把"我叫你等一下"这件事变成可执行的动作。
 export function hail(world, targetId, ticks = 3) {
   if (!world.loc[targetId]) return { ok: false, code: 'NO_TARGET' };
-  world.hail = { target: targetId, until: world.t + Math.max(1, ticks) };
+  // BUG-20：ticks 来自 HTTP 载荷，Infinity / NaN 都会直接写进世界状态。
+  // Infinity ⇒ 目标永远不换地方；NaN ⇒ 静默无效但返回 ok。这里钳到 [1, 60]。
+  const n = Number(ticks);
+  if (!Number.isFinite(n)) return { ok: false, code: 'BAD_TICKS' };
+  const span = Math.min(60, Math.max(1, Math.round(n)));
+  world.hail = { target: targetId, until: world.t + span };
   return { ok: true, code: 'OK', target: targetId, until: world.hail.until };
 }
 
@@ -115,7 +120,10 @@ export function addSecret(world, { kind, about, holder, valence, violates, detai
 // 私藏超额：门口存粮明显高于自己以为该有的量。这是"他有多的"这条可被套利的事实
 export function scanSecrets(world) {
   for (const id of Object.keys(world.stash)) {
-    if (world.stash[id] - (world.expect[id] ?? 3) >= 2) addSecret(world, { kind: 'hoard', about: id, holder: id, valence: 0.3, violates: null, detail: `${world.agents[id]?.name ?? id} 门口比预期多 ${world.stash[id] - (world.expect[id] ?? 3)} 份` });
+    // B3：expect 缺失时不能假定 3 —— 旧档（或手工档）没有 expect 而 stash 很大时，`?? 3` 会凭空造出
+    // 「私藏超额」秘密（幻影套利事实）。缺失就按 stash 自身算，等于「没有超出预期」。
+    const expect = world.expect[id] ?? world.stash[id];
+    if (world.stash[id] - expect >= 2) addSecret(world, { kind: 'hoard', about: id, holder: id, valence: 0.3, violates: null, detail: `${world.agents[id]?.name ?? id} 门口比预期多 ${world.stash[id] - (world.expect[id] ?? 3)} 份` });
   }
   return world.secrets.length;
 }
@@ -345,14 +353,18 @@ export function actuate(world, agentId, action) {
       const theirStash = world.stash[other] ?? 0;
       const mineStash = world.stash[agentId] ?? 0;
       if (mineStash + 2 <= theirStash) {
-        world.stash[other] = theirStash - 1; world.stash[agentId] = 1;
-        world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, 1);
+        // BUG-2：这里曾是 `= 1`（应为「原有 +1」）。候选门允许对方有 ≥2 份，于是接济一次会把他
+        // 手里的粮**赋值**成 1 份：有 5 份的人被接济后剩 1 份，世界总库存凭空蒸发。
+        world.stash[other] = theirStash - 1;
+        world.stash[agentId] = mineStash + 1;
+        world.expect[agentId] = Math.max(world.expect[agentId] ?? 0, world.stash[agentId]);
         if (world.agents[agentId]?.relations) world.agents[agentId].relations.meet(other, world.t, { delta: { trust: 2, familiarity: 0.02 }, why: '接济' });
         return { action, ok: true, code: 'OK', observation: `向${world.agents[other]?.name ?? other}要了一份`, satiated: 'energy', amount: 0.35, evt: evt({ kind: 'trade', valence: 0.25, serves: 'energy', about: other }) };
       }
       if (theirStash + 2 <= mineStash) {
-        world.stash[agentId] = mineStash - 1; world.stash[other] = 1;
-        world.expect[other] = Math.max(world.expect[other] ?? 0, 1);
+        world.stash[agentId] = mineStash - 1;
+        world.stash[other] = theirStash + 1; // BUG-2：同理，受助方是 +1 不是赋值 1
+        world.expect[other] = Math.max(world.expect[other] ?? 0, world.stash[other]);
         if (world.agents[other]?.relations) world.agents[other].relations.meet(agentId, world.t, { delta: { trust: 3, familiarity: 0.03 }, why: '受助' });
         return { action, ok: true, code: 'OK', observation: `给了${world.agents[other]?.name ?? other}一份`, satiated: 'social', amount: 0.05, evt: evt({ kind: 'trade', valence: 0.35, serves: 'social', about: other }) };
       }
@@ -384,8 +396,10 @@ export function actuate(world, agentId, action) {
         if (crowd.length >= 2) {
           world.normLog ??= [];
           world.normLog.push({ t: world.t, of: agentId, victim, witnesses: crowd.slice() });
-          for (const w of Object.keys(world.agents)) {
-            if (w === agentId || w === 'p1' || !world.agents[w]?.relations) continue;
+          // BUG-13：只罚**目击者**（当场在场的 crowd）。上一版遍历 Object.keys(world.agents)，
+          // 于是不在场、也没跟行为人结伴的人同样 −1，与上面这句注释和 §28 C 的设计不符。
+          for (const w of crowd) {
+            if (w === 'p1' || !world.agents[w]?.relations) continue;
             const allied = Array.isArray(world.companions) && world.companions.some((p) => (p[0] === w && p[1] === agentId) || (p[1] === w && p[0] === agentId));
             world.agents[w].relations.meet(agentId, world.t, { delta: { trust: allied ? -2 : -1 }, why: '目击越轨的群体规范' });
           }

@@ -14,7 +14,7 @@ import { makeRng } from './rng.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { ForwardModel } from './s4-predictor.mjs';
-import { DAY_TICKS, dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
+import { dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
 import { PARAMS } from './params.mjs';
 import { ShortHorizonPlanner } from './m3-planner.mjs';
 import { Coupling, COUPLING_KINDS } from './coupling.mjs';
@@ -59,6 +59,19 @@ export class Organism {
     this.deliberator = deliberator;
     this.trace = [];
     this.counters = { actions: 0, reflex: 0, habit: 0, deliberation: 0, rejected: 0, spontaneous: 0, initiated: 0, externalEvents: 0, llmCalls: 0, normbreak: 0, erosion: 0, reflect: 0, asked: 0, skipped: 0, triggered: 0, informed: 0 };
+    // D4：当天的账做成可持久化计数器（trace 不落盘，不能拿它当日志源）
+    this.dayTally = { day: 0, decisions: 0, byDriver: {}, norm: 0, rejected: 0 };
+  }
+
+  // R8：关系写入必须统一夹到 ceiling。viab 的"关系维护"侵蚀会降低 ceiling，
+  // 而 assess() 的常规路径直接 ± 而不看 ceiling ⇒ 被侵蚀的上限可以被普通社交顶穿
+  // （实测 ceiling 75 时 trust 被 6 次 contact 顶到 93），"不可逆降级"因此部分可逆。
+  bumpRel(id, trustDelta = 0, famDelta = 0) {
+    const r = this.relations.get(id);
+    const cap = typeof this.relations.ceiling === 'number' ? this.relations.ceiling : 100;
+    r.trust = Math.max(0, Math.min(cap, r.trust + trustDelta));
+    r.familiarity = Math.max(0, Math.min(1, r.familiarity + famDelta));
+    return r;
   }
 
   assess(evt, actionKind = null, actionSucceeded = null) {
@@ -67,15 +80,11 @@ export class Organism {
     if (this.ch.m5) this.bank.observeEvent(evt, a);
     this.memory.add(this.world?.t ?? 0, { kind: evt.kind, actionKind, actionSucceeded, payload: `来自${evt.about ?? '环境'}`, mSnapshot: this.bank.snapshot(), importance: a.importance });
     if (evt.about) {
-      const r = this.relations.get(evt.about);
-      if (evt.kind === 'contact') {
-        r.familiarity = Math.min(1, r.familiarity + 0.06);
-        r.trust = Math.max(0, Math.min(100, r.trust + 3));
-      }
-      if (evt.violates) r.trust = Math.max(0, r.trust - 10 * this.traits.goals.order);
+      if (evt.kind === 'contact') this.bumpRel(evt.about, 3, 0.06);
+      if (evt.violates) this.bumpRel(evt.about, -10 * this.traits.goals.order, 0);
     }
     if (evt.kind === 'shortfall' || evt.kind === 'witnessed') {
-      for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.relations.get(id).trust = Math.max(0, this.relations.get(id).trust - 4 * this.traits.goals.order);
+      for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.bumpRel(id, -4 * this.traits.goals.order, 0);
     }
     return a;
   }
@@ -187,18 +196,24 @@ export class Organism {
     if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
 
     const hb = this.habit.best();
+    // R1（第二次审计 P0）：习惯分支**原先不做任何规则校验**就直接 execute ——
+    // "规则层是唯一裁决者"因此是假的。实测 50159 次执行里 693 次非法动作真的改了世界：
+    // 607 次夜里 look_out（LOCKED_HOUR）、86 次空缸 eat（DEPLETED）。这里先验一次：
+    // 非法就不许走捷径，落回下面的审议层由规则层裁决（而不是静默什么都不做）。
+    const hbPick = hb ? scored.find((s) => s.id === hb.id) : null;
+    const habitLegal = Boolean(hbPick) && validate(world, this.id, hbPick.act).ok;
     // O9-M（PLAN §23.2）：有登记在册的事件时，习惯不得抢先接管——否则"四类事件才问模型"实测只对一半成立
     // （§47.3：587 次触发只有 294 次真问到，习惯截流 40.5%）。反射层**不动**：alarm/缺口是生存反应，
     // 让它等一次模型往返在线上 6 秒/刻的世界里是可见退化，所以"关键事件"类仍由反射接管，这是设计不是缺陷。
-    if (!told && !(ch.eventFirst && reason) && hb && scored[0] && hb.ema >= scored[0].u - temp * 0.5 && scored.some((s) => s.id === hb.id) && this.rng() < 0.7) {
+    if (habitLegal && !told && !(ch.eventFirst && reason) && hb && scored[0] && hb.ema >= scored[0].u - temp * 0.5 && scored.some((s) => s.id === hb.id) && this.rng() < 0.7) {
       // 习惯的"改变"只在它真的接管时计：习惯选中 ≠ 评分第一名（PLAN §23.1 的基线口径：argmax，不是抽样结果）
       if (ch.cfUsage) {
-        const pick = scored.find((s) => s.id === hb.id);
+        const pick = hbPick;
         const top = scored.reduce((best, x) => (x.u > best.u ? x : best), scored[0]);
         if (pick && pick.id !== top.id) this.counters.cfHabit = (this.counters.cfHabit ?? 0) + 1;
       }
       this.counters.habit += 1;
-      return this.execute(world, scored.find((s) => s.id === hb.id).act, 'habit', t, external.length === 0, { temp, scored });
+      return this.execute(world, hbPick.act, 'habit', t, external.length === 0, { temp, scored });
     }
 
     this.counters.deliberation += 1;
@@ -206,11 +221,23 @@ export class Organism {
     let v = validate(world, this.id, chosen.act);
     if (!v.ok) {
       this.counters.rejected += 1;
+      this.noteDayReject(t);
       const rest = scored.filter((s) => s.id !== chosen.id);
       if (!rest.length) return null;
       // 被驳回本身就是"关键事件"：这次一定要问，否则重试永远走替身
       const again = await this.choose({ scored: rest, temp, ch, world, paths: rest.map((r) => r.act), rejected: v, reason: '驳回重决策' });
       this.trace.push({ t, id: this.id, layer: 'rejected', name: this.name, code: v.code, why: v.why, from: chosen.id, to: again.id, m: this.bank.snapshot(), cond: this.condition });
+      // BUG-1：重选出来的动作必须再过一次规则层。上一版这里直接把 again 交给 execute，
+      // 等于"被驳回一次之后就免检"——实测夜里 eat 被 DEPLETED 驳回、重选到 look_out
+      // （validate 明确返回 LOCKED_HOUR）仍然执行，角色夜里上了瞭台。
+      // 不无限重试，也不重复计数：一次驳回只记一次 rejected（askedRetry === rejected 这条恒等式靠它）。
+      if (!validate(world, this.id, again.act).ok) {
+        // 重选后仍非法 ⇒ 本刻不行动。但仍然留一条 trace（带 scored、不带 action），
+        // 否则引擎内的 cfDecisions 会比"从 trace 独立重算的决策数"多出来，
+        // o1-counterfactual 的装置交叉核对（两条实现必须一致）就会红。
+        this.trace.push({ t, id: this.id, layer: 'aborted', name: this.name, code: 'RETRY_ILLEGAL', why: `${again.id} 重选后仍不合法`, from: chosen.id, to: again.id, action: null, m: this.bank.snapshot(), scored, cond: this.condition });
+        return null;
+      }
       chosen = again;
     }
     return this.execute(world, chosen.act, 'deliberation', t, external.length === 0, { temp, scored });
@@ -271,18 +298,31 @@ export class Organism {
     return null;
   }
 
+  // D4：把"这一天的账"做成可持久化的计数器，供 ⑦ 反思读取。
+  // 只在跨天时归零，所以即使 reflect 关着也不会跨天累计。
+  rollDay(day) {
+    if (this.dayTally.day !== day) this.dayTally = { day, decisions: 0, byDriver: {}, norm: 0, rejected: 0 };
+  }
+  noteDay(t, driver = 'none', norm = false) {
+    this.rollDay(dayOf(t));
+    this.dayTally.decisions += 1;
+    this.dayTally.byDriver[driver] = (this.dayTally.byDriver[driver] ?? 0) + 1;
+    if (norm) this.dayTally.norm += 1;
+  }
+  noteDayReject(t) {
+    this.rollDay(dayOf(t));
+    this.dayTally.rejected += 1;
+  }
+
   // ⑦ 反思回合：把这一天压成一条自传体记忆。**只写记忆，不动 m、不动效用**——
   // 巩固对内部状态的影响属于 M6，现在做就等于把两个里程碑的效应混成一团。
   reflect(world) {
-    const from = world.t - DAY_TICKS;
-    const recs = this.trace.filter((r) => r.t > from && r.t <= world.t && r.action);
-    if (!recs.length) return null;
-    const tally = {};
-    for (const r of recs) tally[r.driver ?? 'none'] = (tally[r.driver ?? 'none'] ?? 0) + 1;
-    const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
-    const norm = recs.filter((r) => r.kind === 'take_shared' && r.ok).length;
-    const rej = this.trace.filter((r) => r.layer === 'rejected' && r.t > from && r.t <= world.t).length;
-    const text = `第 ${dayOf(world.t) + 1} 天：做了 ${recs.length} 个决定，多数由「${top[0]}」驱动；越轨 ${norm} 次，被驳回 ${rej} 次`;
+    this.rollDay(dayOf(world.t));
+    const t = this.dayTally;
+    if (!t.decisions && !t.rejected) return null;
+    const tally = { ...t.byDriver };
+    const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0] ?? ['none', 0];
+    const text = `第 ${dayOf(world.t) + 1} 天：做了 ${t.decisions} 个决定，多数由「${top[0]}」驱动；越轨 ${t.norm} 次，被驳回 ${t.rejected} 次`;
     this.memory.add(world.t, { kind: 'reflect', payload: text, mSnapshot: this.bank.snapshot(), importance: 0.6 });
     this.counters.reflect += 1;
     this.trace.push({ t: world.t, id: this.id, name: this.name, layer: 'reflect', text, drivers: tally, m: this.bank.snapshot(), cond: this.condition });
@@ -399,6 +439,15 @@ export class Organism {
   }
 
   execute(world, action, layer, t, silent, extra = {}) {
+    // R1 的结构性兜底：execute 是唯一的效果器入口，所以裁决必须在这里也成立一次。
+    // 上面三条路径（反射/习惯/审议）各自都验过了，但"每个调用点各补一遍"正是这个 P0 得以存在的
+    // 原因（习惯那条漏了三个月）。这里再验一次：非法就拒绝，并且**不消耗任何资源**。
+    const gate = validate(world, this.id, action);
+    if (!gate.ok) {
+      this.counters.refused = (this.counters.refused ?? 0) + 1;
+      this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: gate.code, why: gate.why, m: this.bank.snapshot(), cond: this.condition });
+      return null;
+    }
     const result = actuate(world, this.id, action);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
     const actionCost = action.cost ?? 0.06;
@@ -437,11 +486,15 @@ export class Organism {
       if (['talk', 'take_shared', 'look_out'].includes(action.kind) || (action.kind === 'move_to' && (world.occupancy[action.to] ?? []).length > 0)) this.counters.initiated += 1;
     }
     const entry = extra.scored?.find((s) => s.id === id);
+    const driverOf = entry?.driver ?? (layer === 'reflex' ? '反射' : layer === 'habit' ? '习惯' : 'none');
+    // D4：当天账累积在状态里（不是每次从 trace 现算）。trace 不落盘、还会被 TRACE_CAP 裁掉，
+    // 重启后现算会把"做了 23 个决定"写成"3 个"，并且那段文字会被永久写进自传体记忆。
+    this.noteDay(t, driverOf, result.ok && action.kind === 'take_shared');
     this.trace.push({
       t, id: this.id, name: this.name, layer, action: id, kind: action.kind, target: action.target ?? action.to ?? null,
       tickStart: this.tickStart?.t === t ? this.tickStart : null,
       ok: result.ok, obs: result.observation, m: this.bank.snapshot(), drives: { ...this.drives.v }, dep: this.drives.describe(),
-      driver: entry?.driver ?? (layer === 'reflex' ? '反射' : layer === 'habit' ? '习惯' : 'none'), parts: entry?.parts ?? null,
+      driver: driverOf, parts: entry?.parts ?? null,
       appraisal: a.parts, importance: Number(a.importance.toFixed(3)), rel: this.relations.dump(t), summary: this.bank.summary(), cond: this.condition,
       m3: this.ch.m3 ? this.m3Last : null,
       viab: { v: Number(this.viab.v.toFixed(3)), reserve: Number(this.viab.reserve.toFixed(3)), risk: Number((this.ch.viab ? this.viab.risk : 0).toFixed(3)), ledger: this.viab.ledger.length, cost: Number(actionCost.toFixed(3)), ate: Number(ateAmount.toFixed(3)), paid, fed },

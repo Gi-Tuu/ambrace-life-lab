@@ -242,6 +242,18 @@ async function refresh() {
     else if (!m.watching) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
     else if ((m.calls ?? 0) >= (m.budget ?? 0)) { chip.textContent = `后端：替身（今日 ${m.budget} 次已用完）`; chip.classList.remove('on'); }
     else { chip.textContent = `后端：真模型 ${m.calls ?? 0}/${m.budget ?? '?'}（今日额度）`; chip.classList.add('on'); }
+    // H-15 / BUG-18：存档失败与 tick 异常原先在页面上**完全不可见**（只有 /healthz 里埋着），
+    // 世界照跑、日志照动，重启后静默回滚到旧档。这里必须红字暴露出来。
+    const faults = [];
+    if (j.saveError) faults.push(`存档失败：${j.saveError}`);
+    if (j.tickError) faults.push(`决策循环异常：${j.tickError}`);
+    if (faults.length) {
+      chip.textContent = `后端：故障 — ${faults.join(' / ')}`;
+      chip.classList.remove('on');
+      chip.classList.add('bad');
+    } else {
+      chip.classList.remove('bad');
+    }
     draw($('cvA'), j.A);
     draw($('cvB'), j.B);
     rows($('rowsA'), j.A, 'a');
@@ -318,7 +330,7 @@ function pickRoom(ev, cv) {
 
 $('btnRun').onclick = () => ctl({ action: S.running ? 'pause' : 'resume' });
 $('btnStep').onclick = () => ctl({ action: 'step' });
-$('btnReset').onclick = () => ctl({ action: 'reset' });
+$('btnReset').onclick = () => ctl({ action: 'reset', confirm: true }); // H-02c：服务端要求 confirm 才重置
 $('btnBrain').onclick = () => ctl({ action: 'brain', brain: S.brain === 'model' ? 'local' : 'model' });
 // M3/M4 的开关是"这一页要不要接上这一层"，机制侧默认关；切一次会把两个世界拉回本次会话的起点重放。
 $('btnM3').onclick = () => ctl({ action: 'mask', key: 'm3', on: !(S.masks?.m3) });
@@ -344,4 +356,17 @@ $('hail').addEventListener('click', (e) => {
   api('/act', { kind: 'hail', target: b.dataset.h, ticks: 4 }).then(refresh);
 });
 
-loadAssets().finally(() => { refresh(); setInterval(refresh, 900); });
+// 轮询要"串行 + 停靠"：
+//  · 旧版 setInterval(refresh,900) 不等上一请求，慢网下会叠加、且响应可乱序（旧快照覆盖新快照）；
+//  · 后台标签页必须停轮询，否则它会一直替世界打 touch()，把"有观众才调真模型"的省额度设计废掉。
+let refreshing = false;
+async function poll() {
+  if (document.hidden || refreshing) return;
+  refreshing = true;
+  try { await refresh(); } finally { refreshing = false; }
+}
+loadAssets().finally(() => {
+  poll();
+  setInterval(poll, 900);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+});

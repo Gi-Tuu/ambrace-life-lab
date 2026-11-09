@@ -24,7 +24,14 @@ test('T2 town 结构：8 房间/物件/开关；lab 四间且顺序不变', () =
 test('T3 天气确定性：同 (seed,day) 同值；坏天气只对户外可见，另在户外扣能量', async () => {
   for (let d = 0; d < 30; d++) assert.equal(weatherFor(7, d), weatherFor(7, d));
   assert.ok(WEATHERS.includes(weatherFor(7, 3)));
-  assert.notEqual(weatherFor(7, 0) + weatherFor(7, 1) + weatherFor(7, 2) + weatherFor(11, 0) + weatherFor(11, 1) + weatherFor(11, 2), '都相同');
+  // BUG-9：这里原来断言"六个天气值拼起来的字符串 ≠ '都相同'"，对任何实现都恒真（假绿）。
+  // 改成真断言：跨 2 个 seed × 30 天的取值集合必须至少有两档，否则天气就是个常数。
+  const samples = [];
+  for (const s of [7, 11]) for (let d = 0; d < 30; d++) samples.push(weatherFor(s, d));
+  const kinds = [...new Set(samples)];
+  assert.ok(kinds.length >= 2, `天气永远只有 ${kinds.join('/')} 一档 ⇒ 天气没在变，确定性闸门是假的`);
+  // 确定性：同 (seed, day) 必须逐位稳定，不受调用顺序影响
+  assert.equal(weatherFor(7, 3), samples[3], '同 (seed,day) 两次取值不一致');
   const w = makeWorld({ preset: 'town', seed: 7 });
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 1, condition: 'C2' });
   w.agents.a1 = a;

@@ -82,9 +82,14 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     }
     let u = base + viabDelta + expectedDelta;
     let discriminatingMod = 0;
+    // R3：这一项对所有动作相同、改不了名次，旧版把它加进 u 却**不进 parts** ⇒
+    // parts.total 与 Σ已命名分量不闭合（实测 99.0% 的行不等，缺口均值 0.057、最大 0.398，
+    // 占 total 的 26%，比所有已命名修饰项都大）。现在显式记成 `常数偏移` 让账目闭合，
+    // 但它**不参与 driver**——driver 回答的是"哪个可归因通道主导"，常数对所有动作一样，不是通道。
+    let utilConst = 0;
     if (ch.util) {
-      // 这一项对所有动作相同，改不了名次，因此**不计入行动来源**（§26 的常数偏移教训）
-      u += 0.4 * (hill(bank.x('approach')) * traits.gain.approach - hill(bank.x('inhibit')) * traits.gain.inhibit * traits.inhibitW);
+      utilConst = 0.4 * (hill(bank.x('approach')) * traits.gain.approach - hill(bank.x('inhibit')) * traits.gain.inhibit * traits.inhibitW);
+      u += utilConst;
       discriminatingMod = 0.2 * hill(bank.x('arousal')) * act.impulse * traits.gain.arousal;
       // 语义是 optimal arousal：比平时更警觉 ⇒ 偏冒险；比平时更迟钝 ⇒ 偏守着不动
       discriminatingMod += 0.25 * hill(bank.x('arousal')) * (act.impulse - 0.3) * traits.gain.arousal;
@@ -103,12 +108,13 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     // 份额 = 在线相对进度 g × weight；单独立项 `探索`。关开关时 exploreGate=0 ⇒ 精确退回原评分。
     const exploreBonus = exploreIds && exploreIds.has(act.id) ? exploreGate * PARAMS.lp.weight : 0;
     u += exploreBonus;
-    const cand = { ...bd, 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
+    const cand = { ...bd, 常数偏移: Number(utilConst.toFixed(4)), 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
     if (schedBonus) cand.日程 = Number(schedBonus.toFixed(4));
     if (exploreBonus) cand.探索 = Number(exploreBonus.toFixed(4));
     if (expectedDelta) cand.预期份量 = Number(expectedDelta.toFixed(4));
     if (viabDelta) cand.存续风险 = Number(viabDelta.toFixed(4)); // 风险为 0 时不挂这个标签，免得归因表里出现恒零的假来源
-    const driver = Object.entries(cand).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ?? 'none';
+    // R3：driver 只在**可归因**通道里取 argmax（排除常数偏移与总数），否则它会恒等于"常数偏移"
+    const driver = Object.entries(cand).filter(([k]) => k !== '常数偏移').sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ?? 'none';
     out.push({
       id: actionId(act),
       kind: act.kind,
