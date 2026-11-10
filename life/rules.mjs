@@ -3,6 +3,7 @@
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
+import { maturePlots } from './worldstate.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
@@ -33,6 +34,13 @@ export function validate(world, agentId, intent) {
   if (kind === 'buy') {
     if (here !== 'store') return fail('NOT_STORE', '换粮得在公仓');
     if ((world.coins?.[agentId] ?? 0) < 2) return fail('NO_COINS', '铜币不够');
+  }
+  // Phase A 生存动作：只在 survival 世界合法，且须在菜园、有成熟/空地块。
+  if (kind === 'harvest' || kind === 'plant') {
+    if (!world.survival) return fail('NOT_AVAILABLE', '这个世界没有菜畦');
+    if (here !== 'garden') return fail('NOT_GARDEN', '得到菜园才能耕作');
+    if (kind === 'harvest' && !maturePlots(world.survival).length) return fail('NO_MATURE', '没有成熟的菜畦');
+    if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   if (kind === 'trade' || kind === 'companion') {
     if (!intent.target) return fail('NO_TARGET', '没指定对象');

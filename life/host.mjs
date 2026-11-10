@@ -276,7 +276,7 @@ async function tickBody(onError = null) {
     if (p.world.weatherEnabled) p.world.weather = weatherFor(CFG.seed, dayOf(p.world.t));
     p.world.percepts = [];
     p.world.pending = p.world.pending.filter((x) => x.for !== 'p1');
-    if (p.world.t % 90 === 0) p.world.pantry = Math.min(6, p.world.pantry + 2);
+    if (!p.world.survival && p.world.t % 90 === 0) p.world.pantry = Math.min(6, p.world.pantry + 2); // survival 不无限补公仓
     scanSecrets(p.world); // 私藏超额这类"可被套利的事实"要持续被登记，不然传话只能靠越轨这一种来源
     for (const id of Object.keys(p.agents)) {
       const a = p.agents[id];

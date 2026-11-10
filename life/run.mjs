@@ -43,7 +43,7 @@ export async function simulate({ seed = 7, ticks = 400, condition = 'C2', mInit 
     // PLAN §28：town 的天气按 (seed, day) 确定性给；lab 的 weatherEnabled=false，不执行。
     if (world.weatherEnabled) world.weather = weatherFor(seed, dayOf(t));
     if (events && t % 97 === 0) world.percepts.push({ for: 'all', kind: 'alarm', subject: '墙外', salience: 0.9 });
-    if (t % 55 === 0) world.pantry = Math.min(8, world.pantry + 2);
+    if (!world.survival && t % 55 === 0) world.pantry = Math.min(8, world.pantry + 2); // survival 食物只来自资源循环，不无限补公仓
     scanSecrets(world);
     if (gossipAt.includes(t)) {
       // 离线世界没有玩家实体 ⇒ presence:false（在场性由 host 路径与单测覆盖，见 gossip.mjs 注释）
