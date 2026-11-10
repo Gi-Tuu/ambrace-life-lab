@@ -43,6 +43,39 @@
 L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask` 不传），关掉时不消费额外随机数、不写状态，轨迹与没有这两层时逐位相同。
 离线实验用 `channelMask` 打开它们并单独计量；演示页上的 `M3 承诺期 / M4 耦合调制` 两个开关只是同一件事的入口，且只叠加在 A 侧（B 侧是切断承重通道的负向对照，把内部状态接回决策就不再是对照）。
 
+## 项目结构
+
+```
+.
+├─ serve.mjs              # HTTP 入口：静态资源 + /world /act /ctl /healthz + 写路由守卫
+├─ life/                  # 引擎（L0–L13）+ 全部闸门测试 + 离线复现脚本
+│  ├─ host.mjs            #   世界宿主：持久化 / tick 调度 / 载荷 / 线上思考层
+│  ├─ body.mjs            #   载体 + 效应器(actuate) + 感知筛选
+│  ├─ agent.mjs / model.mjs / rules.mjs   # 反射 / 动机 / 规则校验(唯一裁决点)
+│  ├─ clock.mjs / drives.mjs / appraisal.mjs / memory.mjs / viability.mjs …
+│  ├─ m3-planner.mjs / coupling.mjs       # 可选层（默认关）
+│  ├─ *.test.mjs          #   42 个测试文件（闸门，含负向对照）
+│  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
+├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
+│  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
+│  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
+│  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
+│  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
+│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体
+├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
+│  ├─ gen-pixel-assets.mjs / gen-actions.mjs / pack-assets.mjs
+│  ├─ editor-catalog.mjs / pixel-overrides.mjs
+│  └─ check.mjs / test.mjs
+├─ seed/world.json        # 固定历史起点（seed=7 实跑 600 刻存档）
+├─ evidence/              # 研究读数留底（随仓库发布，复现见 EVIDENCE.md）
+├─ Dockerfile             # 魔搭创空间镜像（只含 serve/life/web/seed）
+└─ package.json           # 零第三方依赖；scripts = lint/test/check/coverage/assets/serve
+```
+
+美术资产全部由 `scripts/` 代码定义生成（`npm run assets` 一键可复现），色板锁 `web/assets/palette.json`；
+前端只读 `/world` 载荷做表现，动画不读 `w.t`、不消费 rng、不写世界状态，故不污染研究读数。
+内部台账 / 交接稿在 `docs/`（`.gitignore`，不入库）。
+
 ## 快速开始
 
 需要 Node **22+**，零第三方依赖（不需要 `npm install`，没有 lock 文件）。
@@ -79,8 +112,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 ## 判据与复现
 
 ```bash
-npm run lint      # 静态检查：语法 172 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 41 个测试文件 / 308 条断言（发现式点名，不会漏文件）
+npm run lint      # 静态检查：语法 176 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
+npm test          # 42 个测试文件 / 313 条断言（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
 npm run check     # lint + test
 ```
