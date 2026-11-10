@@ -630,7 +630,7 @@ const DUST = {};        // cvId -> [{x, y, age}]（tile 坐标）
 
 function drawViewport(cv, w) {
   // 按容器选择完整的原生像素格，桌面横向取景；窄屏缩小取景范围而非压缩精灵。
-  VIEW_TW = Math.max(8, Math.min(28, Math.floor(((cv.parentElement?.clientWidth || 916) - 20) / (TILE * ART))));
+  VIEW_TW = Math.max(20, Math.min(28, Math.floor(((cv.parentElement?.clientWidth || 916) - 20) / (TILE * ART))));
   const gardenView=(ui.camRoom??w.loc?.p1)==='garden';
   VIEW_TH = gardenView?Math.min(20,Math.max(12,Math.round(VIEW_TW*.72))):Math.min(14,Math.max(10,Math.round(VIEW_TW*.6)));
   VIEW_W = VIEW_TW * TILE; VIEW_H = VIEW_TH * TILE;
@@ -644,10 +644,9 @@ function drawViewport(cv, w) {
   lastCam = { ...cam, mode: 'view' };
   cv._cam = lastCam;
   const CW = VIEW_W * cam.zoom, CH = VIEW_H * cam.zoom;
-  if (cv.width !== CW || cv.height !== CH) {
-    cv.width = CW; cv.height = CH;
-    cv.style.width = `${CW}px`; cv.style.height = `${CH}px`;
-  }
+  if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; }
+  const fitW = Math.min(CW, cv.parentElement?.clientWidth || CW);   // 窄屏缩到容器宽，避免溢出或过度放大
+  cv.style.width = `${fitW}px`; cv.style.height = `${Math.round(CH * fitW / CW)}px`;
   const g = cv.getContext('2d');
   g.setTransform(cam.zoom, 0, 0, cam.zoom, 0, 0);
   g.imageSmoothingEnabled = false;
@@ -1327,8 +1326,8 @@ function pickRoom(ev, cv) {
     tx = ((ev.clientX - rect.left) / rect.width) * WORLD_TW;
     ty = ((ev.clientY - rect.top) / rect.height) * WORLD_TH;
   } else {
-    tx = (cam.x + (ev.clientX - rect.left) / cam.zoom) / TILE;
-    ty = (cam.y + (ev.clientY - rect.top) / cam.zoom) / TILE;
+    tx = (cam.x + (ev.clientX - rect.left) / rect.width * VIEW_W) / TILE;
+    ty = (cam.y + (ev.clientY - rect.top) / rect.height * VIEW_H) / TILE;
   }
   let best = null, bd = Infinity;
   for (const [r, [sx, sy]] of Object.entries(sites)) {
@@ -1356,7 +1355,7 @@ function entrySiteAt(sites, tx, ty) {
   return Object.entries(sites).find(([r, [sx, sy]]) => {
     const left = r === 'garden' ? sx - .6 : sx - 3.4;
     const top = ['hall', 'well', 'yard', 'garden'].includes(r) ? sy - 7.5 : sy - 8.5;
-    return tx >= left && tx <= sx + 3.4 && ty >= top && ty <= sy - .4;
+    return tx >= left && tx <= sx + 3.4 && ty >= top && ty <= sy + 2;
   }) || null;
 }
 // 键盘：WASD / 方向键走路，E / Enter 进出建筑。输入框聚焦或带修饰键时不抢键。
@@ -1379,7 +1378,7 @@ function toggleInteriorByKeyboard() {
   let room = at && at[0];
   if (!room) {   // 站在门口附近也算：最近地点 ≤2.5 格
     let bd = Infinity;
-    for (const [r, [sx, sy]] of Object.entries(sites)) { const d = Math.hypot(s.x - sx, s.y - (sy - 2)); if (d < bd) { bd = d; room = r; } }
+    for (const [r, [sx, sy]] of Object.entries(sites)) { const d = Math.hypot(s.x - sx, s.y - (sy - 1)); if (d < bd) { bd = d; room = r; } }
     if (bd > 2.5) return;
   }
   api('/act', { kind: 'move', room }).then(() => { ui.room = room; ui.interior = room; ui.camRoom = null; refresh(); });
