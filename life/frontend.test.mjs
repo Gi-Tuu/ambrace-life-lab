@@ -67,7 +67,9 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
       child.stdout.on('data', (d) => { if (String(d).includes('就绪')) { clearTimeout(to); res(); } });
       child.on('exit', (c) => rej(new Error('server exited ' + c)));
     });
-    const dom = execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--virtual-time-budget=4000', '--dump-dom', `http://127.0.0.1:${port}/`], { encoding: 'utf8', timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
+    // 注意：不用 --virtual-time-budget —— 页面有常驻 /world 轮询 + rAF 循环，虚拟时间会被
+    // 持续的网络请求挂起导致 headless 永不退出（实测 ETIMEDOUT）。改为 load 时 dump-dom。
+    const dom = execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', `--user-data-dir=${join(dir, 'prof')}`, '--dump-dom', `http://127.0.0.1:${port}/`], { encoding: 'utf8', timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
     assert.ok(dom.includes('通道开'), '渲染结果里没有 A 侧标题 ⇒ 页面没起来');
     assert.ok(dom.includes('通道切断'), '渲染结果里没有 B 侧标题');
     assert.ok(!/undefined|NaN/.test(dom), '页面里漏出了 undefined/NaN');

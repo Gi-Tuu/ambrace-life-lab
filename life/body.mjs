@@ -9,6 +9,7 @@ import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
 import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair } from './production.mjs';
+import { initCoop, stepCooperation } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -77,7 +78,7 @@ export function hail(world, targetId, ticks = 3) {
 
 export const isHailed = (world, id) => Boolean(world.hail && world.hail.target === id && world.t < world.hail.until);
 
-export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip, preset = 'lab', seed = 0 }) {
+export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip, preset = 'lab', seed = 0, coop = false }) {
   const P = presetOf(preset);
   const w = {
     t: 0,
@@ -116,7 +117,7 @@ export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky
     secrets: [],
   };
   // 生存模式独立挂载：lab/town 无 P.survival ⇒ 不新增任何键，逐位不变。
-  if (P.survival) w.survival = initSurvival(w);
+  if (P.survival) { w.survival = initSurvival(w); initCoop(w.survival, coop); }
   return w;
 }
 
@@ -135,6 +136,8 @@ export function scanSecrets(world) {
   // Phase A：生存世界按日低频推进（host 与 simulate 每 tick 都调 scanSecrets，故在此挂日界调度）。
   // lab/town 无 world.survival ⇒ 直接跳过，逐位不变。
   if (world.survival) advanceSurvival(world);
+  // Phase C：AI 合作调度（仅 survival 且 coop 开启；默认关 ⇒ Phase A/B 与 lab/town 逐位不变）。
+  if (world.survival) stepCooperation(world);
   for (const id of Object.keys(world.stash)) {
     // B3：expect 缺失时不能假定 3 —— 旧档（或手工档）没有 expect 而 stash 很大时，`?? 3` 会凭空造出
     // 「私藏超额」秘密（幻影套利事实）。缺失就按 stash 自身算，等于「没有超出预期」。
