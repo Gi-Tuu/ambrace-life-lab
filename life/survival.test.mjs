@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { makeWorld, spawn, actuate, scanSecrets } from './body.mjs';
 import { validate } from './rules.mjs';
 import { advanceSurvival, doHarvest, SURV } from './worldstate.mjs';
+import { blockersOf } from './geometry.mjs';
+import { effectiveMods, BUILDINGS } from './production.mjs';
 
 function survWorld() {
   const w = makeWorld({ preset: 'survival', seed: 7, pantries: 0 });
@@ -72,4 +74,64 @@ test('S6 规则层守卫：非菜园/无成熟/无空畦 拒绝', () => {
   w.survival.plots.forEach((p) => { p.growth = 0.5; });
   assert.equal(validate(w, 'a1', { kind: 'harvest' }).code, 'NO_MATURE');
   assert.equal(validate(w, 'a1', { kind: 'plant' }).code, 'NO_EMPTY_PLOT');
+});
+
+// ── Phase B 建设闭环 ──────────────────────────────────────────────
+test('B1 采集按地点给木/石', () => {
+  const w = survWorld();
+  w.loc.a1 = 'yard'; actuate(w, 'a1', { kind: 'gather' });
+  assert.equal(w.survival.inv.wood, 2);
+  w.loc.a1 = 'watch'; actuate(w, 'a1', { kind: 'gather' });
+  assert.equal(w.survival.inv.stone, 2);
+});
+
+test('B2 奠基需要户外/材料，并扣料', () => {
+  const w = survWorld();
+  w.loc.a1 = 'home';
+  assert.equal(validate(w, 'a1', { kind: 'plan', type: 'granary' }).code, 'NOT_OUTDOOR');
+  w.loc.a1 = 'yard';
+  assert.equal(validate(w, 'a1', { kind: 'plan', type: 'granary' }).code, 'NO_MATERIAL');
+  w.survival.inv.wood = BUILDINGS.granary.cost.wood; w.survival.inv.stone = BUILDINGS.granary.cost.stone;
+  assert.equal(actuate(w, 'a1', { kind: 'plan', type: 'granary' }).ok, true);
+  assert.equal(w.survival.inv.wood, 0);
+  assert.equal(w.survival.sites.length, 1);
+});
+
+test('B3 施工到工时后建成，功能生效（储粮上限提升）', () => {
+  const w = survWorld();
+  w.loc.a1 = 'yard';
+  w.survival.inv.wood = BUILDINGS.granary.cost.wood; w.survival.inv.stone = BUILDINGS.granary.cost.stone;
+  actuate(w, 'a1', { kind: 'plan', type: 'granary' });
+  const before = effectiveMods(w).storeCap;
+  for (let i = 0; i < BUILDINGS.granary.labor / 2; i++) actuate(w, 'a1', { kind: 'build' });
+  assert.equal(w.survival.sites.length, 0, '工地应转为建筑');
+  assert.equal(w.survival.buildings.length, 1);
+  assert.equal(effectiveMods(w).storeCap, before + 12, '储粮设施应提高上限');
+});
+
+test('B4 损坏即失效，维修恢复', () => {
+  const w = survWorld();
+  w.loc.a1 = 'yard';
+  w.survival.inv.wood = BUILDINGS.granary.cost.wood; w.survival.inv.stone = BUILDINGS.granary.cost.stone;
+  actuate(w, 'a1', { kind: 'plan', type: 'granary' });
+  for (let i = 0; i < BUILDINGS.granary.labor / 2; i++) actuate(w, 'a1', { kind: 'build' });
+  w.survival.buildings[0].integrity = 0;
+  assert.equal(effectiveMods(w).storeCap, 24, '损坏的储粮设施不应生效');
+  w.survival.inv.wood = 1; w.survival.inv.stone = 1;
+  assert.equal(actuate(w, 'a1', { kind: 'repair' }).ok, true);
+  assert.equal(w.survival.buildings[0].integrity, 1);
+  assert.equal(effectiveMods(w).storeCap, 36, '维修后应恢复功能');
+});
+
+test('B5 建筑占地进入服务端 blockers；lab/town 为空', () => {
+  const w = survWorld();
+  w.loc.a1 = 'yard';
+  w.survival.inv.wood = BUILDINGS.granary.cost.wood; w.survival.inv.stone = BUILDINGS.granary.cost.stone;
+  actuate(w, 'a1', { kind: 'plan', type: 'granary' });
+  for (let i = 0; i < BUILDINGS.granary.labor / 2; i++) actuate(w, 'a1', { kind: 'build' });
+  const bl = blockersOf(w);
+  assert.equal(bl.length, 1);
+  assert.equal(bl[0].type, 'granary');
+  assert.equal(bl[0].w, 3); assert.equal(bl[0].h, 2);
+  for (const preset of ['lab', 'town']) assert.deepEqual(blockersOf(makeWorld({ preset, seed: 7 })), []);
 });

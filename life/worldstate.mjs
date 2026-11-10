@@ -4,6 +4,7 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
+import { initProduction, effectiveMods, dailyWear } from './production.mjs';
 
 export const SURV = Object.freeze({
   startStore: 6,          // 初始公共粮仓
@@ -19,7 +20,7 @@ export const SURV = Object.freeze({
 
 export function initSurvival(world) {
   const garden = siteOf('garden') ?? [31, 39];
-  return {
+  const s = {
     lastDay: -1,
     store: SURV.startStore,
     water: 0.6,
@@ -30,6 +31,8 @@ export function initSurvival(world) {
     won: false,
     history: [],
   };
+  initProduction(s);
+  return s;
 }
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -42,6 +45,8 @@ export function advanceSurvival(world) {
   const day = dayOf(world.t);
   if (day === s.lastDay) return null;
   s.lastDay = day;
+  const mods = effectiveMods(world);
+  dailyWear(world, mods);
 
   // 水分：雨补、晴耗；土壤：休闲分解回流。
   const rain = world.weather === 'rain';
@@ -62,7 +67,7 @@ export function advanceSurvival(world) {
     s.starveDays += 1;
     for (const a of Object.values(world.agents)) {
       if (a.isPlayer || !a.viab) continue;
-      a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * shortfall);
+      a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
   } else s.starveDays = 0;
 
@@ -81,10 +86,12 @@ export function doHarvest(world, agentId) {
   const s = world.survival;
   const p = maturePlots(s)[0];
   if (!p) return { ok: false, code: 'NO_MATURE' };
+  const mods = effectiveMods(world);
   p.growth = 0;
   s.soil = clamp01(s.soil - 0.15);
-  s.store = Math.min(SURV.storeCap, s.store + SURV.yieldPerPlot);
-  return { ok: true, code: 'OK', amount: SURV.yieldPerPlot };
+  const yieldAmt = SURV.yieldPerPlot + mods.yieldBonus;
+  s.store = Math.min(mods.storeCap, s.store + yieldAmt);
+  return { ok: true, code: 'OK', amount: yieldAmt };
 }
 export function doPlant(world, agentId) {
   const s = world.survival;

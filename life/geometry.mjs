@@ -13,9 +13,12 @@ export const SITES = Object.freeze({
 
 export function siteOf(room) { return SITES[room] ?? null; }
 
-// 建筑占地与阻挡骨架（Phase B 填充）。当前返回空，保证不改变现有寻路。
-export function buildingsOf(world) { return world.buildings ?? []; }
+// 建筑占地与阻挡（Phase B）：生存模式的建筑以 tile 锚点记在 world.survival.buildings，
+// 这里派生成 3×2 占地矩形供服务端寻路/碰撞使用；无 survival 时为空，不改变现有寻路。
+export const BUILDING_FOOTPRINT = Object.freeze({ w: 3, h: 2 });
+export function buildingsOf(world) { return world.survival?.buildings ?? world.buildings ?? []; }
 export function blockersOf(world) {
-  // 现有自然阻挡仍由前端 buildWorld 派生；服务端建筑阻挡在此叠加（Phase A 为空）。
-  return buildingsOf(world).map((b) => b.footprint).filter(Boolean);
+  return buildingsOf(world)
+    .filter((b) => b.at)
+    .map((b) => ({ x: b.at[0] - 1, y: b.at[1] - 1, w: BUILDING_FOOTPRINT.w, h: BUILDING_FOOTPRINT.h, type: b.type }));
 }
