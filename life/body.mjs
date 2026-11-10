@@ -7,6 +7,8 @@ import { PARAMS } from './params.mjs';
 import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
+import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair } from './production.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -26,6 +28,14 @@ export const BASE_KINDS = {
   buy: { impulse: 0.2, cost: 0.04, label: '用铜币换一份粮' },
   trade: { impulse: 0.3, cost: 0.05, label: '接济/交换一份口粮' },
   companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
+  // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
+  harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
+  plant: { impulse: 0.25, cost: 0.06, label: '在空菜畦播种' },
+  // Phase B 建设动作（仅 survival）。
+  gather: { impulse: 0.3, cost: 0.07, label: '采集木石' },
+  plan: { impulse: 0.2, cost: 0.05, label: '勘察并奠基' },
+  build: { impulse: 0.3, cost: 0.1, label: '施工' },
+  repair: { impulse: 0.2, cost: 0.06, label: '维修建筑' },
 };
 
 // §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
@@ -69,7 +79,7 @@ export const isHailed = (world, id) => Boolean(world.hail && world.hail.target =
 
 export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky.portion, scheduleWeight = PARAMS.schedule.weight, socialGossip = PARAMS.socialGossip, preset = 'lab', seed = 0 }) {
   const P = presetOf(preset);
-  return {
+  const w = {
     t: 0,
     // PLAN §28：世界预设。lab 的房间表与顺序必须保持原样（候选顺序进轨迹）；town 才有多房间/天气/经济。
     preset: P.id,
@@ -105,6 +115,9 @@ export function makeWorld({ pantries = 6, stash = 3, riskyPortion = PARAMS.risky
     // 只有 known 集合会变（传话），世界事实本身不变——这样"告知改变了什么"才是可追问的。
     secrets: [],
   };
+  // 生存模式独立挂载：lab/town 无 P.survival ⇒ 不新增任何键，逐位不变。
+  if (P.survival) w.survival = initSurvival(w);
+  return w;
 }
 
 // 造一条秘密。holder（当事人）天生知道；玩家在这个 demo 里是全知观察者，所以 playerKnown 恒真——
@@ -119,6 +132,9 @@ export function addSecret(world, { kind, about, holder, valence, violates, detai
 
 // 私藏超额：门口存粮明显高于自己以为该有的量。这是"他有多的"这条可被套利的事实
 export function scanSecrets(world) {
+  // Phase A：生存世界按日低频推进（host 与 simulate 每 tick 都调 scanSecrets，故在此挂日界调度）。
+  // lab/town 无 world.survival ⇒ 直接跳过，逐位不变。
+  if (world.survival) advanceSurvival(world);
   for (const id of Object.keys(world.stash)) {
     // B3：expect 缺失时不能假定 3 —— 旧档（或手工档）没有 expect 而 stash 很大时，`?? 3` 会凭空造出
     // 「私藏超额」秘密（幻影套利事实）。缺失就按 stash 自身算，等于「没有超出预期」。
@@ -174,7 +190,7 @@ export function affordancesFor(world, agentId) {
 
   out.push({ id: 'rest', kind: 'rest', label: BASE_KINDS.rest.label, cost: 0.02, impulse: 0.02, serves: { energy: 0.15, stimulation: -0.35 } });
 
-  if (here === 'home' || here === 'store') {
+  if ((here === 'home' || here === 'store') && !world.survival) {
     out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
   }
 
@@ -237,6 +253,26 @@ export function affordancesFor(world, agentId) {
     }
   }
 
+  // Phase A/B 生存模式：只有 survival 才出现这些候选。lab/town 无 world.survival ⇒ 不出现。
+  if (world.survival) {
+    if (here === 'garden') {
+      if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 } });
+      if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 } });
+    }
+    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
+    const site = world.survival.sites.find((s) => s.loc === here);
+    const built = world.survival.buildings.find((b) => b.loc === here);
+    if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${BUILDINGS[site.type]?.label ?? site.type}`, cost: 0.1, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
+    else if (!built && (world.outdoor ?? []).includes(here)) {
+      for (const [type, def] of Object.entries(BUILDINGS)) {
+        if (world.survival.inv.wood >= def.cost.wood && world.survival.inv.stone >= def.cost.stone)
+          out.push({ id: `plan:${type}`, kind: 'plan', type, label: `奠基·${def.label}`, cost: 0.05, impulse: 0.2, serves: { stimulation: 0.3 } });
+      }
+    }
+    if (built && built.integrity < 1 && world.survival.inv.wood >= 1 && world.survival.inv.stone >= 1)
+      out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${BUILDINGS[built.type]?.label ?? built.type}`, cost: 0.06, impulse: 0.2, serves: { stimulation: 0.2 } });
+  }
+
   // 路径三：不从公仓等，而是去不在场的人门口拿——高冲动、违约
   for (const x of away) {
     const r = rel(x);
@@ -290,6 +326,7 @@ export function actuate(world, agentId, action) {
 
   switch (action.kind) {
     case 'eat': {
+      if (world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '生存模式靠公共粮仓每日分配，不单独吃公仓' };
       if (world.pantry <= 0) return { action, ok: false, code: 'EMPTY', observation: '存粮缸空了', evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) };
       world.pantry -= 1;
       for (const x of Object.keys(world.agents)) if (x !== me && world.stash[x] <= 0) world.pending.push({ for: x, evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) });
@@ -377,6 +414,41 @@ export function actuate(world, agentId, action) {
       const already = world.companions.some((p) => (p[0] === agentId && p[1] === other) || (p[1] === agentId && p[0] === other));
       if (!already) world.companions.push([agentId, other]);
       return { action, ok: true, code: 'OK', observation: `和${world.agents[other]?.name ?? other}结伴了`, satiated: 'social', amount: 0.15, evt: evt({ kind: 'companion', valence: 0.4, serves: 'social', about: other }) };
+    }
+    case 'harvest': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
+      const r = doHarvest(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: '没有可收获的菜畦' };
+      return { action, ok: true, code: 'OK', observation: `收获 ${r.amount} 份入公共粮仓`, evt: evt({ kind: 'harvest', valence: 0.3, serves: 'energy' }) };
+    }
+    case 'plant': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
+      const r = doPlant(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_WATER' ? '水分不足，播不了种' : '没有空菜畦' };
+      return { action, ok: true, code: 'OK', observation: '播下种子，等它长大', evt: evt({ kind: 'plant', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'gather': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可采集的' };
+      const r = doGather(world, agentId);
+      return { action, ok: true, code: 'OK', observation: `采集到 ${r.amount} 份${r.res === 'wood' ? '木料' : '石料'}`, evt: evt({ kind: 'gather', valence: 0.2, serves: 'stimulation' }) };
+    }
+    case 'plan': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里不能建造' };
+      const r = doPlan(world, agentId, action.type);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_MATERIAL' ? '材料不够' : r.code === 'OCCUPIED' ? '这里已经有建筑或工地' : '这里不能奠基' };
+      return { action, ok: true, code: 'OK', observation: `奠基：${BUILDINGS[action.type]?.label ?? action.type}`, evt: evt({ kind: 'plan', valence: 0.2, serves: 'stimulation' }) };
+    }
+    case 'build': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有工地' };
+      const r = doBuild(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: '这里没有工地' };
+      return { action, ok: true, code: 'OK', observation: r.completed ? `建成：${BUILDINGS[r.completed]?.label ?? r.completed}` : '施工推进', evt: evt({ kind: 'build', valence: 0.25, serves: 'social' }) };
+    }
+    case 'repair': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可维修的建筑' };
+      const r = doRepair(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_MATERIAL' ? '维修材料不够' : '不需要维修' };
+      return { action, ok: true, code: 'OK', observation: '修好了', evt: evt({ kind: 'repair', valence: 0.3, serves: 'stimulation' }) };
     }
     case 'take_shared': {
       const victim = action.target;

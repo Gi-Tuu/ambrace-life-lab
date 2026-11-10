@@ -35,7 +35,24 @@ export const TOWN = Object.freeze({
   ],
 });
 
-export const PRESETS = Object.freeze({ lab: LAB, town: TOWN });
+// 生存模式（Phase A）：独立 preset，与 lab/town 配置隔离。关掉 work/trade 的"凭空得饭"路径，
+// 食物只来自 worldstate 的有限资源循环（种植→收获→公共粮仓→每日消耗）。
+export const SURVIVAL = Object.freeze({
+  id: 'survival',
+  locs: { home: '居所', yard: '院子', hall: '走廊', store: '公仓', workshop: '工坊', garden: '菜园', watch: '瞭台', well: '井台' },
+  grid: { home: [0, 0], yard: [1, 0], hall: [2, 0], store: [3, 0], workshop: [0, 1], garden: [1, 1], watch: [2, 1], well: [3, 1] },
+  outdoor: ['yard', 'garden', 'watch', 'well'],
+  weather: true,
+  speech: false,
+  work: false,
+  trade: false,
+  companions: false,
+  norms: false,
+  survival: true,
+  things: [{ id: 'bedsG', loc: 'garden', label: '菜畦' }],
+});
+
+export const PRESETS = Object.freeze({ lab: LAB, town: TOWN, survival: SURVIVAL });
 
 export function presetOf(name) {
   return PRESETS[name] ?? LAB;

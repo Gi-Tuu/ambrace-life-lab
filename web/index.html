@@ -185,6 +185,17 @@
     #minimap { flex-wrap:nowrap; }
     footer { margin:0 8px 8px; }
   }
+  /* 全屏全景舞台：整张世界地图铺满屏幕，HUD 浮在顶部；纯表现层，不改载荷与读数。 */
+  body.full-on { overflow:hidden; }
+  #fullStage { position:fixed; inset:0; z-index:50; background:#000; display:flex; align-items:center; justify-content:center; }
+  #fullStage[hidden] { display:none; }
+  #cvFull { image-rendering:pixelated; image-rendering:crisp-edges; cursor:pointer; box-shadow:0 0 0 2px var(--line); }
+  #fullHud { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:12px; padding:8px 12px;
+    background:rgba(0,0,0,.55); color:var(--ink); font-size:13px; }
+  #fullHud .fhint { color:var(--dim); margin-left:auto; }
+  #btnFullExit { background:var(--a); color:var(--bg); border:2px solid var(--ink); box-shadow:2px 2px 0 0 var(--shadow);
+    padding:4px 12px; font-weight:700; cursor:pointer; }
+  #btnFullExit:hover { background:var(--ink); color:var(--a); }
 </style>
 </head>
 <body>
@@ -197,6 +208,7 @@
   <div id="minimap"></div>
   <span class="lbl" id="visionInfo"></span>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
+  <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
 </div>
 <main>
   <div class="col">
@@ -258,6 +270,14 @@
   <span>世界 96×64 格完整运行，视口随屏幕调整；树与屋舍挡视线，昼夜影响环境明暗。</span>
 </footer>
 <div id="toasts"></div>
+<div id="fullStage" hidden>
+  <canvas id="cvFull"></canvas>
+  <div id="fullHud">
+    <span id="fullInfo"></span>
+    <span class="fhint">点空地行走 · 点建筑进入 · WASD 移动 · Esc 退出</span>
+    <button id="btnFullExit">✕ 退出全屏</button>
+  </div>
+</div>
 <script type="module" src="/web/app.js"></script>
 </body>
 </html>

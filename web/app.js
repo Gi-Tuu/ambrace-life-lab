@@ -56,7 +56,7 @@ async function loadAssets() {
 // 角色当前动作行：载荷里的 a.last.kind 是世界事实，不是前端猜的；找不到回退 idle。
 const actionRow = (a) => ACT.index[a?.last?.kind] ?? ACT.index.idle ?? 0;
 
-const ui = { room: 'hall', camRoom: null, show: 'A', overview: false, interior: null };
+const ui = { room: 'hall', camRoom: null, show: 'A', overview: false, interior: null, fullscreen: false };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -456,6 +456,8 @@ function lightRadius(phase) {
 let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
 // 相机：默认跟随玩家所在地点（A/B 共用同一锚点，保证双世界在同一镜头下对照）；
 // 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
+// 全屏＝原样放大：取景逻辑像素不变，只把整数倍放大到屏幕能容纳的最大值（不裁切、不拉伸）。
+const fullZoom = (lw, lh) => Math.max(1, Math.min(Math.floor((window.innerWidth - 8) / lw), Math.floor((window.innerHeight - 64) / lh)));
 function cameraOf(w, sites, slots, container, follow) {
   const manual = ui.camRoom && sites[ui.camRoom];
   const anchor = manual || follow || sites[w.loc?.p1] || slots.p1 || Object.values(sites)[0] || [48, 32];
@@ -463,7 +465,7 @@ function cameraOf(w, sites, slots, container, follow) {
   const x = Math.round(Math.max(0, Math.min(WORLD_W - VIEW_W, p[0] * TILE - VIEW_W / 2)));
   // 屋舍在地点上方 3–5 tile，镜头再上抬 2 tile，保证屋顶不被视口上沿裁掉。
   const y = Math.round(Math.max(0, Math.min(WORLD_H - VIEW_H, p[1] * TILE - VIEW_H / 2 - ((ui.camRoom??w.loc?.p1)==='garden'?1:3) * TILE)));
-  const zoom = Math.max(1, Math.min(2, Math.floor(((container || VIEW_W * 2) - 20) / VIEW_W)));
+  const zoom = ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(2, Math.floor(((container || VIEW_W * 2) - 20) / VIEW_W)));
   return { x, y, zoom };
 }
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -812,7 +814,7 @@ function drawOverview(cv, w) {
   const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth, cv.id === 'cvA' ? pTile : camFollow);
   lastCam = { ...cam, mode: 'overview' };
   cv._cam = lastCam;
-  const zoom = Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || OV_W * ZOOM + 20) - 20) / OV_W)));
+  const zoom = ui.fullscreen ? fullZoom(OV_W, OV_H) : Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || OV_W * ZOOM + 20) - 20) / OV_W)));
   const CW = OV_W * zoom, CH = OV_H * zoom;
   if (cv.width !== CW || cv.height !== CH) {
     cv.width = CW; cv.height = CH;
@@ -950,7 +952,7 @@ function roomNavigation(g,w,site){
 function drawInterior(cv, w, site) {
   const VIEW_W = 256, VIEW_H = 192;
   const spec = INTERIORS[site] ?? INTERIORS.hall, outdoor=['garden','well','yard'].includes(site);
-  const zoom = Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || VIEW_W * ZOOM + 20) - 20) / VIEW_W)));
+  const zoom = ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || VIEW_W * ZOOM + 20) - 20) / VIEW_W)));
   const CW = VIEW_W * zoom, CH = VIEW_H * zoom;
   if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; cv.style.width = `${CW}px`; cv.style.height = `${CH}px`; }
   const g = cv.getContext('2d');
@@ -1021,6 +1023,7 @@ function drawInterior(cv, w, site) {
 
 function draw(cv, w) {
   cv._anim = ACT.frame;   // 渲染元数据：验收可核对 A/B 是否共用同一动画帧号
+  // 全屏＝把"当前视角"原样放大（取景不变，只放开整数倍上限），不切换成别的视图。
   if (ui.interior) { cv._cam = { mode: 'interior', site: ui.interior }; return drawInterior(cv, w, ui.interior); }
   if (ui.overview) return drawOverview(cv, w);
   return drawViewport(cv, w);
@@ -1236,8 +1239,8 @@ async function refresh() {
     } else {
       chip.classList.remove('bad');
     }
-    draw($('cvA'), j.A);
-    draw($('cvB'), j.B);
+    if (ui.fullscreen) draw($('cvFull'), j.A);
+    else { draw($('cvA'), j.A); draw($('cvB'), j.B); }
     rows($('rowsA'), j.A, 'a');
     rows($('rowsB'), j.B, 'b');
     $('statA').innerHTML = worldStat(j.A);
@@ -1254,6 +1257,8 @@ async function refresh() {
     pushToasts(j.A);
     $('btnOverview').classList.toggle('on', ui.overview);
     $('btnOverview').textContent = ui.overview ? '返回局部视角' : '世界全景';
+    const fi = $('fullInfo');
+    if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 视野 ${lightRadius(j.A.phase)} 格`;
     const vi = $('visionInfo');
     if (vi) vi.textContent = ui.interior
       ? `室内 · ${(j.A.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
@@ -1311,6 +1316,20 @@ $('minimap').addEventListener('click', (ev) => {
   refresh();
 });
 $('btnOverview').onclick = () => { if (ui.interior) { ui.interior = null; ui.camRoom = ui.room; } else ui.overview = !ui.overview; refresh(); };
+// 全屏全景：整张地图铺满屏幕，只画 A 世界；退出回退出前的视角。纯表现层，不动世界与读数。
+function setFull(on) {
+  ui.fullscreen = on;   // 保持当前视角（聚焦/室内/全景）原样放大，不切换视图
+  $('fullStage').hidden = !on;
+  document.body.classList.toggle('full-on', on);
+  $('btnFull').classList.toggle('on', on);
+  $('btnFull').textContent = on ? '⛶ 退出全屏' : '⛶ 全屏';
+  refresh();
+}
+$('btnFull').onclick = () => setFull(!ui.fullscreen);
+$('btnFullExit').onclick = () => setFull(false);
+$('cvFull').addEventListener('click', (ev) => pickRoom(ev, $('cvFull')));
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.fullscreen) { setFull(false); e.preventDefault(); } });
+window.addEventListener('resize', () => { if (ui.fullscreen && S.view) draw($('cvFull'), S.view); });
 // 点击画面：把屏幕坐标反算成世界 tile，再落到最近的地点（走过去 / 切换镜头）。
 // 局部视角用相机偏移 + 整数倍缩放；全景用微缩比例。两个世界收到同一个动作。
 function pickRoom(ev, cv) {
@@ -1434,6 +1453,7 @@ loadAssets().finally(() => {
   const rq = new URLSearchParams(location.search).get('room');   // 深链进某室内（便于直达与验收）
   if (rq && (rq in INTERIORS)) { ui.interior = rq; ui.room = rq; ui.camRoom = rq; }
   poll();
+  if (new URLSearchParams(location.search).get('full') === '1') setFull(true);   // 深链直达全屏全景（便于分享与验收）
   setInterval(poll, 900);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   // 独立动画时钟：只推进帧号并重绘两个画布，与 900ms 的数据轮询完全解耦。
@@ -1468,7 +1488,7 @@ loadAssets().finally(() => {
       const cvId = k.slice(0, k.indexOf(':'));
       if (k.endsWith(':p1') && !ui.interior && (mdx || mdy)) {
         // 手动驾驶：覆盖 A* 路径，按可行走栅格碰撞（轴分离可贴墙滑）；A/B 同输入。
-        const world = buildWorld(cvId === 'cvA' ? S.view : S.viewB);
+        const world = buildWorld((cvId === 'cvA' || cvId === 'cvFull') ? S.view : S.viewB);
         const n = Math.hypot(mdx, mdy);
         walker.path = []; walker.pi = 0;
         const nx = walker.x + mdx / n * mstep, ny = walker.y + mdy / n * mstep;
@@ -1487,7 +1507,8 @@ loadAssets().finally(() => {
       }
     }
     if (changed) for (const cvId in DUST) DUST[cvId] = DUST[cvId].map(p => ({ ...p, age: p.age + 1 })).filter(p => p.age < 6);
-    draw($('cvA'), S.view); draw($('cvB'), S.viewB);
+    if (ui.fullscreen) draw($('cvFull'), S.view);
+    else { draw($('cvA'), S.view); draw($('cvB'), S.viewB); }
   }
   requestAnimationFrame(animate);
 });
