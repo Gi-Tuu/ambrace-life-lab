@@ -1247,7 +1247,9 @@ async function refresh() {
     $('btnOverview').classList.toggle('on', ui.overview);
     $('btnOverview').textContent = ui.overview ? '返回局部视角' : '世界全景';
     const vi = $('visionInfo');
-    if (vi) vi.textContent = `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）`;
+    if (vi) vi.textContent = ui.interior
+      ? `室内 · ${(j.A.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
+      : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）· WASD/方向键 移动 · E/点建筑 进出`;
     $('tbl').innerHTML = table(j.A, j.B);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
@@ -1342,11 +1344,45 @@ function pickRoom(ev, cv) {
   const s = WALK[k];
   const walkable = isWalkable(world, cTile[0], cTile[1]);
   if (s && walkable) { const path = astar(world, [s.x, s.y], cTile); if (path && path.length) { s.path = path; s.pi = 0; } ui.camRoom = null; }
-  const entry=Object.entries(sites).find(([r,[sx,sy]])=>{const left=r==='garden'?sx-.6:sx-3.4,top=['hall','well','yard','garden'].includes(r)?sy-7.5:sy-8.5;return tx>=left&&tx<=sx+3.4&&ty>=top&&ty<=sy-.4;});
+  const entry=entrySiteAt(sites,tx,ty) || (bd<=3 ? [best, sites[best]] : null);
   if(entry){best=entry[0];return api('/act', { kind: 'move', room: best }).then(() => { ui.room = best; ui.interior = best; ui.camRoom = null; refresh(); });}
   ui.room = best;
   if (!walkable) ui.camRoom = best;   // 点到水 / 屋 / 岩等不可走处：仅把镜头移过去
   refresh();
+}
+
+// 建筑入口判定（点击与 E 键共用）：屋舍 footprint 内的矩形区域。
+function entrySiteAt(sites, tx, ty) {
+  return Object.entries(sites).find(([r, [sx, sy]]) => {
+    const left = r === 'garden' ? sx - .6 : sx - 3.4;
+    const top = ['hall', 'well', 'yard', 'garden'].includes(r) ? sy - 7.5 : sy - 8.5;
+    return tx >= left && tx <= sx + 3.4 && ty >= top && ty <= sy - .4;
+  }) || null;
+}
+// 键盘：WASD / 方向键走路，E / Enter 进出建筑。输入框聚焦或带修饰键时不抢键。
+const keys = new Set();
+const KEY_DIR = { w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right' };
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (KEY_DIR[k]) { keys.add(KEY_DIR[k]); e.preventDefault(); return; }
+  if (k === 'e' || k === 'enter') { e.preventDefault(); toggleInteriorByKeyboard(); }
+});
+window.addEventListener('keyup', (e) => { const d = KEY_DIR[e.key.toLowerCase()]; if (d) keys.delete(d); });
+window.addEventListener('blur', () => keys.clear());
+function toggleInteriorByKeyboard() {
+  if (ui.interior) { ui.interior = null; ui.camRoom = ui.room; refresh(); return; }
+  const s = WALK[walkKey('cvA', 'p1')]; if (!s) return;
+  const sites = sitesOf(S.view ?? {});
+  const at = entrySiteAt(sites, s.x, s.y);
+  let room = at && at[0];
+  if (!room) {   // 站在门口附近也算：最近地点 ≤2.5 格
+    let bd = Infinity;
+    for (const [r, [sx, sy]] of Object.entries(sites)) { const d = Math.hypot(s.x - sx, s.y - (sy - 2)); if (d < bd) { bd = d; room = r; } }
+    if (bd > 2.5) return;
+  }
+  api('/act', { kind: 'move', room }).then(() => { ui.room = room; ui.interior = room; ui.camRoom = null; refresh(); });
 }
 
 $('btnRun').onclick = () => ctl({ action: S.running ? 'pause' : 'resume' });
@@ -1404,12 +1440,29 @@ loadAssets().finally(() => {
     const dt = lastPaint === null ? 0 : Math.min(0.05, (now - lastPaint) / 1000); lastPaint = now; elapsed += dt; ACT.seconds=elapsed;
     ACT.frame = reduced.matches ? 0 : Math.floor(elapsed * ACT.fps) % 4;
     const changed = ACT.frame !== lastSpriteFrame; lastSpriteFrame = ACT.frame;
+    const mdx = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+    const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
+    const mstep = SPEED * ACT.fps * dt;
     for (const k in WALK) {
-      const walker = WALK[k], target = walker.path?.[walker.pi];
-      if (target) { const dx = target[0] - walker.x, dy = target[1] - walker.y; walker.direction = Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? 'up' : 'down') : (dx < 0 ? 'left' : 'right'); }
-      stepWalker(walker, SPEED * ACT.fps * dt);
+      const walker = WALK[k];
+      const cvId = k.slice(0, k.indexOf(':'));
+      if (k.endsWith(':p1') && !ui.interior && (mdx || mdy)) {
+        // 手动驾驶：覆盖 A* 路径，按可行走栅格碰撞（轴分离可贴墙滑）；A/B 同输入。
+        const world = buildWorld(cvId === 'cvA' ? S.view : S.viewB);
+        const n = Math.hypot(mdx, mdy);
+        walker.path = []; walker.pi = 0;
+        const nx = walker.x + mdx / n * mstep, ny = walker.y + mdy / n * mstep;
+        if (isWalkable(world, Math.round(nx), Math.round(walker.y))) walker.x = nx;
+        if (isWalkable(world, Math.round(walker.x), Math.round(ny))) walker.y = ny;
+        walker.moving = true;
+        walker.direction = Math.abs(mdy) > Math.abs(mdx) ? (mdy < 0 ? 'up' : 'down') : (mdx < 0 ? 'left' : 'right');
+        if (mdx) walker.face = mdx > 0 ? 1 : -1;
+      } else {
+        const target = walker.path?.[walker.pi];
+        if (target) { const dx = target[0] - walker.x, dy = target[1] - walker.y; walker.direction = Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? 'up' : 'down') : (dx < 0 ? 'left' : 'right'); }
+        stepWalker(walker, mstep);
+      }
       if (changed && walker.moving && !reduced.matches) {
-        const cvId = k.slice(0, k.indexOf(':'));
         (DUST[cvId] ??= []).push({ x: walker.x, y: walker.y + 0.8, age: 0 });
       }
     }
