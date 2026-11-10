@@ -610,6 +610,8 @@ function drawResident(g, who, action, x, y, facing = 'down') {
 const WALK = {};                 // `${cvId}:${who}` -> {x,y,path,pi,moving,face,auth}
 const SPEED = 0.5;               // 每动画帧推进的 tile 数（6fps ⇒ 约 3 tile/秒）
 const walkKey = (cvId, who) => `${cvId}:${who}`;
+// 室内玩家位置（逻辑像素，tile-top 锚点）：WASD 在房间内走动，走到下门自动出屋。纯表现层。
+const IPOS = { site: null, x: 120, y: 150, moving: false, direction: 'down', face: 1 };
 // isWalkable / astar / stepWalker 都在 web/walk.mjs（纯函数、可单测）。这里只保留行走器状态表与接线。
 function ensureWalker(cvId, who, world, slots) {
   const auth = slots[who];
@@ -986,16 +988,23 @@ function drawInterior(cv, w, site) {
   g.fillStyle = '#FFF1E8'; g.fillText(label, VIEW_W / 2 - label.length * 3, 14);
   // 家具与人按脚底深度排序，室内也遵守近遮远。
   const occ = w.occupancy?.[site] ?? [];
+  if (IPOS.site !== site) { IPOS.site = site; IPOS.x = 120; IPOS.y = 150; IPOS.moving = false; IPOS.direction = 'down'; }
   const spots = [[6,8],[9,8],[5,5],[9,5],[4,9],[11,9],[6,10],[8,10]];
   const items = (outdoor?[]:spec.props).map(([kind, x, y]) => ({ kind, x, y, depth: kind === 'rug' ? -1 : y + 4 }));
-  occ.forEach((who, i) => { const [x, y] = spots[i % spots.length]; items.push({ who, x, y, depth: y + 1 }); });
+  occ.forEach((who, i) => {
+    if (who === 'p1') { items.push({ who, x: IPOS.x / TILE, y: IPOS.y / TILE, depth: IPOS.y / TILE + 1 }); return; }
+    const [x, y] = spots[i % spots.length]; items.push({ who, x, y, depth: y + 1 });
+  });
+  if (!occ.includes('p1')) items.push({ who: 'p1', x: IPOS.x / TILE, y: IPOS.y / TILE, depth: IPOS.y / TILE + 1 });
   items.sort((a, b) => a.depth - b.depth);
   drawGroundShadows(g,items.filter(item=>item.who).map(item=>({who:item.who,wx:item.x,wy:item.y})),{x:0,y:0,zoom},w.phase);
   for (const item of items) {
     const px = item.x * TILE, py = item.y * TILE;
     if (item.kind) { drawProp(g, item.kind, px, py); continue; }
-    drawResident(g, item.who, actionRow(w.agents?.[item.who]), px, py);
-    g.fillStyle = '#FFF0CC'; g.fillText(item.who === 'p1' ? '你' : (w.agents?.[item.who]?.name ?? item.who), px, py + TILE + 6);
+    const isP1 = item.who === 'p1';
+    const act = isP1 && IPOS.moving ? (ACT.index?.move_to ?? ACT.index?.walk ?? actionRow(w.agents?.p1)) : actionRow(w.agents?.[item.who]);
+    drawResident(g, item.who, act, px, py, isP1 ? IPOS.direction : 'down');
+    g.fillStyle = '#FFF0CC'; g.fillText(isP1 ? '你' : (w.agents?.[item.who]?.name ?? item.who), px, py + TILE + 6);
   }
   const light=toneScene(g,cv,w.phase,!outdoor&&site!=='hall');
   if(!outdoor){
@@ -1442,6 +1451,18 @@ loadAssets().finally(() => {
     const mdx = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
     const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
     const mstep = SPEED * ACT.fps * dt;
+    // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
+    if (ui.interior) {
+      if (mdx || mdy) {
+        const step = mstep * TILE, n = Math.hypot(mdx, mdy);
+        IPOS.x = Math.max(24, Math.min(216, IPOS.x + mdx / n * step));
+        IPOS.y = Math.max(34, Math.min(176, IPOS.y + mdy / n * step));
+        IPOS.moving = true;
+        IPOS.direction = Math.abs(mdy) > Math.abs(mdx) ? (mdy < 0 ? 'up' : 'down') : (mdx < 0 ? 'left' : 'right');
+        if (mdx) IPOS.face = mdx > 0 ? 1 : -1;
+        if (IPOS.y >= 174 && IPOS.x >= 108 && IPOS.x <= 140) { ui.interior = null; ui.camRoom = ui.room; refresh(); }
+      } else IPOS.moving = false;
+    }
     for (const k in WALK) {
       const walker = WALK[k];
       const cvId = k.slice(0, k.indexOf(':'));
