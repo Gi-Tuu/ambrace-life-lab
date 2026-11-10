@@ -18,6 +18,7 @@ import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
+import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv } from './survplay.mjs';
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
@@ -98,7 +99,7 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null };
+const S = { packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -337,6 +338,7 @@ async function tickBody(onError = null) {
     });
     if (p.series.length > SERIES_CAP) p.series.splice(0, p.series.length - SERIES_CAP);
   }
+  if (S.surv) tickSurvPlay(S.surv);   // Phase D：生存单世界随拍推进（独立于 A/B）
   if (S.packs.A.world.t % SAVE_EVERY === 0) await save();
 }
 
@@ -422,7 +424,7 @@ function serialize() {
       ]),
     ),
   });
-  return { savedAt: Date.now(), seed: CFG.seed, brain: CFG.brain, missed: S.missed, model: S.model, A: pack(S.packs.A), B: pack(S.packs.B) };
+  return { savedAt: Date.now(), seed: CFG.seed, brain: CFG.brain, missed: S.missed, model: S.model, A: pack(S.packs.A), B: pack(S.packs.B), ...(S.surv ? { survival: dumpSurv(S.surv) } : {}) };
 }
 
 let saveChain = Promise.resolve();
@@ -628,6 +630,8 @@ export const host = {
     // 起点没Load到任何东西时，把当前这份新建世界认成本次会话的起点：
     // 否则切 M3/M4 开关会退回"从零刻重跑"，而重跑出来的世界取决于点了多久，读数没法解释。
     S.startRaw ??= structuredClone(serialize());
+    // Phase D：生存单世界独立挂载（additive）。存档有 survival 键则续跑，否则新建；不影响 A/B。
+    S.surv = loadSurv(S.startRaw?.survival, CFG.seed);
     S.savedAt = Date.now();
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
@@ -700,10 +704,12 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? survView(S.surv) : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };
+    // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
+    if (body?.mode === 'survival') return S.surv ? survAct(S.surv, body) : { ok: false, error: 'NO_SURV' };
     const kind = String(body?.kind ?? '');
     // H-20：旧版没有 kind 白名单。未知 kind 会一路落到末尾，记一条"走到undefined"的玩家日志
     // 却返回 ok:true（前端只看 ok）。显式拒绝。

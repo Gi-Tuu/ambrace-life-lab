@@ -1196,6 +1196,26 @@ function pushToasts(pack) {
   }
 }
 
+// ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
+let survOpen = false;
+function renderSurv(s) {
+  const el = $('survPanel'); if (!el || !s) return;
+  const b = s.buildingsDef || {};
+  const bl = (t) => b[t]?.label ?? t;
+  el.innerHTML = `
+    <div class="survrow"><b>生存 · 第${s.t}刻 ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
+      <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
+      <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span><span>${s.failed ? '已失败' : s.won ? '已达成目标' : '进行中'}</span></div>
+    <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
+    <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => bl(x.type)).join('、') || '无'}</div>
+    <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${s.coop.task.phase}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
+    <div class="survrow survbtns">
+      ${['harvest', 'plant', 'gather', 'build', 'repair'].map((k) => `<button data-sk="${k}">${k}</button>`).join('')}
+      ${Object.keys(b).map((t) => `<button data-sk="plan" data-type="${t}">奠基${bl(t)}</button>`).join('')}
+    </div>
+    <div class="survrow">${s.log.slice(-6).map((l) => `t${l.t} ${l.kind} ${l.ok ? '✓' : esc(l.code)}`).join(' ｜ ')}</div>`;
+}
+
 function table(a, b) {
   const row = (k, x, y) => `<tr><td>${k}</td><td style="color:var(--a)">${x}</td><td style="color:var(--b)">${y}</td></tr>`;
   const lostOf = (p) => Object.values(p.agents).reduce((s, a) => s + ((a.viab?.lost ?? []).length), 0);
@@ -1264,6 +1284,8 @@ async function refresh() {
       ? `室内 · ${(j.A.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
       : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）· WASD/方向键 移动 · E/点建筑 进出`;
     $('tbl').innerHTML = table(j.A, j.B);
+    const sp = $('survPanel'); if (sp) sp.hidden = !survOpen;
+    renderSurv(j.survival);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
     $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
     $('tagB').textContent = `第 ${j.B.t} 刻 · ${j.B.phase ?? ''} · ①③④已切断，状态只走倾向带${onLayers.length ? '（上面的层只加在 A，B 保持登记的对照组）' : ''}`;
@@ -1316,6 +1338,11 @@ $('minimap').addEventListener('click', (ev) => {
   refresh();
 });
 $('btnOverview').onclick = () => { if (ui.interior) { ui.interior = null; ui.camRoom = ui.room; } else ui.overview = !ui.overview; refresh(); };
+$('btnSurv').onclick = () => { survOpen = !survOpen; $('survPanel').hidden = !survOpen; $('btnSurv').classList.toggle('on', survOpen); refresh(); };
+$('survPanel').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-sk]'); if (!btn) return;
+  api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then(refresh);
+});
 // 全屏全景：整张地图铺满屏幕，只画 A 世界；退出回退出前的视角。纯表现层，不动世界与读数。
 function setFull(on) {
   ui.fullscreen = on;   // 保持当前视角（聚焦/室内/全景）原样放大，不切换视图

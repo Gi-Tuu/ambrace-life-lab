@@ -54,7 +54,10 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ agent.mjs / model.mjs / rules.mjs   # 反射 / 动机 / 规则校验(唯一裁决点)
 │  ├─ clock.mjs / drives.mjs / appraisal.mjs / memory.mjs / viability.mjs …
 │  ├─ m3-planner.mjs / coupling.mjs       # 可选层（默认关）
-│  ├─ *.test.mjs          #   44 个测试文件（闸门，含负向对照）
+│  ├─ worldstate.mjs / production.mjs / geometry.mjs   # 生存 Phase A/B（有限资源 + 建设闭环）
+│  ├─ cooperation.mjs                     # Phase C AI 合作（意愿/公共需求/分解/重规划，默认关）
+│  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
+│  ├─ *.test.mjs          #   45 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
@@ -112,8 +115,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 ## 判据与复现
 
 ```bash
-npm run lint      # 静态检查：语法 182 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 44 个测试文件 / 332 条断言（发现式点名，不会漏文件）
+npm run lint      # 静态检查：语法 184 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
+npm test          # 45 个测试文件 / 338 条断言（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
 npm run check     # lint + test
 ```
