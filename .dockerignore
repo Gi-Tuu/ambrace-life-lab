@@ -2,7 +2,7 @@
 .env.*
 data/
 *.log
-*.png
+/*.png
 node_modules/
 life-test.log
 docs/

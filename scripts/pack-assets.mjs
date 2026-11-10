@@ -21,7 +21,7 @@ export function decodePNG(buf) {
   }
   if (bitDepth !== 8 || colorType !== 6) throw new Error('只支持 RGBA8 PNG');
   const raw = inflateSync(Buffer.concat(idat));
-  const stride = w * 4; const px = new Array(w * h);
+  const stride = w * 4; const px = new Array(w * h), alphas = new Uint8Array(w * h);
   let prev = Buffer.alloc(stride);
   for (let y = 0; y < h; y++) {
     const filter = raw[y * (stride + 1)];
@@ -34,27 +34,28 @@ export function decodePNG(buf) {
       else if (filter === 4) line[x] = (line[x] + paeth(a, b, c)) & 255;
     }
     for (let x = 0; x < w; x++) {
-      const i = x * 4; const alpha = line[i + 3];
+      const i = x * 4; const alpha = line[i + 3]; alphas[y * w + x] = alpha;
       px[y * w + x] = alpha === 0 ? null : `${line[i]},${line[i + 1]},${line[i + 2]}`;
     }
     prev = line;
   }
-  return { w, h, px };
+  return { w, h, px, alphas };
 }
 
-const SIZES = { room: [96, 64], char: [16, 16], thing: [16, 16], icon: [8, 8] };
+const SIZES = { room: [96, 64], char: [16, 16], thing: [16, 16], icon: [8, 8], house: [128, 128], tree: [128, 160], terrain: [32, 32], prop: [64, 64] };
 export function validateAsset(name, img) {
-  const kind = name.startsWith('room_') ? 'room' : name.startsWith('char_') ? 'char' : name.startsWith('thing_') ? 'thing' : name.startsWith('icon_') ? 'icon' : null;
+  const kind = name.startsWith('room_') ? 'room' : name.startsWith('char_') ? 'char' : name.startsWith('thing_') ? 'thing' : name.startsWith('icon_') ? 'icon' : name.startsWith('house_') ? 'house' : name.startsWith('tree_') ? 'tree' : name.startsWith('terrain_') ? 'terrain' : name.startsWith('prop_') ? 'prop' : null;
   if (!kind) throw new Error(`未知资产类型 ${name}`);
   const [w, h] = SIZES[kind];
   if (img.w !== w || img.h !== h) throw new Error(`${name} 尺寸 ${img.w}x${img.h} ≠ ${w}x${h}`);
+  if (img.alphas?.some(a => a !== 0 && a !== 255)) throw new Error(`${name} 含半透明/抗锯齿像素`);
   for (const c of img.px) if (c !== null && !ALLOWED.has(c)) throw new Error(`${name} 含色板外/插值颜色 ${c}`);
   return kind;
 }
 
 export function pack(dir) {
   const files = readdirSync(dir).filter((f) => f.endsWith('.png'));
-  const manifest = { chars: {}, tiles: {}, things: {}, icons: {}, palette: 'palette.json', scale: 3 };
+  const manifest = { chars: {}, tiles: {}, things: {}, icons: {}, scenes: {}, palette: 'palette.json', scale: 3 };
   const charFrames = {};
   for (const f of files) {
     const img = decodePNG(readFileSync(join(dir, f)));
@@ -63,6 +64,7 @@ export function pack(dir) {
     if (kind === 'room') manifest.tiles[f.slice(5, -4)] = url;
     else if (kind === 'thing') manifest.things[f.slice(6, -4)] = url;
     else if (kind === 'icon') manifest.icons[f.slice(5, -4)] = url;
+    else if (['house', 'tree', 'terrain', 'prop'].includes(kind)) manifest.scenes[f.slice(0, -4)] = url;
     else {
       const m = f.match(/^char_(.+)_(\d)\.png$/); if (!m) throw new Error(`角色帧命名不符 ${f}`);
       (charFrames[m[1]] ??= [])[Number(m[2])] = url;
@@ -71,6 +73,15 @@ export function pack(dir) {
   for (const [id, frames] of Object.entries(charFrames)) {
     if (frames.length !== 4 || frames.some((x) => !x)) throw new Error(`角色 ${id} 帧数 ≠ 4`);
     manifest.chars[id] = { frames, fps: 4, anchor: [8, 16] };
+  }
+  if (Object.keys(manifest.scenes).length) {
+    const expected = [
+      ...['home', 'yard', 'hall', 'store', 'workshop', 'garden', 'watch', 'well'].map(x => `house_${x}`),
+      ...[0, 1, 2].map(x => `tree_oak${x}`),
+      ...['grass', 'dirt', 'water', 'wood', 'stone'].flatMap(x => [0, 1, 2, 3].map(i => `terrain_${x}${i}`)),
+      ...['bed', 'table', 'longTable', 'bench', 'hearth', 'rug', 'shelf', 'crate', 'barrel', 'telescope', 'furnace', 'anvil', 'planter', 'trellis', 'well', 'bucket', 'fence', 'cart', 'banner', 'boulder', 'workbench'].map(x => `prop_${x}`),
+    ];
+    for (const key of expected) if (!manifest.scenes[key]) throw new Error(`缺失32px场景资产 ${key}`);
   }
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;

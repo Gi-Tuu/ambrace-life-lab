@@ -1,12 +1,18 @@
 {
-  "version": "v1",
+  "version": "v2",
   "frame": [
-    16,
-    16
+    32,
+    48
   ],
   "anchor": [
-    8,
-    16
+    16,
+    48
+  ],
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
   ],
   "framesPerAction": 4,
   "fps": 6,
@@ -29,6 +35,12 @@
     "p1": "/web/assets/actions/p1.png"
   },
   "fx": "/web/assets/actions/fx.png",
+  "portraits": {
+    "a1": "/web/assets/actions/portrait_a1.png",
+    "a2": "/web/assets/actions/portrait_a2.png",
+    "a3": "/web/assets/actions/portrait_a3.png",
+    "p1": "/web/assets/actions/portrait_p1.png"
+  },
   "actions": [
     {
       "id": "idle",

@@ -7,7 +7,7 @@
 <title>拥爱生命实验室 · 仿生物 AI 生命世界</title>
 <style>
   /* 像素 UI 规格（2026-11-09 精修）：
-     · 色板：所有颜色 ⊆ web/assets/palette.json 的 PICO-8 16 色，零色板外值。
+     · 色板：所有颜色 ⊆ web/assets/palette.json 的 所有者批准的固定 64 色，零色板外值。
      · 字号：Fusion Pixel 为 12px 点阵字体，非整数倍会糊 ⇒ 只允许 12 / 24，行高 20 / 32。
      · 网格：padding / gap 全部 8 的倍数；border 2px；硬阴影 4px 4px 0 #000（blur=0）。
      · 框体：border(外亮边) + ::before(内暗边 + 顶高光) = 9-slice 双层描边的 CSS 等效实现，
@@ -15,10 +15,10 @@
      · 禁：圆角、渐变、模糊、抗锯齿、半透明叠加；hover/active 一律换色 + 1px 位移。 */
   @font-face { font-family:"fusion-pixel"; src:url("/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2") format("woff2"); font-display:swap; }
   :root {
-    --bg:#000000; --panel:#1D2B53; --sunken:#000000;
-    --line:#5F574F; --line-hi:#83769C;
-    --ink:#FFF1E8; --dim:#C2C3C7;
-    --a:#29ADFF; --b:#FFA300; --warn:#FF004D; --ok:#00E436; --gold:#FFEC27;
+    --bg:#18251E; --panel:#32302C; --sunken:#263D29;
+    --line:#72513B; --line-hi:#BA8752;
+    --ink:#FFF0CC; --dim:#D9D6B8;
+    --a:#A0D2C6; --b:#EDC787; --warn:#D58274; --ok:#98BD51; --gold:#EDC787;
     --shadow:#000000;
   }
   * { box-sizing: border-box; }
@@ -42,8 +42,9 @@
   .backend.bad { color:var(--ink); background:var(--warn); border-color:var(--ink); font-weight:700; }
 
   #mapbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 16px; margin-bottom:8px; }
-  #mapbar .lbl { color:var(--dim); font-size:12px; margin-right:8px; }
-  #minimap { display:flex; gap:8px; flex-wrap:wrap; }
+  #mapbar .lbl { flex-shrink:0; white-space:nowrap; color:var(--dim); font-size:12px; margin-right:8px; }
+  #minimap { display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0; }
+  #minimap button, #btnOverview { flex-shrink:0; white-space:nowrap; }
 
   /* ── 按钮四态：常态 / hover / active / 选中 / 禁用，全部换色，不用透明度 ── */
   #minimap button, #btnOverview, .ctl button, .say button, .hailrow button, .secrets .who button {
@@ -71,11 +72,11 @@
 
   main { display:flex; gap:16px; padding:16px; align-items:stretch; min-height:calc(100vh - 176px); }
   .col { flex:1 1 0; min-width:0; display:flex; }
-  .world { flex:1; padding:16px 8px 8px; display:flex; flex-direction:column; }
+  .world { flex:1; min-width:0; padding:16px 8px 8px; display:flex; flex-direction:column; }
   .side-a .wtit { border-bottom-color:var(--a); }
   .side-b .wtit { border-bottom-color:var(--b); }
   .wtit { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; gap:8px; padding:0 8px 4px; border-bottom:2px solid var(--line); }
-  .wtit b { font-size:12px; letter-spacing:0; }
+  .wtit b { flex-shrink:0; white-space:nowrap; font-size:12px; letter-spacing:0; }
   .side-a .wtit b { color:var(--a); }
   .side-b .wtit b { color:var(--b); }
   .wtit i { font-style:normal; color:var(--dim); font-size:12px; text-align:right; }
@@ -184,6 +185,17 @@
     #minimap { flex-wrap:nowrap; }
     footer { margin:0 8px 8px; }
   }
+  /* 全屏全景舞台：整张世界地图铺满屏幕，HUD 浮在顶部；纯表现层，不改载荷与读数。 */
+  body.full-on { overflow:hidden; }
+  #fullStage { position:fixed; inset:0; z-index:50; background:#000; display:flex; align-items:center; justify-content:center; }
+  #fullStage[hidden] { display:none; }
+  #cvFull { image-rendering:pixelated; image-rendering:crisp-edges; cursor:pointer; box-shadow:0 0 0 2px var(--line); }
+  #fullHud { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:12px; padding:8px 12px;
+    background:rgba(0,0,0,.55); color:var(--ink); font-size:13px; }
+  #fullHud .fhint { color:var(--dim); margin-left:auto; }
+  #btnFullExit { background:var(--a); color:var(--bg); border:2px solid var(--ink); box-shadow:2px 2px 0 0 var(--shadow);
+    padding:4px 12px; font-weight:700; cursor:pointer; }
+  #btnFullExit:hover { background:var(--ink); color:var(--a); }
 </style>
 </head>
 <body>
@@ -196,6 +208,7 @@
   <div id="minimap"></div>
   <span class="lbl" id="visionInfo"></span>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
+  <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
 </div>
 <main>
   <div class="col">
@@ -241,7 +254,7 @@
         <div class="wstat" id="statB"></div>
         <div class="rows" id="rowsB"></div>
         <table id="tbl"></table>
-        <div class="note">世界是一整片 96×64 格的自然地形，屏幕只取 16×15 格的放大视角；点地点条移镜头，点画面走过去。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
+        <div class="note">世界是一整片 96×64 格的自然地形，视口随屏幕和地点调整；点空地行走，点建筑进入，连廊两侧通向居所与公仓。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
         <h2>事件</h2>
         <div class="log" id="log"></div>
       </div>
@@ -254,9 +267,17 @@
   <span><i class="key b"></i>B 侧 · 承重通道切断</span>
   <span><i class="key g"></i>地点 / 镜头位置</span>
   <span><i class="key w"></i>驳回 / 永久损失</span>
-  <span>世界 96×64 格完整运行，屏幕只取 16×15 格放大视角；树与屋舍挡视线。</span>
+  <span>世界 96×64 格完整运行，视口随屏幕调整；树与屋舍挡视线，昼夜影响环境明暗。</span>
 </footer>
 <div id="toasts"></div>
+<div id="fullStage" hidden>
+  <canvas id="cvFull"></canvas>
+  <div id="fullHud">
+    <span id="fullInfo"></span>
+    <span class="fhint">点空地行走 · 点建筑进入 · WASD 移动 · Esc 退出</span>
+    <button id="btnFullExit">✕ 退出全屏</button>
+  </div>
+</div>
 <script type="module" src="/web/app.js"></script>
 </body>
 </html>
