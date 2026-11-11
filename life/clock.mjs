@@ -14,6 +14,18 @@ export function phaseOf(t) {
 export const dayOf = (t) => Math.floor(t / DAY_TICKS);
 export const isNight = (t) => phaseOf(t) === '夜';
 
+// §14/§15 统一游戏时间：1 天=24 刻；宿主默认 TICK_MS=7500 ⇒ 3 分钟/天；四季×30 天=1.5 小时/季。
+// 季节相位只作用 survival（town/lab 仍用 phaseOf，基线逐位不变）；昼夜分配随季节变化。
+export const SEASON_DAYS = 30;
+export const SEASONS = Object.freeze(['春', '夏', '秋', '冬']);
+export const seasonOf = (day) => Math.floor(day / SEASON_DAYS) % 4;
+const SEASON_BOUNDS = Object.freeze([[4, 12, 18], [4, 16, 20], [4, 12, 18], [4, 8, 12]]); // [晨末, 昼末, 暮末]；夜=余下
+export function survivalPhaseOf(t) {
+  const h = ((t % DAY_TICKS) + DAY_TICKS) % DAY_TICKS;
+  const [m, d, k] = SEASON_BOUNDS[seasonOf(dayOf(t))];
+  return h < m ? '晨' : h < d ? '昼' : h < k ? '暮' : '夜';
+}
+
 // 日落 = 进入夜的第一刻。反思回合挂在这里，而不是挂在一个没人能解释的 tick 数上
 export const isSunset = (t) => t > 0 && isNight(t) && !isNight(t - 1);
 

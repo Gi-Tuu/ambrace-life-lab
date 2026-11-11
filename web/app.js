@@ -1,6 +1,8 @@
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker } from './walk.mjs';
+// 验收/调试钩子：占位碰撞与寻路可在浏览器内断言（drive6 用）
+window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf };
 const ROOMS = ['home', 'hall', 'watch', 'store'];
 const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 // 兜底色也必须 ⊆ palette.json 的固定色板（manifest 缺失时走这里，不能偷偷引入色板外颜色）。
@@ -408,16 +410,30 @@ function buildWorld(w) {
   const ROOF = ['#7E2553', '#AB5236', '#1D2B53', '#FF004D', '#5F574F', '#008751', '#83769C', '#FFA300'];
   Object.entries(sites).forEach(([r, [sx, sy]], i) => {
     for (let dx = -4; dx <= 3; dx += 1) for (let dy = -8; dy <= -2; dy += 1) {
-      if(r==='hall' && dy>-6)continue; // 连廊腹部可通行；顶梁后方遮挡视线。
+      if (r === 'hall') continue; // 走廊改用站台占位模板（下方）
       if(['well','yard','garden'].includes(r) && (dx<0 || dy<-6))continue;
       blockers.add(tileKey(sx+dx,sy+dy));
     }
+    if (r === 'hall') {
+      // §14 用户规格：站台四周横棍＋四柱实碰撞，仅正面入口可上（占位）
+      for (let dx = -4; dx <= 3; dx += 1) for (let dy = -8; dy <= -6; dy += 1) blockers.add(tileKey(sx+dx,sy+dy)); // 顶梁
+      for (let dx = -4; dx <= 3; dx += 1) for (let dy = -4; dy <= -1; dy += 1) {
+        if (dx === -1 || dx === 0) continue; // 正面入口通道
+        blockers.add(tileKey(sx+dx,sy+dy));
+      }
+      for (const [px,py] of [[-4,-4],[3,-4],[-4,-1],[3,-1]]) blockers.add(tileKey(sx+px,sy+py)); // 四柱
+    }
     const chimney = r === 'workshop';
-    // 屋舍几何 / 屋顶色 / 门前设施 / 栅栏 / 烟囱，全部记录为对象，绘制交给 drawHouseObj（视口）与全景简化块。
-    objects.push({
-      kind: 'house', site: r, sx, sy, roof: ROOF[i % ROOF.length],
-      thing: SITE_THING[r], fence: r === 'yard' || r === 'well', chimney,
-    });
+    if (r === 'hall') {
+      // 两段绘制：背段（屋顶/后柱/后棍）先画，前段（前柱/前棍）后画 ⇒ 站上站台被前柱/前棍遮挡
+      objects.push({ kind:'house', part:'back', site:r, sx, sy, foot: sy-4, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
+      objects.push({ kind:'house', part:'front', site:r, sx, sy, foot: sy-1, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
+    } else {
+      objects.push({
+        kind: 'house', site: r, sx, sy, roof: ROOF[i % ROOF.length],
+        thing: SITE_THING[r], fence: r === 'yard' || r === 'well', chimney,
+      });
+    }
     if (chimney) chimneys.push([sx + 1, sy - 6]);
   });
 
@@ -548,7 +564,11 @@ function drawTreeObj(g, o, cam) {
 function drawHouseObj(g, o, cam) {
   const bx = (o.sx - 4) * TILE - cam.x, by = (o.sy - 9) * TILE - cam.y;
   const image = ASSETS.scenes[`house_${o.site}`];
-  if (image) g.drawImage(image, bx, by, 128, 128);
+  if (image) {
+    if (o.part === 'back') g.drawImage(image, 0, 0, 128, 96, bx, by, 128, 96);
+    else if (o.part === 'front') g.drawImage(image, 0, 96, 128, 32, bx, by + 96, 128, 32);
+    else g.drawImage(image, bx, by, 128, 128);
+  }
   if (o.fence && o.site==='yard') {
     g.fillStyle = '#72513B';
     for (let i = 0; i < 6; i++) { g.fillRect(bx - 6 + i * 13, by + 123, 2, 7); g.fillStyle = '#D8A667'; g.fillRect(bx - 6 + i * 13, by + 123, 1, 6); g.fillStyle = '#72513B'; }
@@ -780,13 +800,12 @@ function drawViewport(cv, w) {
   // 屋后的人被屋挡住（2.5D 空间关系由此而来）。视野外（LOS 挡住）的整件不画，避免穿雾显形。
   const drawables = [];
   for (const o of world.objects) {
-    const footTy = o.kind === 'house' ? o.sy - 1 : o.ty;
+    const footTy = o.kind === 'house' ? (o.foot ?? o.sy - 1) : o.ty;
     const footTx = o.kind === 'house' ? o.sx : o.tx;
     const fy = (footTy + 1) * TILE - cam.y;
     if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
     const seen=o.kind==='house'?[-4,-3,-2,-1,0,1,2,3,4].some(dx=>visible.has(tileKey(footTx+dx,footTy))):visible.has(tileKey(footTx,footTy));
-    if(!seen)continue;
-    drawables.push({ sy: fy, o });
+    drawables.push({ sy: fy, o, faded: !seen });   // 视野外＝半透而非消失（避免"空气墙"观感）
   }
   // 生存建筑/工地进同一张深度排序列表（town 视图无这两个键 ⇒ 逐位不变）。
   for (const b of w.buildings ?? []) {
@@ -794,16 +813,14 @@ function drawViewport(cv, w) {
     const sx = site[0] + 3, sy = site[1];
     const fy = (sy + 1) * TILE - cam.y;
     if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
-    if (!visible.has(tileKey(sx, sy - 1))) continue;
-    drawables.push({ sy: fy, bld: b, sx: site[0], sy });
+    drawables.push({ sy: fy, bld: b, sx: site[0], sy, faded: !visible.has(tileKey(sx, sy - 1)) });
   }
   for (const st of w.sites ?? []) {
     const site = world.sites[st.loc]; if (!site) continue;
     const sx = site[0] + 3, sy = site[1];
     const fy = (sy + 1) * TILE - cam.y;
     if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
-    if (!visible.has(tileKey(sx, sy - 1))) continue;
-    drawables.push({ sy: fy, st, sx: site[0], sy });
+    drawables.push({ sy: fy, st, sx: site[0], sy, faded: !visible.has(tileKey(sx, sy - 1)) });
   }
   for (const who of Object.keys(slots)) {
     const s = WALK[walkKey(cv.id, who)];
@@ -812,15 +829,18 @@ function drawViewport(cv, w) {
     drawables.push({ sy: (wy + 1) * TILE - cam.y, who, wx, wy, moving: s && s.moving, face: s ? s.face : 1 });
   }
   drawables.sort((a, b) => a.sy - b.sy);
-  drawGroundShadows(g,drawables,cam,w.phase);
+  drawGroundShadows(g, drawables.filter((d) => !d.faded && !(d.o && d.o.part === 'back')), cam, w.phase);
   for (const d of drawables) {
-    if (d.bld) { drawBuildingObj(g, d, cam); continue; }
-    if (d.st) { drawSiteObj(g, d, cam); continue; }
+    g.globalAlpha = d.faded ? 0.35 : 1;
+    if (d.bld) { drawBuildingObj(g, d, cam); g.globalAlpha = 1; continue; }
+    if (d.st) { drawSiteObj(g, d, cam); g.globalAlpha = 1; continue; }
     if (d.o) {
       if (d.o.kind === 'tree') drawTreeObj(g, d.o, cam);
       else drawHouseObj(g, d.o, cam);
+      g.globalAlpha = 1;
       continue;
     }
+    g.globalAlpha = 1;
     const px = Math.round((d.wx * TILE - cam.x) * cam.zoom) / cam.zoom, py = Math.round((d.wy * TILE - cam.y) * cam.zoom) / cam.zoom;
     const row = d.moving ? (ACT.index.move_to ?? ACT.index.walk ?? actionRow(w.agents?.[d.who])) : actionRow(w.agents?.[d.who]);
     const walker = WALK[walkKey(cv.id, d.who)];
@@ -1287,7 +1307,18 @@ function pushToasts(pack) {
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survOpen = true;
 let survFlash = null;
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象' };
+// 统一按键：E/Enter＝生存上下文交互（修→建→收/种→采），town 模式仍为进出室内。
+function survInteract() {
+  const s = S.view; if (!s || !s.loc) return;
+  const here = s.loc.p1;
+  const kind = (s.buildings ?? []).some((b) => b.loc === here && b.integrity < 1) ? 'repair'
+    : (s.sites ?? []).some((x) => x.loc === here) ? 'build'
+      : here === 'garden' ? (s.plots.some((p) => p.growth >= 1) ? 'harvest' : 'plant')
+        : (s.outdoor ?? []).includes(here) ? 'gather' : null;
+  if (!kind) { survFlash = { kind: 'interact', ok: false, code: 'NOTHING_HERE' }; refresh(); return; }
+  api('/act', { mode: 'survival', kind }).then((r) => { survFlash = { kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
+}
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   const b = s.buildingsDef || {};
@@ -1312,7 +1343,7 @@ function renderSurv(s) {
   const banner = s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : s.won ? `<div class="survbanner good">活到了第 ${s.targetDays} 天，聚落站住了！</div>` : '';
   el.innerHTML = `
     ${banner}
-    <div class="survrow"><b>第 ${s.day}/${s.targetDays} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
+    <div class="survrow"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day}/${s.targetDays} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
       <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
       <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>${flash}</div>
     <div class="survrow">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}${s.stormTomorrow ? ' <span class="bad">风暴预警</span>' : ''}${s.coldsnapTomorrow ? ' <span class="bad">寒潮预警</span>' : ''}${s.drought ? ' <span class="bad">干旱</span>' : ''}${s.disasterToday ? ` <span class="bad">今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}</span>` : ''}</div>
@@ -1398,7 +1429,7 @@ async function refresh() {
     if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 视野 ${lightRadius(j.A.phase)} 格`;
     const vi = $('visionInfo');
     if (vi) vi.textContent = S.soloSurv
-      ? `世界 ${WORLD_TW}×${WORLD_TH} 格 · 点地点移动 · 面板按钮行动 · 全景/全屏可用`
+      ? `世界 ${WORLD_TW}×${WORLD_TH} 格 · 点地点移动 · E 交互 · 面板按钮行动 · 全景/全屏可用`
       : ui.interior
         ? `室内 · ${(viewA.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
         : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(viewA.phase)} 格（${viewA.phase ?? ''}）· WASD/方向键 移动 · E/点建筑 进出`;
@@ -1551,7 +1582,7 @@ window.addEventListener('keydown', (e) => {
   if (tag === 'input' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (KEY_DIR[k]) { keys.add(KEY_DIR[k]); e.preventDefault(); return; }
-  if (k === 'e' || k === 'enter') { e.preventDefault(); toggleInteriorByKeyboard(); }
+  if (k === 'e' || k === 'enter') { e.preventDefault(); if (S.soloSurv) survInteract(); else toggleInteriorByKeyboard(); }
 });
 window.addEventListener('keyup', (e) => { const d = KEY_DIR[e.key.toLowerCase()]; if (d) keys.delete(d); });
 window.addEventListener('blur', () => keys.clear());

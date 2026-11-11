@@ -2,7 +2,7 @@
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 //  additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate } from './body.mjs';
-import { weatherFor, phaseOf, dayOf } from './clock.mjs';
+import { weatherFor, phaseOf, dayOf, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
 import { SURV } from './worldstate.mjs';
 import { initCoop } from './cooperation.mjs';
@@ -74,7 +74,8 @@ export function survAct(sp, body) {
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   return {
-    t: w.t, phase: phaseOf(w.t), weather: w.weather,
+    t: w.t, phase: survivalPhaseOf(w.t), weather: w.weather,
+    season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV.targetDays,
     rooms: w.locs, outdoor: w.outdoor,
     loc: w.loc, occupancy: w.occupancy,

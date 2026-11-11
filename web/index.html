@@ -212,6 +212,9 @@
   #survPanel .survbanner { padding:6px 8px; border:2px solid var(--line); font-weight:bold; }
   #survPanel .survbanner.bad { border-color:#e06c75; color:#e06c75; }
   #survPanel .survbanner.good { border-color:var(--a); color:var(--a); }
+  #keysHelp { display:inline-block; font-size:12px; vertical-align:middle; }
+  #keysHelp summary { cursor:pointer; border:1px solid var(--line); padding:2px 8px; background:var(--bg); color:var(--ink); }
+  #keysHelp div { padding:4px 8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); max-width:460px; }
 </style>
 </head>
 <body>
@@ -227,6 +230,9 @@
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" title="切换生存单世界游玩面板（独立于 A/B 对照）">生存模式</button>
   <button id="btnCompare" title="切换：单世界大屏 / A/B 双世界对照">对照 A/B</button>
+  <details id="keysHelp"><summary>按键</summary>
+    <div>WASD/方向键 走路 · E/Enter 交互（生存：修→建→收/种→采；town：进出室内）· 点地面 走路 · 点建筑 进入(town)/移动(生存) · Esc 退出全屏 · 面板按钮 行动</div>
+  </details>
 </div>
 <section id="survPanel" hidden></section>
 <main class="solo">

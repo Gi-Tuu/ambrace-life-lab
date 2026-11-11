@@ -30,7 +30,7 @@ const M5_ENABLED = process.env.M5_ENABLED === '1';
 // §33 工坊当日上限：不设（缺省）＝无上限＝现行为逐位相同。设成数字即"工坊一天收几次工"这条世界事实，
 // 它属于世界配置而非内部通道，所以 A/B 两侧同样生效（B 侧是内部状态切断的负向对照，不是规则差异的对照）。
 const WORK_CAP = process.env.WORK_CAP === undefined || process.env.WORK_CAP === '' ? undefined : Number(process.env.WORK_CAP);
-const TICK_MS = Number(process.env.TICK_MS ?? 1200);
+const TICK_MS = Number(process.env.TICK_MS ?? 7500); // §14 统一游戏时间：24 刻/天 × 7.5s = 3 分钟/天（env 可覆盖）
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
