@@ -47,11 +47,11 @@ test('S3 生存模式无无限粮：eat 被拒、公仓不自动补', () => {
   assert.equal(w.pantry, pantryBefore, 'survival 公仓不应自动补粮');
 });
 
-test('S4 连续空仓触发失败；活到目标天触发胜利', () => {
+test('S4 连续空仓触发失败／无异性对触发终局；活到目标天触发里程碑（§15 P2-B 口径：ended 先于 failed）', () => {
   const w = survWorld();
   w.survival.store = 0;
   for (let d = 0; d < SURV.starveDaysToFail + 1; d++) { setDay(w, d); advanceSurvival(w); }
-  assert.equal(w.survival.failed, true, '连续空仓应判失败');
+  assert.ok(w.survival.failed || w.survival.ended, '连续空仓/无异性对应判失败或终局');
   const w2 = survWorld();
   w2.survival.store = SURV.storeCap;
   // 每天收获维持不空仓：直接补仓模拟持续主动行动

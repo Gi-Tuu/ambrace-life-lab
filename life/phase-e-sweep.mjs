@@ -1,5 +1,5 @@
-// Phase E/§11 测量（预登记 phase1-plan §9/§9.1/§10/§11）：digest 基线 / E1 / E3 / 生态灾害闸门读数。
-// 用法：node life/phase-e-sweep.mjs baseline|e1|e3|base2|grid|eco；export run 供闸门复用同一装置。
+// Phase E/§11/§13/§15 测量（预登记 phase1-plan）：digest 基线 / E1 / E3 / 生态灾害 / 同权读数。
+// 用法：node life/phase-e-sweep.mjs baseline|e1|e3|base2|drought|eco|eco2|grid|parity；export run 供闸门复用。
 import { createHash } from 'node:crypto';
 import { createSurvPlay, tickSurvPlay, survAct } from './survplay.mjs';
 import { forecastDisasters } from './worldstate.mjs';
@@ -8,7 +8,7 @@ const SEEDS = [7, 11, 13];
 const TICKS = 360;
 const DAY10 = 240;
 
-export function run(seed, { forage = false, player = false, policy = 'continuous', flags = {} } = {}) {
+export async function run(seed, { forage = false, player = false, policy = 'continuous', flags = {} } = {}) {
   const sp = createSurvPlay(seed);
   const s = sp.world.survival;
   s.forage = forage;
@@ -33,11 +33,11 @@ export function run(seed, { forage = false, player = false, policy = 'continuous
   let lastDroughtDay = -1;
   for (let i = 0; i < TICKS; i++) {
     const f = forecastDisasters(sp.world);
-    tickSurvPlay(sp);
+    await tickSurvPlay(sp);
     const dayNow = Math.floor(sp.world.t / 24);
     if (s.disasterToday && dayNow !== lastDisDay) {
       disasterDays.push(dayNow);
-      if (!lastWarn) warnBad += 1; // 预警只需 onset 前存在一次，按灾害日计
+      if (!lastWarn) warnBad += 1;
       lastDisDay = dayNow;
     }
     lastWarn = f.stormTomorrow || f.coldsnapTomorrow;
@@ -46,12 +46,18 @@ export function run(seed, { forage = false, player = false, policy = 'continuous
       if (s.plots.some((p) => p.growth >= 1)) { const r = survAct(sp, { kind: 'harvest' }); if (r.ok) playerHarvests += 1; }
       const empty = s.plots.filter((p) => p.growth === 0).length;
       if (empty > 0 && (policy === 'continuous' || empty >= 2) && s.water >= 0.1) survAct(sp, { kind: 'plant' });
+      if (policy === 'competent') {
+        const here = sp.world.loc.p1;
+        if (s.buildings.some((b) => b.loc === here && b.integrity < 1)) survAct(sp, { kind: 'repair' });
+        else if (s.sites.some((x) => x.loc === here)) survAct(sp, { kind: 'build' });
+        else if ((sp.world.outdoor ?? []).includes(here) && (s.inv.wood < 4 || s.inv.stone < 4)) survAct(sp, { kind: 'gather' });
+      }
     }
     const ints = s.buildings.map((b) => b.integrity);
     ints.forEach((v, k) => { if (prevInt[k] !== undefined && v < prevInt[k]) damageEvents += 1; });
     prevInt = ints;
     if (sp.world.t === DAY10) store240 = s.store;
-    if (s.failed && failDay === null) failDay = Math.floor(sp.world.t / 24);
+    if (s.failed && failDay === null) failDay = dayNow;
     if (s.won && wonTick === null) wonTick = i;
     if (s.won && wonTick !== null && i > wonTick && prevStore !== null && s.store < prevStore) storeDropsAfterWon += 1;
     prevStore = s.store;
@@ -67,13 +73,13 @@ export function run(seed, { forage = false, player = false, policy = 'continuous
     failDay,
     storeAtWon,
     storeDropsAfterWon,
-    storeEnd: s.store,
     warnBad,
     disasterDays,
     droughtDays,
     soilEnd: s.soil,
     yieldTotal: s.yieldTotal ?? 0,
     harvestCount: s.harvestCount ?? 0,
+    aiActions: s.aiActions ?? {},
     end: { failed: s.failed, won: s.won, store: s.store },
     forageStats: s.forageStats ?? null,
     repairs: s.coop.completions.filter((c) => c.repair).length,
@@ -85,58 +91,105 @@ export function run(seed, { forage = false, player = false, policy = 'continuous
   };
 }
 
-export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 2026-11-11 E1/E3 改前实测（seed 7；§13 后仅 seed 7 有效）
-export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // §11 实施前默认（seed 7；§13 后仅 seed 7 有效）
-// §13 回填：L2 回退后天气复归硬编码 7 ⇒ 基线复抓#2 回到全 seed 同值（阶段A 的按 seed 映射作废，披露）
-export const OFF_BASE = { 7: 'a946f538b14ce9242fbc31d23882e69f', 11: 'a946f538b14ce9242fbc31d23882e69f', 13: 'a946f538b14ce9242fbc31d23882e69f' };
-export const BASELINE3 = { 7: '05d3cd7c72de4cbe70fbb42864a91499', 11: '05d3cd7c72de4cbe70fbb42864a91499', 13: '05d3cd7c72de4cbe70fbb42864a91499' };
-export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false } };
-export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false } };
+// §15 同权＋take_shared 守卫＋P2-B（无尽/繁衍/四季/两性 roster）后基线复抓#6（旧 survival 基线作废，披露于 §15 回填）
+export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 历史：E1/E3 前（plain 居民），仅留痕
+export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 前（plain 居民），仅留痕
+export const OFF_BASE = { 7: '5519ae49c91241c4db9c5b8d7751419b', 11: 'a43fcf3c57693856e6264e7f44c9f63c', 13: 'e54bf4ec50b38cb5ccc8ca8ea33c7192' };
+export const BASELINE3 = { 7: '31e20e1f31cd7612882923e098064d8d', 11: 'ed60d044885f5062c8e546b2c35b52bf', 13: 'f8e2fb1e774e89bbd01a47b23f23b081' };
+export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
+export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
+
+const modes = {
+  baseline: () => Promise.all(SEEDS.map((s) => run(s, OFF))),
+  base2: () => Promise.all(SEEDS.map((s) => run(s, OFF2))),
+  e1: async () => ({
+    off: await Promise.all(SEEDS.map((s) => run(s, OFF))),
+    on: await Promise.all(SEEDS.map((s) => run(s, { forage: true, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } }))),
+    withPlayer: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } }))),
+  }),
+  e3: async () => ({
+    off: await Promise.all(SEEDS.map((s) => run(s, OFF))),
+    on: await Promise.all(SEEDS.map((s) => run(s, { forage: false, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } }))),
+  }),
+  drought: async () => ({
+    k1: await Promise.all(SEEDS.map((s) => run(s, { forage: true, flags: { droughts: true, droughtThreshold: 2 } }))),
+    k2: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true }))),
+    k5: await Promise.all(SEEDS.map((s) => run(s, OFF2))),
+  }),
+  eco: async () => ({
+    g1: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true }))),
+    g2: await Promise.all(SEEDS.map((s) => run(s, { forage: true }))),
+    g2off: await Promise.all(SEEDS.map((s) => run(s, { forage: true, flags: { disasters: false } }))),
+    g9: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true }))),
+    armA: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'continuous', flags: { disasters: false, eco: true } }))),
+    armB: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'rotation', flags: { disasters: false, eco: true } }))),
+    g6: await Promise.all(SEEDS.map((s) => run(s, OFF2))),
+  }),
+  eco2: async () => ({
+    h1: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true, flags: { eco: true } }))),
+    h1off: await Promise.all(SEEDS.map((s) => run(s, { forage: true, player: true }))),
+    h2a: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'continuous', flags: { disasters: false, eco: true } }))),
+    h2b: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'rotation', flags: { disasters: false, eco: true } }))),
+    h3: await Promise.all(SEEDS.map((s) => run(s, OFF2))),
+  }),
+  parity: async () => ({
+    idle: await Promise.all(SEEDS.map((s) => run(s, {}))),
+    withPlayer: await Promise.all(SEEDS.map((s) => run(s, { player: true }))),
+  }),
+  codesign: async () => {
+    const points = [];
+    for (const moveUrgency of [false, true]) for (const m2 of [{ rainRefill: 0.35 }, { plantWater: 0.06 }]) for (const forage of [false, true]) {
+      const flags = { moveUrgency, ...m2 };
+      points.push({
+        moveUrgency, m2: Object.keys(m2)[0], forage,
+        idle: await Promise.all(SEEDS.map((s) => run(s, { forage, flags }))),
+        competent: await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, policy: 'competent', flags }))),
+        disOn: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags }))) : null,
+        disOff: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags: { ...flags, disasters: false } }))) : null,
+      });
+    }
+    return points;
+  },
+  urgency: async () => {
+    const points = [];
+    for (const urgencyThreshold of [1, 2]) for (const urgencyBoost of [0.6, 1.2]) for (const forage of [false, true]) {
+      const flags = { urgencyThreshold, urgencyBoost };
+      points.push({
+        urgencyThreshold, urgencyBoost, forage,
+        idle: await Promise.all(SEEDS.map((s) => run(s, { forage, flags }))),
+        competent: await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, policy: 'competent', flags }))),
+        disOn: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags }))) : null,
+        disOff: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags: { ...flags, disasters: false } }))) : null,
+      });
+    }
+    return points;
+  },
+  balance: async () => {
+    const points = [];
+    for (const feedReward of [0.5, 0.3, 0.15]) for (const forage of [false, true]) {
+      const flags = { feedReward };
+      points.push({
+        feedReward, forage,
+        idle: await Promise.all(SEEDS.map((s) => run(s, { forage, flags }))),
+        naive: await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags }))),
+        competent: await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, policy: 'competent', flags }))),
+        disOn: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags }))) : null,
+        disOff: forage ? await Promise.all(SEEDS.map((s) => run(s, { forage, player: true, flags: { ...flags, disasters: false } }))) : null,
+      });
+    }
+    return points;
+  },
+  grid: async () => {
+    const points = [];
+    for (const repairEarly of [false, true]) for (const wearRate of [0.1, 0.05]) for (const repairRisk of [0.3, 0.15]) {
+      points.push({ repairEarly, wearRate, repairRisk, runs: await Promise.all(SEEDS.map((s) => run(s, { forage: false, flags: { repairEarly, wearRate, repairRisk, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } }))) });
+    }
+    return points;
+  },
+};
 
 if (process.argv[1]?.endsWith('phase-e-sweep.mjs')) {
   const mode = process.argv[2] ?? 'baseline';
-  if (mode === 'baseline') {
-    console.log(JSON.stringify(SEEDS.map((seed) => run(seed, OFF)), null, 2));
-  } else if (mode === 'base2') {
-    console.log(JSON.stringify(SEEDS.map((seed) => run(seed, OFF2)), null, 2));
-  } else if (mode === 'e1') {
-    const off = SEEDS.map((seed) => run(seed, OFF));
-    const on = SEEDS.map((seed) => run(seed, { forage: true, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false } }));
-    const withPlayer = SEEDS.map((seed) => run(seed, { forage: true, player: true, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false } }));
-    console.log(JSON.stringify({ off, on, withPlayer }, null, 2));
-  } else if (mode === 'e3') {
-    const off = SEEDS.map((seed) => run(seed, OFF));
-    const on = SEEDS.map((seed) => run(seed, { forage: false, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false } }));
-    console.log(JSON.stringify({ off, on }, null, 2));
-  } else if (mode === 'eco') {
-    const g1 = SEEDS.map((seed) => run(seed, { forage: true, player: true }));
-    const g1alt = SEEDS.map((seed) => run(seed, { forage: true, player: true, flags: { disasters: true, playerEats: true } }));
-    const g2 = SEEDS.map((seed) => run(seed, { forage: false, flags: { disasters: true, playerEats: true } }));
-    const g2off = SEEDS.map((seed) => run(seed, { forage: false, flags: { disasters: false, playerEats: true } }));
-    const g9 = SEEDS.map((seed) => run(seed, { forage: true, player: true }));
-    const armA = SEEDS.map((seed) => run(seed, { player: true, policy: 'continuous', flags: { disasters: false, eco: true } }));
-    const armB = SEEDS.map((seed) => run(seed, { player: true, policy: 'rotation', flags: { disasters: false, eco: true } }));
-    const g6 = SEEDS.map((seed) => run(seed, OFF2));
-    console.log(JSON.stringify({ g1, g1alt, g2, g2off, g9, armA, armB, g6 }, null, 2));
-  } else if (mode === 'eco2') {
-    const h1 = SEEDS.map((seed) => run(seed, { forage: true, player: true, flags: { eco: true } }));
-    const h1off = SEEDS.map((seed) => run(seed, { forage: true, player: true }));
-    const h2a = SEEDS.map((seed) => run(seed, { player: true, policy: 'continuous', flags: { disasters: false, eco: true } }));
-    const h2b = SEEDS.map((seed) => run(seed, { player: true, policy: 'rotation', flags: { disasters: false, eco: true } }));
-    const h3 = SEEDS.map((seed) => run(seed, OFF2));
-    console.log(JSON.stringify({ h1, h1off, h2a, h2b, h3 }, null, 2));
-  } else if (mode === 'drought') {
-    const k1 = SEEDS.map((seed) => run(seed, { forage: true }));
-    const k2 = SEEDS.map((seed) => run(seed, { forage: true, player: true }));
-    const k5 = SEEDS.map((seed) => run(seed, OFF2));
-    console.log(JSON.stringify({ k1, k2, k5 }, null, 2));
-  } else if (mode === 'grid') {
-    const points = [];
-    for (const repairEarly of [false, true]) for (const wearRate of [0.1, 0.05]) for (const repairRisk of [0.3, 0.15]) {
-      points.push({ repairEarly, wearRate, repairRisk, runs: SEEDS.map((seed) => run(seed, { forage: false, flags: { repairEarly, wearRate, repairRisk, eco: false, disasters: false, playerEats: false, endFreeze: false } })) });
-    }
-    console.log(JSON.stringify(points, null, 2));
-  } else {
-    console.error('unknown mode'); process.exit(1);
-  }
+  if (!modes[mode]) { console.error('unknown mode'); process.exit(1); }
+  console.log(JSON.stringify(await modes[mode](), null, 2));
 }

@@ -2,7 +2,7 @@
 //   土壤/水分/天气 → 植物生长 → 收获入仓 → 居民每日消耗 → 缺口产生存续压力 → 失败/目标。
 // 只在 world.survival 存在时生效（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
-import { dayOf, weatherFor } from './clock.mjs';
+import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, dailyWear } from './production.mjs';
 
@@ -29,6 +29,10 @@ export function initSurvival(world) {
     starveDays: 0,
     failed: false,
     won: false,
+    ended: false,
+    endReason: null,
+    births: 0,
+    lastBirthDay: -99,
     history: [],
   };
   initProduction(s);
@@ -77,13 +81,14 @@ export function advanceSurvival(world) {
   const thr = s.droughts === false ? 3 : (s.droughtThreshold ?? 3); // §13：droughts=0 复原阶段A（阈值3）；备选档经 droughtThreshold=2
   s.drought = s.clearStreak >= thr;
   const dis = s.disasters === true;
-  s.water = clamp01(s.water + (rain ? 0.25 : -0.08) - (dis && s.drought ? 0.06 : 0));
+  s.water = clamp01(s.water + (rain ? (s.rainRefill ?? 0.25) : -0.08) - (dis && s.drought ? 0.06 : 0)); // §15.5 M2 雨补挂开关
   const empty = s.plots.filter((p) => p.growth === 0).length;
   s.soil = clamp01(s.soil + 0.05 + (s.eco === true ? 0.05 * empty : 0));
   const wf = 0.4 + 0.6 * s.water, sf = 0.4 + 0.6 * s.soil;
   const coldF = cold ? 0.5 : 1;
+  const seasonGrow = [1.0, 1.15, 0.9, 0.6][seasonOf(day)]; // §15 P2-B 四季调制生长
   const droughtF = dis && s.drought ? 0.8 : 1;
-  for (const p of s.plots) if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * coldF * droughtF);
+  for (const p of s.plots) if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * coldF * droughtF * seasonGrow);
 
   // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
   s.disasterToday = null;
@@ -104,7 +109,7 @@ export function advanceSurvival(world) {
   const pop = Object.values(world.agents).filter((a) => !a.isPlayer).length;
   const eaters = pop + (s.playerEats === true ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
-  const ended = (s.won || s.failed) && s.endFreeze === true; // 裁决①：结算后冻结消耗
+  const ended = (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
     if (s.store >= need) s.store -= need;
@@ -117,11 +122,25 @@ export function advanceSurvival(world) {
       if (a.isPlayer || !a.viab) continue;
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
-  } else if (!ended) s.starveDays = 0;
+  } else if (!ended) {
+    s.starveDays = 0;
+    // §15 同权驱动同步：吃饱的一天给能量驱动回补（系数跑前登记 0.5/天），缺口天不回补
+    for (const a of Object.values(world.agents)) {
+      if (a.isPlayer || !a.drives) continue;
+      a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
+    }
+  }
 
+  // §15 P2-B 无尽终局：存活集合中不存在异性对 ⇒ 无法繁衍＝必定灭绝（含只剩 1 人/同性对）；先于 failed 判定
+  if (!s.ended) {
+    const alive = Object.values(world.agents).filter((a) => a.isPlayer || (a.viab?.v ?? 1) > 0);
+    const sexes = alive.map((a) => world.sex?.[a.id]);
+    const hasPair = sexes.includes('M') && sexes.includes('F');
+    if (!hasPair) { s.ended = true; s.endReason = alive.length <= 1 ? 'sole' : 'noPair'; }
+  }
   const allDead = Object.values(world.agents).filter((a) => !a.isPlayer).every((a) => (a.viab?.v ?? 1) <= 0);
-  if (!ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
-  if (!ended && !s.failed && day >= SURV.targetDays) s.won = true;
+  if (!s.ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
+  if (!s.failed && day >= SURV.targetDays) s.won = true; // 里程碑徽章（无尽模式不终局）
 
   const summary = { day, store: s.store, need, shortfall, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)), mature: maturePlots(s).length, failed: s.failed, won: s.won, drought: !!s.drought, disaster: s.disasterToday };
   s.history.push(summary);
@@ -148,8 +167,8 @@ export function doPlant(world, agentId) {
   const s = world.survival;
   const p = s.plots.find((x) => x.growth === 0);
   if (!p) return { ok: false, code: 'NO_EMPTY_PLOT' };
-  if (s.water < 0.1) return { ok: false, code: 'NO_WATER' };
-  s.water = clamp01(s.water - 0.1);
+  if (s.water < (s.plantWater ?? 0.1)) return { ok: false, code: 'NO_WATER' };
+  s.water = clamp01(s.water - (s.plantWater ?? 0.1)); // §15.5 M2 播种耗水挂开关
   p.growth = 0.1;
   return { ok: true, code: 'OK' };
 }

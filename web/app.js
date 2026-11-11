@@ -1340,7 +1340,7 @@ function renderSurv(s) {
   const planWhy = (t) => !outdoor ? '得在户外' : (siteHere || s.buildings.some((x) => x.loc === here)) ? '当前地点已占用' : (s.inv.wood >= (b[t]?.cost.wood ?? 0) && s.inv.stone >= (b[t]?.cost.stone ?? 0)) ? '' : '材料不够';
   const btn = (sk, label, reason) => `<button data-sk="${sk}"${reason ? ` disabled title="${esc(reason)}"` : ''}>${label}</button>`;
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}</span>` : '';
-  const banner = s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : s.won ? `<div class="survbanner good">活到了第 ${s.targetDays} 天，聚落站住了！</div>` : '';
+  const banner = s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : s.won ? `<div class="survbanner good">里程碑：活到第 ${s.targetDays} 天（无尽模式继续）</div>` : '';
   el.innerHTML = `
     ${banner}
     <div class="survrow"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day}/${s.targetDays} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
@@ -1355,7 +1355,7 @@ function renderSurv(s) {
     <div class="survrow survbtns">
       ${btn('harvest', '收获', why.harvest)}${btn('plant', '播种', why.plant)}${btn('gather', '采集', why.gather)}${btn('build', '施工', why.build)}${btn('repair', '维修', why.repair)}
       ${Object.keys(b).map((t) => `<button data-sk="plan" data-type="${t}"${planWhy(t) ? ` disabled title="${esc(planWhy(t))}"` : ''}>奠基${bl(t)}</button>`).join('')}
-      ${s.failed || s.won ? '<button id="btnSurvReset">重新开始</button>' : ''}
+      ${s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>
     <div class="survrow">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>`;
 }

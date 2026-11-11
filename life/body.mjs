@@ -258,9 +258,23 @@ export function affordancesFor(world, agentId) {
 
   // Phase A/B 生存模式：只有 survival 才出现这些候选。lab/town 无 world.survival ⇒ 不出现。
   if (world.survival) {
+    // §15.4 状态依赖紧迫度：公仓低时抬收获/播种的能量权重，让 AI 在聚落饥饿时真种地（系数挂开关供网格）
+    const s0 = world.survival;
+    const pop0 = Object.values(world.agents).filter((a) => !a.isPlayer).length;
+    const urg = s0.store < pop0 * (s0.urgencyThreshold ?? 1) ? (s0.urgencyBoost ?? 0.8) : 0;
+    // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
+    if (urg > 0 && s0.moveUrgency === true) {
+      if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
+      const affordable = Object.entries(BUILDINGS).find(([, d]) => s0.inv.wood >= d.cost.wood && s0.inv.stone >= d.cost.stone);
+      const hereFree = !s0.sites.some((x) => x.loc === here) && !s0.buildings.some((x) => x.loc === here);
+      if (affordable && hereFree) {
+        const free = (world.outdoor ?? []).find((l) => l !== here && !s0.sites.some((x) => x.loc === l) && !s0.buildings.some((x) => x.loc === l));
+        if (free) out.push({ id: `move_to:${free}`, kind: 'move_to', to: free, label: `去${(world.locs ?? {})[free] ?? free}奠基`, cost: 0.05, impulse: 0.2, serves: { stimulation: urg } });
+      }
+    }
     if (here === 'garden') {
-      if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 } });
-      if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 } });
+      if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 + urg } });
+      if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
     if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
     const site = world.survival.sites.find((s) => s.loc === here);
@@ -322,7 +336,16 @@ export function affordancesFor(world, agentId) {
   return out;
 }
 
+// §15 同权观测：居民（非玩家）在生存世界的成功动作计数，供同权闸门断言
 export function actuate(world, agentId, action) {
+  const r = actuateInner(world, agentId, action);
+  if (world.survival && agentId !== 'p1' && r.ok) {
+    const c = (world.survival.aiActions ??= {});
+    c[action.kind] = (c[action.kind] ?? 0) + 1;
+  }
+  return r;
+}
+function actuateInner(world, agentId, action) {
   const me = agentId;
   const here = world.loc[agentId];
   const evt = (o) => ({ kind: o.kind, valence: o.valence, selfCaused: o.selfCaused ?? true, serves: o.serves ?? null, about: o.about ?? null, violates: o.violates ?? null, novel: o.novel ?? false });
@@ -454,6 +477,8 @@ export function actuate(world, agentId, action) {
       return { action, ok: true, code: 'OK', observation: '修好了', evt: evt({ kind: 'repair', valence: 0.3, serves: 'stimulation' }) };
     }
     case 'take_shared': {
+      // §15.4 生存语义一致性：生存模式只有公仓每日分配、无私藏 ⇒ 越轨取食不可用（否则 AI 偷吃吃饱就不种地）
+      if (world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '生存模式只有公仓每日分配，没有私藏可拿' };
       const victim = action.target;
       if (!victim || (world.stash[victim] ?? 0) <= 0) return { action, ok: false, code: 'EMPTY', observation: '那人门口已经空了', evt: evt({ kind: 'shortfall', valence: -0.5, selfCaused: false, serves: 'energy' }) };
       world.stash[victim] -= 1;

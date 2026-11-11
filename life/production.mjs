@@ -2,6 +2,7 @@
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
 import { siteOf } from './geometry.mjs';
+import { dayOf, seasonOf } from './clock.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -80,7 +81,7 @@ export function doRepair(world, agentId) {
 export function dailyWear(world, mods) {
   const s = world.survival;
   if (!s || (world.weather !== 'rain' && world.weather !== 'cold')) return;
-  const base = world.survival.wearRate ?? 0.1; // E2 L2 杠杆；缺省＝现行为
+  const base = (world.survival.wearRate ?? 0.1) * [1.0, 1.0, 1.1, 1.5][seasonOf(dayOf(world.t))]; // §15 P2-B 四季调制损耗（冬更苛）
   const rate = mods.shield ? base * 0.4 : base;
   for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - rate).toFixed(2)));
 }

@@ -1,31 +1,42 @@
-// 生存单世界游玩层（Phase D）。把 survival+coop 接成一个可玩的单世界，独立于 town A/B 研究对照。
+// 生存单世界游玩层（Phase D / §14–15 P2）。居民＝完整 Organism（同权：玩家能做的 AI 都能做）。
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
-//  additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
+// additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate } from './body.mjs';
-import { weatherFor, phaseOf, dayOf, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
+import { weatherFor, dayOf, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
-import { SURV } from './worldstate.mjs';
 import { initCoop } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
+import { Organism } from './agent.mjs';
+import { hashSeed } from './rng.mjs';
 
-const ROSTER = [['a1', '岑'], ['a2', '绛'], ['a3', '蓑']];
+const ROSTER = [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']];
+export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
 export function createSurvPlay(seed = 7) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
-  for (const [id, name] of ROSTER) { world.agents[id] = { id, name }; spawn(world, id, 'home'); }
-  world.agents.p1 = { id: 'p1', name: '你', isPlayer: true }; spawn(world, 'p1', 'hall');
-  world.survival.forage = true; // Phase E1：安全网觅食默认开（play 层；engine survival 不带此键 ⇒ S1–S6 不变）
-  world.survival.repairEarly = true; // E3a 过 ⇒ 默认开（§10 跑前登记的裁决）
-  world.survival.eco = true; // §12 缓和曲线 H1∧H2 过 ⇒ 默认开（0.8+0.2×土）
-  world.survival.disasters = true; // §11 中档 G1 负 ⇒ 预登记备选档（4%/0.15）G1 过 ⇒ 默认开（备选档）
-  world.survival.playerEats = true; // §11 裁决②成立：4 人/日可由工坊+1 产量支撑（曾误归因于水经济，已更正回填）
-  world.survival.endFreeze = true; // §11 裁决①（G9 验）
-  world.survival.droughts = false; // §13 K2 负（主/备各一次）⇒ 默认关、R3 主张撤回；机制与开关保留（K3 单元验）
-  world.survival.forageStats = { harvest: 0, plant: 0 };
+  // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
+  world.sex = { a1: 'M', a2: 'F', a3: sexOf(seed, 'a3'), p1: sexOf(seed, 'p1') };
+  for (const [id, name, archetype] of ROSTER) {
+    const a = new Organism({ id, name, archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2' });
+    world.agents[id] = a;
+    spawn(world, id, 'home');
+  }
+  world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
+  spawn(world, 'p1', 'hall');
+  for (const id of Object.keys(world.stash ?? {})) world.stash[id] = 0; // §15.5 M3：生存无私藏（恒 on 语义 fix）
+  const s = world.survival;
+  s.forage = false; // §15 同权后撤安全网代劳（开关保留供对照/负控）
+  s.repairEarly = true; // E3a 过 ⇒ 默认开
+  s.eco = true; // §12 缓和曲线 H1∧H2 过
+  s.disasters = true; // §11 备选档 G1 过
+  s.playerEats = false; // §15.4 负结果回滚裁决②：4 人/日受水循环限制不可持续（播种耗水>雨补）；开关保留待水循环共设计预登记
+  s.endFreeze = true; // §11 裁决①
+  s.droughts = false; // §13 K2 负 ⇒ 默认关、R3 撤回
+  s.forageStats = { harvest: 0, plant: 0 };
   return { world, log: [] };
 }
 
-// E1 安全网觅食（9.1 修订）：全聚落每日预算 1 收＋1 种，仅当公仓低于 pop×阈值；走 actuate+rules。
+// E1 安全网觅食（保留供对照；默认关）：全聚落每日预算 1 收＋1 种。
 function forageRound(w) {
   const s = w.survival;
   const pop = Object.values(w.agents).filter((a) => !a.isPlayer).length;
@@ -45,13 +56,51 @@ function forageRound(w) {
   }
 }
 
-export function tickSurvPlay(sp) {
+export async function tickSurvPlay(sp) {
   const w = sp.world;
   w.t += 1;
-  w.weather = weatherFor(7, dayOf(w.t)); // §13 L2 被 K2 否（11/13 不可玩）⇒ 回退硬编码 7；seed 轴退化保留披露
+  w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
+  w.percepts = [];
+  w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
   if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
+  if (dayOf(w.t) !== dayOf(w.t - 1)) reproduce(w); // §15 P2-B 繁衍（日界）
+  // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
+  for (const id of Object.keys(w.agents)) {
+    const a = w.agents[id];
+    if (a.isPlayer) continue;
+    try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+  }
   return w;
+}
+
+// §15 P2-B 繁衍：异性存活对＋住所完好＋粮≥pop×2＋信任≥60＋冷却 10 天 ⇒ 新生 Organism（记忆从空开始）
+const CHILD_NAMES = ['芽', '苗', '穗', '实', '蘖', '籽'];
+function reproduce(w) {
+  const s = w.survival;
+  if (s.ended || s.failed) return;
+  const day = dayOf(w.t);
+  if (day - (s.lastBirthDay ?? -99) < 10) return;
+  const pop = Object.values(w.agents).filter((a) => !a.isPlayer).length;
+  if (s.store < pop * 2) return;
+  if (!s.buildings.some((b) => b.type === 'shelter' && b.integrity > 0)) return;
+  const alive = Object.values(w.agents).filter((a) => a.isPlayer || (a.viab?.v ?? 1) > 0);
+  for (const a of alive) for (const b of alive) {
+    if (a.id >= b.id) continue;
+    if ((w.sex?.[a.id] ?? 'M') === (w.sex?.[b.id] ?? 'F')) continue;
+    const trust = a.relations?.get?.(b.id)?.trust ?? 30;
+    if (trust < 60) continue;
+    const n = (s.births ?? 0) + 1;
+    const id = `c${n}`;
+    const child = new Organism({ id, name: CHILD_NAMES[(n - 1) % CHILD_NAMES.length], archetype: ['谨慎', '冲动', '孤僻'][hashSeed(w.seed ?? 7, `arch:${id}`) % 3], seed: hashSeed(w.seed ?? 7, `${id}:surv`), condition: 'C2' });
+    w.agents[id] = child;
+    w.sex[id] = sexOf(w.seed ?? 7, id);
+    if (w.stash) w.stash[id] = 0;
+    spawn(w, id, 'home');
+    s.births = n;
+    s.lastBirthDay = day;
+    return;
+  }
 }
 
 export function survAct(sp, body) {
@@ -76,15 +125,15 @@ export function survView(sp) {
   return {
     t: w.t, phase: survivalPhaseOf(w.t), weather: w.weather,
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
-    day: dayOf(w.t), targetDays: SURV.targetDays,
+    day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms: w.locs, outdoor: w.outdoor,
     loc: w.loc, occupancy: w.occupancy,
     store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     plots: s.plots.map((p) => ({ id: p.id, growth: Number(p.growth.toFixed(2)) })),
     inv: s.inv, sites: s.sites, buildings: s.buildings,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer }])),
-    failed: s.failed, won: s.won, history: s.history.slice(-14),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, sex: w.sex?.[a.id] ?? null }])),
+    failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,
     clearStreak: s.clearStreak ?? 0, coldStreak: s.coldStreak ?? 0,
@@ -94,10 +143,12 @@ export function survView(sp) {
   };
 }
 
+const SURV_TARGET = 10; // 无尽模式落地前的里程碑显示；P2-B 终局语义替换
+
 // 持久化（additive）：只 dump 生存世界事实，读回时 tolerant。
 export function dumpSurv(sp) {
   const w = sp.world;
-  return { t: w.t, loc: w.loc, survival: w.survival, log: sp.log };
+  return { t: w.t, loc: w.loc, survival: w.survival, log: sp.log, sex: w.sex };
 }
 export function loadSurv(raw, seed = 7) {
   const sp = createSurvPlay(seed);
@@ -105,6 +156,7 @@ export function loadSurv(raw, seed = 7) {
     sp.world.t = raw.t;
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    sp.world.sex = { ...sp.world.sex, ...(raw.sex ?? {}) };
     sp.log = raw.log ?? [];
   }
   return sp;
