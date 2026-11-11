@@ -555,6 +555,55 @@ function drawHouseObj(g, o, cam) {
     g.fillRect(bx - 6, by + 126, 126, 1);
   }
 }
+// 生存建筑实体：素材钩子 bld_<type> 优先（美术到货即生效），缺省程序化像素兜底（色板内）。
+const BLD_ROOF = { shelter: '#FF004D', granary: '#83769C', workshop: '#008751', wall: '#D8A667' };
+function drawBuildingObj(g, d, cam) {
+  const b = d.bld;
+  const bx = (d.sx + 3) * TILE - cam.x, by = (d.sy - 4) * TILE - cam.y;
+  const image = ASSETS.scenes[`bld_${b.type}`];
+  if (image) g.drawImage(image, bx, by, 64, 64);
+  else if (b.type === 'wall') {
+    g.fillStyle = '#72513B';
+    for (let i = 0; i < 8; i++) { g.fillRect(bx + i * 8, by + 16, 4, 32); g.fillStyle = '#D8A667'; g.fillRect(bx + i * 8, by + 12, 4, 4); g.fillStyle = '#72513B'; }
+    g.fillRect(bx, by + 28, 64, 2);
+  } else {
+    const roof = BLD_ROOF[b.type] ?? '#83769C';
+    g.fillStyle = roof;
+    g.fillRect(bx + 8, by, 48, 6); g.fillRect(bx + 4, by + 6, 56, 6);
+    g.fillStyle = b.type === 'workshop' ? '#5F574F' : '#AB5236';
+    g.fillRect(bx + 6, by + 12, 52, 32);
+    g.fillStyle = '#72513B';
+    g.fillRect(bx + 6, by + 22, 52, 2); g.fillRect(bx + 6, by + 34, 52, 2);
+    if (b.type === 'shelter') { g.fillStyle = '#1D2B53'; g.fillRect(bx + 26, by + 26, 12, 18); g.fillStyle = '#FFEC27'; g.fillRect(bx + 12, by + 16, 6, 6); }
+    if (b.type === 'granary') { g.fillStyle = '#FFA300'; for (let i = 0; i < 5; i++) g.fillRect(bx + 10 + i * 10, by + 26, 4, 4); }
+    if (b.type === 'workshop') { g.fillStyle = '#1D2B53'; g.fillRect(bx + 22, by + 28, 20, 8); g.fillRect(bx + 28, by + 36, 8, 8); g.fillStyle = '#FFA300'; g.fillRect(bx + 44, by + 26, 3, 3); }
+  }
+  if (b.integrity < 1) {
+    g.fillStyle = '#1D2B53';
+    g.fillRect(bx + 14, by + 14, 3, 10); g.fillRect(bx + 17, by + 24, 3, 8); g.fillRect(bx + 40, by + 18, 3, 12);
+    g.fillStyle = '#FF004D'; g.fillRect(bx + 46, by + 40, 6, 4);
+  }
+  const label = `${BLD_LABEL[b.type] ?? b.type}${b.integrity < 1 ? '(损)' : ''}`;
+  const tw = g.measureText(label).width;
+  g.fillStyle = '#1D2B53'; g.fillRect(bx - 2, by - 13, tw + 4, 10);
+  g.fillStyle = '#FFF1E8'; g.fillText(label, bx, by - 5);
+}
+function drawSiteObj(g, d, cam) {
+  const st = d.st;
+  const bx = (d.sx + 3) * TILE - cam.x, by = (d.sy - 2) * TILE - cam.y;
+  g.fillStyle = '#83769C';
+  for (let i = 0; i < 48; i += 6) { g.fillRect(bx + i, by, 3, 1); g.fillRect(bx + i, by + 31, 3, 1); }
+  for (let i = 0; i < 32; i += 6) { g.fillRect(bx, by + i, 1, 3); g.fillRect(bx + 47, by + i, 1, 3); }
+  const labor = BLD_LABOR[st.type] ?? 6;
+  g.fillStyle = '#1D2B53'; g.fillRect(bx, by + 36, 48, 4);
+  g.fillStyle = '#008751'; g.fillRect(bx, by + 36, Math.round(48 * Math.min(1, (st.progress ?? 0) / labor)), 4);
+  const slabel = `工地·${BLD_LABEL[st.type] ?? st.type}`;
+  const sw = g.measureText(slabel).width;
+  g.fillStyle = '#1D2B53'; g.fillRect(bx - 2, by - 13, sw + 4, 10);
+  g.fillStyle = '#FFF1E8'; g.fillText(slabel, bx, by - 5);
+}
+const BLD_LABEL = { shelter: '住所', granary: '储粮', workshop: '工坊', wall: '防护' };
+const BLD_LABOR = { shelter: 6, granary: 6, workshop: 8, wall: 8 };
 // 环境光由世界相位决定，过渡只使用共享渲染时钟；每一输出颜色仍在固定色板内。
 const TONE_CACHE=new Map();
 function toneScene(g,cv,phase,indoor=false){
@@ -730,6 +779,23 @@ function drawViewport(cv, w) {
     if(!seen)continue;
     drawables.push({ sy: fy, o });
   }
+  // 生存建筑/工地进同一张深度排序列表（town 视图无这两个键 ⇒ 逐位不变）。
+  for (const b of w.buildings ?? []) {
+    const site = world.sites[b.loc]; if (!site) continue;
+    const sx = site[0] + 3, sy = site[1];
+    const fy = (sy + 1) * TILE - cam.y;
+    if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
+    if (!visible.has(tileKey(sx, sy - 1))) continue;
+    drawables.push({ sy: fy, bld: b, sx: site[0], sy });
+  }
+  for (const st of w.sites ?? []) {
+    const site = world.sites[st.loc]; if (!site) continue;
+    const sx = site[0] + 3, sy = site[1];
+    const fy = (sy + 1) * TILE - cam.y;
+    if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
+    if (!visible.has(tileKey(sx, sy - 1))) continue;
+    drawables.push({ sy: fy, st, sx: site[0], sy });
+  }
   for (const who of Object.keys(slots)) {
     const s = WALK[walkKey(cv.id, who)];
     const wx = s ? s.x : slots[who][0], wy = s ? s.y : slots[who][1];
@@ -739,6 +805,8 @@ function drawViewport(cv, w) {
   drawables.sort((a, b) => a.sy - b.sy);
   drawGroundShadows(g,drawables,cam,w.phase);
   for (const d of drawables) {
+    if (d.bld) { drawBuildingObj(g, d, cam); continue; }
+    if (d.st) { drawSiteObj(g, d, cam); continue; }
     if (d.o) {
       if (d.o.kind === 'tree') drawTreeObj(g, d.o, cam);
       else drawHouseObj(g, d.o, cam);
@@ -835,6 +903,17 @@ function drawOverview(cv, w) {
       const bw = Math.max(2, Math.round(3 * TILE * OV_SX)), bh = Math.max(2, Math.round(2 * TILE * OV_SY));
       g.fillStyle = o.roof; g.fillRect(mx, my, bw, bh);
     }
+  }
+  for (const b of w.buildings ?? []) {
+    const site = world.sites[b.loc]; if (!site) continue;
+    const mx = Math.round((site[0] + 3) * TILE * OV_SX), my = Math.round((site[1] - 2) * TILE * OV_SY);
+    g.fillStyle = b.integrity < 1 ? '#FF004D' : (BLD_ROOF[b.type] ?? '#83769C');
+    g.fillRect(mx, my, 3, 2);
+  }
+  for (const st of w.sites ?? []) {
+    const site = world.sites[st.loc]; if (!site) continue;
+    const mx = Math.round((site[0] + 3) * TILE * OV_SX), my = Math.round((site[1] - 2) * TILE * OV_SY);
+    g.fillStyle = '#83769C'; g.fillRect(mx, my, 3, 1);
   }
   toneScene(g,cv,w.phase);
   // 地点标记 / 相机取景框 / 玩家点，全部按世界→全景比例换算。
@@ -1377,7 +1456,7 @@ $('btnOverview').onclick = () => { if (ui.interior) { ui.interior = null; ui.cam
 $('btnSurv').onclick = () => { survOpen = !survOpen; $('survPanel').hidden = !survOpen; $('btnSurv').classList.toggle('on', survOpen); refresh(); };
 $('btnCompare').onclick = () => { ui.compare = !ui.compare; document.querySelector('main').classList.toggle('solo', !ui.compare); $('btnCompare').textContent = ui.compare ? '单世界' : '对照 A/B'; refresh(); };
 $('survPanel').addEventListener('click', (e) => {
-  if (e.target.closest('#btnSurvReset')) { survFlash = null; ctl({ action: 'reset' }); return; }
+  if (e.target.closest('#btnSurvReset')) { survFlash = null; ctl({ action: 'reset', confirm: true }); return; }
   const mv = e.target.closest('button[data-mv]');
   if (mv) { api('/act', { mode: 'survival', kind: 'move', room: mv.dataset.mv }).then(refresh); return; }
   const btn = e.target.closest('button[data-sk]'); if (!btn || btn.disabled) return;
