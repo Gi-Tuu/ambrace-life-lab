@@ -191,6 +191,13 @@ export function loadSurv(raw, seed = 7) {
   if (raw && typeof raw.t === 'number' && raw.survival) {
     sp.world.t = raw.t;
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
+    // occupancy 是派生数据但顺序进感知/候选：dumpSurv 不存它，读档必须按 loc 重建，
+    // 否则创建期的 spawn 占位与存档位置错位，下一次 move() 取 occupancy[from] 落空。
+    sp.world.occupancy = {};
+    for (const id of Object.keys(sp.world.agents)) {
+      const l = sp.world.loc[id];
+      if (l) (sp.world.occupancy[l] ??= []).push(id);
+    }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
     sp.world.sex = { ...sp.world.sex, ...(raw.sex ?? {}) };
     sp.world.pinv = { ...sp.world.pinv, ...(raw.pinv ?? {}) };
