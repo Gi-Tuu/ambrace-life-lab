@@ -35,6 +35,10 @@ export function createSurvPlay(seed = 7) {
   s.endFreeze = true; // §11 裁决①
   s.droughts = false; // §13 K2 负 ⇒ 默认关、R3 撤回
   s.forageStats = { harvest: 0, plant: 0 };
+  s.farmerId = 'a1'; // §15.7 R1 角色化农夫（网格选定默认开）
+  s.roleFarmer = false; // §15.7 网格：R1/R2' 均无效（aiH 不随角色升）⇒ 默认关、负结果留痕；机制代码保留待经济重设计
+  s.allHunger = false;
+  s.moveUrgency = false; // §15.7：M1 默认关（开则破坏已验平衡 G1/K2）；机制保留待经济重设计
   return { world, log: [] };
 }
 
@@ -66,13 +70,24 @@ export async function tickSurvPlay(sp) {
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
   if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
-  if (dayOf(w.t) !== dayOf(w.t - 1)) reproduce(w); // §15 P2-B 繁衍（日界）
+  if (dayOf(w.t) !== dayOf(w.t - 1)) {
+    reproduce(w); // §15 P2-B 繁衍（日界）
+    // §15 P2-D 性格-季节慢偏移：冬社交设点降、夏升（人格随季节缓慢变化）
+    const season = seasonOf(dayOf(w.t));
+    const d = season === 3 ? -0.005 : season === 1 ? 0.005 : 0;
+    if (d) for (const a of Object.values(w.agents)) {
+      if (a.isPlayer || !a.drives) continue;
+      a.drives.setpoint.social = Math.max(0.2, Math.min(0.6, a.drives.setpoint.social + d));
+    }
+  }
   // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
   for (const id of Object.keys(w.agents)) {
     const a = w.agents[id];
     if (a.isPlayer) continue;
     try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
-    if (w.survival.decayExtra) a.drives.tick(w.survival.decayExtra, false); // §15.6 生存额外衰减⇒两餐之间存在饥饿⇒觅食/移动候选有权重
+    // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
+    if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
+    else if (w.survival.allHunger) a.drives.tick(1, false);
   }
   return w;
 }

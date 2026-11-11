@@ -261,9 +261,12 @@ export function affordancesFor(world, agentId) {
     // §15.4 状态依赖紧迫度：公仓低时抬收获/播种的能量权重，让 AI 在聚落饥饿时真种地（系数挂开关供网格）
     const s0 = world.survival;
     const pop0 = Object.values(world.agents).filter((a) => !a.isPlayer).length;
-    const urg = s0.store < pop0 * (s0.urgencyThreshold ?? 1) ? (s0.urgencyBoost ?? 0.8) : 0;
+    // §15.7 R1：农夫用更高阈值＋更强 boost（持久驻菜园动机）；其余居民原口径
+    const isFarmer = s0.roleFarmer === true && agentId === s0.farmerId;
+    const thr = pop0 * (isFarmer ? 3 : (s0.urgencyThreshold ?? 1));
+    const urg = s0.store < thr ? (isFarmer ? 1.2 : (s0.urgencyBoost ?? 0.8)) : 0;
     // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
-    if (urg > 0 && s0.moveUrgency === true) {
+    if (urg > 0 && (s0.moveUrgency === true || isFarmer)) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
       const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
       const affordable = Object.entries(BUILDINGS).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);

@@ -96,8 +96,8 @@ export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 历史：E
 export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 前（plain 居民），仅留痕
 export const OFF_BASE = { 7: 'aae4b3ac9c7ad1052ed0eed0026b1da3', 11: 'fc6f7b90367fb7704f751c9fba704f7d', 13: 'de16a551fcfb81358fb9b92008ad8b43' };
 export const BASELINE3 = { 7: 'dd30810fa7e97d415ace0c850adbf03e', 11: '01d81e502e5db829bd5020c67cb34bbd', 13: '9f66d79a77ea3fef4f233de342dfce89' };
-export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
-export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
+export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false } };
+export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false } };
 
 const modes = {
   baseline: () => Promise.all(SEEDS.map((s) => run(s, OFF))),
@@ -136,6 +136,18 @@ const modes = {
     idle: await Promise.all(SEEDS.map((s) => run(s, {}))),
     withPlayer: await Promise.all(SEEDS.map((s) => run(s, { player: true }))),
   }),
+  rolegrid: async () => {
+    const points = [];
+    for (const roleFarmer of [false, true]) for (const allHunger of [false, true]) {
+      const flags = { roleFarmer, allHunger, moveUrgency: true };
+      points.push({
+        roleFarmer, allHunger,
+        idle: await Promise.all(SEEDS.map((s) => run(s, { flags }))),
+        competent: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent', flags }))),
+      });
+    }
+    return points;
+  },
   publicdrive: async () => {
     const points = [];
     for (const decayExtra of [1, 3]) for (const feedReward of [0.5, 0.25]) {

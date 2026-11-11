@@ -18,6 +18,22 @@ test('P2-4 stakes 回归：撤安全网后无人值守 360 tick 内会垮（≥2
   assert.ok(rs.filter((r) => r.end.failed).length >= 2, `failed=${rs.map((r) => r.end.failed).join(',')}`);
 });
 
+test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；自足负结果留痕台账）', async () => {
+  const rs = await Promise.all(SEEDS.map((s) => run(s, {})));
+  assert.ok(rs.filter((r) => (r.aiActions.harvest ?? 0) >= 4).length >= 2, `aiH=${rs.map((r) => r.aiActions.harvest ?? 0).join(',')}`);
+});
+
+test('P2-6 性格-季节慢偏移：冬社交设点 < 夏（同 seed 同天数）', async () => {
+  const mk = async (day) => {
+    const sp = createSurvPlay(7);
+    sp.world.t = day * 24;
+    for (let i = 0; i < 24; i++) await tickSurvPlay(sp);
+    return sp.world.agents.a2.drives.setpoint.social;
+  };
+  const summer = await mk(40); const winter = await mk(100);
+  assert.ok(winter < summer, `冬 ${winter} 应 < 夏 ${summer}`);
+});
+
 test('P2-0 性别：初始 roster 保证两性在场；其余确定哈希（同 seed 同值）', () => {
   const a = createSurvPlay(7); const b = createSurvPlay(7);
   const sexes = ['a1', 'a2', 'a3', 'p1'].map((id) => a.world.sex[id]);
