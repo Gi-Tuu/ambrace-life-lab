@@ -3,7 +3,7 @@
 // 只作用于 world.survival.coop.enabled（默认关）；lab/town 无 survival ⇒ 逐位不变，
 // Phase A/B（coop 关）轨迹亦不变。配对闸门用同 seed「独建 vs 协作」比完工时间。
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, effectiveMods } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild } from './production.mjs';
 
 export const COOP = Object.freeze({
   assistThreshold: 0.5,
@@ -33,15 +33,15 @@ export function willingness(world, agentId, task = {}) {
 // 自发识别公共需求：缺粮→储粮、无住所→住所、无生产→工坊、损坏→维修优先。
 export function identifyPublicNeeds(world) {
   const s = world.survival; if (!s) return [];
-  const mods = effectiveMods(world);
   const pop = Object.values(world.agents).filter((a) => !a.isPlayer).length;
   const has = (t) => (s.buildings ?? []).some((b) => b.type === t && b.integrity > 0);
+  const under = (t) => (s.sites ?? []).some((x) => x.type === t);   // 在建中不再重复派同类活
   const needs = [];
   const damaged = (s.buildings ?? []).find((b) => b.integrity <= 0);
-  if (damaged) needs.push({ type: damaged.type, severity: 0.9, repair: true });
-  if (s.store < pop * 2 && !has('granary')) needs.push({ type: 'granary', severity: 0.8 });
-  if (!has('shelter')) needs.push({ type: 'shelter', severity: 0.6 });
-  if (!has('workshop')) needs.push({ type: 'workshop', severity: 0.4 });
+  if (damaged) needs.push({ type: damaged.type, severity: 0.9, repair: true, loc: damaged.loc });
+  if (s.store < pop * 2 && !has('granary') && !under('granary')) needs.push({ type: 'granary', severity: 0.8 });
+  if (!has('shelter') && !under('shelter')) needs.push({ type: 'shelter', severity: 0.6 });
+  if (!has('workshop') && !under('workshop')) needs.push({ type: 'workshop', severity: 0.4 });
   return needs.sort((a, b) => b.severity - a.severity);
 }
 
@@ -51,7 +51,7 @@ export const decompose = (task) => (task.repair ? ['repair'] : ['gather', 'plan'
 const pickBuildLoc = (world, exclude) => {
   const s = world.survival;
   const taken = (l) => (s.sites ?? []).some((x) => x.loc === l) || (s.buildings ?? []).some((x) => x.loc === l);
-  return (world.outdoor ?? []).find((l) => l !== exclude && !taken(l)) ?? 'yard';
+  return (world.outdoor ?? []).find((l) => l !== exclude && !taken(l)) ?? null;
 };
 
 const assignWorkers = (world, task) => Object.keys(world.agents)
@@ -78,8 +78,11 @@ function execTick(world, t) {
       world.loc[id] = t.loc;
       const r = doPlan(world, id, t.type);
       if (r.ok) t.phase = 'build';
-      else if (r.code === 'OCCUPIED' || r.code === 'NOT_OUTDOOR') { t.loc = pickBuildLoc(world, t.loc); s.coop.replans += 1; }
-      else if (r.code === 'NO_MATERIAL') t.phase = 'gather';
+      else if (r.code === 'OCCUPIED' || r.code === 'NOT_OUTDOOR') {
+        const nl = pickBuildLoc(world, t.loc);
+        if (nl && nl !== t.loc) { t.loc = nl; s.coop.replans += 1; t.tries = (t.tries ?? 0) + 1; if (t.tries > 3) t.abandoned = true; }
+        else t.abandoned = true;   // 没有空位：放弃该任务，绝不空转重规划
+      } else if (r.code === 'NO_MATERIAL') t.phase = 'gather';
     }
     if (t.phase === 'build') {
       world.loc[id] = t.loc;
@@ -104,12 +107,14 @@ export function stepCooperation(world) {
   if (!c.task) {
     const need = identifyPublicNeeds(world)[0];
     if (!need) return null;
+    const loc = need.loc ?? pickBuildLoc(world);
+    if (!loc) return null;   // 没有可用选址就不再派活，避免空转
     const workers = assignWorkers(world, need);
     if (!workers.length) { c.refusals += 1; return { refused: true }; }
-    c.task = { ...need, loc: pickBuildLoc(world), phase: decompose(need)[0], workers, startedAt: world.t };
+    c.task = { ...need, loc, phase: decompose(need)[0], workers, startedAt: world.t };
   }
   const r = execTick(world, c.task);
-  if (r.completed) c.task = null;
+  if (r.completed || c.task.abandoned) { if (c.task.abandoned) c.refusals += 1; c.task = null; }
   return r;
 }
 

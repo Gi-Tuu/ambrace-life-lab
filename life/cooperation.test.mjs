@@ -86,6 +86,24 @@ test('C7 全员拒绝时不组队、记拒绝（撤掉意愿门槛即红）', ()
   assert.equal(w.survival.coop.task, null, '拒绝时不应建任务');
 });
 
+test('C9 选址持续被占：有界重试并放弃任务，绝不无限重规划', () => {
+  const w = survWorld(true); const s = w.survival;
+  for (const l of (w.outdoor ?? ['yard'])) s.buildings.push({ type: 'wall', loc: l, integrity: 1 }); // 户外全占
+  s.inv.wood = 50; s.inv.stone = 50;
+  s.coop.task = { type: 'granary', severity: 0.8, loc: (w.outdoor ?? ['yard'])[0], phase: 'plan', workers: ['a1'], startedAt: 0 };
+  for (let i = 0; i < 50 && s.coop.task; i += 1) stepCooperation(w);
+  assert.equal(s.coop.task, null, '无空位应放弃任务');
+  assert.ok(s.coop.replans <= 1, `重规划应有限，实际 ${s.coop.replans}`);
+});
+
+test('C10 维修需求定位到损坏建筑本位（不是随机空位）', () => {
+  const w = survWorld(true); const s = w.survival;
+  s.buildings.push({ type: 'granary', loc: 'yard', integrity: 0 });
+  const needs = identifyPublicNeeds(w);
+  assert.equal(needs[0].repair, true);
+  assert.equal(needs[0].loc, 'yard');
+});
+
 test('C8 开启后随 tick 推进：scanSecrets 驱动合作并完工记入 completions', () => {
   const w = survWorld(true);
   w.survival.store = 0;   // 触发公共需求
