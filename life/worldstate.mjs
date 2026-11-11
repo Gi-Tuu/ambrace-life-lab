@@ -2,7 +2,7 @@
 //   土壤/水分/天气 → 植物生长 → 收获入仓 → 居民每日消耗 → 缺口产生存续压力 → 失败/目标。
 // 只在 world.survival 存在时生效（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
-import { dayOf } from './clock.mjs';
+import { dayOf, weatherFor } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, dailyWear } from './production.mjs';
 
@@ -38,6 +38,27 @@ export function initSurvival(world) {
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 export const maturePlots = (s) => s.plots.filter((p) => p.growth >= 1);
 
+// §11 灾害哈希：与 weatherFor 同族 xorshift，确定可复现。
+function hash01(seed, n) {
+  let x = ((seed >>> 0) * 2654435761 ^ ((n + 1) >>> 0) * 40503) >>> 0;
+  x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+  return x / 4294967296;
+}
+export function stormOn(day, lastStormDay) {
+  return day >= 3 && hash01(7, day * 7 + 1) > 0.96 && day - (lastStormDay ?? -99) >= 4; // §11 预登记备选档（8%→4%）；实测仍负 ⇒ disasters 默认关
+}
+// 明日灾害预警（R1/G3）：风暴可提前一天知道；寒潮＝明日 cold 且今日已 cold。
+export function forecastDisasters(world) {
+  const s = world.survival;
+  const day = dayOf(world.t) + 1;
+  const w = weatherFor(7, day); // §13 L2 回退后与 tickSurvPlay 同源（硬编码 7）
+  return {
+    forecast: w,
+    stormTomorrow: s.disasters === true && stormOn(day, s.lastStormDay),
+    coldsnapTomorrow: s.disasters === true && w === 'cold' && (s.coldStreak ?? 0) >= 1,
+  };
+}
+
 // 每日推进：生长→消耗→压力→胜负。返回当日摘要（供事件/日志）。
 export function advanceSurvival(world) {
   const s = world.survival;
@@ -48,34 +69,61 @@ export function advanceSurvival(world) {
   const mods = effectiveMods(world);
   dailyWear(world, mods);
 
-  // 水分：雨补、晴耗；土壤：休闲分解回流。
+  // 水分：雨补、晴耗；土壤：休闲分解回流（§11 R2：空畦额外养土，仅 eco 开）。
   const rain = world.weather === 'rain';
-  s.water = clamp01(s.water + (rain ? 0.25 : -0.08));
-  s.soil = clamp01(s.soil + 0.05);
+  const cold = world.weather === 'cold';
+  s.clearStreak = rain || cold ? 0 : (s.clearStreak ?? 0) + 1;
+  s.coldStreak = cold ? (s.coldStreak ?? 0) + 1 : 0;
+  const thr = s.droughts === false ? 3 : (s.droughtThreshold ?? 3); // §13：droughts=0 复原阶段A（阈值3）；备选档经 droughtThreshold=2
+  s.drought = s.clearStreak >= thr;
+  const dis = s.disasters === true;
+  s.water = clamp01(s.water + (rain ? 0.25 : -0.08) - (dis && s.drought ? 0.06 : 0));
+  const empty = s.plots.filter((p) => p.growth === 0).length;
+  s.soil = clamp01(s.soil + 0.05 + (s.eco === true ? 0.05 * empty : 0));
   const wf = 0.4 + 0.6 * s.water, sf = 0.4 + 0.6 * s.soil;
-  const cold = world.weather === 'cold' ? 0.5 : 1;
-  for (const p of s.plots) if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * cold);
+  const coldF = cold ? 0.5 : 1;
+  const droughtF = dis && s.drought ? 0.8 : 1;
+  for (const p of s.plots) if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * coldF * droughtF);
 
-  // 居民每日消耗公共粮仓。
+  // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
+  s.disasterToday = null;
+  if (dis && day >= 3) {
+    if (stormOn(day, s.lastStormDay)) {
+      s.lastStormDay = day;
+      s.disasterToday = 'storm';
+      for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
+      const growing = s.plots.filter((p) => p.growth > 0 && p.growth < 1);
+      if (growing.length) {
+        const p = growing[Math.floor(hash01(7, day * 13 + 5) * growing.length)];
+        p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
+      }
+    } else if (s.coldStreak >= 2) s.disasterToday = 'coldsnap';
+  }
+
+  // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。
   const pop = Object.values(world.agents).filter((a) => !a.isPlayer).length;
-  const need = pop * SURV.foodPerPersonDay;
+  const eaters = pop + (s.playerEats === true ? 1 : 0);
+  const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
+  const ended = (s.won || s.failed) && s.endFreeze === true; // 裁决①：结算后冻结消耗
   let shortfall = 0;
-  if (s.store >= need) s.store -= need;
-  else { shortfall = need - s.store; s.store = 0; }
+  if (!ended) {
+    if (s.store >= need) s.store -= need;
+    else { shortfall = need - s.store; s.store = 0; }
+  }
 
-  if (shortfall > 0) {
+  if (!ended && shortfall > 0) {
     s.starveDays += 1;
     for (const a of Object.values(world.agents)) {
       if (a.isPlayer || !a.viab) continue;
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
-  } else s.starveDays = 0;
+  } else if (!ended) s.starveDays = 0;
 
   const allDead = Object.values(world.agents).filter((a) => !a.isPlayer).every((a) => (a.viab?.v ?? 1) <= 0);
-  if (!s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
-  if (!s.failed && day >= SURV.targetDays) s.won = true;
+  if (!ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
+  if (!ended && !s.failed && day >= SURV.targetDays) s.won = true;
 
-  const summary = { day, store: s.store, need, shortfall, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)), mature: maturePlots(s).length, failed: s.failed, won: s.won };
+  const summary = { day, store: s.store, need, shortfall, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)), mature: maturePlots(s).length, failed: s.failed, won: s.won, drought: !!s.drought, disaster: s.disasterToday };
   s.history.push(summary);
   if (s.history.length > 60) s.history.shift();
   return summary;
@@ -88,8 +136,11 @@ export function doHarvest(world, agentId) {
   if (!p) return { ok: false, code: 'NO_MATURE' };
   const mods = effectiveMods(world);
   p.growth = 0;
+  const base = SURV.yieldPerPlot + mods.yieldBonus;
+  const yieldAmt = s.eco === true ? Math.max(1, Math.round(base * (0.8 + 0.2 * s.soil))) : base; // §12 缓和曲线候选（0.5+0.5 被 G1 否）
   s.soil = clamp01(s.soil - 0.15);
-  const yieldAmt = SURV.yieldPerPlot + mods.yieldBonus;
+  s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
+  s.harvestCount = (s.harvestCount ?? 0) + 1;
   s.store = Math.min(mods.storeCap, s.store + yieldAmt);
   return { ok: true, code: 'OK', amount: yieldAmt };
 }

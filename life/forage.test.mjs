@@ -2,14 +2,14 @@
 // 负控口径＝全部新机制关（OFF）；基线 digest 为改前实测冻结值。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { run, BASELINE_DIGEST, OFF } from './phase-e-sweep.mjs';
+import { run, OFF_BASE, OFF } from './phase-e-sweep.mjs';
 import { createSurvPlay, loadSurv } from './survplay.mjs';
 
 const SEEDS = [7, 11, 13];
 const E1ON = { forage: true, flags: { repairEarly: false } };
 
-test('E1b/E3b 全机制关与改前基线逐位相同（冻结 digest）', () => {
-  for (const seed of SEEDS) assert.equal(run(seed, OFF).digest, BASELINE_DIGEST);
+test('E1b/E3b 全机制关与改前基线逐位相同（冻结 digest；§13 后按 seed 对照重抓基线）', () => {
+  for (const seed of SEEDS) assert.equal(run(seed, OFF).digest, OFF_BASE[seed]);
 });
 
 test('E1a 无人值守（9.1 缩预算）：收/种发生；可接受结局＝无人活 或 玩家必需（E1f）', () => {

@@ -750,6 +750,15 @@ function drawViewport(cv, w) {
     for (const [tx, ty] of world.chimneys) if (inView(tx, ty)) cell(ACT.rows.smoke ?? 3, tx, ty);
   }
 
+  // §11 R5：灾害日在菜园上方画 8×8 像素图标（风暴红/寒潮蓝），反馈长在变化处。
+  if (w.disasterToday && world.sites.garden) {
+    const [gx, gy] = world.sites.garden;
+    const ix = gx * TILE - cam.x, iy = (gy - 10) * TILE - cam.y;
+    if (ix > -8 && ix < VIEW_W && iy > -8 && iy < VIEW_H) {
+      g.fillStyle = w.disasterToday === 'storm' ? '#FF004D' : '#29ADFF';
+      g.fillRect(ix, iy, 8, 2); g.fillRect(ix + 2, iy + 2, 4, 2); g.fillRect(ix + 3, iy + 4, 2, 4);
+    }
+  }
   // 昼夜色温：视口外框按相位换色板映射（不新画资产、不叠半透明）。
   g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
   g.fillRect(0, 0, VIEW_W, 1); g.fillRect(0, VIEW_H - 1, VIEW_W, 1);
@@ -1306,6 +1315,7 @@ function renderSurv(s) {
     <div class="survrow"><b>第 ${s.day}/${s.targetDays} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
       <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
       <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>${flash}</div>
+    <div class="survrow">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}${s.stormTomorrow ? ' <span class="bad">风暴预警</span>' : ''}${s.coldsnapTomorrow ? ' <span class="bad">寒潮预警</span>' : ''}${s.drought ? ' <span class="bad">干旱</span>' : ''}${s.disasterToday ? ` <span class="bad">今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}</span>` : ''}</div>
     <div class="survrow">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       ${Object.entries(s.rooms ?? {}).map(([k, label]) => `<button data-mv="${k}" class="mv${k === here ? ' on' : ''}">${esc(label)}</button>`).join('')}</div>
     <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>

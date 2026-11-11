@@ -6,6 +6,7 @@ import { weatherFor, phaseOf, dayOf } from './clock.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
 import { SURV } from './worldstate.mjs';
 import { initCoop } from './cooperation.mjs';
+import { forecastDisasters } from './worldstate.mjs';
 
 const ROSTER = [['a1', '岑'], ['a2', '绛'], ['a3', '蓑']];
 
@@ -15,6 +16,11 @@ export function createSurvPlay(seed = 7) {
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true }; spawn(world, 'p1', 'hall');
   world.survival.forage = true; // Phase E1：安全网觅食默认开（play 层；engine survival 不带此键 ⇒ S1–S6 不变）
   world.survival.repairEarly = true; // E3a 过 ⇒ 默认开（§10 跑前登记的裁决）
+  world.survival.eco = true; // §12 缓和曲线 H1∧H2 过 ⇒ 默认开（0.8+0.2×土）
+  world.survival.disasters = true; // §11 中档 G1 负 ⇒ 预登记备选档（4%/0.15）G1 过 ⇒ 默认开（备选档）
+  world.survival.playerEats = true; // §11 裁决②成立：4 人/日可由工坊+1 产量支撑（曾误归因于水经济，已更正回填）
+  world.survival.endFreeze = true; // §11 裁决①（G9 验）
+  world.survival.droughts = false; // §13 K2 负（主/备各一次）⇒ 默认关、R3 主张撤回；机制与开关保留（K3 单元验）
   world.survival.forageStats = { harvest: 0, plant: 0 };
   return { world, log: [] };
 }
@@ -42,7 +48,7 @@ function forageRound(w) {
 export function tickSurvPlay(sp) {
   const w = sp.world;
   w.t += 1;
-  w.weather = weatherFor(7, dayOf(w.t));
+  w.weather = weatherFor(7, dayOf(w.t)); // §13 L2 被 K2 否（11/13 不可玩）⇒ 回退硬编码 7；seed 轴退化保留披露
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
   if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   return w;
@@ -78,6 +84,10 @@ export function survView(sp) {
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer }])),
     failed: s.failed, won: s.won, history: s.history.slice(-14),
+    ...forecastDisasters(w),
+    drought: !!s.drought, disasterToday: s.disasterToday,
+    clearStreak: s.clearStreak ?? 0, coldStreak: s.coldStreak ?? 0,
+    yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
     log: sp.log.slice(-12),
     buildingsDef: BUILDINGS,
   };
