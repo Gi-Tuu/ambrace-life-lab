@@ -796,6 +796,7 @@ export const host = {
       // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
       // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
       S.packs = freshPacks();
+      S.surv = createSurvPlay(CFG.seed); // 重置世界＝连生存单世界一起回零刻（A/B 行为不变）
       S.startRaw = structuredClone(serialize());
       // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
       // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。

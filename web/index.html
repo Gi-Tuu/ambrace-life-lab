@@ -202,11 +202,21 @@
   #survPanel .survrow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; }
   #survPanel .survbtns button:hover { background:var(--a); color:var(--bg); }
+  body.surv-mode .town-only { display:none; }
+  #survPanel .survbtns button[disabled] { opacity:.45; cursor:not-allowed; }
+  #survPanel .survbtns button[disabled]:hover { background:var(--bg); color:var(--ink); }
+  #survPanel button.mv { background:var(--bg); color:var(--ink); border:1px solid var(--line); padding:1px 6px; cursor:pointer; font:inherit; }
+  #survPanel button.mv.on { background:var(--a); color:var(--bg); }
+  #survPanel .good { color:var(--a); }
+  #survPanel .bad { color:#e06c75; }
+  #survPanel .survbanner { padding:6px 8px; border:2px solid var(--line); font-weight:bold; }
+  #survPanel .survbanner.bad { border-color:#e06c75; color:#e06c75; }
+  #survPanel .survbanner.good { border-color:var(--a); color:var(--a); }
 </style>
 </head>
 <body>
 <header>
-  <h1>拥爱生命实验室<span>同一颗种子、两个世界：左边内部状态参与决策，右边切断。</span></h1>
+  <h1>拥爱生命实验室<span id="tagline">同一颗种子、两个世界：左边内部状态参与决策，右边切断。</span></h1>
   <div id="backend" class="backend">后端：读取中…</div>
 </header>
 <div id="mapbar">
@@ -222,7 +232,7 @@
 <main class="solo">
   <div class="col">
     <div class="world side-a">
-      <div class="wtit"><b>A · 通道开</b><i id="tagA"></i></div>
+      <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
       <canvas id="cvA" width="384" height="256"></canvas>
       <div class="occ" id="occA"></div>
     </div>
@@ -239,23 +249,23 @@
     <div class="ctl">
       <button id="btnRun" class="on">▶ 运行</button>
       <button id="btnStep">单步</button>
-      <button id="btnBrain" title="切换内心来源">内心：本地替身</button>
-      <button id="btnM3" title="M3 目标承诺层（默认关）">M3 承诺期</button>
-      <button id="btnM4" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
+      <button id="btnBrain" class="town-only" title="切换内心来源">内心：本地替身</button>
+      <button id="btnM3" class="town-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>
+      <button id="btnM4" class="town-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
       <button id="btnSleep" title="假装容器休眠 45 分钟">休眠 45 分钟</button>
       <button id="btnReset">重置世界</button>
     </div>
-    <h2>你（玩家）</h2>
-    <div class="say">
+    <h2 class="town-only">你（玩家）</h2>
+    <div class="say town-only">
       <input id="sayText" placeholder="对他们说一句话，两个世界收到同一句" />
       <button id="btnSay">说</button>
     </div>
-    <div class="hailrow" id="hail"></div>
-    <h2>关系与规范</h2>
-    <div id="social" class="social"></div>
-    <h2>你知道的事</h2>
-    <div id="secrets" class="secrets"></div>
-    <details class="lab" id="labPanel">
+    <div class="hailrow town-only" id="hail"></div>
+    <h2 class="town-only">关系与规范</h2>
+    <div id="social" class="social town-only"></div>
+    <h2 class="town-only">你知道的事</h2>
+    <div id="secrets" class="secrets town-only"></div>
+    <details class="lab town-only" id="labPanel">
       <summary>实验面板 · 判据 / 对照 / 日志</summary>
       <div class="inner">
         <div class="wstat" id="statA"></div>

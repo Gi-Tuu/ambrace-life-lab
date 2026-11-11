@@ -1197,23 +1197,47 @@ function pushToasts(pack) {
 }
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
-let survOpen = false;
+let survOpen = true;
+let survFlash = null;
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了' };
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   const b = s.buildingsDef || {};
-  const bl = (t) => b[t]?.label ?? t;
+  const bl = (t) => esc(b[t]?.label ?? t);
+  const here = s.loc?.p1;
+  const outdoor = (s.outdoor ?? []).includes(here);
+  const inGarden = here === 'garden';
+  const mature = s.plots.some((p) => p.growth >= 1);
+  const empty = s.plots.some((p) => p.growth === 0);
+  const siteHere = s.sites.some((x) => x.loc === here);
+  const dmgHere = s.buildings.some((x) => x.loc === here && x.integrity < 1);
+  const why = {
+    harvest: !inGarden ? '得在菜园' : mature ? '' : '没有成熟的菜畦',
+    plant: !inGarden ? '得在菜园' : !empty ? '没有空畦' : s.water >= 0.1 ? '' : '水不够',
+    gather: outdoor ? '' : '得在户外',
+    build: siteHere ? '' : '当前地点没有工地（先奠基）',
+    repair: dmgHere ? '' : '当前地点没有损坏建筑',
+  };
+  const planWhy = (t) => !outdoor ? '得在户外' : (siteHere || s.buildings.some((x) => x.loc === here)) ? '当前地点已占用' : (s.inv.wood >= (b[t]?.cost.wood ?? 0) && s.inv.stone >= (b[t]?.cost.stone ?? 0)) ? '' : '材料不够';
+  const btn = (sk, label, reason) => `<button data-sk="${sk}"${reason ? ` disabled title="${esc(reason)}"` : ''}>${label}</button>`;
+  const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}</span>` : '';
+  const banner = s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : s.won ? `<div class="survbanner good">活到了第 ${s.targetDays} 天，聚落站住了！</div>` : '';
   el.innerHTML = `
-    <div class="survrow"><b>生存 · 第${s.t}刻 ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
+    ${banner}
+    <div class="survrow"><b>第 ${s.day}/${s.targetDays} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
       <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
-      <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span><span>${s.failed ? '已失败' : s.won ? '已达成目标' : '进行中'}</span></div>
+      <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>${flash}</div>
+    <div class="survrow">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
+      ${Object.entries(s.rooms ?? {}).map(([k, label]) => `<button data-mv="${k}" class="mv${k === here ? ' on' : ''}">${esc(label)}</button>`).join('')}</div>
     <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
-    <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => bl(x.type)).join('、') || '无'}</div>
-    <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${s.coop.task.phase}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
+    <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}`).join('、') || '无'}</div>
+    <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${esc(s.coop.task.phase)}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
     <div class="survrow survbtns">
-      ${['harvest', 'plant', 'gather', 'build', 'repair'].map((k) => `<button data-sk="${k}">${k}</button>`).join('')}
-      ${Object.keys(b).map((t) => `<button data-sk="plan" data-type="${t}">奠基${bl(t)}</button>`).join('')}
+      ${btn('harvest', '收获', why.harvest)}${btn('plant', '播种', why.plant)}${btn('gather', '采集', why.gather)}${btn('build', '施工', why.build)}${btn('repair', '维修', why.repair)}
+      ${Object.keys(b).map((t) => `<button data-sk="plan" data-type="${t}"${planWhy(t) ? ` disabled title="${esc(planWhy(t))}"` : ''}>奠基${bl(t)}</button>`).join('')}
+      ${s.failed || s.won ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>
-    <div class="survrow">${s.log.slice(-6).map((l) => `t${l.t} ${l.kind} ${l.ok ? '✓' : esc(l.code)}`).join(' ｜ ')}</div>`;
+    <div class="survrow">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>`;
 }
 
 function table(a, b) {
@@ -1237,7 +1261,6 @@ async function refresh() {
     S.model = j.model;
     S.running = j.running;
     S.masks = j.masks ?? S.masks;
-    S.view = j.A;
     S.viewB = j.B;   // 动画循环重绘 B 侧用；不新增请求、不动载荷形状
     S.layer = j.layer ?? S.layer;
     // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
@@ -1259,8 +1282,13 @@ async function refresh() {
     } else {
       chip.classList.remove('bad');
     }
-    if (ui.fullscreen) draw($('cvFull'), j.A);
-    else { draw($('cvA'), j.A); draw($('cvB'), j.B); }
+    const sv = j.survival;
+    S.soloSurv = !ui.compare && !!sv;
+    document.body.classList.toggle('surv-mode', S.soloSurv);
+    const viewA = S.soloSurv ? sv : j.A;
+    S.view = viewA;
+    if (ui.fullscreen) draw($('cvFull'), viewA);
+    else { draw($('cvA'), viewA); draw($('cvB'), j.B); }
     rows($('rowsA'), j.A, 'a');
     rows($('rowsB'), j.B, 'b');
     $('statA').innerHTML = worldStat(j.A);
@@ -1269,25 +1297,32 @@ async function refresh() {
     hailRow($('hail'), j.A);
     social($('social'), j.A);
     // 聚焦镜头 HUD：小地图 / 当前房间角色卡 / 事件 toast
-    const roomKeys = Object.keys(j.A.rooms ?? LOCS);
+    const roomKeys = Object.keys(viewA.rooms ?? LOCS);
     if (!roomKeys.includes(ui.room)) ui.room = roomKeys[0];
-    fillMinimap(j.A);
-    fillOcc($('occA'), j.A);
+    fillMinimap(viewA);
+    fillOcc($('occA'), viewA);
     fillOcc($('occB'), j.B);
-    pushToasts(j.A);
+    if (!S.soloSurv) pushToasts(j.A);
     $('btnOverview').classList.toggle('on', ui.overview);
     $('btnOverview').textContent = ui.overview ? '返回局部视角' : '世界全景';
     const fi = $('fullInfo');
     if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 视野 ${lightRadius(j.A.phase)} 格`;
     const vi = $('visionInfo');
-    if (vi) vi.textContent = ui.interior
-      ? `室内 · ${(j.A.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
-      : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(j.A.phase)} 格（${j.A.phase ?? ''}）· WASD/方向键 移动 · E/点建筑 进出`;
+    if (vi) vi.textContent = S.soloSurv
+      ? `世界 ${WORLD_TW}×${WORLD_TH} 格 · 点地点移动 · 面板按钮行动 · 全景/全屏可用`
+      : ui.interior
+        ? `室内 · ${(viewA.rooms ?? LOCS)[ui.interior] ?? ui.interior} · E / 点门 离开`
+        : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(viewA.phase)} 格（${viewA.phase ?? ''}）· WASD/方向键 移动 · E/点建筑 进出`;
+    $('titA').textContent = S.soloSurv ? '生存 · 单世界' : 'A · 通道开';
+    $('tagline').textContent = S.soloSurv ? '生存聚落：种地喂饱大家，AI 邻居合作建房；活到第 10 天。' : '同一颗种子、两个世界：左边内部状态参与决策，右边切断。';
     $('tbl').innerHTML = table(j.A, j.B);
     const sp = $('survPanel'); if (sp) sp.hidden = !survOpen;
+    $('btnSurv').classList.toggle('on', survOpen);
     renderSurv(j.survival);
     const onLayers = Object.entries(S.masks ?? {}).filter(([, v]) => v).map(([k]) => (k === 'm3' ? 'M3 承诺' : 'M4 耦合'));
-    $('tagA').textContent = `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
+    $('tagA').textContent = S.soloSurv
+      ? `第 ${sv.day}/${sv.targetDays} 天 · ${sv.phase} · ${sv.weather ?? ''} · 粮 ${sv.store}/${sv.storeCap}`
+      : `第 ${j.A.t} 刻 · ${j.A.phase ?? ''} · 通道全开${onLayers.length ? ' · 另叠 ' + onLayers.join('+') : ''} · 休眠补时 ${j.missed.applied ?? 0} 分钟`;
     $('tagB').textContent = `第 ${j.B.t} 刻 · ${j.B.phase ?? ''} · ①③④已切断，状态只走倾向带${onLayers.length ? '（上面的层只加在 A，B 保持登记的对照组）' : ''}`;
     const box = $('log');
     // playerLog 单独并进来：主日志只有 40 条，玩家动作几秒就会被挤出去（实测误判过"传话没生效"）
@@ -1333,7 +1368,8 @@ $('minimap').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-room]');
   if (!b) return;
   const r = b.dataset.room;
-  if (ui.interior === r) { ui.interior = null; ui.camRoom = r; }   // 再点当前房间 = 出门
+  if (S.soloSurv) { ui.room = r; ui.camRoom = r; }                 // 生存单世界：只移镜头，不进室内
+  else if (ui.interior === r) { ui.interior = null; ui.camRoom = r; }   // 再点当前房间 = 出门
   else { ui.interior = r; ui.room = r; ui.camRoom = r; }            // 进入该地点室内
   refresh();
 });
@@ -1341,8 +1377,11 @@ $('btnOverview').onclick = () => { if (ui.interior) { ui.interior = null; ui.cam
 $('btnSurv').onclick = () => { survOpen = !survOpen; $('survPanel').hidden = !survOpen; $('btnSurv').classList.toggle('on', survOpen); refresh(); };
 $('btnCompare').onclick = () => { ui.compare = !ui.compare; document.querySelector('main').classList.toggle('solo', !ui.compare); $('btnCompare').textContent = ui.compare ? '单世界' : '对照 A/B'; refresh(); };
 $('survPanel').addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-sk]'); if (!btn) return;
-  api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then(refresh);
+  if (e.target.closest('#btnSurvReset')) { survFlash = null; ctl({ action: 'reset' }); return; }
+  const mv = e.target.closest('button[data-mv]');
+  if (mv) { api('/act', { mode: 'survival', kind: 'move', room: mv.dataset.mv }).then(refresh); return; }
+  const btn = e.target.closest('button[data-sk]'); if (!btn || btn.disabled) return;
+  api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then((r) => { survFlash = { kind: btn.dataset.sk, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 });
 // 全屏全景：整张地图铺满屏幕，只画 A 世界；退出回退出前的视角。纯表现层，不动世界与读数。
 function setFull(on) {
@@ -1362,7 +1401,7 @@ window.addEventListener('resize', () => { if (ui.fullscreen && S.view) draw($('c
 // 局部视角用相机偏移 + 整数倍缩放；全景用微缩比例。两个世界收到同一个动作。
 function pickRoom(ev, cv) {
   // 室内：点击只认门（底部中央）→ 出门回大地图，镜头停在该建筑。按 rect 归一化，抗 CSS 缩放。
-  if (ui.interior) {
+  if (ui.interior && !S.soloSurv) {
     const rect = cv.getBoundingClientRect();
     const roomW = 256, roomH = 192;
     const lx = (ev.clientX - rect.left) / rect.width * roomW, ly = (ev.clientY - rect.top) / rect.height * roomH;
@@ -1400,6 +1439,7 @@ function pickRoom(ev, cv) {
   const walkable = isWalkable(world, cTile[0], cTile[1]);
   if (s && walkable) { const path = astar(world, [s.x, s.y], cTile); if (path && path.length) { s.path = path; s.pi = 0; } ui.camRoom = null; }
   const entry=entrySiteAt(sites,tx,ty) || (bd<=3 ? [best, sites[best]] : null);
+  if (S.soloSurv) { if (!best) return; return api('/act', { mode: 'survival', kind: 'move', room: best }).then(() => { ui.room = best; ui.camRoom = null; refresh(); }); }
   if(entry){best=entry[0];return api('/act', { kind: 'move', room: best }).then(() => { ui.room = best; ui.interior = best; ui.camRoom = null; refresh(); });}
   ui.room = best;
   if (!walkable) ui.camRoom = best;   // 点到水 / 屋 / 岩等不可走处：仅把镜头移过去

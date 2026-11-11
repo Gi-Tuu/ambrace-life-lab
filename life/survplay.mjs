@@ -4,6 +4,7 @@
 import { makeWorld, spawn, scanSecrets, actuate } from './body.mjs';
 import { weatherFor, phaseOf, dayOf } from './clock.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
+import { SURV } from './worldstate.mjs';
 import { initCoop } from './cooperation.mjs';
 
 const ROSTER = [['a1', '岑'], ['a2', '绛'], ['a3', '蓑']];
@@ -44,6 +45,8 @@ export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   return {
     t: w.t, phase: phaseOf(w.t), weather: w.weather,
+    day: dayOf(w.t), targetDays: SURV.targetDays,
+    rooms: w.locs, outdoor: w.outdoor,
     loc: w.loc, occupancy: w.occupancy,
     store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     plots: s.plots.map((p) => ({ id: p.id, growth: Number(p.growth.toFixed(2)) })),

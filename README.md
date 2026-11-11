@@ -116,7 +116,7 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 184 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 45 个测试文件 / 338 条断言（发现式点名，不会漏文件）
+npm test          # 45 个测试文件 / 341 条断言（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
 npm run check     # lint + test
 ```

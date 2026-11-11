@@ -37,7 +37,7 @@ test('D3 玩家生存动作：move/gather/plan/build 生效；未知 kind 拒绝
 
 test('D4 survView 载荷齐全（前端只读这份）', () => {
   const v = survView(createSurvPlay(7));
-  for (const k of ['t', 'phase', 'store', 'storeCap', 'plots', 'inv', 'buildings', 'coop', 'loc', 'agents', 'buildingsDef']) assert.ok(k in v, `缺 ${k}`);
+  for (const k of ['t', 'phase', 'store', 'storeCap', 'plots', 'inv', 'buildings', 'coop', 'loc', 'agents', 'buildingsDef', 'rooms', 'outdoor', 'day', 'targetDays']) assert.ok(k in v, `缺 ${k}`);
 });
 
 test('D5 持久化 round-trip：t/粮仓/建筑/合作状态读回一致', () => {
@@ -53,6 +53,25 @@ test('D5 持久化 round-trip：t/粮仓/建筑/合作状态读回一致', () =>
   assert.equal(back.world.survival.coop.enabled, sp.world.survival.coop.enabled);
   // 缺省 tolerant：无 survival 键不炸
   assert.ok(loadSurv(undefined, 7).world.survival);
+});
+
+test('D7 重置世界同时重置生存单世界（回零刻、清失败态）', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ambrace-survreset-'));
+  process.env.DATA_DIR = dir; process.env.SEED_FILE = join(dir, 'none.json');
+  process.env.BRAIN = 'local'; process.env.MODEL_PROVIDERS = ''; process.env.MODEL_KEYS = '';
+  try {
+    await host.start();
+    for (let i = 0; i < 5; i++) await host.ctl({ action: 'step' });
+    assert.ok(host.snapshot().survival.t > 0);
+    await host.ctl({ action: 'reset' });
+    const snap = host.snapshot();
+    assert.ok(snap.survival.t <= 1, '重置后生存世界应回零刻');
+    assert.equal(snap.survival.failed, false);
+    assert.equal(snap.survival.store, 6, '重置后粮仓回初始值');
+  } finally {
+    host.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
