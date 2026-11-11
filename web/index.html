@@ -71,6 +71,7 @@
   #btnOverview { margin-left:auto; }
 
   main { display:flex; gap:16px; padding:16px; align-items:stretch; min-height:calc(100vh - 176px); }
+  main.solo .col + .col { display:none; }   /* 默认单世界大屏：隐藏 A/B 对照的 B 栏 */
   .col { flex:1 1 0; min-width:0; display:flex; }
   .world { flex:1; min-width:0; padding:16px 8px 8px; display:flex; flex-direction:column; }
   .side-a .wtit { border-bottom-color:var(--a); }
@@ -197,6 +198,7 @@
     padding:4px 12px; font-weight:700; cursor:pointer; }
   #btnFullExit:hover { background:var(--ink); color:var(--a); }
   #survPanel { margin:0 16px 8px; padding:10px 12px; border:2px solid var(--line); background:var(--bg); color:var(--ink); font-size:13px; display:flex; flex-direction:column; gap:6px; }
+  #survPanel[hidden] { display:none; }
   #survPanel .survrow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; }
   #survPanel .survbtns button:hover { background:var(--a); color:var(--bg); }
@@ -214,9 +216,10 @@
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" title="切换生存单世界游玩面板（独立于 A/B 对照）">生存模式</button>
+  <button id="btnCompare" title="切换：单世界大屏 / A/B 双世界对照">对照 A/B</button>
 </div>
 <section id="survPanel" hidden></section>
-<main>
+<main class="solo">
   <div class="col">
     <div class="world side-a">
       <div class="wtit"><b>A · 通道开</b><i id="tagA"></i></div>
