@@ -214,7 +214,8 @@ export function loadSurv(raw, seed = 7) {
       a.viab.restore(st.viab);
       Object.assign(a.traits, st.traits ?? {});
     }
-    sp.log = raw.log ?? [];
+    // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
+    sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
   }
   return sp;
 }

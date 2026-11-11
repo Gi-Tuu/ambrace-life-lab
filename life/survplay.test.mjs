@@ -100,6 +100,9 @@ test('D9 读档重建 occupancy：存档位置与占位必须一致（否则重�
     assert.ok((back.world.occupancy[loc] ?? []).includes(id), `读档后 ${id} 在 ${loc} 但占位缺失`);
   }
   assert.ok(!(back.world.occupancy.home ?? []).includes('a1'), '旧 spawn 占位不得残留');
+  sp.log.push({ t: sp.world.t, kind: 'agentError', ok: false, code: 'old-engine' });
+  const back2 = loadSurv(JSON.parse(JSON.stringify(dumpSurv(sp))), 7);
+  assert.deepEqual(back2.log.filter((x) => x.kind === 'agentError'), [], '旧引擎的 agentError 不应随档回来');
 });
 
 test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
