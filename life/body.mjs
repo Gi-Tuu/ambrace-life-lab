@@ -266,7 +266,9 @@ export function affordancesFor(world, agentId) {
     const thr = pop0 * (isFarmer ? 3 : (s0.urgencyThreshold ?? 1));
     const urg = s0.store < thr ? (isFarmer ? 1.2 : (s0.urgencyBoost ?? 0.8)) : 0;
     // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
-    if (urg > 0 && (s0.moveUrgency === true || isFarmer)) {
+    // §16 E4b：storeHunger 开时直接用能量 deficit 门控移动候选（饿就去菜园，不等公仓阈值）
+    const hungry = s0.storeHunger === true && (world.agents[agentId]?.drives?.v?.energy ?? 1) < 0.4;
+    if ((urg > 0 && (s0.moveUrgency === true || isFarmer)) || hungry) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
       const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
       const affordable = Object.entries(BUILDINGS).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);
@@ -355,6 +357,10 @@ export function actuate(world, agentId, action) {
   if (world.survival && agentId !== 'p1' && r.ok) {
     const c = (world.survival.aiActions ??= {});
     c[action.kind] = (c[action.kind] ?? 0) + 1;
+  }
+  // §16 E1 劳动即进食：成功收/种/采给执行者加能量（劳动换食闭环）
+  if (world.survival?.workFeeds === true && r.ok && ['harvest', 'plant', 'gather'].includes(action.kind)) {
+    world.agents[agentId]?.drives?.reward('energy', 0.3);
   }
   return r;
 }

@@ -124,8 +124,8 @@ export function advanceSurvival(world) {
     }
   } else if (!ended) {
     s.starveDays = 0;
-    // §15 同权驱动同步：吃饱的一天给能量驱动回补（系数跑前登记 0.5/天），缺口天不回补
-    for (const a of Object.values(world.agents)) {
+    // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
+    if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
       if (a.isPlayer || !a.drives) continue;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
     }

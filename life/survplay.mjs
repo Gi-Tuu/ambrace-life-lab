@@ -38,7 +38,10 @@ export function createSurvPlay(seed = 7) {
   s.farmerId = 'a1'; // §15.7 R1 角色化农夫（网格选定默认开）
   s.roleFarmer = false; // §15.7 网格：R1/R2' 均无效（aiH 不随角色升）⇒ 默认关、负结果留痕；机制代码保留待经济重设计
   s.allHunger = false;
-  s.moveUrgency = false; // §15.7：M1 默认关（开则破坏已验平衡 G1/K2）；机制保留待经济重设计
+  s.moveUrgency = true; // §16 选点（E4 饥饿需移动候选）
+  s.workFeeds = false; // §16 选点：E1 off（E4 已足）
+  s.storeHunger = true; // §16 选点：E4 on（公仓目标挂钩饥饿⇒AI 自足 idleWon 2/3）
+  s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
   return { world, log: [] };
 }
 
@@ -88,6 +91,12 @@ export async function tickSurvPlay(sp) {
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
     else if (w.survival.allHunger) a.drives.tick(1, false);
+    // §16 E4 公仓目标挂钩饥饿：公仓低于 pop×3 时全员饿感上升⇒集体劳动
+    if (w.survival.storeHunger === true) {
+      const popH = Object.values(w.agents).filter((x) => !x.isPlayer).length;
+      const mult = 1 + Math.max(0, 1 - w.survival.store / (popH * 3));
+      if (mult > 1) a.drives.tick(mult - 1, false);
+    }
   }
   return w;
 }

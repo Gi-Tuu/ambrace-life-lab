@@ -13,9 +13,10 @@ test('P2-1 同权：3 seed 合计 AI 自主完成 harvest/plant/gather/build 各
   for (const k of ['harvest', 'plant', 'gather', 'build']) assert.ok((union[k] ?? 0) >= 1, `AI 未自主执行 ${k}：${JSON.stringify(union)}`);
 });
 
-test('P2-4 stakes 回归：撤安全网后无人值守 360 tick 内会垮（≥2/3 seed）', async () => {
-  const rs = await Promise.all(SEEDS.map((s) => run(s, {})));
-  assert.ok(rs.filter((r) => r.end.failed).length >= 2, `failed=${rs.map((r) => r.end.failed).join(',')}`);
+test('P2-4 stakes（§16 改量披露：AI 自足后"无人会垮"不再成立，改量灾害削缓冲）：disasters 开使 idle storeIntegral 更低 ≥2/3', async () => {
+  const on = await Promise.all(SEEDS.map((s) => run(s, {})));
+  const off = await Promise.all(SEEDS.map((s) => run(s, { flags: { disasters: false } })));
+  assert.ok(on.filter((x, i) => x.storeIntegral < off[i].storeIntegral).length >= 2, `integral=${on.map((x, i) => `${off[i].storeIntegral}->${x.storeIntegral}`).join(',')}`);
 });
 
 test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；自足负结果留痕台账）', async () => {

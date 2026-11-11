@@ -96,8 +96,8 @@ export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 历史：E
 export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 前（plain 居民），仅留痕
 export const OFF_BASE = { 7: 'aae4b3ac9c7ad1052ed0eed0026b1da3', 11: 'fc6f7b90367fb7704f751c9fba704f7d', 13: 'de16a551fcfb81358fb9b92008ad8b43' };
 export const BASELINE3 = { 7: 'dd30810fa7e97d415ace0c850adbf03e', 11: '01d81e502e5db829bd5020c67cb34bbd', 13: '9f66d79a77ea3fef4f233de342dfce89' };
-export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false } };
-export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false } };
+export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25 } };
+export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25 } };
 
 const modes = {
   baseline: () => Promise.all(SEEDS.map((s) => run(s, OFF))),
@@ -136,6 +136,20 @@ const modes = {
     idle: await Promise.all(SEEDS.map((s) => run(s, {}))),
     withPlayer: await Promise.all(SEEDS.map((s) => run(s, { player: true }))),
   }),
+  econgrid: async () => {
+    const points = [];
+    for (const workFeeds of [false, true]) for (const storeHunger of [false, true]) for (const m3 of [{ plantWater: 0.06 }, { rainRefill: 0.35 }]) {
+      const flags = { workFeeds, storeHunger, moveUrgency: true, ...m3 }; // v2：moveUrgency 为使能开关（E4 饥饿需移动候选才能落地），披露
+      points.push({
+        workFeeds, storeHunger, water: Object.keys(m3)[0],
+        idle: await Promise.all(SEEDS.map((s) => run(s, { flags }))),
+        player: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent', flags }))),
+        disOn: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent', flags }))),
+        disOff: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent', flags: { ...flags, disasters: false } }))),
+      });
+    }
+    return points;
+  },
   rolegrid: async () => {
     const points = [];
     for (const roleFarmer of [false, true]) for (const allHunger of [false, true]) {
