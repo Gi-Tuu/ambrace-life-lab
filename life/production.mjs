@@ -80,6 +80,7 @@ export function doRepair(world, agentId) {
 export function dailyWear(world, mods) {
   const s = world.survival;
   if (!s || (world.weather !== 'rain' && world.weather !== 'cold')) return;
-  const rate = mods.shield ? 0.04 : 0.1;
+  const base = world.survival.wearRate ?? 0.1; // E2 L2 杠杆；缺省＝现行为
+  const rate = mods.shield ? base * 0.4 : base;
   for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - rate).toFixed(2)));
 }

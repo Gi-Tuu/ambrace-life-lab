@@ -13,7 +13,30 @@ export function createSurvPlay(seed = 7) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   for (const [id, name] of ROSTER) { world.agents[id] = { id, name }; spawn(world, id, 'home'); }
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true }; spawn(world, 'p1', 'hall');
+  world.survival.forage = true; // Phase E1：安全网觅食默认开（play 层；engine survival 不带此键 ⇒ S1–S6 不变）
+  world.survival.repairEarly = true; // E3a 过 ⇒ 默认开（§10 跑前登记的裁决）
+  world.survival.forageStats = { harvest: 0, plant: 0 };
   return { world, log: [] };
+}
+
+// E1 安全网觅食（9.1 修订）：全聚落每日预算 1 收＋1 种，仅当公仓低于 pop×阈值；走 actuate+rules。
+function forageRound(w) {
+  const s = w.survival;
+  const pop = Object.values(w.agents).filter((a) => !a.isPlayer).length;
+  if (s.store >= pop * (s.forageThreshold ?? 1)) return;
+  let budgetH = 1; let budgetP = 1;
+  for (const id of Object.keys(w.agents)) {
+    if (w.agents[id].isPlayer || (!budgetH && !budgetP)) continue;
+    const wantH = budgetH > 0 && s.plots.some((p) => p.growth >= 1);
+    const wantP = budgetP > 0 && s.plots.some((p) => p.growth === 0) && s.water >= 0.1;
+    if (!wantH && !wantP) continue;
+    if (w.loc[id] !== 'garden') {
+      w.occupancy[w.loc[id]] = (w.occupancy[w.loc[id]] ?? []).filter((x) => x !== id);
+      w.loc[id] = 'garden'; (w.occupancy.garden ??= []).push(id);
+    }
+    if (wantH) { const r = actuate(w, id, { kind: 'harvest' }); if (r.ok) { s.forageStats.harvest += 1; budgetH -= 1; } }
+    if (wantP) { const r = actuate(w, id, { kind: 'plant' }); if (r.ok) { s.forageStats.plant += 1; budgetP -= 1; } }
+  }
 }
 
 export function tickSurvPlay(sp) {
@@ -21,6 +44,7 @@ export function tickSurvPlay(sp) {
   w.t += 1;
   w.weather = weatherFor(7, dayOf(w.t));
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
+  if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   return w;
 }
 

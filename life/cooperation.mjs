@@ -23,7 +23,7 @@ export function willingness(world, agentId, task = {}) {
   if (!a || a.isPlayer) return { score: 0, decision: 'refuse', reason: 'NOT_ELIGIBLE' };
   const ownScarcity = 1 - (a.viab?.v ?? 1);                       // 自己越匮乏越难帮人
   const trust = (world.relations?.get?.(agentId, task.requester ?? 'p1')?.trust ?? 30) / 100;
-  const risk = (world.weather === 'rain' || world.weather === 'cold') ? 0.3 : 0;
+  const risk = (world.weather === 'rain' || world.weather === 'cold') ? (task.repair ? (world.survival?.repairRisk ?? 0.3) : 0.3) : 0; // E2 L3：维修雨天风险可单独降
   const reward = clamp01(task.severity ?? 0.5);
   const score = clamp01(0.35 * trust + 0.35 * reward + 0.15 * (1 - ownScarcity) - risk + 0.15);
   const decision = score >= COOP.assistThreshold ? 'assist' : score >= COOP.alternativeThreshold ? 'alternative' : 'refuse';
@@ -37,7 +37,7 @@ export function identifyPublicNeeds(world) {
   const has = (t) => (s.buildings ?? []).some((b) => b.type === t && b.integrity > 0);
   const under = (t) => (s.sites ?? []).some((x) => x.type === t);   // 在建中不再重复派同类活
   const needs = [];
-  const damaged = (s.buildings ?? []).find((b) => b.integrity <= 0);
+  const damaged = (s.buildings ?? []).find((b) => (s.repairEarly ? b.integrity < 1 : b.integrity <= 0)); // E2 L1：维修触发阈值
   if (damaged) needs.push({ type: damaged.type, severity: 0.9, repair: true, loc: damaged.loc });
   if (s.store < pop * 2 && !has('granary') && !under('granary')) needs.push({ type: 'granary', severity: 0.8 });
   if (!has('shelter') && !under('shelter')) needs.push({ type: 'shelter', severity: 0.6 });
@@ -67,9 +67,10 @@ function execTick(world, t) {
   const s = world.survival; const def = BUILDINGS[t.type];
   for (const id of t.workers) {
     if (t.phase === 'gather') {
-      if (s.inv.wood >= def.cost.wood && s.inv.stone >= def.cost.stone) t.phase = 'plan';
+      const cost = (s.repairEarly && t.repair) ? { wood: 1, stone: 1 } : def.cost; // E3：维修采料 1/1，不按建筑成本
+      if (s.inv.wood >= cost.wood && s.inv.stone >= cost.stone) t.phase = (s.repairEarly && t.repair) ? 'repair' : 'plan';
       else {
-        const res = s.inv.wood < def.cost.wood ? 'wood' : 'stone';
+        const res = s.inv.wood < cost.wood ? 'wood' : 'stone';
         world.loc[id] = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res) ?? 'yard';
         doGather(world, id);
       }
@@ -91,10 +92,11 @@ function execTick(world, t) {
     }
     if (t.phase === 'repair') {
       world.loc[id] = t.loc;
-      // 维修走 production.doRepair 需材料；此处简化为直接恢复（服务端权威）
-      const b = (s.buildings ?? []).find((x) => x.loc === t.loc && x.integrity <= 0);
+      // E3：执行侧阈值与需求侧成对（repairEarly）；旧档/关开关保持 <=0 逐位不变
+      const b = (s.buildings ?? []).find((x) => x.loc === t.loc && (s.repairEarly ? x.integrity < 1 : x.integrity <= 0));
       if (b && s.inv.wood >= 1 && s.inv.stone >= 1) { s.inv.wood -= 1; s.inv.stone -= 1; b.integrity = 1; s.coop.completions.push({ type: t.type, tick: world.t, repair: true }); return { completed: t.type }; }
-      t.phase = 'gather';
+      if (s.repairEarly && !b) t.abandoned = true;   // E3：无目标＝放弃，禁止 fallthrough 重建
+      else t.phase = 'gather';
     }
   }
   return { phase: t.phase };
