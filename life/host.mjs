@@ -338,7 +338,7 @@ async function tickBody(onError = null) {
     });
     if (p.series.length > SERIES_CAP) p.series.splice(0, p.series.length - SERIES_CAP);
   }
-  if (S.surv) tickSurvPlay(S.surv);   // Phase D：生存单世界随拍推进（独立于 A/B）
+  if (S.surv) await tickSurvPlay(S.surv);   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   if (S.packs.A.world.t % SAVE_EVERY === 0) await save();
 }
 
