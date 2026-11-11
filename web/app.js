@@ -56,7 +56,7 @@ async function loadAssets() {
 // 角色当前动作行：载荷里的 a.last.kind 是世界事实，不是前端猜的；找不到回退 idle。
 const actionRow = (a) => ACT.index[a?.last?.kind] ?? ACT.index.idle ?? 0;
 
-const ui = { room: 'hall', camRoom: null, show: 'A', overview: false, interior: null, fullscreen: false };
+const ui = { room: 'hall', camRoom: null, show: 'A', overview: false, interior: null, fullscreen: false, compare: false };
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -1339,6 +1339,7 @@ $('minimap').addEventListener('click', (ev) => {
 });
 $('btnOverview').onclick = () => { if (ui.interior) { ui.interior = null; ui.camRoom = ui.room; } else ui.overview = !ui.overview; refresh(); };
 $('btnSurv').onclick = () => { survOpen = !survOpen; $('survPanel').hidden = !survOpen; $('btnSurv').classList.toggle('on', survOpen); refresh(); };
+$('btnCompare').onclick = () => { ui.compare = !ui.compare; document.querySelector('main').classList.toggle('solo', !ui.compare); $('btnCompare').textContent = ui.compare ? '单世界' : '对照 A/B'; refresh(); };
 $('survPanel').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-sk]'); if (!btn) return;
   api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then(refresh);
