@@ -196,6 +196,10 @@
   #btnFullExit { background:var(--a); color:var(--bg); border:2px solid var(--ink); box-shadow:2px 2px 0 0 var(--shadow);
     padding:4px 12px; font-weight:700; cursor:pointer; }
   #btnFullExit:hover { background:var(--ink); color:var(--a); }
+  #survPanel { margin:0 16px 8px; padding:10px 12px; border:2px solid var(--line); background:var(--bg); color:var(--ink); font-size:13px; display:flex; flex-direction:column; gap:6px; }
+  #survPanel .survrow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; }
+  #survPanel .survbtns button:hover { background:var(--a); color:var(--bg); }
 </style>
 </head>
 <body>
@@ -209,7 +213,9 @@
   <span class="lbl" id="visionInfo"></span>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
+  <button id="btnSurv" title="切换生存单世界游玩面板（独立于 A/B 对照）">生存模式</button>
 </div>
+<section id="survPanel" hidden></section>
 <main>
   <div class="col">
     <div class="world side-a">
