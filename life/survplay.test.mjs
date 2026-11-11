@@ -90,6 +90,18 @@ test('D8 occupancy 不变量：合作改位置也必须同步占位，否则 mov
   }
 });
 
+test('D9 读档重建 occupancy：存档位置与占位必须一致（否则重启后第一次 move 崩）', async () => {
+  const sp = createSurvPlay(7);
+  for (let i = 0; i < 30; i++) await tickSurvPlay(sp);
+  sp.world.loc.a1 = 'garden'; // 模拟旧档：位置偏离创建期 spawn
+  const back = loadSurv(JSON.parse(JSON.stringify(dumpSurv(sp))), 7);
+  for (const id of Object.keys(back.world.agents)) {
+    const loc = back.world.loc[id];
+    assert.ok((back.world.occupancy[loc] ?? []).includes(id), `读档后 ${id} 在 ${loc} 但占位缺失`);
+  }
+  assert.ok(!(back.world.occupancy.home ?? []).includes('a1'), '旧 spawn 占位不得残留');
+});
+
 test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-surv-'));
   process.env.DATA_DIR = dir; process.env.SEED_FILE = join(dir, 'none.json');
