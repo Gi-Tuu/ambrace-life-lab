@@ -94,8 +94,13 @@ export async function run(seed, { forage = false, player = false, policy = 'cont
 // §15 同权＋P2-B＋P2-C（背包/心智入档/集体劳动）后基线复抓#7（旧 survival 基线作废，披露于 §15 回填）
 export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 历史：E1/E3 前（plain 居民），仅留痕
 export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 前（plain 居民），仅留痕
-export const OFF_BASE = { 7: 'aae4b3ac9c7ad1052ed0eed0026b1da3', 11: 'fc6f7b90367fb7704f751c9fba704f7d', 13: 'de16a551fcfb81358fb9b92008ad8b43' };
-export const BASELINE3 = { 7: 'dd30810fa7e97d415ace0c850adbf03e', 11: '01d81e502e5db829bd5020c67cb34bbd', 13: '9f66d79a77ea3fef4f233de342dfce89' };
+// #8–#10 与 #7 逐位同值（新开关全关等价），故不另存。
+// 基线复抓#11（2026-11-12，披露于 phase1-plan §18）：#7 抓取时 cooperation.execTick 直写
+// world.loc 而不同步 occupancy ⇒ 工人下一次 move() 读 occupancy[from] 崩、被 survplay 的
+// try/catch 吞成 agentError，工人冻结在院落（seed 7 实测 a1）。#7 因此编码了"冻结工人"轨迹，
+// 修复后作废；以下为本轮修复引擎后的重抓（两次跑逐位相同）。
+export const OFF_BASE = { 7: 'dbac661bb9b4cb09a0473c2711454a66', 11: '2827d6cc7d64a80f06afa9649a9aaa2d', 13: '6b6f24925e7501ca3337c186b3b57502' };
+export const BASELINE3 = { 7: 'b80d888494d65aa010e64943c2d429cc', 11: '3523e4f705220673464f9a42acb76f3e', 13: '901cbf034a6370c754f6a9b6a746ea66' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 

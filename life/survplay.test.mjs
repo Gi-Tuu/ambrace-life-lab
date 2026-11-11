@@ -74,6 +74,22 @@ test('D7 重置世界同时重置生存单世界（回零刻、清失败态）',
   }
 });
 
+test('D8 occupancy 不变量：合作改位置也必须同步占位，否则 move() 崩→agentError 冻结 AI', async () => {
+  const sp = createSurvPlay(7);
+  sp.world.survival.store = 0; // 触发合作采集/奠基/施工
+  for (let i = 0; i < 120; i++) await tickSurvPlay(sp);
+  assert.deepEqual(sp.log.filter((x) => x.kind === 'agentError'), [], '不得有 agentError');
+  for (const id of Object.keys(sp.world.agents)) {
+    const loc = sp.world.loc[id];
+    const at = sp.world.occupancy[loc] ?? [];
+    assert.ok(at.includes(id), `${id} 在 ${loc} 但占位里没有它`);
+    for (const [l, ids] of Object.entries(sp.world.occupancy)) {
+      const n = ids.filter((x) => x === id).length;
+      assert.equal(n, l === loc ? 1 : 0, `${id} 占位重复/错位：${l}×${n}`);
+    }
+  }
+});
+
 test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-surv-'));
   process.env.DATA_DIR = dir; process.env.SEED_FILE = join(dir, 'none.json');

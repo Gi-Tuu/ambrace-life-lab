@@ -158,7 +158,9 @@ export function spawn(world, id, loc) {
 export function move(world, id, to) {
   const from = world.loc[id];
   if (from === to) return false;
-  world.occupancy[from] = world.occupancy[from].filter((x) => x !== id);
+  // 防御：from 可能已不在 occupancy（旧档/占位错位），不能对 undefined 直接 .filter，
+  // 否则每拍每角色抛 agentError、整条决策环被 catch 吞掉（实测 survplay 因此全线不动）。
+  world.occupancy[from] = (world.occupancy[from] ?? []).filter((x) => x !== id);
   world.loc[id] = to;
   (world.occupancy[to] ??= []).push(id);
   return true;
