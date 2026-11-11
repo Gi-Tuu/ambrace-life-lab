@@ -51,7 +51,8 @@ export function validate(world, agentId, intent) {
     const def = BUILDINGS[intent.type];
     if (!def) return fail('NO_TYPE', '未知建筑类型');
     if (world.survival.sites.some((s) => s.loc === here) || world.survival.buildings.some((b) => b.loc === here)) return fail('OCCUPIED', '这里已经有建筑或工地');
-    if (world.survival.inv.wood < def.cost.wood || world.survival.inv.stone < def.cost.stone) return fail('NO_MATERIAL', '材料不够');
+    const bagP = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包+公仓合计
+    if (bagP.wood + world.survival.inv.wood < def.cost.wood || bagP.stone + world.survival.inv.stone < def.cost.stone) return fail('NO_MATERIAL', '材料不够');
   }
   if (kind === 'build') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有工地');
@@ -61,7 +62,17 @@ export function validate(world, agentId, intent) {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可维修的建筑');
     const b = world.survival.buildings.find((x) => x.loc === here);
     if (!b || b.integrity >= 1) return fail('NO_REPAIR', '不需要维修');
-    if (world.survival.inv.wood < 1 || world.survival.inv.stone < 1) return fail('NO_MATERIAL', '维修材料不够');
+    const bagR = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包+公仓合计
+    if (bagR.wood + world.survival.inv.wood < 1 || bagR.stone + world.survival.inv.stone < 1) return fail('NO_MATERIAL', '维修材料不够');
+  }
+  // §15 P2-C 公仓存取：只能在公仓、且来源有货
+  if (kind === 'deposit' || kind === 'withdraw') {
+    if (!world.survival) return fail('NOT_AVAILABLE', '这里没有公仓');
+    if (here !== 'store') return fail('NOT_STORE', '存取只能在公仓');
+    const res = intent.type === 'stone' ? 'stone' : 'wood';
+    const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
+    if (kind === 'deposit' && bag[res] <= 0) return fail('NO_MATERIAL', '背包里没有可存的');
+    if (kind === 'withdraw' && world.survival.inv[res] <= 0) return fail('NO_MATERIAL', '公仓里没有可取的');
   }
   if (kind === 'trade' || kind === 'companion') {
     if (!intent.target) return fail('NO_TARGET', '没指定对象');

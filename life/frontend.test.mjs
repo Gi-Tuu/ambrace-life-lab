@@ -48,6 +48,12 @@ test('F5 页面结构：A/B 双世界栏与关键面板都在', () => {
   }
 });
 
+test('F7 生存重开按钮必须带 confirm（H-02c 同族：缺 confirm 服务端 400，按钮会静默失效）', () => {
+  const line = APP.split('\n').find((l) => l.includes('btnSurvReset') && l.includes('ctl('));
+  assert.ok(line, 'app.js 缺 btnSurvReset 处理');
+  assert.ok(line.includes('confirm: true'), '生存重开未带 confirm ⇒ 400 静默失效');
+});
+
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',

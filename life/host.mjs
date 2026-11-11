@@ -30,7 +30,7 @@ const M5_ENABLED = process.env.M5_ENABLED === '1';
 // §33 工坊当日上限：不设（缺省）＝无上限＝现行为逐位相同。设成数字即"工坊一天收几次工"这条世界事实，
 // 它属于世界配置而非内部通道，所以 A/B 两侧同样生效（B 侧是内部状态切断的负向对照，不是规则差异的对照）。
 const WORK_CAP = process.env.WORK_CAP === undefined || process.env.WORK_CAP === '' ? undefined : Number(process.env.WORK_CAP);
-const TICK_MS = Number(process.env.TICK_MS ?? 1200);
+const TICK_MS = Number(process.env.TICK_MS ?? 7500); // §14 统一游戏时间：24 刻/天 × 7.5s = 3 分钟/天（env 可覆盖）
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
@@ -338,7 +338,7 @@ async function tickBody(onError = null) {
     });
     if (p.series.length > SERIES_CAP) p.series.splice(0, p.series.length - SERIES_CAP);
   }
-  if (S.surv) tickSurvPlay(S.surv);   // Phase D：生存单世界随拍推进（独立于 A/B）
+  if (S.surv) await tickSurvPlay(S.surv);   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   if (S.packs.A.world.t % SAVE_EVERY === 0) await save();
 }
 
@@ -796,6 +796,7 @@ export const host = {
       // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
       // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
       S.packs = freshPacks();
+      S.surv = createSurvPlay(CFG.seed); // 重置世界＝连生存单世界一起回零刻（A/B 行为不变）
       S.startRaw = structuredClone(serialize());
       // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
       // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。
