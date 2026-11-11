@@ -24,6 +24,14 @@ test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；
   assert.ok(rs.filter((r) => (r.aiActions.harvest ?? 0) >= 4).length >= 2, `aiH=${rs.map((r) => r.aiActions.harvest ?? 0).join(',')}`);
 });
 
+test('P2-7 玩家边际硬闸（§17 T3 落地为默认档护栏）：player−idle integral 差 ≥ 基准点差的一半（456/632/412）', async () => {
+  const idle = await Promise.all(SEEDS.map((s) => run(s, {})));
+  const player = await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent' })));
+  const floor = [456, 632, 412];
+  const diffs = player.map((x, i) => x.storeIntegral - idle[i].storeIntegral);
+  assert.ok(diffs.filter((d, i) => d >= floor[i]).length >= 2, `diffs=${diffs.join(',')} floor=${floor.join(',')}`);
+});
+
 test('P2-6 性格-季节慢偏移：冬社交设点 < 夏（同 seed 同天数）', async () => {
   const mk = async (day) => {
     const sp = createSurvPlay(7);

@@ -267,7 +267,7 @@ export function affordancesFor(world, agentId) {
     const urg = s0.store < thr ? (isFarmer ? 1.2 : (s0.urgencyBoost ?? 0.8)) : 0;
     // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
     // §16 E4b：storeHunger 开时直接用能量 deficit 门控移动候选（饿就去菜园，不等公仓阈值）
-    const hungry = s0.storeHunger === true && (world.agents[agentId]?.drives?.v?.energy ?? 1) < 0.4;
+    const hungry = s0.storeHunger === true && (world.agents[agentId]?.drives?.v?.energy ?? 1) < (s0.hungerGate ?? 0.4); // §17 L2 门控宽度
     if ((urg > 0 && (s0.moveUrgency === true || isFarmer)) || hungry) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
       const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };

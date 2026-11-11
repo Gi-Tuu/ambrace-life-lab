@@ -91,12 +91,14 @@ export async function tickSurvPlay(sp) {
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
     else if (w.survival.allHunger) a.drives.tick(1, false);
-    // §16 E4 公仓目标挂钩饥饿：公仓低于 pop×3 时全员饿感上升⇒集体劳动
+    // §16 E4 公仓目标挂钩饥饿：公仓低于 pop×3 时全员饿感上升⇒集体劳动；§17 L1 强度乘数 hungerK
     if (w.survival.storeHunger === true) {
       const popH = Object.values(w.agents).filter((x) => !x.isPlayer).length;
-      const mult = 1 + Math.max(0, 1 - w.survival.store / (popH * 3));
+      const mult = 1 + (w.survival.hungerK ?? 1) * Math.max(0, 1 - w.survival.store / (popH * 3));
       if (mult > 1) a.drives.tick(mult - 1, false);
     }
+    // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
+    a.ch.m3 = w.survival.commitChain === true ? 1 : 0;
   }
   return w;
 }
