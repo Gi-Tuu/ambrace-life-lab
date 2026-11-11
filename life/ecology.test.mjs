@@ -38,7 +38,7 @@ test('G5 确定：同 seed 两跑 digest 相同', async () => {
   for (const s of SEEDS) assert.equal((await run(s, { forage: true })).digest, (await run(s, { forage: true })).digest);
 });
 
-test('G6 可逆：全关＝OFF_BASE；新机制关（forage/repair 保持）＝BASELINE3（复抓#3 按 seed）', async () => {
+test('G6 可逆：全关＝OFF_BASE；新机制关（forage/repair 保持）＝BASELINE3（复抓#11 按 seed）', async () => {
   for (const s of SEEDS) {
     assert.equal((await run(s, OFF)).digest, OFF_BASE[s]);
     assert.equal((await run(s, OFF2)).digest, BASELINE3[s]);

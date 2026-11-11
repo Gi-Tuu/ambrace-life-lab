@@ -4,6 +4,10 @@
 // Phase A/B（coop 关）轨迹亦不变。配对闸门用同 seed「独建 vs 协作」比完工时间。
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
 import { BUILDINGS, GATHER_BY_LOC, coopPoolGather, doPlan, doBuild } from './production.mjs';
+// 位置只能经 body.move 改：它同时维护 world.occupancy。直接写 world.loc[id] 会让
+// occupancy 里留着旧地点、新地点没有该角色，下一次 move() 读 occupancy[from] 时崩，
+// 然后 survplay 的 try/catch 每拍吞一条 agentError，工人整条决策环停摆（2026-11-12 实测）。
+import { move as moveTo } from './body.mjs';
 
 export const COOP = Object.freeze({
   assistThreshold: 0.5,
@@ -71,12 +75,12 @@ function execTick(world, t) {
       if (s.inv.wood >= cost.wood && s.inv.stone >= cost.stone) t.phase = (s.repairEarly && t.repair) ? 'repair' : 'plan';
       else {
         const res = s.inv.wood < cost.wood ? 'wood' : 'stone';
-        world.loc[id] = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res) ?? 'yard';
+        moveTo(world, id, Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res) ?? 'yard');
         coopPoolGather(world, id);
       }
     }
     if (t.phase === 'plan') {
-      world.loc[id] = t.loc;
+      moveTo(world, id, t.loc);
       const r = doPlan(world, id, t.type);
       if (r.ok) t.phase = 'build';
       else if (r.code === 'OCCUPIED' || r.code === 'NOT_OUTDOOR') {
@@ -86,12 +90,12 @@ function execTick(world, t) {
       } else if (r.code === 'NO_MATERIAL') t.phase = 'gather';
     }
     if (t.phase === 'build') {
-      world.loc[id] = t.loc;
+      moveTo(world, id, t.loc);
       const r = doBuild(world, id);
       if (r.completed) { s.coop.completions.push({ type: t.type, tick: world.t, workers: t.workers.length }); return { completed: t.type }; }
     }
     if (t.phase === 'repair') {
-      world.loc[id] = t.loc;
+      moveTo(world, id, t.loc);
       // E3：执行侧阈值与需求侧成对（repairEarly）；旧档/关开关保持 <=0 逐位不变
       const b = (s.buildings ?? []).find((x) => x.loc === t.loc && (s.repairEarly ? x.integrity < 1 : x.integrity <= 0));
       if (b && s.inv.wood >= 1 && s.inv.stone >= 1) { s.inv.wood -= 1; s.inv.stone -= 1; b.integrity = 1; s.coop.completions.push({ type: t.type, tick: world.t, repair: true }); return { completed: t.type }; }

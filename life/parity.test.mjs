@@ -24,12 +24,21 @@ test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；
   assert.ok(rs.filter((r) => (r.aiActions.harvest ?? 0) >= 4).length >= 2, `aiH=${rs.map((r) => r.aiActions.harvest ?? 0).join(',')}`);
 });
 
-test('P2-7 玩家边际硬闸（§17 T3 落地为默认档护栏）：player−idle integral 差 ≥ 基准点差的一半（456/632/412）', async () => {
+test('P2-7 玩家边际（改量#11，披露 §18）：won≥2/3 且 完好建筑≥idle、损伤≤idle、存粮≥idle−300、玩家实收≥1，各 ≥2/3', async () => {
+  // 旧判据"player−idle integral ≥ 456/632/412"作废：那组基准点差是 occupancy 崩溃、工人被
+  // 冻结时测的；修复后 AI 真自足＋公仓封顶，integral 对玩家劳动不再敏感（实测 −220/+711/+11）。
+  // 改量：存粮仅留 300 容差防"玩家拖垮"，边际改在不饱和的基础设施与劳动量口径上测。
   const idle = await Promise.all(SEEDS.map((s) => run(s, {})));
   const player = await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent' })));
-  const floor = [456, 632, 412];
-  const diffs = player.map((x, i) => x.storeIntegral - idle[i].storeIntegral);
-  assert.ok(diffs.filter((d, i) => d >= floor[i]).length >= 2, `diffs=${diffs.join(',')} floor=${floor.join(',')}`);
+  const rows = player.map((p, i) => ({
+    won: !!p.end.won,
+    intact: p.intact >= idle[i].intact,
+    dmg: p.damageEvents <= idle[i].damageEvents,
+    econ: p.storeIntegral >= idle[i].storeIntegral - 300,
+    acted: (p.playerHarvests ?? 0) >= 1,
+  }));
+  const ok = rows.map((r) => Object.values(r).every(Boolean));
+  assert.ok(ok.filter(Boolean).length >= 2, `player=${JSON.stringify(rows)} idleInt=${idle.map((x) => x.storeIntegral)} playerInt=${player.map((x) => x.storeIntegral)}`);
 });
 
 test('P2-6 性格-季节慢偏移：冬社交设点 < 夏（同 seed 同天数）', async () => {

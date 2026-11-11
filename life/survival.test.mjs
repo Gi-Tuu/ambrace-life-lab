@@ -2,7 +2,7 @@
 // 每条都应能被反向变异打红（撤掉对应守卫/循环即红）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeWorld, spawn, actuate, scanSecrets } from './body.mjs';
+import { makeWorld, spawn, actuate, scanSecrets, move } from './body.mjs';
 import { validate } from './rules.mjs';
 import { advanceSurvival, doHarvest, SURV } from './worldstate.mjs';
 import { blockersOf } from './geometry.mjs';
@@ -134,4 +134,15 @@ test('B5 建筑占地进入服务端 blockers；lab/town 为空', () => {
   assert.equal(bl[0].type, 'granary');
   assert.equal(bl[0].w, 3); assert.equal(bl[0].h, 2);
   for (const preset of ['lab', 'town']) assert.deepEqual(blockersOf(makeWorld({ preset, seed: 7 })), []);
+});
+
+test('S7 move 防御：occupancy[from] 缺失不得崩溃（否则 survplay 每拍 agentError、AI 全线不动）', () => {
+  const w = makeWorld({ preset: 'survival', seed: 7, pantries: 0 });
+  w.agents.a1 = { id: 'a1', name: '岑' };
+  spawn(w, 'a1', 'home');
+  delete w.occupancy['home'];   // 模拟旧档/占位错位：loc 指向的键丢了
+  assert.doesNotThrow(() => move(w, 'a1', 'hall'));
+  assert.equal(w.loc.a1, 'hall');
+  assert.ok((w.occupancy['hall'] ?? []).includes('a1'), '应正常落到新地点');
+  assert.deepEqual(w.occupancy['home'] ?? [], [], 'from 键应重建为空数组而非 undefined');
 });
