@@ -77,12 +77,12 @@ test('S6 规则层守卫：非菜园/无成熟/无空畦 拒绝', () => {
 });
 
 // ── Phase B 建设闭环 ──────────────────────────────────────────────
-test('B1 采集按地点给木/石', () => {
+test('B1 采集按地点给木/石（§15 P2-C 改量：入个人背包）', () => {
   const w = survWorld();
   w.loc.a1 = 'yard'; actuate(w, 'a1', { kind: 'gather' });
-  assert.equal(w.survival.inv.wood, 2);
+  assert.equal(w.pinv.a1.wood, 2);
   w.loc.a1 = 'watch'; actuate(w, 'a1', { kind: 'gather' });
-  assert.equal(w.survival.inv.stone, 2);
+  assert.equal(w.pinv.a1.stone, 2);
 });
 
 test('B2 奠基需要户外/材料，并扣料', () => {

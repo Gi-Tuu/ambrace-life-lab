@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { run } from './phase-e-sweep.mjs';
-import { createSurvPlay, sexOf } from './survplay.mjs';
+import { createSurvPlay, sexOf, survAct, dumpSurv, loadSurv, tickSurvPlay } from './survplay.mjs';
 
 const SEEDS = [7, 11, 13];
 
@@ -30,10 +30,38 @@ test('P2-0 性别：初始 roster 保证两性在场；其余确定哈希（同 
   assert.equal(a.world.sex.p1, sexOf(7, 'p1'));
 });
 
-test('P2-1b 居民是完整决策角色：有 drives/memory/viab/relations（同权载体）', () => {
+test('P2-2 背包：采集入个人包；公仓存取往返守恒；奠基扣个人包', () => {
   const sp = createSurvPlay(7);
-  for (const id of ['a1', 'a2', 'a3']) {
-    const a = sp.world.agents[id];
-    assert.ok(a.drives && a.memory && a.viab && a.relations, `${id} 缺决策栈`);
-  }
+  const w = sp.world;
+  survAct(sp, { kind: 'move', room: 'yard' });
+  assert.equal(survAct(sp, { kind: 'gather' }).ok, true);
+  assert.equal(w.pinv.p1.wood, 2, '采集应入个人包');
+  assert.equal(w.survival.inv.wood, 0, '公仓不应直接加');
+  survAct(sp, { kind: 'move', room: 'store' });
+  assert.equal(survAct(sp, { kind: 'deposit', type: 'wood' }).ok, true);
+  assert.equal(w.pinv.p1.wood, 1);
+  assert.equal(w.survival.inv.wood, 1);
+  assert.equal(survAct(sp, { kind: 'withdraw', type: 'wood' }).ok, true);
+  assert.equal(w.pinv.p1.wood, 2);
+  assert.equal(w.survival.inv.wood, 0);
+  survAct(sp, { kind: 'move', room: 'yard' });
+  w.pinv.p1 = { wood: 4, stone: 2 };
+  assert.equal(survAct(sp, { kind: 'plan', type: 'shelter' }).ok, true);
+  assert.equal(w.pinv.p1.wood, 0, '奠基应扣个人包');
+});
+
+test('P2-3 心智入档：dump/load 往返后 drives/memory/viab/traits 一致', async () => {
+  const sp = createSurvPlay(7);
+  for (let i = 0; i < 30; i++) await tickSurvPlay(sp);
+  const a = sp.world.agents.a1;
+  a.drives.v.energy = 0.31;
+  a.memory.add(sp.world.t, { kind: 'alone', payload: '测试记忆', importance: 0.5 });
+  const raw = JSON.parse(JSON.stringify(dumpSurv(sp)));
+  const back = loadSurv(raw, 7);
+  const b = back.world.agents.a1;
+  assert.equal(b.drives.v.energy, 0.31);
+  assert.equal(b.memory.dump().rows.length, a.memory.dump().rows.length);
+  assert.equal(b.viab.dump().v, a.viab.dump().v);
+  assert.deepEqual(b.traits, a.traits);
+  assert.deepEqual(back.world.pinv, sp.world.pinv);
 });

@@ -91,11 +91,11 @@ export async function run(seed, { forage = false, player = false, policy = 'cont
   };
 }
 
-// §15 同权＋take_shared 守卫＋P2-B（无尽/繁衍/四季/两性 roster）后基线复抓#6（旧 survival 基线作废，披露于 §15 回填）
+// §15 同权＋P2-B＋P2-C（背包/心智入档/集体劳动）后基线复抓#7（旧 survival 基线作废，披露于 §15 回填）
 export const BASELINE_DIGEST = 'a946f538b14ce9242fbc31d23882e69f'; // 历史：E1/E3 前（plain 居民），仅留痕
 export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 前（plain 居民），仅留痕
-export const OFF_BASE = { 7: '5519ae49c91241c4db9c5b8d7751419b', 11: 'a43fcf3c57693856e6264e7f44c9f63c', 13: 'e54bf4ec50b38cb5ccc8ca8ea33c7192' };
-export const BASELINE3 = { 7: '31e20e1f31cd7612882923e098064d8d', 11: 'ed60d044885f5062c8e546b2c35b52bf', 13: 'f8e2fb1e774e89bbd01a47b23f23b081' };
+export const OFF_BASE = { 7: 'aae4b3ac9c7ad1052ed0eed0026b1da3', 11: 'fc6f7b90367fb7704f751c9fba704f7d', 13: 'de16a551fcfb81358fb9b92008ad8b43' };
+export const BASELINE3 = { 7: 'dd30810fa7e97d415ace0c850adbf03e', 11: '01d81e502e5db829bd5020c67cb34bbd', 13: '9f66d79a77ea3fef4f233de342dfce89' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
 
@@ -136,6 +136,18 @@ const modes = {
     idle: await Promise.all(SEEDS.map((s) => run(s, {}))),
     withPlayer: await Promise.all(SEEDS.map((s) => run(s, { player: true }))),
   }),
+  publicdrive: async () => {
+    const points = [];
+    for (const decayExtra of [1, 3]) for (const feedReward of [0.5, 0.25]) {
+      const flags = { decayExtra, feedReward, moveUrgency: true };
+      points.push({
+        decayExtra, feedReward,
+        idle: await Promise.all(SEEDS.map((s) => run(s, { flags }))),
+        competent: await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent', flags }))),
+      });
+    }
+    return points;
+  },
   codesign: async () => {
     const points = [];
     for (const moveUrgency of [false, true]) for (const m2 of [{ rainRefill: 0.35 }, { plantWater: 0.06 }]) for (const forage of [false, true]) {

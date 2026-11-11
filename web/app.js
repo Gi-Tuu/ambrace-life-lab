@@ -1349,11 +1349,14 @@ function renderSurv(s) {
     <div class="survrow">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}${s.stormTomorrow ? ' <span class="bad">风暴预警</span>' : ''}${s.coldsnapTomorrow ? ' <span class="bad">寒潮预警</span>' : ''}${s.drought ? ' <span class="bad">干旱</span>' : ''}${s.disasterToday ? ` <span class="bad">今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}</span>` : ''}</div>
     <div class="survrow">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       ${Object.entries(s.rooms ?? {}).map(([k, label]) => `<button data-mv="${k}" class="mv${k === here ? ' on' : ''}">${esc(label)}</button>`).join('')}</div>
+    <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
     <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
     <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}`).join('、') || '无'}</div>
     <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${esc(s.coop.task.phase)}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
     <div class="survrow survbtns">
       ${btn('harvest', '收获', why.harvest)}${btn('plant', '播种', why.plant)}${btn('gather', '采集', why.gather)}${btn('build', '施工', why.build)}${btn('repair', '维修', why.repair)}
+      ${['wood', 'stone'].map((r) => `<button data-sk="deposit" data-type="${r}"${(s.loc?.p1 !== 'store' || (s.pinv?.p1?.[r] ?? 0) <= 0) ? ' disabled title="在公仓且背包有货才能存"' : ''}>存${r === 'wood' ? '木' : '石'}</button>`).join('')}
+      ${['wood', 'stone'].map((r) => `<button data-sk="withdraw" data-type="${r}"${(s.loc?.p1 !== 'store' || s.inv[r] <= 0) ? ' disabled title="在公仓且公仓有货才能取"' : ''}>取${r === 'wood' ? '木' : '石'}</button>`).join('')}
       ${Object.keys(b).map((t) => `<button data-sk="plan" data-type="${t}"${planWhy(t) ? ` disabled title="${esc(planWhy(t))}"` : ''}>奠基${bl(t)}</button>`).join('')}
       ${s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>

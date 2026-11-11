@@ -89,7 +89,7 @@ test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作
     assert.equal(r.ok, true);
     const after = host.snapshot();
     assert.equal(JSON.stringify(after.A.loc), locBefore, '生存动作不应改 A/B');
-    assert.ok(after.survival.inv.wood >= 2 || after.survival.inv.stone >= 2, '生存采集应入生存库存');
+    assert.ok((after.survival.pinv?.p1?.wood ?? 0) >= 2 || (after.survival.pinv?.p1?.stone ?? 0) >= 2, '生存采集应入个人背包（§15 P2-C）');
   } finally {
     host.stop();
     rmSync(dir, { recursive: true, force: true });

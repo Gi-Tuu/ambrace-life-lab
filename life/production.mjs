@@ -35,10 +35,17 @@ export function effectiveMods(world) {
 }
 
 export function doGather(world, agentId) {
-  const s = world.survival;
   const res = GATHER_BY_LOC[world.loc[agentId]] ?? 'wood';
-  s.inv[res] += 2;
+  const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
+  bag[res] += 2;
   return { ok: true, code: 'OK', res, amount: 2 };
+}
+// §15 P2-C 集体劳动：coop 采集归公仓（个人包→公仓），供合作阶段检查与奠基消耗
+export function coopPoolGather(world, agentId) {
+  const r = doGather(world, agentId);
+  const bag = world.pinv?.[agentId];
+  if (bag) { world.survival.inv[r.res] += bag[r.res]; bag[r.res] = 0; }
+  return r;
 }
 
 export function doPlan(world, agentId, type) {
@@ -48,8 +55,10 @@ export function doPlan(world, agentId, type) {
   const loc = world.loc[agentId];
   if (!(world.outdoor ?? []).includes(loc)) return { ok: false, code: 'NOT_OUTDOOR' };
   if (atLoc(s.sites, loc) || atLoc(s.buildings, loc)) return { ok: false, code: 'OCCUPIED' };
-  if (s.inv.wood < def.cost.wood || s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
-  s.inv.wood -= def.cost.wood; s.inv.stone -= def.cost.stone;
+  const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
+  if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
+  const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
+  const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
   s.sites.push({ type, loc, at: siteOf(loc) ?? [0, 0], progress: 0 });
   return { ok: true, code: 'OK' };
 }
@@ -71,8 +80,10 @@ export function doRepair(world, agentId) {
   const s = world.survival;
   const b = atLoc(s.buildings, world.loc[agentId]);
   if (!b || b.integrity >= 1) return { ok: false, code: 'NO_REPAIR' };
-  if (s.inv.wood < 1 || s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
-  s.inv.wood -= 1; s.inv.stone -= 1;
+  const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
+  if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
+  const bw = Math.min(bag.wood, 1); bag.wood -= bw; s.inv.wood -= 1 - bw;
+  const bs = Math.min(bag.stone, 1); bag.stone -= bs; s.inv.stone -= 1 - bs;
   b.integrity = 1;
   return { ok: true, code: 'OK' };
 }

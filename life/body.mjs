@@ -265,7 +265,8 @@ export function affordancesFor(world, agentId) {
     // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
     if (urg > 0 && s0.moveUrgency === true) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
-      const affordable = Object.entries(BUILDINGS).find(([, d]) => s0.inv.wood >= d.cost.wood && s0.inv.stone >= d.cost.stone);
+      const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
+      const affordable = Object.entries(BUILDINGS).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);
       const hereFree = !s0.sites.some((x) => x.loc === here) && !s0.buildings.some((x) => x.loc === here);
       if (affordable && hereFree) {
         const free = (world.outdoor ?? []).find((l) => l !== here && !s0.sites.some((x) => x.loc === l) && !s0.buildings.some((x) => x.loc === l));
@@ -277,17 +278,26 @@ export function affordancesFor(world, agentId) {
       if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
     if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
+    const bag0 = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
+    const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);
     const built = world.survival.buildings.find((b) => b.loc === here);
     if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${BUILDINGS[site.type]?.label ?? site.type}`, cost: 0.1, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
     else if (!built && (world.outdoor ?? []).includes(here)) {
       for (const [type, def] of Object.entries(BUILDINGS)) {
-        if (world.survival.inv.wood >= def.cost.wood && world.survival.inv.stone >= def.cost.stone)
+        if (poolW >= def.cost.wood && poolS >= def.cost.stone)
           out.push({ id: `plan:${type}`, kind: 'plan', type, label: `奠基·${def.label}`, cost: 0.05, impulse: 0.2, serves: { stimulation: 0.3 } });
       }
     }
-    if (built && built.integrity < 1 && world.survival.inv.wood >= 1 && world.survival.inv.stone >= 1)
+    if (built && built.integrity < 1 && poolW >= 1 && poolS >= 1)
       out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${BUILDINGS[built.type]?.label ?? built.type}`, cost: 0.06, impulse: 0.2, serves: { stimulation: 0.2 } });
+    // §15 P2-C 公仓存取（同权动作集）：在公仓可存/取个人包
+    if (here === 'store') {
+      for (const res of ['wood', 'stone']) {
+        if (bag0[res] > 0) out.push({ id: `deposit:${res}`, kind: 'deposit', type: res, label: `存${res === 'wood' ? '木' : '石'}入公仓`, cost: 0.03, impulse: 0.1, serves: { social: 0.2 } });
+        if (world.survival.inv[res] > 0) out.push({ id: `withdraw:${res}`, kind: 'withdraw', type: res, label: `从公仓取${res === 'wood' ? '木' : '石'}`, cost: 0.03, impulse: 0.1, serves: { stimulation: 0.15 } });
+      }
+    }
   }
 
   // 路径三：不从公仓等，而是去不在场的人门口拿——高冲动、违约
@@ -475,6 +485,20 @@ function actuateInner(world, agentId, action) {
       const r = doRepair(world, agentId);
       if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_MATERIAL' ? '维修材料不够' : '不需要维修' };
       return { action, ok: true, code: 'OK', observation: '修好了', evt: evt({ kind: 'repair', valence: 0.3, serves: 'stimulation' }) };
+    }
+    case 'deposit':
+    case 'withdraw': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有公仓' };
+      const res = action.type === 'stone' ? 'stone' : 'wood';
+      const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 };
+      if (action.kind === 'deposit') {
+        if (bag[res] <= 0) return { action, ok: false, code: 'NO_MATERIAL', observation: '背包里没有可存的' };
+        bag[res] -= 1; world.survival.inv[res] += 1;
+      } else {
+        if (world.survival.inv[res] <= 0) return { action, ok: false, code: 'NO_MATERIAL', observation: '公仓里没有可取的' };
+        world.survival.inv[res] -= 1; bag[res] += 1;
+      }
+      return { action, ok: true, code: 'OK', observation: action.kind === 'deposit' ? '存入公仓' : '从公仓取出', evt: evt({ kind: action.kind, valence: 0.1, serves: 'social' }) };
     }
     case 'take_shared': {
       // §15.4 生存语义一致性：生存模式只有公仓每日分配、无私藏 ⇒ 越轨取食不可用（否则 AI 偷吃吃饱就不种地）

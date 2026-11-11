@@ -3,7 +3,7 @@
 // 只作用于 world.survival.coop.enabled（默认关）；lab/town 无 survival ⇒ 逐位不变，
 // Phase A/B（coop 关）轨迹亦不变。配对闸门用同 seed「独建 vs 协作」比完工时间。
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, coopPoolGather, doPlan, doBuild } from './production.mjs';
 
 export const COOP = Object.freeze({
   assistThreshold: 0.5,
@@ -72,7 +72,7 @@ function execTick(world, t) {
       else {
         const res = s.inv.wood < cost.wood ? 'wood' : 'stone';
         world.loc[id] = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res) ?? 'yard';
-        doGather(world, id);
+        coopPoolGather(world, id);
       }
     }
     if (t.phase === 'plan') {

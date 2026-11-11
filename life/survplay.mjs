@@ -24,6 +24,8 @@ export function createSurvPlay(seed = 7) {
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
   spawn(world, 'p1', 'hall');
   for (const id of Object.keys(world.stash ?? {})) world.stash[id] = 0; // §15.5 M3：生存无私藏（恒 on 语义 fix）
+  world.pinv = {}; // §15 P2-C 背包：每角色个人木石
+  for (const id of Object.keys(world.agents)) world.pinv[id] = { wood: 0, stone: 0 };
   const s = world.survival;
   s.forage = false; // §15 同权后撤安全网代劳（开关保留供对照/负控）
   s.repairEarly = true; // E3a 过 ⇒ 默认开
@@ -70,6 +72,7 @@ export async function tickSurvPlay(sp) {
     const a = w.agents[id];
     if (a.isPlayer) continue;
     try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    if (w.survival.decayExtra) a.drives.tick(w.survival.decayExtra, false); // §15.6 生存额外衰减⇒两餐之间存在饥饿⇒觅食/移动候选有权重
   }
   return w;
 }
@@ -113,7 +116,7 @@ export function survAct(sp, body) {
     w.loc.p1 = room; (w.occupancy[room] ??= []).push('p1');
     return { ok: true };
   }
-  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
   const r = actuate(w, 'p1', { kind, type: body?.type });
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
@@ -130,7 +133,7 @@ export function survView(sp) {
     loc: w.loc, occupancy: w.occupancy,
     store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     plots: s.plots.map((p) => ({ id: p.id, growth: Number(p.growth.toFixed(2)) })),
-    inv: s.inv, sites: s.sites, buildings: s.buildings,
+    inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, sex: w.sex?.[a.id] ?? null }])),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, history: s.history.slice(-14),
@@ -148,7 +151,14 @@ const SURV_TARGET = 10; // 无尽模式落地前的里程碑显示；P2-B 终局
 // 持久化（additive）：只 dump 生存世界事实，读回时 tolerant。
 export function dumpSurv(sp) {
   const w = sp.world;
-  return { t: w.t, loc: w.loc, survival: w.survival, log: sp.log, sex: w.sex };
+  // §15 P2-C 心智入档：居民内部状态活过重启（镜像 host serialize 的心智字段）
+  const minds = Object.fromEntries(Object.values(w.agents).filter((a) => !a.isPlayer && a.drives).map((a) => [a.id, {
+    m: a.bank.snapshot(), drives: { ...a.drives.v }, memory: a.memory.dump(),
+    rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling,
+    habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(),
+    traits: structuredClone(a.traits),
+  }]));
+  return { t: w.t, loc: w.loc, survival: w.survival, log: sp.log, sex: w.sex, pinv: w.pinv, minds };
 }
 export function loadSurv(raw, seed = 7) {
   const sp = createSurvPlay(seed);
@@ -157,6 +167,20 @@ export function loadSurv(raw, seed = 7) {
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
     sp.world.sex = { ...sp.world.sex, ...(raw.sex ?? {}) };
+    sp.world.pinv = { ...sp.world.pinv, ...(raw.pinv ?? {}) };
+    for (const [id, st] of Object.entries(raw.minds ?? {})) {
+      const a = sp.world.agents[id];
+      if (!a || !a.drives || !st) continue;
+      Object.assign(a.drives.v, st.drives ?? {});
+      if (typeof a.bank.restore === 'function') a.bank.restore(st.m);
+      a.memory.load(Array.isArray(st.memory) ? { rows: st.memory } : st.memory);
+      a.relations.map = new Map(st.rel ?? []);
+      if (typeof st.relCeiling === 'number') a.relations.ceiling = st.relCeiling;
+      a.habit.load(st.habit);
+      a.forwardModel.load(st.forwardModel);
+      a.viab.restore(st.viab);
+      Object.assign(a.traits, st.traits ?? {});
+    }
     sp.log = raw.log ?? [];
   }
   return sp;
