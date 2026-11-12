@@ -2,6 +2,7 @@
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
 import { siteOf } from './geometry.mjs';
+import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 
 export const BUILDINGS = Object.freeze({
@@ -54,12 +55,17 @@ export function doPlan(world, agentId, type) {
   if (!def) return { ok: false, code: 'NO_TYPE' };
   const loc = world.loc[agentId];
   if (!(world.outdoor ?? []).includes(loc)) return { ok: false, code: 'NOT_OUTDOOR' };
-  if (atLoc(s.sites, loc) || atLoc(s.buildings, loc)) return { ok: false, code: 'OCCUPIED' };
+  const lot=constructionLot(loc,world.campLayout);
+  if (!lot) return {ok:false,code:'NO_LOT'};
+  if ([...s.sites,...s.buildings].some(b=>{
+    const occupied=b.lot??constructionLot(b.loc,world.campLayout);
+    return b.loc===loc || occupied && overlapsLot(lot,occupied,.35);
+  })) return {ok:false,code:'OCCUPIED'};
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
   if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
-  s.sites.push({ type, loc, at: siteOf(loc) ?? [0, 0], progress: 0 });
+  s.sites.push({ type, loc, at: siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
 
@@ -70,7 +76,7 @@ export function doBuild(world, agentId) {
   site.progress += LABOR_PER_ACTION;
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
-    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, integrity: 1 });
+    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1 });
     return { ok: true, code: 'OK', completed: site.type };
   }
   return { ok: true, code: 'OK', completed: null, progress: site.progress };

@@ -1,10 +1,11 @@
+import { householdPlans, houseLabor } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
-import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
+import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
@@ -219,10 +220,15 @@ export function affordancesFor(world, agentId) {
 
   // 路径二：走到某处——目的地有谁，满足的需求就不同（这是原来 wander 完全没有的分岔）
   const feats = world.features ?? {};
+  const ownHome=world.housing?.[agentId];
+  const privateRooms=world.survival?.households ? Object.keys(world.survival.households.deeds) :
+    world.housing ? Object.values(world.housing) : [];
+  const houseGoal=world.survival?.households ? householdPlans(world,agentId) : null;
+  const homeAtNight=ownHome && survivalPhaseOf(world.t)==='夜';
   for (const loc of Object.keys(world.locs ?? LOCS)) {
-    if (loc === here) continue;
+    if (loc===here || (privateRooms.includes(loc) && (loc!==ownHome || !homeAtNight))) continue;
     const crowd = (world.occupancy[loc] ?? []).filter((x) => x !== agentId);
-    const serves = crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
+    const serves=loc===houseGoal?{energy:.7,safety:1,stimulation:1}:loc===ownHome?{energy:.46,safety:.2}:crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
     out.push({ id: `move_to:${loc}`, kind: 'move_to', to: loc, label: `走到${(world.locs ?? LOCS)[loc] ?? loc}`, cost: 0.06, impulse: 0.15, serves });
   }
 
@@ -288,7 +294,8 @@ export function affordancesFor(world, agentId) {
       if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 + urg } });
       if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
-    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
+    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: '为自己的房子加工木石', cost: .08, impulse: .4, serves: { safety: 1, stimulation: .9, energy: .55 } });
+    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: houseGoal===here ? { safety: 1, energy: .65, stimulation: .9 } : { stimulation: 0.55 } });
     // §17 产出循环：AI 与玩家拿到完全相同的候选，走同一套规则层裁决。
     // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，
     // 否则无人值守会退化成原地刷产出（E1a/E1g 实测踩到过）。兑换另设 70% 仓容门槛，
@@ -510,6 +517,12 @@ function actuateInner(world, agentId, action) {
       const r = doPlant(world, agentId);
       if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_WATER' ? '水分不足，播不了种' : '没有空菜畦' };
       return { action, ok: true, code: 'OK', observation: '播下种子，等它长大', evt: evt({ kind: 'plant', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'house_work': {
+      const ok = houseLabor(world, agentId, true);
+      return { action, ok, code: ok ? 'OK' : 'NO_HOUSE_WORK',
+        observation: ok ? '加工了一批建房用料' : '今天没有可做的建房工作',
+        evt: evt({ kind: 'house_work', valence: ok ? .3 : -.1, serves: 'stimulation' }) };
     }
     case 'gather': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可采集的' };

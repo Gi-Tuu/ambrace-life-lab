@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HTML = readFileSync('web/index.html', 'utf8');
@@ -20,7 +20,7 @@ test('F1 轮询必须串行且后台停轮询（否则请求叠加、且替世�
 });
 
 test('F2 重置必须带 confirm（服务端要求，缺了就 400）', () => {
-  assert.match(APP, /action: 'reset', confirm: true/, 'btnReset 没有带 confirm:true ⇒ 点了必然 400');
+  assert.match(APP, /action: 'compare_reset', confirm: true/, 'btnReset 没有带 confirm:true ⇒ 点了必然 400');
 });
 
 test('F3 存档失败与决策异常必须出现在页面上', () => {
@@ -48,10 +48,11 @@ test('F5 页面结构：A/B 双世界栏与关键面板都在', () => {
   }
 });
 
-test('F7 生存重开按钮必须带 confirm（H-02c 同族：缺 confirm 服务端 400，按钮会静默失效）', () => {
-  const line = APP.split('\n').find((l) => l.includes('btnSurvReset') && l.includes('ctl('));
-  assert.ok(line, 'app.js 缺 btnSurvReset 处理');
-  assert.ok(line.includes('confirm: true'), '生存重开未带 confirm ⇒ 400 静默失效');
+test('F7 菜单与终局重开共用确认后的生存重置', () => {
+  assert.match(APP, /startNew.*onclick=newSurvival/);
+  assert.match(APP, /btnSurvReset.*newSurvival/);
+  assert.match(APP, /confirm\('新开一局/);
+  assert.match(APP, /action:'survival_reset',confirm:true/);
 });
 
 const CHROME = [
@@ -67,21 +68,60 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir, SEED_FILE: join(dir, 'none.json'), BRAIN: 'local', MODEL_PROVIDERS: '', MODEL_KEYS: '', MODEL_NAME: '', CHAT_TOKEN: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  let browser, socket;
   try {
     await new Promise((res, rej) => {
       const to = setTimeout(() => rej(new Error('server boot timeout')), 15000);
       child.stdout.on('data', (d) => { if (String(d).includes('就绪')) { clearTimeout(to); res(); } });
       child.on('exit', (c) => rej(new Error('server exited ' + c)));
     });
-    // 注意：不用 --virtual-time-budget —— 页面有常驻 /world 轮询 + rAF 循环，虚拟时间会被
-    // 持续的网络请求挂起导致 headless 永不退出（实测 ETIMEDOUT）。改为 load 时 dump-dom。
-    const dom = execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', `--user-data-dir=${join(dir, 'prof')}`, '--dump-dom', `http://127.0.0.1:${port}/`], { encoding: 'utf8', timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
+    const profile=join(dir,'prof');
+    browser=spawn(CHROME,['--headless=new','--disable-gpu','--no-sandbox',
+      '--remote-debugging-port=0',`--user-data-dir=${profile}`,`http://127.0.0.1:${port}/?mode=compare`],
+    {stdio:'ignore',windowsHide:true});
+    const until=async probe=>{
+      const deadline=Date.now()+18000;
+      while (Date.now()<deadline) {
+        const value=await probe();
+        if (value) return value;
+        await new Promise(resolve=>setTimeout(resolve,80));
+      }
+      throw new Error('等待浏览器完成页面加载超时');
+    };
+    const debuggingPort=await until(()=>{
+      try { return Number(readFileSync(join(profile,'DevToolsActivePort'),'utf8').split('\n')[0]); }
+      catch { return 0; }
+    });
+    const endpoint=await until(async()=>{
+      const pages=await (await fetch(`http://127.0.0.1:${debuggingPort}/json`)).json();
+      return pages.find(page=>page.type==='page')?.webSocketDebuggerUrl;
+    });
+    socket=new WebSocket(endpoint);
+    await new Promise((resolve,reject)=>{
+      socket.addEventListener('open',resolve,{once:true});
+      socket.addEventListener('error',reject,{once:true});
+    });
+    let seq=0;
+    const dom=await until(()=>new Promise(resolve=>{
+      const id=++seq;
+      function response(event) {
+        const msg=JSON.parse(event.data);
+        if (msg.id!==id) return;
+        socket.removeEventListener('message',response);
+        resolve(msg.result?.result?.value);
+      }
+      socket.addEventListener('message',response);
+      socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression:
+        "document.getElementById('cvB')?.dataset.renderer && document.documentElement.outerHTML",returnByValue:true}}));
+    }));
     assert.ok(dom.includes('通道开'), '渲染结果里没有 A 侧标题 ⇒ 页面没起来');
     assert.ok(dom.includes('通道切断'), '渲染结果里没有 B 侧标题');
-    assert.ok(dom.includes('本地替身'), '后端 chip 仍是读取中 ⇒ refresh 没跑（模块抛错/TDZ）');
+    assert.match(dom, /id="backend"[^>]*>后端：本地替身/, '后端 chip 仍是读取中 ⇒ refresh 没跑（模块抛错/TDZ）');
     assert.ok(!/undefined|NaN/.test(dom), '页面里漏出了 undefined/NaN');
     assert.ok(dom.length > 2000, `DOM 太小（${dom.length}）⇒ 可能只渲染了骨架`);
   } finally {
+    socket?.close();
+    browser?.kill();
     child.kill();
     await new Promise((r) => setTimeout(r, 400));
   }

@@ -149,9 +149,9 @@ export function advanceSurvival(world) {
 }
 
 // 行动效果（由 body.actuate 调用，统一走规则校验）。
-export function doHarvest(world, agentId) {
+export function doHarvest(world, agentId, plot) {
   const s = world.survival;
-  const p = maturePlots(s)[0];
+  const p = maturePlots(s).find(p=>plot===undefined || p.id===plot);
   if (!p) return { ok: false, code: 'NO_MATURE' };
   const mods = effectiveMods(world);
   p.growth = 0;
@@ -163,9 +163,9 @@ export function doHarvest(world, agentId) {
   s.store = Math.min(mods.storeCap, s.store + yieldAmt);
   return { ok: true, code: 'OK', amount: yieldAmt };
 }
-export function doPlant(world, agentId) {
+export function doPlant(world, agentId, plot) {
   const s = world.survival;
-  const p = s.plots.find((x) => x.growth === 0);
+  const p = s.plots.find(x=>x.growth===0 && (plot===undefined || x.id===plot));
   if (!p) return { ok: false, code: 'NO_EMPTY_PLOT' };
   if (s.water < (s.plantWater ?? 0.1)) return { ok: false, code: 'NO_WATER' };
   s.water = clamp01(s.water - (s.plantWater ?? 0.1)); // §15.5 M2 播种耗水挂开关

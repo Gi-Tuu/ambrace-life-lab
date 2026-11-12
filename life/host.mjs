@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 // 权威世界宿主：状态在服务器上持续演化，浏览器只是观察与介入的窗口。
 // 三件事是这里的核心，不是装饰：
 //   1) 持久化：状态落 DATA_DIR；平台无持久卷时（创空间实测）靠内置种子回到固定历史起点
@@ -18,7 +19,8 @@ import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
-import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv } from './survplay.mjs';
+import { campSleepTicks } from './camp-play.mjs';
+import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator } from './survplay.mjs';
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
@@ -61,6 +63,7 @@ export function budgetTick(model, dayKey) {
   model.dayKey = dayKey;
   model.calls = 0;
   model.tokens = 0;
+  if ('survivalChoices' in model) model.survivalChoices = 0;
   model.attempts.length = 0;
   return model;
 }
@@ -99,7 +102,7 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
+const S = { packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0 }, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -209,18 +212,28 @@ function buildPacks() {
   S.packs = packsFrom(S.startRaw);
 }
 
+function modelConfigured() {
+  return CFG.keys.length > 0 && CFG.providers.some((_, i) => CFG.models[i] || CFG.model);
+}
+
+function survivalOptions() {
+  return { residentialDecisions: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
+}
+
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
-  if (!CFG.providers.length || !CFG.keys.length) return null;
+  if (!CFG.providers.length || !CFG.keys.length || world.fastForward) return null;
   const here = world.loc[agent.id];
   const bands = preferenceBands(scored, agent.ch);
-  const present = (world.occupancy[here] ?? []).filter((x) => x !== agent.id && x !== 'p1').map((x) => world.agents[x]?.name ?? x);
+  const present = (world.occupancy[here] ?? []).filter((x) => x !== agent.id && (world.survival || x !== 'p1')).map((x) => world.agents[x]?.name ?? x);
   const dom = agent.drives.dominant();
   const lines = [
     `你是${agent.name}（${agent.traits.archetype}型）。第 ${world.t} 刻，你在${here}。`,
     `为什么现在问你：${trigger}`, // ⑧ 事件门控：没有事件就不会被问到，所以这行永远有内容
     `内部读数：${agent.bank.summary()}`,
     `此刻你最缺：${dom.label}（偏差 ${dom.e.toFixed(2)}，紧迫度 ${dom.urgency.toFixed(2)}）`,
-    `世界事实：公仓余 ${world.pantry} 份；你自己门口存着 ${world.stash[agent.id]} 份（你以为该有 ${world.expect[agent.id]} 份）；在场的人：${present.join('、') || '没有'}`,
+    world.survival
+      ? `生存营地：公共食物 ${world.survival.store} 份，水 ${world.survival.water.toFixed(2)}，个人木料 ${world.pinv?.[agent.id]?.wood ?? 0}、石料 ${world.pinv?.[agent.id]?.stone ?? 0}。在场的人：${present.join('、') || '没有'}`
+      : `世界事实：公仓余 ${world.pantry} 份；你自己门口存着 ${world.stash[agent.id]} 份（你以为该有 ${world.expect[agent.id]} 份）；在场的人：${present.join('、') || '没有'}`,
     `你想起的事：${memories?.length ? memories.map((m) => `${m.kind}(相似${m.sim})`).join('、') : '暂无'}`,
     daySummary ? `上一天的自己：${daySummary}` : '', // ⑦ 反思回合的产物；关掉开关后这行必须消失
     '可做的事（只能选一项，id 照抄）：',
@@ -230,7 +243,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   if (S.model.calls >= BUDGET) return null; // 预算用尽：退回确定性替身，世界照跑，不再发请求
-  if (!observerActive(S.lastVisitor, Date.now())) return null; // 无人观看：走替身，把额度留给真正的观众
+  if (!observerActive(S.viewers[world.survival ? 'survival' : 'compare'], Date.now())) return null;
   // 单拍上限：默认 0 = 不限（保证默认行为逐位不变）。见 PER_TICK_CAP 的注释。
   if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
@@ -256,6 +269,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
       const hit = scored.find((s) => s.id === p.id);
       if (!hit) return null;
       agent.lastReason = p.reason ?? '';
+      if (world.survival) S.model.survivalChoices = (S.model.survivalChoices ?? 0) + 1;
       return { id: hit.id };
     } catch (e) {
       note(String(e.message).slice(0, 40));
@@ -352,6 +366,30 @@ async function tickBody(onError = null) {
 //   · reset / mask / brain：先等当前拍落地再换 packs
 let tickChain = Promise.resolve();
 let autoPending = false;
+let sleepPending=false;
+async function sleepSurvival() {
+  if (sleepPending) return {ok:false,code:'SLEEP_BUSY'};
+  sleepPending=true;
+  const run=tickChain.then(async()=>{
+    const sp=S.surv;
+    const result=campSleepTicks(sp.world);
+    if (!result.ok) return result;
+    const start=sp.world.t;
+    sp.world.fastForward = true;
+    try {
+      while (sp.world.t-start<result.ticks && !sp.world.survival.ended && !sp.world.survival.failed)
+        await tickSurvPlay(sp);
+    } finally {
+      delete sp.world.fastForward;
+    }
+    const ticks=sp.world.t-start;
+    sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
+    await save();
+    return {ok:true,code:'OK',ticks};
+  });
+  tickChain=run.catch(()=>{});
+  try { return await run; } finally { sleepPending=false; }
+}
 
 function enqueueTick() {
   const run = tickChain.then(async () => {
@@ -563,7 +601,11 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
 export const host = {
   setBackend: configure,
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
-  touch: () => { S.lastVisitor = Date.now(); },
+  touch: mode => {
+    S.lastVisitor = Date.now();
+    if (!mode || mode === 'survival') S.viewers.survival = S.lastVisitor;
+    if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
+  },
   async start() {
     // H-12 / H-31：S 是模块单例，stop→start 之间会带上一次会话的状态。
     // 旧版 start() 不先清 interval（第二次 start 留下一个孤儿定时器：stop() 之后世界仍在跑、
@@ -575,6 +617,7 @@ export const host = {
     S.masks = { m3: false, coupling: false }; // 演示开关按设计不落盘，重启即回到默认关
     S.tickError = null;
     S.saveError = null;
+    S.lastVisitor = S.viewers.survival = S.viewers.compare = 0;
     // BUG-5：装载必须在**副本**上做，全部成功才提交。上一版直接对活 pack 调 applyInto，
     // 任一字段抛错（例如越界的 m3.remaining）就留在半载入状态；catch 又把它当成"没有存档"，
     // 于是下一次 save() 用混合态覆盖掉唯一的历史档 —— 免费创空间没有持久卷，这是唯一的数据丢失路径。
@@ -631,7 +674,7 @@ export const host = {
     // 否则切 M3/M4 开关会退回"从零刻重跑"，而重跑出来的世界取决于点了多久，读数没法解释。
     S.startRaw ??= structuredClone(serialize());
     // Phase D：生存单世界独立挂载（additive）。存档有 survival 键则续跑，否则新建；不影响 A/B。
-    S.surv = loadSurv(S.startRaw?.survival, CFG.seed);
+    S.surv=loadSurv(S.startRaw?.survival,CFG.seed,survivalOptions());
     S.savedAt = Date.now();
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
@@ -704,12 +747,19 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? survView(S.surv) : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };
     // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
-    if (body?.mode === 'survival') return S.surv ? survAct(S.surv, body) : { ok: false, error: 'NO_SURV' };
+    if (body?.mode === 'survival') {
+      if (!S.surv) return {ok:false,error:'NO_SURV'};
+      if (body.kind==='camp_sleep') return sleepSurvival();
+      if (sleepPending) return {ok:false,code:'SLEEP_BUSY'};
+      const result = survAct(S.surv,body);
+      if (result.ok && (String(body.kind).startsWith('family_') || body.kind==='camp_resident')) await save();
+      return result;
+    }
     const kind = String(body?.kind ?? '');
     // H-20：旧版没有 kind 白名单。未知 kind 会一路落到末尾，记一条"走到undefined"的玩家日志
     // 却返回 ok:true（前端只看 ok）。显式拒绝。
@@ -778,7 +828,7 @@ export const host = {
     return { ok: true, t: S.packs.A.world.t };
   },
   async ctl(body) {
-    const known = ['pause', 'resume', 'brain', 'reset', 'catchup', 'step', 'mask'];
+    const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask'];
     if (body.action === 'pause') S.running = false;
     if (body.action === 'resume') S.running = true;
     if (body.action === 'brain') {
@@ -786,17 +836,38 @@ export const host = {
       // log 15→0），而日志里一个字都不写。用户点一下"内心：真实模型"就丢掉整段可见历史。
       // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
       configure({ brain: body.brain });
+      if (S.surv) setSurvivalDeliberator(S.surv, survivalOptions().deliberator);
       for (const key of ['A', 'B']) {
         for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
         S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });
       }
     }
-    if (body.action === 'reset') {
+    if (body.action === 'survival_reset') {
+      if (body.confirm !== true) return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
+      const run = tickChain.then(async () => {
+        const old = S.surv;
+        let seed;
+        do { seed = randomInt(1, 0x7fffffff); } while (seed === old?.world.mapSeed);
+        S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: 1 });
+        await save();
+        if (S.saveError) {
+          S.surv = old;
+          return { ...this.status(), ok: false, error: 'SAVE_FAILED' };
+        }
+        return { ...this.status(), ok: true, mapSeed: seed };
+      });
+      tickChain = run.catch(() => {});
+      return run;
+    }
+    if (body.action === 'compare_reset' && body.confirm !== true) {
+      return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
+    }
+    if (body.action === 'reset' || body.action === 'compare_reset') {
       await quiesce(); // H-11：在途的一拍先落地，否则它会用旧 pack 继续写、并触发一次 save 把错位写进盘
       // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
       // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
       S.packs = freshPacks();
-      S.surv = createSurvPlay(CFG.seed); // 重置世界＝连生存单世界一起回零刻（A/B 行为不变）
+      if (body.action === 'reset') S.surv=createSurvPlay(CFG.seed,survivalOptions());
       S.startRaw = structuredClone(serialize());
       // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
       // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。

@@ -31,7 +31,7 @@ export function createCollisionEditor({ dialog, enabled = true, editable = true,
     revision += 1;
     changed();
     try {
-      localStorage.setItem(STORAGE, writeCollisionData(data));
+      localStorage.setItem(STORAGE, writeCollisionData(data,grids));
       storageNotice = '已保存到当前浏览器';
     } catch {
       storageNotice = '浏览器无法保存，请导出备份';
@@ -54,7 +54,7 @@ export function createCollisionEditor({ dialog, enabled = true, editable = true,
     const size = brushSize(), offset = Math.floor((size - 1) / 2);
     const left = x - offset, top = y - offset;
     const { cell, width, height } = grid;
-    const bounds = id === 'map' ? { left: 0, top: 0, right: width, bottom: height } : ROOM_BOUNDS;
+    const bounds = id === 'map' ? { left: 0, top: 0, right: width, bottom: height } : scene.roomBounds ?? ROOM_BOUNDS;
     return [
       Math.max(left, Math.floor(bounds.left / cell)),
       Math.max(top, Math.floor(bounds.top / cell)),
@@ -71,7 +71,7 @@ export function createCollisionEditor({ dialog, enabled = true, editable = true,
     context.drawImage(scene.background, 0, 0, width, height);
     if (overlay.checked) {
       if (id !== 'map') {
-        const b = ROOM_BOUNDS;
+        const b = scene.roomBounds ?? ROOM_BOUNDS;
         fillBlock(0, 0, width, b.top, '#83769C');
         fillBlock(0, b.top, b.left, height - b.top, '#83769C');
         fillBlock(b.right, b.top, width - b.right, height - b.top, '#83769C');
@@ -392,7 +392,7 @@ export function createCollisionEditor({ dialog, enabled = true, editable = true,
     finishStroke();
     const link = document.createElement('a');
     link.download = 'collision-overrides.json';
-    link.href = URL.createObjectURL(new Blob([writeCollisionData(data)], { type: 'application/json' }));
+    link.href = URL.createObjectURL(new Blob([writeCollisionData(data,grids)], { type: 'application/json' }));
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };

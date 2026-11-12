@@ -10,22 +10,22 @@ export function collisionIndex(grid, x, y) {
   return Math.floor(y / grid.cell) * (grid.width / grid.cell) + Math.floor(x / grid.cell);
 }
 
-export function roomAllows(cells, x, y, pixels) {
-  const { left, right, top, bottom } = ROOM_BOUNDS;
+export function roomAllows(cells, x, y, pixels, bounds = ROOM_BOUNDS) {
+  const { left, right, top, bottom } = bounds;
   if (x < left || x > right || y < top || y > bottom) return false;
-  const index = roomPixel(x, y);
+  const index = roomPixel(x, y, bounds);
   return pixels?.[index] !== 0 && cells.get(index) !== 0;
 }
 
-function roomPixel(x, y) {
-  return Math.min(Math.floor(y), ROOM_BOUNDS.bottom - 1) * ROOM_GRID.width +
-    Math.min(Math.floor(x), ROOM_BOUNDS.right - 1);
+function roomPixel(x, y, bounds) {
+  return Math.min(Math.floor(y), bounds.bottom - 1) * ROOM_GRID.width +
+    Math.min(Math.floor(x), bounds.right - 1);
 }
 
-export function moveRoomFeet(cells, x, y, dx, dy, pixels) {
-  const bounds = ROOM_BOUNDS;
-  const initial = roomPixel(x, y);
-  const clear = (px, py) => roomAllows(cells, px, py, pixels) || roomPixel(px, py) === initial;
+export function moveRoomFeet(cells, x, y, dx, dy, pixels, fits, bounds = ROOM_BOUNDS) {
+  const initial = roomPixel(x, y, bounds);
+  const clear = (px, py) => (!fits || fits(x,y,px,py)) &&
+    (roomAllows(cells,px,py,pixels,bounds) || roomPixel(px,py,bounds)===initial);
   const steps = pixels || cells.size ? Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)))) : 1;
   for (let i = 0; i < steps; i += 1) {
     const nextX = Math.max(bounds.left, Math.min(bounds.right, x + dx / steps));
@@ -46,15 +46,15 @@ export function mapAllows(world, x, y) {
   return isWalkable(grid, mapCell(x, scale), mapCell(y, scale));
 }
 
-export function moveMapFeet(world, x, y, dx, dy) {
+export function moveMapFeet(world, x, y, dx, dy, fits) {
   const grid = world.collisionGrid ?? world;
   const scale = grid.tw / world.tw;
   const startX = mapCell(x, scale), startY = mapCell(y, scale);
   const clear = (px, py) => {
     const tx = mapCell(px, scale), ty = mapCell(py, scale);
     // 编辑时若在角色脚下画了阻挡，仍允许角色走出这一格。
-    return isWalkable(grid, tx, ty) ||
-      (tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < grid.tw && ty < grid.th);
+    return (!fits || fits(x,y,px,py)) && (isWalkable(grid, tx, ty) ||
+      (tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < grid.tw && ty < grid.th));
   };
   const steps = scale > 2 ? Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * scale)) : 1;
   for (let i = 0; i < steps; i += 1) {
@@ -106,7 +106,7 @@ export function overrideWalk(base, cells, assetPixels) {
   return walk;
 }
 
-export function writeCollisionData(scenes) {
+export function writeCollisionData(scenes, grids) {
   const entries = [];
   for (const [name, cells] of scenes) {
     if (!cells.size) continue;
@@ -118,33 +118,41 @@ export function writeCollisionData(scenes) {
     }
     entries.push([name, runs]);
   }
-  return JSON.stringify({ version: 3, scenes: Object.fromEntries(entries) });
+  const map=grids?.map;
+  return JSON.stringify(map
+    ? {version:4,mapSize:[map.width,map.height],scenes:Object.fromEntries(entries)}
+    : {version:3,scenes:Object.fromEntries(entries)});
 }
 
 export function readCollisionData(raw, grids) {
   const value = JSON.parse(raw);
-  if (![1, 2, 3].includes(value?.version) || !value.scenes || Array.isArray(value.scenes) || typeof value.scenes !== 'object') {
+  if (![1, 2, 3, 4].includes(value?.version) || !value.scenes || Array.isArray(value.scenes) || typeof value.scenes !== 'object') {
     throw new Error('碰撞文件格式不正确');
   }
   const scenes = new Map();
   for (const [name, entries] of Object.entries(value.scenes)) {
     if (!Object.hasOwn(grids, name) || !Array.isArray(entries)) throw new Error('碰撞文件含未知场景');
-    const { width, height } = grids[name];
-    const cells = new Map();
-    if (value.version === 3) {
+    const {width,height,legacy}=grids[name];
+    const source=name==='map' ? (value.version===4?value.mapSize:legacy??[width,height]) : [width,height];
+    if (!Array.isArray(source) || source.length!==2 || !source.every(Number.isInteger) ||
+        source[0]<1 || source[1]<1 || source[0]>width || source[1]>height) throw new Error('碰撞地图尺寸不兼容');
+    const [sw,sh]=source;
+    const indexInTarget=i=>Math.floor(i/sw)*width+i%sw;
+    const cells=new Map();
+    if (value.version>=3) {
       let end = 0;
       for (const run of entries) {
         if (!Array.isArray(run) || run.length !== 3 || !run.every(Number.isInteger) ||
-            run[0] < end || run[1] < 1 || run[0] + run[1] > width * height || (run[2] !== 0 && run[2] !== 1)) {
+            run[0] < end || run[1] < 1 || run[0]+run[1]>sw*sh || (run[2] !== 0 && run[2] !== 1)) {
           throw new Error('碰撞文件含无效或重叠的像素');
         }
         const [start, length, state] = run;
         end = start + length;
-        for (let i = start; i < end; i += 1) cells.set(i, state);
+        for (let i=start;i<end;i+=1) cells.set(indexInTarget(i),state);
       }
     } else {
       const size = value.version === 1 && name === 'map' ? 16 : 8;
-      const columns = width / size, count = columns * height / size;
+      const columns=sw/size,count=columns*sh/size;
       const seen = new Set();
       for (const pair of entries) {
         if (!Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0]) ||
