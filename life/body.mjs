@@ -38,6 +38,9 @@ export const BASE_KINDS = {
   plan: { impulse: 0.2, cost: 0.05, label: '勘察并奠基' },
   build: { impulse: 0.3, cost: 0.1, label: '施工' },
   repair: { impulse: 0.2, cost: 0.06, label: '维修建筑' },
+  // §15 P2-C：公仓存取。只由玩家/合作动作触发，不进候选集。
+  deposit: { impulse: 0.05, cost: 0.02, label: '存入公仓' },
+  withdraw: { impulse: 0.05, cost: 0.02, label: '从公仓取出' },
   // §17 产出循环：仅在 survival 候选里出现，lab/town 的候选集逐位不变。
   forage: { impulse: 0.2, cost: 0.05, label: '采一捧浆果' },
   exchange: { impulse: 0.15, cost: 0.03, label: '兑换收成' },

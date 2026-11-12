@@ -1,5 +1,5 @@
 // Phase E 闸门（预登记 phase1-plan §9/§9.1/§10）：装置同源 phase-e-sweep.run()（async）。
-// 基线＝§15 同权升级后复抓#11（OFF_BASE/BASELINE3）；旧 plain-居民基线仅留痕于 sweep 常量注释。
+// 基线＝§15 同权升级后复抓#14（OFF_BASE/BASELINE3）；旧 plain-居民基线仅留痕于 sweep 常量注释。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { run, OFF_BASE, OFF } from './phase-e-sweep.mjs';
@@ -8,7 +8,7 @@ import { createSurvPlay, loadSurv } from './survplay.mjs';
 const SEEDS = [7, 11, 13];
 const E1ON = { forage: true, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } };
 
-test('E1b/E3b 全机制关与复抓#11基线逐位相同（按 seed）', async () => {
+test('E1b/E3b 全机制关与复抓#14基线逐位相同（按 seed）', async () => {
   for (const seed of SEEDS) assert.equal((await run(seed, OFF)).digest, OFF_BASE[seed]);
 });
 

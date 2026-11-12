@@ -165,11 +165,13 @@ export function doExchange(world, id, kind) {
   const s = world.survival, rate = EXCHANGE[kind];
   if (!s || !rate) return { ok: false, code: 'NO_RATE' };
   if ((s.produce?.[kind] ?? 0) < 1) return { ok: false, code: 'NO_PRODUCE' };
+  // 仓容必须走 effectiveMods（谷仓 +12 才生效）；旧实现读 s.storeCap 固定 24，谷仓只改善收获上限。
+  const cap = effectiveMods(world).storeCap;
   // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
-  if (rate.store && s.store >= (s.storeCap ?? 24) * .7) return { ok: false, code: 'STORE_FULL' };
+  if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
   s.produce[kind] -= 1;
   let gained;
-  if (rate.store) { s.store = Math.min(s.storeCap ?? 24, s.store + rate.store); gained = `粮+${rate.store}`; }
+  if (rate.store) { s.store = Math.min(cap, s.store + rate.store); gained = `粮+${rate.store}`; }
   else { s.inv.wood = (s.inv.wood ?? 0) + rate.wood; gained = `木+${rate.wood}`; }
   return { ok: true, code: 'OK', gained };
 }

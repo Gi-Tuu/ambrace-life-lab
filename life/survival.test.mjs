@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeWorld, spawn, actuate, scanSecrets, move } from './body.mjs';
 import { validate } from './rules.mjs';
-import { advanceSurvival, doHarvest, SURV } from './worldstate.mjs';
+import { advanceSurvival, doHarvest, forecastDisasters, stormOn, SURV } from './worldstate.mjs';
+import { weatherFor } from './clock.mjs';
 import { blockersOf } from './geometry.mjs';
 import { constructionLot } from '../web/camp-layout.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
@@ -147,4 +148,13 @@ test('S7 move 防御：occupancy[from] 缺失不得崩溃（否则 survplay 每�
   assert.equal(w.loc.a1, 'hall');
   assert.ok((w.occupancy['hall'] ?? []).includes('a1'), '应正常落到新地点');
   assert.deepEqual(w.occupancy['home'] ?? [], [], 'from 键应重建为空数组而非 undefined');
+});
+
+test('P1 预警与风暴跟随 world.seed：非 7 的 seed 不再借用 seed 7', () => {
+  const w = makeWorld({ preset: 'survival', seed: 11, pantries: 0 });
+  w.t = 24 * 5;
+  assert.equal(forecastDisasters(w).forecast, weatherFor(11, 6), '明日预警必须用 world.seed');
+  let diff = false;
+  for (let d = 3; d < 200 && !diff; d += 1) if (stormOn(d, -99, 11) !== stormOn(d, -99, 7)) diff = true;
+  assert.ok(diff, '风暴哈希必须吃 seed 参数');
 });

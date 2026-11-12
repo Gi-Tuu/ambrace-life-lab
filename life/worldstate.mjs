@@ -48,22 +48,35 @@ function hash01(seed, n) {
   x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
   return x / 4294967296;
 }
-export function stormOn(day, lastStormDay) {
-  return day >= 3 && hash01(7, day * 7 + 1) > 0.96 && day - (lastStormDay ?? -99) >= 4; // §11 预登记备选档（8%→4%）；实测仍负 ⇒ disasters 默认关
+export function stormOn(day, lastStormDay, seed = 7) {
+  return day >= 3 && hash01(seed, day * 7 + 1) > 0.96 && day - (lastStormDay ?? -99) >= 4; // §11 预登记备选档（8%→4%）；实测仍负 ⇒ disasters 默认关
 }
 // 明日灾害预警（R1/G3）：风暴可提前一天知道；寒潮＝明日 cold 且今日已 cold。
 export function forecastDisasters(world) {
   const s = world.survival;
   const day = dayOf(world.t) + 1;
-  const w = weatherFor(7, day); // §13 L2 回退后与 tickSurvPlay 同源（硬编码 7）
+  const w = weatherFor(world.seed ?? 7, day); // 与 tickSurvPlay 同源：新开一局换 seed 后预警必须跟着换
   return {
     forecast: w,
-    stormTomorrow: s.disasters === true && stormOn(day, s.lastStormDay),
+    stormTomorrow: s.disasters === true && stormOn(day, s.lastStormDay, world.seed ?? 7),
     coldsnapTomorrow: s.disasters === true && w === 'cold' && (s.coldStreak ?? 0) >= 1,
   };
 }
 
 // 每日推进：生长→消耗→压力→胜负。返回当日摘要（供事件/日志）。
+const PANTRY_FOOD = ['berry', 'fruit', 'crop', 'egg', 'milk'];
+// 家里容器是公仓缺口的第一层缓冲（玩家与居民同享）：按容器键序确定性地吃掉食物。
+function drainCampPantry(world, need) {
+  const all = world.survival.campContainers ?? {};
+  for (const key of Object.keys(all)) {
+    const bag = all[key];
+    for (const item of PANTRY_FOOD) {
+      while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; }
+    }
+  }
+  return need;
+}
+
 export function advanceSurvival(world) {
   const s = world.survival;
   if (!s) return null;
@@ -93,13 +106,13 @@ export function advanceSurvival(world) {
   // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
   s.disasterToday = null;
   if (dis && day >= 3) {
-    if (stormOn(day, s.lastStormDay)) {
+    if (stormOn(day, s.lastStormDay, world.seed ?? 7)) {
       s.lastStormDay = day;
       s.disasterToday = 'storm';
       for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
       const growing = s.plots.filter((p) => p.growth > 0 && p.growth < 1);
       if (growing.length) {
-        const p = growing[Math.floor(hash01(7, day * 13 + 5) * growing.length)];
+        const p = growing[Math.floor(hash01(world.seed ?? 7, day * 13 + 5) * growing.length)];
         p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
       }
     } else if (s.coldStreak >= 2) s.disasterToday = 'coldsnap';
@@ -116,17 +129,19 @@ export function advanceSurvival(world) {
     else { shortfall = need - s.store; s.store = 0; }
   }
 
+  // P0-2：家里容器里的食物是真缓冲——公仓缺口先用它抵，再饿人（玩家与居民同规则）。
+  if (!ended && shortfall > 0) shortfall = drainCampPantry(world, shortfall);
   if (!ended && shortfall > 0) {
     s.starveDays += 1;
     for (const a of Object.values(world.agents)) {
-      if (a.isPlayer || !a.viab) continue;
+      if (!a.viab) continue;
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
   } else if (!ended) {
     s.starveDays = 0;
     // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
     if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
-      if (a.isPlayer || !a.drives) continue;
+      if (!a.drives) continue;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
     }
   }

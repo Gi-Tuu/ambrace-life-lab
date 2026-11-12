@@ -2,6 +2,8 @@
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate } from './body.mjs';
+import { validate } from './rules.mjs';
+import { leaveTalk } from './dialogue.mjs';
 import { campAction, campTimberView } from './camp-play.mjs';
 import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -45,7 +47,11 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
     world.agents[id] = a;
     spawn(world, id, 'home');
   }
-  world.agents.p1 = { id: 'p1', name: '你', isPlayer: true };
+  // P0-3：玩家与居民同一套存续/驱动（同权在"会死"这一层也成立）。
+  // 决策环仍不跑玩家（isPlayer 跳过），但基础代谢、动作消耗、饥饿压力、进食回补全部一致。
+  const p1 = new Organism({ id: 'p1', name: '你', archetype: '谨慎', seed: hashSeed(seed, 'p1:surv'), condition: 'C2', deliberator: null });
+  p1.isPlayer = true;
+  world.agents.p1 = p1;
   spawn(world, 'p1', 'hall');
   for (const id of Object.keys(world.stash ?? {})) world.stash[id] = 0; // §15.5 M3：生存无私藏（恒 on 语义 fix）
   world.pinv = {}; // §15 P2-C 背包：每角色个人木石
@@ -67,7 +73,7 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   s.repairEarly = true; // E3a 过 ⇒ 默认开
   s.eco = true; // §12 缓和曲线 H1∧H2 过
   s.disasters = true; // §11 备选档 G1 过
-  s.playerEats = false; // §15.4 负结果回滚裁决②：4 人/日受水循环限制不可持续（播种耗水>雨补）；开关保留待水循环共设计预登记
+  s.playerEats = true; // P0-3：玩家与居民同权，占一份日配给（用户裁决：会死亡的个人生存压力）
   s.endFreeze = true; // §11 裁决①
   s.droughts = false; // §13 K2 负 ⇒ 默认关、R3 撤回
   s.forageStats = { harvest: 0, plant: 0 };
@@ -140,6 +146,11 @@ export async function tickSurvPlay(sp) {
   for (const id of Object.keys(w.agents)) {
     const a = w.agents[id];
     if (a.isPlayer) continue;
+    // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
+    if (w.survival.talk?.target === id) {
+      try { a.drives.tick(1, false); a.viab.tick(1); } catch { /* 对话优先 */ }
+      continue;
+    }
     try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
@@ -152,6 +163,20 @@ export async function tickSurvPlay(sp) {
     }
     // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
     a.ch.m3 = w.survival.commitChain === true ? 1 : 0;
+  }
+  // 打字太久：居民主动走开（不等你点发送才判）。
+  const talk = w.survival.talk;
+  if (talk && Date.now() - talk.openAt > talk.patienceMs) {
+    const gone = leaveTalk(sp);
+    if (gone) sp.log.push({ t: w.t, kind: 'talk_left', ok: true, code: gone.line });
+  }
+  // P0-3：玩家只跑"需求/存续"这两条，不跑决策环。基础代谢与居民同参数；
+  // 存续归零 ⇒ 玩家死亡，终局（与"聚落饿垮"分开显示）。动作消耗由 actuate 统一扣。
+  const pl = w.agents.p1;
+  if (pl?.drives && !w.survival.ended && !w.survival.failed) {
+    pl.drives.tick(1, false);
+    pl.viab.tick(1);
+    if (pl.viab.v <= 0) { w.survival.playerDead = true; w.survival.failed = true; w.survival.endReason = 'player'; }
   }
   if (w.survival.households && !w.survival.ended && !w.survival.failed) stepRelationships(w, sp.log);
   return w;
@@ -173,7 +198,9 @@ function reproduce(w) {
   if (day - (s.lastBirthDay ?? -99) < 10) return;
   const pop = Object.values(w.agents).filter((a) => !a.isPlayer).length;
   if (s.store < pop * 2) return;
-  if (!s.buildings.some((b) => b.type === 'shelter' && b.integrity > 0)) return;
+  // 有住户系统时，繁衍门槛由"已婚＋同住＋有床"裁决（familyHomeForBirth）；旧的抽象 shelter
+  // 检查会让婚姻永远卡在一栋与住所无关的建筑上。无 households 的旧档保留原门槛。
+  if (!s.households && !s.buildings.some((b) => b.type === 'shelter' && b.integrity > 0)) return;
   const alive = Object.values(w.agents).filter((a) => a.isPlayer || (a.viab?.v ?? 1) > 0);
   for (const a of alive) for (const b of alive) {
     if (a.id >= b.id) continue;
@@ -200,6 +227,7 @@ function reproduce(w) {
 export function survAct(sp, body) {
   const w = sp.world;
   const kind = String(body?.kind ?? '');
+  if (w.survival.failed || w.survival.ended) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
   if (kind === 'move') {
     const room = String(body?.room ?? '');
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
@@ -219,8 +247,15 @@ export function survAct(sp, body) {
     if (sp.log.length>40) sp.log.shift();
     return result;
   }
-  // 同权：玩家与 AI 的这些动作都走 actuate → 规则层裁决，不再为玩家开特判。
+  // 同权：玩家与 AI 的这些动作都走 validate → actuate，规则层是唯一"能不能"的裁决者。
+  // （旧实现只调 actuate，地点/材料门槛只作用于 AI，构造 POST 可在任意地点收种存取。）
   if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+  const gate = validate(w, 'p1', { kind, type: body?.type });
+  if (!gate.ok) {
+    sp.log.push({ t: w.t, kind, ok: false, code: gate.code });
+    if (sp.log.length > 40) sp.log.shift();
+    return gate;
+  }
   const r = actuate(w, 'p1', { kind, type: body?.type });
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
@@ -242,7 +277,9 @@ export function survView(sp) {
     housing: w.housing,
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: a.isPlayer ? null : Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: a.isPlayer ? null : Number((a.viab?.v ?? 1).toFixed(2)) }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), counters: a.counters ?? null }])),
+    talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead },
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,
@@ -262,7 +299,7 @@ const SURV_TARGET = 10; // 无尽模式落地前的里程碑显示；P2-B 终局
 export function dumpSurv(sp) {
   const w = sp.world;
   // §15 P2-C 心智入档：居民内部状态活过重启（镜像 host serialize 的心智字段）
-  const minds = Object.fromEntries(Object.values(w.agents).filter((a) => !a.isPlayer && a.drives).map((a) => [a.id, {
+  const minds = Object.fromEntries(Object.values(w.agents).filter((a) => a.drives && a.viab).map((a) => [a.id, {
     m: a.bank.snapshot(), drives: { ...a.drives.v }, memory: a.memory.dump(),
     rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling,
     habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(),

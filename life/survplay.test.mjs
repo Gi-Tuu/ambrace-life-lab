@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv } from './survplay.mjs';
 import { host } from './host.mjs';
+import { doExchange } from './production.mjs';
 
 test('D1 生存单世界创建：preset=survival、coop 开、居民+玩家齐', () => {
   const sp = createSurvPlay(7);
@@ -125,4 +126,70 @@ test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作
     host.stop();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('D10 玩家动作过规则层：位置不对先被裁决拒绝，地点对才允许', async () => {
+  const sp = createSurvPlay(7);
+  const w = sp.world;
+  w.survival.plots[0].growth = 1;
+  const bad = survAct(sp, { kind: 'harvest' });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.code, 'NOT_GARDEN', '走廊收菜必须被规则层拒绝');
+  const dep = survAct(sp, { kind: 'deposit', type: 'wood' });
+  assert.equal(dep.ok, false);
+  assert.equal(dep.code, 'NOT_STORE', '非公仓存取必须被拒绝');
+  assert.ok(survAct(sp, { kind: 'move', room: 'garden' }).ok);
+  const good = survAct(sp, { kind: 'harvest' });
+  assert.equal(good.ok, true, '菜园收菜应通过规则层');
+});
+
+test('D11 兑换用 effectiveMods 仓容：谷仓后 20 粮仍可兑，无谷仓则封顶', () => {
+  const mk = (granary) => {
+    const sp = createSurvPlay(7);
+    const s = sp.world.survival;
+    s.store = 20; s.produce.berry = 1;
+    if (granary) s.buildings.push({ type: 'granary', loc: 'yard', integrity: 1 });
+    return doExchange(sp.world, 'p1', 'berry');
+  };
+  assert.equal(mk(false).code, 'STORE_FULL', '无谷仓：24×0.7=16.8，20 份应拒兑');
+  assert.equal(mk(true).ok, true, '有谷仓：36×0.7=25.2，20 份应允许');
+});
+
+test('D12 住户模式：已婚同住有床即可繁衍，不再要求抽象 shelter', async () => {
+  const sp = createSurvPlay(7, { residentialDecisions: true });
+  const w = sp.world, s = w.survival;
+  w.sex.a1 = 'M'; w.sex.a2 = 'F';
+  s.households.spouses.a1 = 'a2'; s.households.spouses.a2 = 'a1';
+  w.housing.a1 = w.housing.a2;
+  s.store = 30;
+  assert.ok(!s.buildings.some((b) => b.type === 'shelter'), '本测试不建 shelter');
+  w.t = 23;
+  await tickSurvPlay(sp);
+  assert.ok((s.births ?? 0) >= 1, '已婚同住有床应繁衍');
+});
+
+test('D13 玩家同等生存：有存续、会因归零死亡，尸检后动作被锁', async () => {
+  const sp = createSurvPlay(7);
+  const w = sp.world;
+  const v0 = w.agents.p1.viab.v;
+  for (let i = 0; i < 5; i++) await tickSurvPlay(sp);
+  assert.ok(w.agents.p1.viab.v < v0, '基础代谢必须真的扣玩家存续');
+  w.agents.p1.viab.v = 0.0005;
+  await tickSurvPlay(sp);
+  assert.equal(w.survival.playerDead, true);
+  assert.equal(w.survival.failed, true);
+  assert.equal(survView(sp).player.dead, true);
+  assert.equal(survAct(sp, { kind: 'move', room: 'garden' }).ok, false);
+});
+
+test('D14 家里容器是日耗缓冲：公仓空时先吃它，不立刻记饥荒', async () => {
+  const sp = createSurvPlay(7);
+  const w = sp.world, s = w.survival;
+  s.store = 0;
+  s.campContainers = { 'home:meal': { berry: 4 } };
+  for (const a of Object.values(w.agents)) a.viab.v = 1;
+  w.t = 23;
+  await tickSurvPlay(sp);
+  assert.equal(s.starveDays, 0, '容器食物应先抵缺口');
+  assert.equal(s.campContainers['home:meal'].berry, 0, '缓冲应被吃掉');
 });

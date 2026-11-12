@@ -27,7 +27,15 @@ test('工具、来源和菜畦一一对应，餐桌吃饭实际扣食物',()=>{
   assert.equal(act('camp_collect',{type:'egg',tool:'basket'}).ok,false);
   act('move',{room:'home'});
   assert.equal(act('camp_store',{target:'home:meal',type:'egg'}).ok,true);
+  assert.equal(act('camp_eat',{type:'egg'}).code,'NEED_TRAY', '没有餐具不能吃饭');
+  act('move',{room:'yard'});
+  w.pinv.p1.wood=2;
+  assert.equal(act('camp_craft',{type:'tray'}).ok,true);
+  assert.equal(w.pinv.p1.tray,1);
+  act('move',{room:'home'});
+  w.agents.p1.viab.v=0.5;
   assert.equal(act('camp_eat',{type:'egg'}).ok,true);
+  assert.ok(w.agents.p1.viab.v>0.5, '吃饭必须实际回补存续');
   assert.equal(act('camp_eat',{type:'egg'}).ok,false);
   assert.equal(w.survival.mealsEaten,1);
   assert.ok(campSleepTicks(w).ticks>0);

@@ -16,7 +16,7 @@ import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 import { createCollisionEditor } from './collision-editor.mjs';
 // 验收/调试钩子：占位碰撞与寻路可在浏览器内断言（drive6 用）
-window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf };
+window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf, talk: (target) => openTalkWith(target) };
 const ROOMS = ['home', 'hall', 'watch', 'store'];
 const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 // 兜底色也必须 ⊆ palette.json 的固定色板（manifest 缺失时走这里，不能偷偷引入色板外颜色）。
@@ -2124,7 +2124,7 @@ function pushToasts(pack) {
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survFlash = null;
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
@@ -2493,7 +2493,10 @@ function outdoorResidents(s) {
 }
 
 async function useResident(person) {
-  const {target,room,from,to}=person, tool=ui.tool;
+  const {target}=person;
+  // P0 对话：空手按 F = 打开对话；重工具仍保留"会击伤"的代价交互。
+  if (ui.tool==='hand') { await openTalkWith(target); return; }
+  const {room,from,to}=person, tool=ui.tool;
   campBusy=true;
   try {
     const result=await api('/act',{mode:'survival',kind:'camp_resident',target,room,from,to,tool});
@@ -2505,6 +2508,48 @@ async function useResident(person) {
   } catch {
     $('campToast').textContent='互动未完成，请重试。';
   } finally { campBusy=false; }
+}
+
+function addTalk(who,text){
+  const box=$('talkLog'); if(!box)return;
+  const row=document.createElement('div');
+  row.className=who; row.textContent=text;
+  box.appendChild(row); box.scrollTop=box.scrollHeight;
+}
+async function openTalkWith(target){
+  if(!target||campBusy)return;
+  campBusy=true;
+  try{
+    const r=await api('/act',{mode:'survival',kind:'talk_open',target});
+    if(!r.ok){ $('campToast').textContent=r.why ?? (r.code==='NOT_TOGETHER'?'对方不在这里。':r.code==='CAMP_ENDED'?'这一局已经结束。':'现在没法交谈。'); return; }
+    ui.talk={target,name:r.name};
+    $('talkTitle').textContent=`和 ${r.name} 交谈`;
+    $('talkLog').innerHTML='';
+    addTalk('npc',r.line);
+    const dlg=$('talkDlg'); if(!dlg.open) dlg.showModal();
+    $('talkText').value=''; $('talkText').focus(); $('talkSend').disabled=false;
+  }catch{ $('campToast').textContent='交谈失败，请重试。'; }
+  finally{ campBusy=false; }
+}
+async function sendTalk(){
+  const t=ui.talk, input=$('talkText'); if(!t||!input)return;
+  const text=input.value.trim(); if(!text)return;
+  addTalk('me','你：'+text); input.value=''; $('talkSend').disabled=true;
+  try{
+    const r=await api('/act',{mode:'survival',kind:'talk_say',target:t.target,text});
+    if(r.ok){
+      addTalk(r.ignored?'sys':'npc', r.line);
+      if(r.attacked) $('campToast').textContent='你被打了，存续值下降。';
+      if(r.left) setTimeout(closeTalkDlg,1200);
+      refresh();
+    } else { addTalk('sys', r.code==='NO_TALK'?'（对话已经结束。）':'（没有回应。）'); if(r.code==='NO_TALK') setTimeout(closeTalkDlg,800); }
+  }catch{ addTalk('sys','（对方没有回应。）'); }
+  finally{ $('talkSend').disabled=false; if($('talkDlg').open)input.focus(); }
+}
+function closeTalkDlg(){
+  const t=ui.talk; ui.talk=null;
+  const d=$('talkDlg'); if(d?.open)d.close();
+  if(t)api('/act',{mode:'survival',kind:'talk_close'}).catch(()=>{});
 }
 
 async function survInteract() {
@@ -2648,6 +2693,10 @@ $('hotbar').addEventListener('click', (e) => {
 $('bpClose').onclick=closeBackpack;
 $('btnBagTop').onclick=openBackpack;
 $('btnBagFull').onclick=openBackpack;
+$('talkSend').onclick=sendTalk;
+$('talkClose').onclick=closeTalkDlg;
+$('talkText').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendTalk(); } });
+$('talkDlg').addEventListener('cancel',(e)=>{ e.preventDefault(); closeTalkDlg(); });
 $('backpack').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-bp]'); if (!b || b.disabled) return;
   const [kind, type] = b.dataset.bp.split(':');
@@ -2737,7 +2786,7 @@ function renderSurv(s) {
   const here = s.loc?.p1;
   const outdoor = (s.outdoor ?? []).includes(here);
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
-  const banner = s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : '';
+  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : '';
   el.innerHTML = `
     ${banner}
     <div class="survrow survtop"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day+1} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
@@ -2747,9 +2796,10 @@ function renderSurv(s) {
         ? `<span class="bad">${[s.stormTomorrow ? '风暴预警' : '', s.coldsnapTomorrow ? '寒潮预警' : '', s.drought ? '干旱' : '', s.disasterToday ? `今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}` : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
       ${flash}</div>
+    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''} <span class="dim">与居民同一套存续规则：不吃饭会死</span></div>
     <div class="survrow survhere">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       · 手持 <b>${TOOL_ZH[ui.tool] ?? '空手'}</b>
-      <span class="dim">F 交互 · E 背包 · 1–5 换工具 · 地点在顶栏切换</span>
+      <span class="dim">F 交互 · E 背包 · 1–8 换工具 · 地点在顶栏切换</span>
       ${s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
       <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
@@ -2897,6 +2947,11 @@ async function refresh() {
     if (requestedMode!==(ui.menu?'menu':ui.compare?'compare':'survival') || resettingSurvival) return;
     renderPlayMode(j.survival);
     if (ui.menu) return;
+    // 交谈结束（不耐烦/走开/服务端清空）：收尾，别让输入框停在死对话上。
+    if (ui.talk && j.survival && !j.survival.talk) {
+      addTalk('sys', `${ui.talk.name}结束了对话。`);
+      closeTalkDlg();
+    }
     S.brain = j.brain;
     S.model = j.model;
     S.running = j.running;
@@ -3326,7 +3381,7 @@ window.addEventListener('keydown', (e) => {
     if (ui.fullscreen) { setFull(false); e.preventDefault(); }
     return;
   }
-  if (S.soloSurv && (S.campReady?/^[1-8]$/:/^[1-5]$/).test(k)) {
+  if (S.soloSurv && (S.campReady?/^[1-8]$/:/^[1-8]$/).test(k)) {
     ui.tool = Object.keys(TOOL_ZH)[Number(k) - 1]; updateHotbar(); e.preventDefault(); return;
   }
   if (e.repeat) return;

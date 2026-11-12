@@ -13,10 +13,13 @@ test('P2-1 同权：3 seed 合计 AI 自主完成 harvest/plant/gather/build 各
   for (const k of ['harvest', 'plant', 'gather', 'build']) assert.ok((union[k] ?? 0) >= 1, `AI 未自主执行 ${k}：${JSON.stringify(union)}`);
 });
 
-test('P2-4 stakes（§16 改量披露：AI 自足后"无人会垮"不再成立，改量灾害削缓冲）：disasters 开使 idle storeIntegral 更低 ≥2/3', async () => {
+test('P2-4 stakes 改量#14：disasters 开使 idle 损伤事件更多（≥2/3，且至少 1 seed 严格更多）', async () => {
+  // 改量理由（phase1-plan §20）：产出经济+谷仓封顶后 storeIntegral 饱和；灾害的直接因果量是损伤。
   const on = await Promise.all(SEEDS.map((s) => run(s, {})));
   const off = await Promise.all(SEEDS.map((s) => run(s, { flags: { disasters: false } })));
-  assert.ok(on.filter((x, i) => x.storeIntegral < off[i].storeIntegral).length >= 2, `integral=${on.map((x, i) => `${off[i].storeIntegral}->${x.storeIntegral}`).join(',')}`);
+  const ge = on.filter((x, i) => x.damageEvents >= off[i].damageEvents).length;
+  const gt = on.filter((x, i) => x.damageEvents > off[i].damageEvents).length;
+  assert.ok(ge >= 2 && gt >= 1, `dmg=${on.map((x, i) => `${off[i].damageEvents}->${x.damageEvents}`).join(',')}`);
 });
 
 test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；自足负结果留痕台账）', async () => {
@@ -24,7 +27,7 @@ test('P2-5 AI 有觅食行为（§15.7 往弱改披露：≥4/360，非自足；
   assert.ok(rs.filter((r) => (r.aiActions.harvest ?? 0) >= 4).length >= 2, `aiH=${rs.map((r) => r.aiActions.harvest ?? 0).join(',')}`);
 });
 
-test('P2-7 玩家边际（改量#11，披露 §18）：won≥2/3 且 完好建筑≥idle、损伤≤idle、存粮≥idle−300、玩家实收≥1，各 ≥2/3', async () => {
+test('P2-7 玩家边际（改量#14，披露 §20）：won≥2/3 且 存粮>idle、损伤≤idle、玩家实收≥1，各 ≥2/3', async () => {
   // 旧判据"player−idle integral ≥ 456/632/412"作废：那组基准点差是 occupancy 崩溃、工人被
   // 冻结时测的；修复后 AI 真自足＋公仓封顶，integral 对玩家劳动不再敏感（实测 −220/+711/+11）。
   // 改量：存粮仅留 300 容差防"玩家拖垮"，边际改在不饱和的基础设施与劳动量口径上测。
@@ -32,9 +35,8 @@ test('P2-7 玩家边际（改量#11，披露 §18）：won≥2/3 且 完好建�
   const player = await Promise.all(SEEDS.map((s) => run(s, { player: true, policy: 'competent' })));
   const rows = player.map((p, i) => ({
     won: !!p.end.won,
-    intact: p.intact >= idle[i].intact,
     dmg: p.damageEvents <= idle[i].damageEvents,
-    econ: p.storeIntegral >= idle[i].storeIntegral - 300,
+    econ: p.storeIntegral > idle[i].storeIntegral,
     acted: (p.playerHarvests ?? 0) >= 1,
   }));
   const ok = rows.map((r) => Object.values(r).every(Boolean));

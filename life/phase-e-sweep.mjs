@@ -106,8 +106,11 @@ export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 �
 //             #12 OFF_BASE {7:b51cb8e4…,11:aeefee87…,13:114bb176…} / BASELINE3 {7:7df6deb1…,11:7583f317…,13:a8d3e4de…}。
 // 改量#12 同步作废 E1a/E1g 的「安全网代劳收种」判据：AI 自动兑换让公仓自足，
 // E1 安全网（只在缺粮时触发）不再需要动作；判据改测「AI 自主收种」aiActions（详见 forage.test.mjs）。
-export const OFF_BASE = { 7: '8a8080e58783a2021d677e7753221d93', 11: '3e0ea4e2b3b09ce1d5dad534ca4accd4', 13: '5e2e4ce83ddbb95fbad6abbd57f2e5e1' };
-export const BASELINE3 = { 7: 'ca781e43537aad8c688a8c875768b8cd', 11: 'dcb33f997313a60e3d6b264e82aac9d9', 13: 'd5bdb1f6422476816a00823cfe4e83c6' };
+// 复抓#14（2026-11-13，P0 玩法收口）：玩家同权（p1 有存续/驱动、占一份日配给、动作付存续）
+// ⇒ 默认日耗 3→4 人、玩家动作成本进入轨迹；风暴/预警改吃 world.seed（seed 11 不再借用 7 的风暴）。
+// #13 因此作废；#14 两次跑逐位相同。改量披露见 phase1-plan §20。
+export const OFF_BASE = { 7: '63e2bbab4b7441c6fff4dd675fb49543', 11: 'c6a8c639d08ccbe19d8cb105fd228919', 13: '568d7443aaa4fbccf5851e917acb143a' };
+export const BASELINE3 = { 7: 'b4dd5799b3e5bfe9c09ef9dfa223907b', 11: '1b089a8308dfbdb7a69ef6fc4496d946', 13: 'fe395da9fc364ded904f6bb7b6dea213' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 
