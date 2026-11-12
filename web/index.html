@@ -35,7 +35,7 @@
   }
 
   header { padding:8px 16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px; }
-  h1 { margin:0; font-size:24px; line-height:32px; letter-spacing:0; }
+  h1 { margin:0; font-size:20px; line-height:28px; letter-spacing:0; }
   h1 span { color:var(--dim); font-weight:400; margin-left:16px; font-size:12px; }
   .backend { font-size:12px; color:var(--dim); border:2px solid var(--line); background:var(--sunken); padding:2px 10px; box-shadow:2px 2px 0 0 var(--shadow); }
   .backend.on { color:var(--bg); background:var(--ok); border-color:var(--ink); font-weight:700; }
@@ -50,7 +50,7 @@
     padding:clamp(20px, 6vw, 76px);
   }
   .start-shell { width:min(100%, 810px); }
-  .start-shell h1 { margin:0; font-size:48px; line-height:1.25; color:var(--ink); }
+  .start-shell h1 { margin:0; font-size:32px; line-height:40px; color:var(--ink); }
   .start-shell > p { color:var(--dim); margin:14px 0 34px; }
   .start-options { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .start-card {
@@ -59,7 +59,7 @@
     background:var(--sunken); color:var(--ink); box-shadow:4px 4px 0 var(--shadow);
   }
   .start-card.compare { border-top-color:var(--a); background:var(--panel); }
-  .start-card h2 { margin:0; font-size:24px; }
+  .start-card h2 { margin:0; font-size:20px; line-height:28px; }
   .start-card p { margin:12px 0 20px; line-height:1.55; color:var(--dim); }
   .start-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; }
   .start-actions button { min-height:42px; padding:8px 14px; border:2px solid var(--line-hi); background:var(--panel); color:#f7e8c4; cursor:pointer; font:inherit; }
@@ -70,7 +70,7 @@
   .family-panel li { margin-block:5px; }
   @media (max-width:620px) {
     .start-options { grid-template-columns:1fr; }
-    .start-shell h1 { font-size:24px; }
+    .start-shell h1 { font-size:20px; line-height:28px; }
   }
   #playNotice { margin:0 16px 10px; padding:10px 12px; border:2px solid var(--gold); background:var(--panel); }
   #playNotice p { margin:0 0 6px; }
@@ -90,6 +90,8 @@
   #minimap button:hover, #btnOverview:hover, .ctl button:hover, .hailrow button:hover, .secrets .who button:hover {
     color:var(--ink); border-color:var(--a); background:var(--panel);
   }
+  /* 字号阶梯收口：顶栏这几个按钮原先没写字号，继承到 13.33px 破坏了 12/16/20 三档。 */
+  #mapbar > button { font-size:12px; line-height:20px; }
   #minimap button:active, #btnOverview:active, .ctl button:active, .say button:active,
   .hailrow button:active, .secrets .who button:active {
     transform:translate(1px,1px); box-shadow:1px 1px 0 0 var(--shadow);
@@ -229,22 +231,24 @@
   #fullStage[hidden] { display:none; }
   #cvFull { image-rendering:pixelated; image-rendering:crisp-edges; cursor:pointer; box-shadow:0 0 0 2px var(--line); }
   #fullHud { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:12px; padding:8px 12px;
-    background:rgba(0,0,0,.55); color:var(--ink); font-size:13px; }
+    background:rgba(0,0,0,.55); color:var(--ink); font-size:12px; }
   #fullHud .fhint { color:var(--dim); margin-left:auto; }
   #btnFullExit { background:var(--a); color:var(--bg); border:2px solid var(--ink); box-shadow:2px 2px 0 0 var(--shadow);
     padding:4px 12px; font-weight:700; cursor:pointer; }
   #btnFullExit:hover { background:var(--ink); color:var(--a); }
-  #survPanel { margin:0 16px 8px; padding:10px 12px; border:2px solid var(--line); background:var(--bg); color:var(--ink); font-size:13px; display:flex; flex-direction:column; gap:6px; }
+  #survPanel { margin:0 16px 8px; padding:10px 12px; border:2px solid var(--line); background:var(--bg); color:var(--ink); font-size:12px; display:flex; flex-direction:column; gap:6px; }
   #survPanel[hidden] { display:none; }
   #survPanel .survrow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-  #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; }
+  /* flex:0 0 auto：按钮文字比自身宽时不许被压缩（实测兑换/扩建按钮被压窄 6px 而溢出）。 */
+  #survPanel .survbtns { gap:6px; }
+  #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; flex:0 0 auto; white-space:nowrap; min-width:max-content; }
   #survPanel .survbtns button:hover { background:var(--a); color:var(--bg); }
   body.surv-mode .town-only { display:none; }
   #survPanel .survbtns button[disabled] { opacity:.45; cursor:not-allowed; }
   #survPanel .survbtns button[disabled]:hover { background:var(--bg); color:var(--ink); }
   #survPanel .surveco summary { cursor:pointer; color:var(--gold); padding:2px 0; font-size:12px; }
   #survPanel .surveco[open] summary { margin-bottom:6px; }
-  #survPanel .survtop { font-size:13px; gap:14px; }
+  #survPanel .survtop { font-size:12px; gap:14px; }
   #survPanel .survhere { font-size:12px; gap:8px; }
   #survPanel .survhere button { font-size:12px; }
   #survPanel .dim { color:var(--dim); }
@@ -270,7 +274,7 @@
   #collisionEditor[open] { display:flex; flex-direction:column; gap:8px; }
   #collisionEditor::backdrop { background:rgba(0,0,0,.72); }
   .collision-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-  .collision-title { margin:0 auto 0 0; font-size:18px; line-height:28px; }
+  .collision-title { margin:0 auto 0 0; font-size:16px; line-height:20px; }
   #collisionEditor button, #collisionEditor select, .collision-import, #btnCollision {
     font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line);
     padding:4px 8px; min-height:32px; cursor:pointer;
@@ -315,9 +319,9 @@
   #survPanel { margin:0 !important; border:0 !important; padding:0 !important; background:transparent !important; }
   #hotbar { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:6px;
     padding:8px 10px; background:var(--panel); border:2px solid var(--line-hi); box-shadow:4px 4px 0 var(--shadow); z-index:60; width:max-content; max-width:calc(100vw - 16px); justify-content:center; flex-wrap:wrap; }
-  #hotbar .slot { position:relative; width:46px; height:46px; font:inherit; font-size:18px; color:var(--ink);
+  #hotbar .slot { position:relative; width:46px; height:46px; font:inherit; font-size:16px; color:var(--ink);
     background:var(--sunken); border:2px solid var(--line); cursor:pointer; }
-  #hotbar .slot i { position:absolute; right:2px; bottom:0; font-style:normal; font-size:10px; color:var(--dim); }
+  #hotbar .slot i { position:absolute; right:2px; bottom:0; font-style:normal; font-size:12px; color:var(--dim); }
   #hotbar .slot.on { color:var(--bg); background:var(--gold); border-color:var(--line-hi); }
   #hotbar .slot.on i { color:var(--bg); }
   #hotbar .slot.can { border-color:var(--leaf, #98BD51); }
@@ -325,13 +329,13 @@
   #hotbar .slot:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
   #hotbar .slot img { display:block; margin:auto; max-width:100%; image-rendering:pixelated; pointer-events:none; }
   .bp-item img { justify-self:center; image-rendering:pixelated; }
-  #btnBag, #btnUse { font-size:13px; }
+  #btnBag, #btnUse { font-size:12px; }
   #toolHint { max-width:220px; font-size:12px; color:var(--dim); }
   #backpack, #campPropDialog { width:min(560px,calc(100vw - 24px)); padding:12px; color:var(--ink); background:var(--panel);
     border:2px solid var(--line-hi); box-shadow:4px 4px 0 var(--shadow); }
   #backpack::backdrop, #campPropDialog::backdrop { background:rgba(0,0,0,.72); }
   .bp-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .bp-row h2 { margin:0 auto 0 0; font-size:18px; }
+  .bp-row h2 { margin:0 auto 0 0; font-size:16px; line-height:20px; }
   #backpack button, #campPropDialog button { font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line); padding:4px 10px; cursor:pointer; }
   #campPropDialog { width:min(420px,calc(100vw - 24px)); }
   #campPropDialog p { margin:8px 0; line-height:1.5; }
@@ -356,7 +360,7 @@
   .bp-note { margin-top:8px; font-size:12px; color:var(--dim); }
   @media (max-width:620px) {
     #hotbar { bottom:8px; gap:4px; padding:6px; }
-    #hotbar .slot { width:38px; height:38px; font-size:15px; }
+    #hotbar .slot { width:38px; height:38px; font-size:12px; }
     #toolHint { display:none; }
   }
   /* 顶栏仪表化：像素方块条 + 内联 SVG 图标（色板内） */
@@ -366,7 +370,7 @@
   .gbar { display:inline-flex; gap:1px; }
   .gbar b { width:5px; height:10px; background:var(--sunken); border:1px solid var(--line); }
   .gbar b.on { background:var(--gold); border-color:var(--line-hi); }
-  .gauge i { font-style:normal; font-size:11px; color:var(--dim); min-width:34px; }
+  .gauge i { font-style:normal; font-size:12px; color:var(--dim); min-width:36px; }
   /* 聚落一览 */
   #villagePanel { display:flex; flex-direction:column; gap:6px; }
   .vrow { display:flex; align-items:center; gap:8px; border:2px solid var(--line); background:var(--sunken); padding:4px 8px; }
@@ -374,12 +378,12 @@
   .vbar { display:inline-flex; gap:1px; }
   .vbar b { width:6px; height:10px; background:var(--panel); border:1px solid var(--line); }
   .vbar b.on { background:var(--leaf, #98BD51); }
-  .vrow .dim { margin-left:auto; font-size:11px; }
+  .vrow .dim { margin-left:auto; font-size:12px; }
   /* 禁用原因屏上可见角标（不再只藏 title） */
   #hotbar .slot, #backpack button, .survbtns button { position:relative; }
   #hotbar .slot[data-need]::after, #backpack button[data-need]::after, .survbtns button[data-need]::after {
     content:attr(data-need); position:absolute; top:-9px; right:-6px; z-index:2;
-    font-size:10px; line-height:14px; padding:0 3px; color:#FFF1E8; background:#FF004D; border:1px solid var(--line-hi);
+    font-size:12px; line-height:16px; padding:0 4px; color:#FFF1E8; background:#FF004D; border:1px solid var(--line-hi);
     pointer-events:none; white-space:nowrap;
   }
   /* 触屏统一收口：点击区 ≥44、动作条 ≥104 */
@@ -387,7 +391,7 @@
     body.surv-mode { padding-bottom:132px; }
     #mapbar button, .mv, .ctl button, #backpack button, .survbtns button, details.grp > summary { min-height:44px; }
     #hotbar { min-height:104px; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 16px); padding:10px; }
-    #hotbar .slot { width:44px; height:44px; font-size:17px; }
+    #hotbar .slot { width:44px; height:44px; font-size:16px; }
     #toolHint { flex-basis:100%; text-align:center; max-width:none; }
   }
 </style>
