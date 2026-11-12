@@ -57,7 +57,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ worldstate.mjs / production.mjs / geometry.mjs   # 生存 Phase A/B（有限资源 + 建设闭环）
 │  ├─ cooperation.mjs                     # Phase C AI 合作（意愿/公共需求/分解/重规划，默认关）
 │  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
-│  ├─ *.test.mjs          #   46 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   55 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
@@ -116,7 +116,7 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 184 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 46 个测试文件 / 349 条断言（发现式点名，不会漏文件）
+npm test          # 55 个测试文件 / 403 条断言（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
 npm run check     # lint + test
 ```
