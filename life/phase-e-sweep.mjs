@@ -99,8 +99,15 @@ export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 �
 // world.loc 而不同步 occupancy ⇒ 工人下一次 move() 读 occupancy[from] 崩、被 survplay 的
 // try/catch 吞成 agentError，工人冻结在院落（seed 7 实测 a1）。#7 因此编码了"冻结工人"轨迹，
 // 修复后作废；以下为本轮修复引擎后的重抓（两次跑逐位相同）。
-export const OFF_BASE = { 7: 'dbac661bb9b4cb09a0473c2711454a66', 11: '2827d6cc7d64a80f06afa9649a9aaa2d', 13: '6b6f24925e7501ca3337c186b3b57502' };
-export const BASELINE3 = { 7: 'b80d888494d65aa010e64943c2d429cc', 11: '3523e4f705220673464f9a42acb76f3e', 13: '901cbf034a6370c754f6a9b6a746ea66' };
+// 复抓#13 = 改量#12 的终值（2026-11-12，§17 产出循环 + AI 自动兑换）：
+// survival 候选新增 forage/exchange/expand 三类，其中 owner 终裁 AI 也要自动兑换 ⇒
+// #12（exchange 仅玩家）与 #11（无产出循环）两版哈希都作废。
+// 历史值留痕：#11 OFF_BASE {7:dbac661b…,11:2827d6cc…,13:6b6f2492…} / BASELINE3 {7:b80d8884…,11:3523e4f7…,13:901cbf03…}；
+//             #12 OFF_BASE {7:b51cb8e4…,11:aeefee87…,13:114bb176…} / BASELINE3 {7:7df6deb1…,11:7583f317…,13:a8d3e4de…}。
+// 改量#12 同步作废 E1a/E1g 的「安全网代劳收种」判据：AI 自动兑换让公仓自足，
+// E1 安全网（只在缺粮时触发）不再需要动作；判据改测「AI 自主收种」aiActions（详见 forage.test.mjs）。
+export const OFF_BASE = { 7: '8a8080e58783a2021d677e7753221d93', 11: '3e0ea4e2b3b09ce1d5dad534ca4accd4', 13: '5e2e4ce83ddbb95fbad6abbd57f2e5e1' };
+export const BASELINE3 = { 7: 'ca781e43537aad8c688a8c875768b8cd', 11: 'dcb33f997313a60e3d6b264e82aac9d9', 13: 'd5bdb1f6422476816a00823cfe4e83c6' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 

@@ -96,3 +96,86 @@ export function dailyWear(world, mods) {
   const rate = mods.shield ? base * 0.4 : base;
   for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - rate).toFixed(2)));
 }
+// ── 采集与蓄养产出（§16+，2026-11-12）────────────────────────────────────
+// 规则层是唯一裁决点：合法性、冷却、上限、季节产量都在这里定，前端只读结果。
+// 新资源走独立的 produce 账（berry/fruit/egg/milk/wool），不并入 store/inv，
+// 因此既有生存基线 digest 的字段集合不变（这是刻意的口径约束，不是遗漏）。
+export const PRODUCE_KINDS = Object.freeze(['berry', 'fruit', 'egg', 'milk', 'wool']);
+export const DEFAULT_LIVESTOCK = Object.freeze({ chickens: 3, cows: 2, sheep: 2, orchards: 3 });
+const SEASON_YIELD = Object.freeze({
+  fruit: [2, 3, 1, 0],  // 春 夏 秋 冬：每棵果树
+  egg:   [3, 3, 2, 1],  // 每只鸡
+  milk:  [2, 2, 1, 1],  // 每头奶牛
+  wool:  [1, 2, 2, 0],  // 每只羊
+});
+export const PRODUCE_CAP = 24;
+
+export function forageRule(world, id) {
+  const s = world.survival;
+  if (!s) return { ok: false, code: 'NO_SURVIVAL' };
+  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
+  if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
+  if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
+  return { ok: true, code: 'OK' };
+}
+
+// 日界结算：季节 × 存栏数；纯函数，输出各资源增量。
+export function produceYield(season, counts = DEFAULT_LIVESTOCK) {
+  const out = {};
+  for (const [kind, ramp] of Object.entries(SEASON_YIELD)) {
+    const n = kind === 'fruit' ? counts.orchards : counts[kind === 'egg' ? 'chickens' : kind === 'milk' ? 'cows' : 'sheep'];
+    out[kind] = ramp[season % 4] * (n ?? 0);
+  }
+  return out;
+}
+
+// ── 产出兑换 / 蓄养扩建 / 采浆果（§17，AI 与玩家同权）──────────────────
+// 这三个动作与 harvest/gather 同层：规则层裁决 + actuate 执行，affordancesFor 对双方都给候选。
+export const EXCHANGE = Object.freeze({
+  berry: { store: 1 }, fruit: { store: 2 }, egg: { store: 1 }, milk: { store: 2 }, wool: { wood: 1 },
+});
+export const EXPAND = Object.freeze({
+  chickens: { wood: 2, stone: 1 }, cows: { wood: 3, stone: 2 },
+  sheep: { wood: 2, stone: 2 }, orchards: { wood: 3, stone: 1 },
+});
+export const EXPAND_LABEL = Object.freeze({ chickens: '鸡舍', cows: '牛棚', sheep: '羊圈', orchards: '果树' });
+export const PRODUCE_LABEL = Object.freeze({ berry: '浆果', fruit: '果', egg: '蛋', milk: '奶', wool: '毛' });
+export const LIVESTOCK_CAP = 12;
+export const FORAGE_COOLDOWN = 2;
+
+export function doForage(world, id) {
+  const s = world.survival;
+  if (!s) return { ok: false, code: 'NOT_AVAILABLE' };
+  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
+  if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
+  if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
+  s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
+  s.produce.berry += 1;
+  s.forageCd = world.t + FORAGE_COOLDOWN;
+  return { ok: true, code: 'OK', amount: 1 };
+}
+
+export function doExchange(world, id, kind) {
+  const s = world.survival, rate = EXCHANGE[kind];
+  if (!s || !rate) return { ok: false, code: 'NO_RATE' };
+  if ((s.produce?.[kind] ?? 0) < 1) return { ok: false, code: 'NO_PRODUCE' };
+  // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
+  if (rate.store && s.store >= (s.storeCap ?? 24) * .7) return { ok: false, code: 'STORE_FULL' };
+  s.produce[kind] -= 1;
+  let gained;
+  if (rate.store) { s.store = Math.min(s.storeCap ?? 24, s.store + rate.store); gained = `粮+${rate.store}`; }
+  else { s.inv.wood = (s.inv.wood ?? 0) + rate.wood; gained = `木+${rate.wood}`; }
+  return { ok: true, code: 'OK', gained };
+}
+
+export function doExpand(world, id, type) {
+  const s = world.survival, cost = EXPAND[type];
+  if (!s || !cost) return { ok: false, code: 'NO_TYPE' };
+  s.livestock ??= { ...DEFAULT_LIVESTOCK };
+  if ((s.livestock[type] ?? 0) >= LIVESTOCK_CAP) return { ok: false, code: 'LIVESTOCK_FULL' };
+  // 与候选侧同一条裁决：材料必须富余（留一份建筑料），不能挤掉建房。
+  if ((s.inv?.wood ?? 0) < cost.wood + 4 || (s.inv?.stone ?? 0) < cost.stone + 3) return { ok: false, code: 'NO_MATERIAL' };
+  s.inv.wood -= cost.wood; s.inv.stone -= cost.stone;
+  s.livestock[type] = (s.livestock[type] ?? 0) + 1;
+  return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
+}

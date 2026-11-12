@@ -3,13 +3,26 @@
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate } from './body.mjs';
 import { weatherFor, dayOf, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { effectiveMods, BUILDINGS } from './production.mjs';
+import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { initCoop } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
 
 const ROSTER = [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']];
+// 只读表现字段：从 Organism.trace 里取最近一次成功动作的 kind，供 3D 姿态与图标使用。
+// 不改规则层、不参与裁决、不消费 rng；找不到回退 idle。
+function lastAct(a, t) {
+  const tr = a?.trace;
+  if (!Array.isArray(tr)) return 'idle';
+  for (let i = tr.length - 1, n = 0; i >= 0 && n < 40; i -= 1, n += 1) {
+    const r = tr[i];
+    if (!r || !r.ok || !r.kind || r.layer === 'refused' || r.layer === 'aborted') continue;
+    if (t - (r.t ?? t) > 3) break;
+    return r.kind;
+  }
+  return 'idle';
+}
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
 export function createSurvPlay(seed = 7) {
@@ -27,6 +40,11 @@ export function createSurvPlay(seed = 7) {
   world.pinv = {}; // §15 P2-C 背包：每角色个人木石
   for (const id of Object.keys(world.agents)) world.pinv[id] = { wood: 0, stone: 0 };
   const s = world.survival;
+  // 采集/蓄养：独立产出账，缺省 tolerant（旧档没有这些键也能补上）。
+  s.produce = Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
+  s.livestock = { ...DEFAULT_LIVESTOCK };
+  s.produceCap = PRODUCE_CAP;
+  s.forageCd = 0;
   s.forage = false; // §15 同权后撤安全网代劳（开关保留供对照/负控）
   s.repairEarly = true; // E3a 过 ⇒ 默认开
   s.eco = true; // §12 缓和曲线 H1∧H2 过
@@ -75,6 +93,11 @@ export async function tickSurvPlay(sp) {
   if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   if (dayOf(w.t) !== dayOf(w.t - 1)) {
     reproduce(w); // §15 P2-B 繁衍（日界）
+    // 蓄养/果树日界结算：规则层算增量，写独立产出账，不碰 store/inv。
+    w.survival.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
+    const daily = produceYield(seasonOf(dayOf(w.t)), w.survival.livestock ?? DEFAULT_LIVESTOCK);
+    for (const [k, v] of Object.entries(daily)) w.survival.produce[k] = Math.min(PRODUCE_CAP * 4, (w.survival.produce[k] ?? 0) + v);
+    sp.log.push({ t: w.t, kind: 'produce', ok: true, code: Object.entries(daily).map(([k, v]) => k + v).join('/') });
     // §15 P2-D 性格-季节慢偏移：冬社交设点降、夏升（人格随季节缓慢变化）
     const season = seasonOf(dayOf(w.t));
     const d = season === 3 ? -0.005 : season === 1 ? 0.005 : 0;
@@ -142,7 +165,8 @@ export function survAct(sp, body) {
     w.loc.p1 = room; (w.occupancy[room] ??= []).push('p1');
     return { ok: true };
   }
-  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+  // 同权：玩家与 AI 的这些动作都走 actuate → 规则层裁决，不再为玩家开特判。
+  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
   const r = actuate(w, 'p1', { kind, type: body?.type });
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
@@ -161,13 +185,16 @@ export function survView(sp) {
     plots: s.plots.map((p) => ({ id: p.id, growth: Number(p.growth.toFixed(2)) })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, sex: w.sex?.[a.id] ?? null }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: a.isPlayer ? null : Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: a.isPlayer ? null : Number((a.viab?.v ?? 1).toFixed(2)) }])),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,
     clearStreak: s.clearStreak ?? 0, coldStreak: s.coldStreak ?? 0,
     yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
     log: sp.log.slice(-12),
+    produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? DEFAULT_LIVESTOCK) },
+    produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
+    economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
     buildingsDef: BUILDINGS,
   };
 }

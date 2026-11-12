@@ -3,18 +3,53 @@
 *{box-sizing:border-box}body{margin:0;background:#18251e;color:#fff0cc;font:15px/1.5 system-ui}header{padding:16px 24px;border-bottom:1px solid #568d3e}h1{font-size:22px;margin:0 0 6px}button,select,input{font:inherit}button,select{background:#263d29;color:#fff0cc;border:1px solid #70905a;padding:9px;cursor:pointer}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible{outline:2px solid #edc787}main{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;padding:16px}aside{display:flex;flex-direction:column;gap:12px}#assets{width:100%}.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}#colors{display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;overflow-x:hidden;padding:2px 4px 2px 2px;scrollbar-gutter:stable;border:1px solid #263D29;background:#141d17}.palette-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#c2cfa0}.palette-head label{display:inline-flex;align-items:center;gap:4px}.pal-group{display:flex;flex-direction:column;gap:3px}.pal-group>span{font-size:10.5px;line-height:1.2;color:#c2cfa0}.pal-row{display:flex;flex-wrap:wrap;gap:2px}.pal-row button{position:relative;width:22px;height:22px;padding:0;border:1px solid #939584}.pal-row button i{position:absolute;right:0;bottom:-1px;font-size:10px;font-weight:600;font-style:normal;line-height:1;pointer-events:none;text-shadow:0 0 3px currentColor,0 0 1px #000}.pal-row button[data-index="null"]{background:repeating-conic-gradient(#514134 0% 25%,#72513B 0% 50%) 0/8px 8px}.current{display:flex;align-items:center;gap:8px;min-height:24px}.swatch-current{width:24px;height:24px;flex:0 0 auto;border:1px solid #939584}.pal-row button.selected{outline:3px solid #fff;outline-offset:1px;z-index:1}#stage{overflow:auto;height:66vh;background:repeating-conic-gradient(#514134 0% 25%,#72513b 0% 50%) 0/16px 16px;border:1px solid #70905a}canvas{image-rendering:pixelated;display:block;touch-action:none}#preview{max-width:100%;background:#568d3e}small{color:#c2cfa0}#status{min-height:3em;white-space:pre-wrap}label{display:block}a{color:#edc787}@media(max-width:720px){main{grid-template-columns:1fr}#colors{gap:6px}.pal-row button{width:22px;height:22px}#stage{height:50vh}}
 
 [hidden]{display:none!important}#library{padding:24px;max-width:1440px;margin:auto}.library-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:20px}.library-bar label{display:flex;flex-direction:column;gap:5px}.library-bar input{padding:10px;background:#263d29;border:1px solid #70905a;color:#fff0cc;width:min(320px,80vw)}#gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}.asset-card{display:flex;flex-direction:column;text-align:left;gap:8px;padding:12px;min-width:0}.asset-card:hover{background:#315431;border-color:#edc787}.asset-card .thumb{height:132px;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(#514134 0% 25%,#72513b 0% 50%) 0/12px 12px;overflow:hidden}.asset-card img{image-rendering:pixelated;max-width:128px;max-height:128px;object-fit:contain}.asset-card .crop{width:64px;height:96px;overflow:hidden}.asset-card .crop img{display:block;width:256px;max-width:none;max-height:none}.asset-card .crop.fx{height:64px}.asset-card small{font-size:11px;overflow-wrap:anywhere}#status{min-height:0;margin-top:8px}header .header-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px}#editorTitle{margin:0 0 12px;font-size:20px}#empty{padding:32px;text-align:center;border:1px solid #568d3e}@media(max-width:480px){#library{padding:12px}#gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.asset-card{padding:8px}.asset-card .thumb{height:112px}}
-.tools-group{display:flex;flex-direction:column;gap:6px}.tools-label{color:#c2cfa0}.toolrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.toolrow button{padding:8px 6px}.toolrow button[aria-pressed="true"]{background:#EDC787;border-color:#EDC787;color:#18251E;font-weight:600}.actions{position:sticky;bottom:-10px;display:flex;flex-direction:column;gap:8px;padding:8px 0;background:#18251E;border-top:1px solid #263D29}</style><header><h1>营地像素工作台</h1><small>本地编辑 · 固定色板 · 保存为可重生成的手工覆盖</small><div class="header-actions"><button id="open">连接项目文件夹</button><small id="connection">先浏览素材；首次编辑时选择 AMBRACElife 根目录。</small></div><div id="status" role="status"></div></header>
+.tools-group{display:flex;flex-direction:column;gap:6px}.tools-label{color:#c2cfa0}.toolrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.toolrow button{padding:8px 6px}.toolrow button[aria-pressed="true"]{background:#EDC787;border-color:#EDC787;color:#18251E;font-weight:600}.actions{position:sticky;bottom:-10px;display:flex;flex-direction:column;gap:8px;padding:8px 0;background:#18251E;border-top:1px solid #263D29}.layer-picker{display:flex;gap:6px}.layer-picker button{flex:1}.layer-picker [aria-pressed=true]{color:#18251e;background:#edc787;border-color:#edc787}
+#maskTools{display:grid;gap:8px}#maskTools label{display:flex;align-items:center;gap:8px}#maskBrush{width:70px;background:#263d29;color:#fff0cc;border:1px solid #70905a;padding:4px}
+</style><header><h1>营地像素工作台</h1><small>本地编辑 · 固定色板 · 保存为可重生成的手工覆盖</small><div class="header-actions"><button id="open">连接项目文件夹</button><small id="connection">先浏览素材；首次编辑时选择 AMBRACElife 根目录。</small></div><div id="status" role="status"></div></header>
 <section id="library"><h2>选择要微调的素材</h2><div class="library-bar"><label>搜索素材<input id="search" type="search" placeholder="例如：树、居所、桌子…"></label><label>分类<select id="category"><option value="all">全部素材</option><option value="building">建筑</option><option value="tree">树木</option><option value="terrain">地形</option><option value="prop">家具与设施</option><option value="action">角色动作与特效</option><option value="portrait">角色头像</option><option value="icon">图标</option><option value="legacy">兼容素材</option></select></label><span id="count"></span></div><div id="gallery"></div><p id="empty" hidden>没有匹配的素材，试试其他名称或分类。</p></section>
 <main id="editor" hidden><aside>
 <button id="back">← 返回素材库</button><small>选择图片进入编辑，手工修改仍可随素材重生成保留。</small>
-<label>素材<select id="assets" disabled></select></label><div class="tools-group"><span class="tools-label">工具</span><div class="toolrow" id="tools" role="group" aria-label="工具"><button type="button" data-tool="pen" aria-pressed="true" title="画笔（快捷键 B）">画笔</button><button type="button" data-tool="erase" aria-pressed="false" title="橡皮（快捷键 E）">橡皮</button><button type="button" data-tool="pick" aria-pressed="false" title="取色（快捷键 I）">取色</button><button type="button" data-tool="fill" aria-pressed="false" title="填充连通区域（快捷键 G）">填充</button></div></div>
-<div class="palette-head"><span>色板 · <b id="paletteCount">64</b> 色</span><label class="inline"><input id="showIndex" type="checkbox" checked> 显示索引</label></div><div id="colors"></div><div class="current"><span class="swatch-current" id="currentSwatch" aria-hidden="true"></span><small id="colorName"></small></div><label>缩放 <input id="zoom" type="range" min="1" max="20" value="4"></label><label><input id="grid" type="checkbox" checked> 显示像素网格</label>
+<label>素材<select id="assets" disabled></select></label><div class="layer-picker" role="group" aria-label="编辑图层">
+  <button id="artLayer" type="button" aria-pressed="true">像素颜色</button>
+  <button id="maskLayer" type="button" aria-pressed="false" disabled>素材碰撞</button>
+</div>
+<div id="maskTools" hidden>
+  <label>笔刷边长 <input id="maskBrush" type="number" min="1" max="32" step="1" value="1"> 像素</label>
+  <button id="maskFromArt" type="button">从不透明像素生成</button>
+  <button id="maskEmpty" type="button">设为无碰撞</button>
+  <button id="maskDefault" type="button">恢复默认碰撞</button>
+  <small id="maskState"></small>
+  <small>红色表示挡路。同一素材的所有摆放位置共用蒙版。画好后保存，刷新游戏查看。</small>
+</div>
+<div class="tools-group"><span class="tools-label">工具</span><div class="toolrow" id="tools" role="group" aria-label="工具"><button type="button" data-tool="pen" aria-pressed="true" title="画笔（快捷键 B）">画笔</button><button type="button" data-tool="erase" aria-pressed="false" title="橡皮（快捷键 E）">橡皮</button><button type="button" data-tool="pick" aria-pressed="false" title="取色（快捷键 I）">取色</button><button type="button" data-tool="fill" aria-pressed="false" title="填充连通区域（快捷键 G）">填充</button></div></div>
+<div id="artPalette"><div class="palette-head"><span>色板 · <b id="paletteCount">64</b> 色</span><label class="inline"><input id="showIndex" type="checkbox" checked> 显示索引</label></div><div id="colors"></div><div class="current"><span class="swatch-current" id="currentSwatch" aria-hidden="true"></span><small id="colorName"></small></div></div><label>缩放 <input id="zoom" type="range" min="1" max="20" value="4"></label><label><input id="grid" type="checkbox" checked> 显示像素网格</label>
 <div class="actions"><button id="save" disabled>保存素材与覆盖稿</button><button id="export" disabled>导出 PNG 副本</button></div><small>保存后刷新游戏即可看到新图。覆盖稿记录在 web/assets/pixel-overrides.json，重新生成素材也会保留。动作图集可横向、纵向滚动编辑。</small>
 </aside><section><h2 id="editorTitle"></h2><div class="tools"><button id="undo" disabled>撤销 Ctrl+Z</button><button id="redo" disabled>重做 Ctrl+Y</button><span id="size"></span></div><div id="stage"><canvas id="canvas"></canvas></div><p>原尺寸预览</p><canvas id="preview"></canvas></section></main>
 <script src="assets/editor-catalog.js"></script>
 <script type="module">
 const $=id=>document.getElementById(id);let root,dir,palette=[],files=[...(globalThis.PIXEL_CATALOG??[])],pixels=[],w=0,h=0,name='',color=0,dirty=false,busy=false,history=[],future=[],drawing=false,last=null,stroke=null,revision='',tool='pen';
-function selectTool(next){tool=next;for(const b of tools.children)b.setAttribute('aria-pressed',String(b.dataset.tool===next));}
+let maskMode = false, mask = null, maskDirty = false, maskRevision = '';
+let maskHistory = [], maskFuture = [];
+const hasDraft = () => dirty || maskDirty;
+const supportsMask = name => /^(?:house_|tree_oak|prop_|bld_)[^/]+[.]png$/.test(name);
+const layerPixels = () => maskMode ? mask : pixels;
+const undoStack = () => maskMode ? maskHistory : history;
+const redoStack = () => maskMode ? maskFuture : future;
+
+function setLayer(enabled) {
+  end();
+  maskMode = enabled && supportsMask(name);
+  $('maskTools').hidden = !maskMode;
+  $('artPalette').hidden = maskMode;
+  $('artLayer').setAttribute('aria-pressed', String(!maskMode));
+  $('maskLayer').setAttribute('aria-pressed', String(maskMode));
+  if (maskMode && !['pen', 'erase'].includes(tool)) selectTool('pen');
+  draw();
+}
+$('artLayer').onclick = () => setLayer(false);
+$('maskLayer').onclick = () => setLayer(true);
+
+function selectTool(next){if(maskMode && !['pen','erase'].includes(next))return;tool=next;for(const b of tools.children)b.setAttribute('aria-pressed',String(b.dataset.tool===next));}
 tools.onclick=e=>{const b=e.target.closest('button[data-tool]');if(!b||busy)return;selectTool(b.dataset.tool);};
 const image=document.createElement('canvas');const message=t=>$('status').textContent=t;
 const urls=new Map();
@@ -23,11 +58,67 @@ function info(n){let category='legacy',title=n.replace('.png','');if(n.startsWit
 function renderLibrary(){const term=$('search').value.trim().toLowerCase(),category=$('category').value;const rank=['building','tree','terrain','prop','action','portrait','icon','legacy'];const shown=files.filter(n=>{const m=info(n);return(category==='all'||m.category===category)&&(!term||(m.title+' '+n).toLowerCase().includes(term));}).sort((a,b)=>rank.indexOf(info(a).category)-rank.indexOf(info(b).category)||a.localeCompare(b));$('gallery').replaceChildren(...shown.map(n=>{const meta=info(n),button=document.createElement('button');button.className='asset-card';button.dataset.asset=n;button.setAttribute('aria-label','编辑 '+meta.title);const thumb=document.createElement('div');thumb.className='thumb';const img=document.createElement('img');img.src=urls.get(n)??('assets/'+n);img.alt=meta.title;img.loading='lazy';if(meta.category==='action'){const crop=document.createElement('div');crop.className='crop'+(n.endsWith('fx.png')?' fx':'');crop.append(img);thumb.append(crop);}else thumb.append(img);const title=document.createElement('strong');title.textContent=meta.title;const file=document.createElement('small');file.textContent=n;button.append(thumb,title,file);button.disabled=busy;button.onclick=()=>choose(n);return button;}));$('count').textContent=`${shown.length} / ${files.length} 张`;$('empty').hidden=!!shown.length;}
 function showEditor(){ $('library').hidden=true;$('editor').hidden=false;$('assets').value=name;$('editorTitle').textContent=info(name).title+' · '+name;window.scrollTo(0,0);}
 async function connect(){if(!window.showDirectoryPicker)throw Error('请用 Chrome 或 Edge 打开本工具并选择项目文件夹');const selected=await showDirectoryPicker({mode:'readwrite'});const selectedDir=await(await selected.getDirectoryHandle('web')).getDirectoryHandle('assets');const selectedPalette=JSON.parse(await(await(await selectedDir.getFileHandle('palette.json')).getFile()).text()).map(x=>x.toUpperCase());const names=[];for await(const[n,f]of selectedDir.entries())if(f.kind==='file'&&n.endsWith('.png'))names.push(n);try{const actions=await selectedDir.getDirectoryHandle('actions');for await(const[n,f]of actions.entries())if(f.kind==='file'&&n.endsWith('.png'))names.push('actions/'+n);}catch(e){if(e.name!=='NotFoundError')throw e;}if(!names.length)throw Error('该目录没有像素素材');root=selected;dir=selectedDir;palette=selectedPalette;files=names.sort();for(const url of urls.values())URL.revokeObjectURL(url);urls.clear();for(const n of files)urls.set(n,URL.createObjectURL(await(await fileAt(n)).getFile()));$('assets').replaceChildren(...files.map(n=>{const o=document.createElement('option');o.textContent=info(n).title+' · '+n;o.value=n;return o;}));renderPalette();$('connection').textContent='已连接项目 · '+files.length+' 张素材';renderLibrary();}
-function choose(next){run(async()=>{end();if(next===name&&dir){showEditor();return;}if(dirty&&!confirm('有未保存修改，放弃并切换素材？'))return;if(!dir)await connect();if(!files.includes(next))throw Error('所选目录没有这张素材');await load(next);showEditor();});}
+function choose(next){run(async()=>{end();if(next===name&&dir){showEditor();return;}if(hasDraft()&&!confirm('有未保存修改，放弃并切换素材？'))return;if(!dir)await connect();if(!files.includes(next))throw Error('所选目录没有这张素材');await load(next);showEditor();});}
 $('search').oninput=renderLibrary;$('showIndex').onchange=renderPalette;$('category').onchange=renderLibrary;$('back').onclick=()=>{if(busy)return;end();$('editor').hidden=true;$('library').hidden=false;renderLibrary();window.scrollTo(0,0);};
 async function fileAt(path,create=false){const parts=path.split('/');let d=dir;for(const part of parts.slice(0,-1))d=await d.getDirectoryHandle(part,{create});return d.getFileHandle(parts.at(-1),{create});}
 async function readDoc(){try{return JSON.parse(await(await(await dir.getFileHandle('pixel-overrides.json')).getFile()).text());}catch(e){if(e.name==='NotFoundError')return {version:1,assets:{}};throw e;}}
-function controls(){for(const id of ['save','export','assets'])$(id).disabled=busy||!name;$('open').disabled=busy;$('undo').disabled=busy||!history.length;$('redo').disabled=busy||!future.length;$('back').disabled=busy;for(const card of document.querySelectorAll('.asset-card'))card.disabled=busy;for(const b of tools.children)b.disabled=busy;}
+async function readMaskDoc() {
+  try {
+    const file = await (await dir.getFileHandle('asset-collisions.json')).getFile();
+    const doc = JSON.parse(await file.text());
+    if (doc.version !== 1 || !doc.assets || Array.isArray(doc.assets) || typeof doc.assets !== 'object') {
+      throw Error('碰撞蒙版文件格式异常');
+    }
+    return doc;
+  } catch (error) {
+    if (error.name === 'NotFoundError') return { version: 1, assets: {} };
+    throw error;
+  }
+}
+
+function decodeMask(entry, width, height) {
+  if (!entry) return null;
+  if (entry.width !== width || entry.height !== height || !Array.isArray(entry.spans)) {
+    throw Error('碰撞蒙版尺寸与素材不符');
+  }
+  const result = new Uint8Array(width * height);
+  for (const row of entry.spans) {
+    if (!Array.isArray(row) || row.length !== 3 || !row.every(Number.isInteger)) throw Error('碰撞蒙版格式异常');
+    const [y, from, to] = row;
+    if (y < 0 || y >= height || from < 0 || from >= to || to > width) throw Error('碰撞蒙版超出素材');
+    result.fill(1, y * width + from, y * width + to);
+  }
+  return result;
+}
+
+function encodeMask() {
+  const spans = [];
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w;) {
+      if (!mask[y * w + x]) { x += 1; continue; }
+      const from = x;
+      while (x < w && mask[y * w + x]) x += 1;
+      spans.push([y, from, x]);
+    }
+  }
+  return { width: w, height: h, spans };
+}
+
+function controls() {
+  for (const id of ['save', 'export', 'assets']) $(id).disabled = busy || !name;
+  $('save').textContent = maskMode ? '保存碰撞蒙版' : '保存素材与覆盖稿';
+  $('export').hidden = maskMode;
+  $('maskLayer').disabled = busy || !supportsMask(name);
+  $('artLayer').disabled = busy;
+  for (const id of ['maskFromArt', 'maskEmpty', 'maskDefault', 'maskBrush']) $(id).disabled = busy;
+  $('open').disabled = busy;
+  $('undo').disabled = busy || !undoStack().length;
+  $('redo').disabled = busy || !redoStack().length;
+  $('back').disabled = busy;
+  for (const card of document.querySelectorAll('.asset-card')) card.disabled = busy;
+  for (const b of tools.children) b.hidden = maskMode && !['pen','erase'].includes(b.dataset.tool);
+  for (const b of tools.children) b.disabled = busy;
+}
 async function run(fn){if(busy)return;busy=true;controls();try{await fn();}catch(e){message('未完成：'+e.message);}finally{busy=false;controls();}}
 // 色板分组：按 PALETTE 里真实的色阶边界切的（0–15 基础、16–24 营地绿、25–33 木纸、34–39 陶土屋顶、
 // 40–43 石灰、44–48 水青、49–52 梅紫、53–55 珊瑚、56–59 金褐、60–63 苔绿灰）。
@@ -67,19 +158,137 @@ function selectColor(i){
   sw.style.background=i===null?'repeating-conic-gradient(#514134 0% 25%,#72513B 0% 50%) 0/8px 8px':palette[i];
   $('colorName').textContent=i===null?'透明 · 画笔=空像素':palette[i]+' · 索引 '+i;
 }
-function draw(){if(!w)return;image.width=w;image.height=h;const ctx=image.getContext('2d'),data=ctx.createImageData(w,h);pixels.forEach((v,i)=>{if(v===null)return;const hex=palette[v];data.data[i*4]=parseInt(hex.slice(1,3),16);data.data[i*4+1]=parseInt(hex.slice(3,5),16);data.data[i*4+2]=parseInt(hex.slice(5,7),16);data.data[i*4+3]=255;});ctx.putImageData(data,0,0);const z=+$('zoom').value,c=$('canvas');c.width=w*z;c.height=h*z;const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(image,0,0,c.width,c.height);if($('grid').checked&&z>=5){g.fillStyle='#514134';for(let x=0;x<c.width;x+=z)g.fillRect(x,0,1,c.height);for(let y=0;y<c.height;y+=z)g.fillRect(0,y,c.width,1);}const p=$('preview');p.width=w;p.height=h;p.getContext('2d').drawImage(image,0,0);$('size').textContent=`${w} × ${h} 像素${dirty?' · 未保存':''}`;controls();}
-async function load(next){const handle=await fileAt(next),file=await handle.getFile(),bitmap=await createImageBitmap(file);const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);bitmap.close();const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data,values=[];for(let i=0;i<data.length;i+=4){if(data[i+3]===0){values.push(null);continue;}const hex='#'+[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();const index=palette.indexOf(hex);if(index<0||data[i+3]!==255)throw Error('素材含色板外颜色或半透明像素');values.push(index);}w=c.width;h=c.height;const maxZoom=Math.max(1,Math.min(20,Math.floor(16000/Math.max(w,h)),Math.floor(Math.sqrt(16000000/(w*h)))));$('zoom').max=maxZoom;$('zoom').value=Math.min(+$('zoom').value,maxZoom);pixels=values;name=next;revision=JSON.stringify((await readDoc()).assets?.[name]??null);history=[];future=[];dirty=false;draw();message('已打开 '+name);}
-$('open').onclick=()=>run(async()=>{end();if(dirty&&!confirm('有未保存修改，放弃并切换项目文件夹？'))return;await connect();name='';dirty=false;history=[];future=[];$('editor').hidden=true;$('library').hidden=false;message('素材库已就绪，点击图片进入编辑。');});
+function draw(){if(!w)return;image.width=w;image.height=h;const ctx=image.getContext('2d'),data=ctx.createImageData(w,h);pixels.forEach((v,i)=>{if(v===null)return;const hex=palette[v];data.data[i*4]=parseInt(hex.slice(1,3),16);data.data[i*4+1]=parseInt(hex.slice(3,5),16);data.data[i*4+2]=parseInt(hex.slice(5,7),16);data.data[i*4+3]=255;});ctx.putImageData(data,0,0);const z=+$('zoom').value,c=$('canvas');c.width=w*z;c.height=h*z;const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(image,0,0,c.width,c.height);if($('grid').checked&&z>=5){g.fillStyle='#514134';for(let x=0;x<c.width;x+=z)g.fillRect(x,0,1,c.height);for(let y=0;y<c.height;y+=z)g.fillRect(0,y,c.width,1);}const p=$('preview');p.width=w;p.height=h;const pg=p.getContext('2d');pg.drawImage(image,0,0);
+  if(maskMode && mask) {
+    g.fillStyle=pg.fillStyle='rgba(255,0,77,0.48)';
+    for(let i=0;i<mask.length;i+=1) if(mask[i]) {
+      g.fillRect(i%w*z,Math.floor(i/w)*z,z,z);
+      pg.fillRect(i%w,Math.floor(i/w),1,1);
+    }
+  }
+  if(maskMode) $('maskState').textContent = mask
+    ? '自定义蒙版 · ' + mask.reduce((count,v)=>count+v,0) + ' 个碰撞像素'
+    : '当前继承素材的默认碰撞';
+  $('size').textContent=`${w} × ${h} 像素${(maskMode ? maskDirty : dirty)?' · 未保存':''}`;controls();}
+async function load(next){const handle=await fileAt(next),file=await handle.getFile(),bitmap=await createImageBitmap(file);const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);bitmap.close();const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data,values=[];for(let i=0;i<data.length;i+=4){if(data[i+3]===0){values.push(null);continue;}const hex='#'+[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();const index=palette.indexOf(hex);if(index<0||data[i+3]!==255)throw Error('素材含色板外颜色或半透明像素');values.push(index);}const doc=await readDoc();
+const entry=supportsMask(next)?(await readMaskDoc()).assets[next]??null:null;
+const decoded=decodeMask(entry,c.width,c.height);
+w=c.width;h=c.height;const maxZoom=Math.max(1,Math.min(20,Math.floor(16000/Math.max(w,h)),Math.floor(Math.sqrt(16000000/(w*h)))));$('zoom').max=maxZoom;$('zoom').value=Math.min(+$('zoom').value,maxZoom);pixels=values;name=next;revision=JSON.stringify(doc.assets?.[name]??null);history=[];future=[];dirty=false;
+mask=decoded;maskRevision=JSON.stringify(entry);maskHistory=[];maskFuture=[];maskDirty=false;
+setLayer(maskMode);message('已打开 '+name);}
+$('open').onclick=()=>run(async()=>{end();if(hasDraft()&&!confirm('有未保存修改，放弃并切换项目文件夹？'))return;await connect();name='';dirty=false;maskDirty=false;maskMode=false;history=[];future=[];$('editor').hidden=true;$('library').hidden=false;message('素材库已就绪，点击图片进入编辑。');});
 $('assets').onchange=()=>{const next=$('assets').value;$('assets').value=name;choose(next);};
 function point(e){const r=$('canvas').getBoundingClientRect();return [Math.floor((e.clientX-r.left)/r.width*w),Math.floor((e.clientY-r.top)/r.height*h)];}
-function set(x,y,v){if(x>=0&&y>=0&&x<w&&y<h)pixels[y*w+x]=v;}
-function paint(e){const [x,y]=point(e);if(x<0||y<0||x>=w||y>=h)return;const mode=tool;if(mode==='pick'){selectColor(pixels[y*w+x]);return;}const v=mode==='erase'?null:color;if(mode==='fill'){const old=pixels[y*w+x];if(old===v)return;const stack=[y*w+x];pixels[y*w+x]=v;while(stack.length){const i=stack.pop(),cx=i%w;for(const n of [cx>0?i-1:-1,cx<w-1?i+1:-1,i-w,i+w])if(n>=0&&n<pixels.length&&pixels[n]===old){pixels[n]=v;stack.push(n);}}}else{const [lx,ly]=last??[x,y],steps=Math.max(Math.abs(x-lx),Math.abs(y-ly));for(let i=0;i<=steps;i++)set(Math.round(lx+(x-lx)*i/(steps||1)),Math.round(ly+(y-ly)*i/(steps||1)),v);}last=[x,y];dirty=true;draw();}
-$('canvas').onpointerdown=e=>{if(busy||!name||e.button!==0)return;e.preventDefault();drawing=true;last=null;stroke=pixels.slice();$('canvas').setPointerCapture(e.pointerId);paint(e);};$('canvas').onpointermove=e=>{if(drawing&&['pen','erase'].includes(tool))paint(e);};function end(){if(!drawing)return;drawing=false;if(stroke.some((v,i)=>v!==pixels[i])){history.push(stroke);if(history.length>30)history.shift();future=[];}stroke=null;last=null;controls();}for(const event of ['pointerup','pointercancel','lostpointercapture'])$('canvas').addEventListener(event,end);
-$('undo').onclick=()=>{end();if(history.length){future.push(pixels.slice());pixels=history.pop();dirty=true;draw();}};$('redo').onclick=()=>{if(future.length){history.push(pixels.slice());pixels=future.pop();dirty=true;draw();}};
+function set(x,y,v){
+  if(x>=0&&y>=0&&x<w&&y<h)layerPixels()[y*w+x]=v;
+}
+
+function maskBrushSize() {
+  const input = $('maskBrush');
+  return Math.max(1, Math.min(32, Math.round(Number(input.value)) || 1));
+}
+$('maskBrush').onchange = () => { $('maskBrush').value = maskBrushSize(); };
+
+function brush(x,y,value,size) {
+  const left = x - Math.floor((size - 1) / 2);
+  const top = y - Math.floor((size - 1) / 2);
+  for (let py=top;py<top+size;py+=1) {
+    for (let px=left;px<left+size;px+=1) set(px,py,value);
+  }
+}
+
+function paint(e) {
+  const [x,y]=point(e);
+  if(x<0||y<0||x>=w||y>=h){last=null;return;}
+  if(tool==='pick'){selectColor(pixels[y*w+x]);return;}
+  if(maskMode && !mask && tool==='erase')return;
+  if(maskMode && !mask)mask=new Uint8Array(w*h);
+  const v=maskMode?Number(tool!=='erase'):tool==='erase'?null:color;
+  if(tool==='fill'){
+    const old=pixels[y*w+x];
+    if(old===v)return;
+    const stack=[y*w+x];
+    pixels[y*w+x]=v;
+    while(stack.length){
+      const i=stack.pop(),cx=i%w;
+      for(const n of [cx>0?i-1:-1,cx<w-1?i+1:-1,i-w,i+w]){
+        if(n>=0&&n<pixels.length&&pixels[n]===old){pixels[n]=v;stack.push(n);}
+      }
+    }
+  }else{
+    const [lx,ly]=last??[x,y],steps=Math.max(1,Math.abs(x-lx),Math.abs(y-ly));
+    const size=maskMode?maskBrushSize():1;
+    for(let i=0;i<=steps;i++)brush(Math.round(lx+(x-lx)*i/steps),Math.round(ly+(y-ly)*i/steps),v,size);
+  }
+  last=[x,y];
+  draw();
+}
+$('canvas').onpointerdown=e=>{
+  if(busy||!name||e.button!==0||drawing)return;
+  e.preventDefault();drawing=true;last=null;
+  stroke=layerPixels()?.slice()??null;
+  $('canvas').setPointerCapture(e.pointerId);
+  paint(e);
+};
+$('canvas').onpointermove=e=>{if(drawing&&['pen','erase'].includes(tool))paint(e);};
+
+function record(before) {
+  const stack=undoStack(), after=layerPixels();
+  if (before === after || (before && after && !before.some((v,i)=>v!==after[i]))) return;
+  stack.push(before);
+  if(stack.length>30)stack.shift();
+  redoStack().length=0;
+  if(maskMode)maskDirty=true;
+  else dirty=true;
+}
+
+function end(){
+  if(!drawing)return;
+  drawing=false;
+  record(stroke);
+  stroke=null;last=null;
+  draw();
+}
+for(const event of ['pointerup','pointercancel','lostpointercapture'])$('canvas').addEventListener(event,end);
+
+function replaceMask(next) {
+  end();
+  const before=mask;
+  mask=next;
+  record(before);
+  draw();
+}
+$('maskFromArt').onclick=()=>replaceMask(Uint8Array.from(pixels,value=>Number(value!==null)));
+$('maskEmpty').onclick=()=>replaceMask(new Uint8Array(w*h));
+$('maskDefault').onclick=()=>replaceMask(null);
+
+function replay(from,to) {
+  end();
+  if(!from.length)return;
+  to.push(layerPixels()?.slice()??null);
+  if(maskMode){mask=from.pop();maskDirty=true;}
+  else{pixels=from.pop();dirty=true;}
+  draw();
+}
+$('undo').onclick=()=>replay(undoStack(),redoStack());
+$('redo').onclick=()=>replay(redoStack(),undoStack());
 window.addEventListener('keydown',e=>{if(busy||/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const t={b:'pen',e:'erase',i:'pick',g:'fill'}[e.key.toLowerCase()];if(t){e.preventDefault();selectTool(t);return;}}
-if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();(e.key.toLowerCase()==='y'||e.shiftKey?$('redo'):$('undo')).click();}});window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();(e.key.toLowerCase()==='y'||e.shiftKey?$('redo'):$('undo')).click();}});window.addEventListener('beforeunload',e=>{if(hasDraft()){e.preventDefault();e.returnValue='';}});
 $('zoom').oninput=draw;$('grid').onchange=draw;const blob=()=>new Promise(resolve=>image.toBlob(resolve,'image/png'));async function write(handle,data){const stream=await handle.createWritable();await stream.write(data);await stream.close();}
-$('save').onclick=()=>run(async()=>{end();const doc=await readDoc();if(doc.version!==1||!doc.assets)throw Error('覆盖稿格式异常，未覆盖');if(JSON.stringify(doc.assets[name]??null)!==revision)throw Error('该素材覆盖稿已被其他窗口修改，请先导出当前PNG，再重新打开核对');doc.assets[name]={width:w,height:h,pixels};await write(await dir.getFileHandle('pixel-overrides.json',{create:true}),JSON.stringify(doc));revision=JSON.stringify(doc.assets[name]);const png=await blob();await write(await fileAt(name),png);if(urls.has(name))URL.revokeObjectURL(urls.get(name));urls.set(name,URL.createObjectURL(png));dirty=false;draw();message('已保存 '+name+'。刷新游戏查看；重新生成素材也会保留本次修改。');});
+async function saveMask() {
+  const doc = await readMaskDoc();
+  if (JSON.stringify(doc.assets[name]??null)!==maskRevision) {
+    throw Error('该素材的碰撞已被其他窗口修改，请重新打开素材核对');
+  }
+  if (mask) doc.assets[name]=encodeMask();
+  else delete doc.assets[name];
+  await write(await dir.getFileHandle('asset-collisions.json',{create:true}),JSON.stringify(doc,null,2));
+  maskRevision=JSON.stringify(doc.assets[name]??null);
+  maskDirty=false;
+  draw();
+  message('已保存 '+name+' 的碰撞蒙版。刷新游戏即可应用到所有使用该素材的位置。');
+}
+$('save').onclick=()=>run(async()=>{end();if(maskMode){await saveMask();return;}const doc=await readDoc();if(doc.version!==1||!doc.assets)throw Error('覆盖稿格式异常，未覆盖');if(JSON.stringify(doc.assets[name]??null)!==revision)throw Error('该素材覆盖稿已被其他窗口修改，请先导出当前PNG，再重新打开核对');doc.assets[name]={width:w,height:h,pixels};await write(await dir.getFileHandle('pixel-overrides.json',{create:true}),JSON.stringify(doc));revision=JSON.stringify(doc.assets[name]);const png=await blob();await write(await fileAt(name),png);if(urls.has(name))URL.revokeObjectURL(urls.get(name));urls.set(name,URL.createObjectURL(png));dirty=false;draw();message('已保存 '+name+'。刷新游戏查看；重新生成素材也会保留本次修改。');});
 $('export').onclick=()=>run(async()=>{const url=URL.createObjectURL(await blob()),a=document.createElement('a');a.href=url;a.download=name.split('/').at(-1);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 renderLibrary();selectTool(tool);
 </script></html>

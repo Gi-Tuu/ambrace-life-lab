@@ -78,6 +78,7 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
     const dom = execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', `--user-data-dir=${join(dir, 'prof')}`, '--dump-dom', `http://127.0.0.1:${port}/`], { encoding: 'utf8', timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
     assert.ok(dom.includes('通道开'), '渲染结果里没有 A 侧标题 ⇒ 页面没起来');
     assert.ok(dom.includes('通道切断'), '渲染结果里没有 B 侧标题');
+    assert.ok(dom.includes('本地替身'), '后端 chip 仍是读取中 ⇒ refresh 没跑（模块抛错/TDZ）');
     assert.ok(!/undefined|NaN/.test(dom), '页面里漏出了 undefined/NaN');
     assert.ok(dom.length > 2000, `DOM 太小（${dom.length}）⇒ 可能只渲染了骨架`);
   } finally {

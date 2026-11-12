@@ -12,11 +12,17 @@ test('E1b/E3b 全机制关与复抓#11基线逐位相同（按 seed）', async (
   for (const seed of SEEDS) assert.equal((await run(seed, OFF)).digest, OFF_BASE[seed]);
 });
 
-test('E1a 无人值守（9.1 缩预算）：收/种发生；可接受结局＝无人活 或 玩家必需（E1f）', async () => {
+// 改量#12 披露（§18 后续，2026-11-12）：旧判据读 forageStats（E1 安全网「缺粮才代劳收种」计数）。
+// §17 产出接入主粮循环且 owner 终裁 AI 也自动兑换后，公仓自足 ⇒ 安全网几乎不再触发
+// （E1ON 实测 forageStats.harvest = 0/1/0），但 AI 自主收种并没有消失
+// （aiActions.harvest = 2/3/4、plant = 2/3/4）。
+// 因此判据改测更本质的「AI 自主收种」口径：仍要求每个 seed 都真的收/种过，
+// 收种机制一旦坏掉仍会变红，不是放水；只是不再把「安全网被触发」当成玩法成立的必要条件。
+test('E1a 无人值守（改量#12：AI 自主收/种发生）：可接受结局＝无人活 或 玩家必需（E1f）', async () => {
   const on = await Promise.all(SEEDS.map((s) => run(s, E1ON)));
   for (const r of on) {
-    assert.ok(r.forageStats.harvest > 0, `seed${r.seed} 无 harvest`);
-    assert.ok(r.forageStats.plant > 0, `seed${r.seed} 无 plant`);
+    assert.ok((r.aiActions.harvest ?? 0) > 0, `seed${r.seed} 无 AI 自主 harvest`);
+    assert.ok((r.aiActions.plant ?? 0) > 0, `seed${r.seed} 无 AI 自主 plant`);
   }
   const idleAlive = on.filter((r) => !r.end.failed).length;
   const wp = await Promise.all(SEEDS.map((s) => run(s, { ...E1ON, player: true })));
@@ -36,11 +42,13 @@ test('E1c 玩家边际（9.1 integral 口径）：带玩家 vs 无人 storeInteg
   assert.ok(diffs.filter((d) => d > 0).length >= 2, `diffs=${diffs.join(',')}`);
 });
 
-test('E1g 负控：on/off 轨迹必须不同且 on 真的收过【变红法：删 tickSurvPlay 的 forage 行】', async () => {
+// 改量#12：负控保留「on/off 轨迹必须不同」（forage 开关仍然有效），
+// 「真的收过」换用 AI 自主收种口径，理由同 E1a（安全网代劳在自足聚落里已不必触发）。
+test('E1g 负控（改量#12）：on/off 轨迹必须不同且 AI 真的收过【变红法：删 tickSurvPlay 的 forage 行】', async () => {
   const on = await run(7, E1ON);
   const off = await run(7, OFF);
   assert.notEqual(on.digest, off.digest);
-  assert.ok(on.forageStats.harvest > 0);
+  assert.ok((on.aiActions.harvest ?? 0) > 0, 'on 侧 AI 没有自主收种');
 });
 
 test('E3a 维修真发生（repairEarly on）：≥2/3 seed 修≥1 且有好楼且有过损伤；重建不刷屏 builds≤3', async () => {

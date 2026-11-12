@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>营地空间小样 · AMBRACE</title>
+  <style>
+    :root { color-scheme: dark; --bg:#18251e; --panel:#263d29; --line:#72513b; --ink:#fff0cc; --dim:#d9d6b8; --gold:#edc787; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui,sans-serif; }
+    main { max-width:1260px; margin:auto; padding:20px clamp(12px,3vw,36px); }
+    header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    h1 { font-size:clamp(23px,4vw,34px); line-height:1.18; margin:0; }
+    p { margin:4px 0 0; color:var(--dim); }
+    a { color:var(--gold); }
+    .scene { position:relative; background:#263d29; border:2px solid #ba8752; box-shadow:4px 4px #000; }
+    canvas { width:100%; height:clamp(320px,58dvh,620px); display:block; outline-offset:-4px; cursor:grab; touch-action:none; }
+    canvas:active { cursor:grabbing; }
+    canvas:focus-visible, button:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+    #unsupported { position:absolute; inset:0; display:grid; place-content:center; padding:20px; margin:0; text-align:center; background:var(--panel); }
+    #unsupported[hidden] { display:none; }
+    .controls { display:flex; align-items:flex-start; justify-content:space-between; gap:12px 24px; flex-wrap:wrap; margin-top:14px; }
+    .group { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .group > span { color:var(--dim); margin-right:4px; }
+    button { font:inherit; color:var(--ink); background:var(--panel); border:2px solid var(--line); padding:7px 12px; min-height:40px; cursor:pointer; touch-action:none; }
+    button:hover { border-color:var(--gold); }
+    button[aria-pressed="true"] { background:var(--gold); color:var(--bg); border-color:var(--ink); }
+    button:disabled { opacity:.65; cursor:default; }
+    .hint { margin-top:12px; font-size:13px; }
+    #status { min-height:1.5em; margin-top:8px; color:var(--gold); }
+    .directions { display:grid; grid-template-columns:repeat(4, minmax(40px, 1fr)); gap:6px; }
+    @media (max-width:540px) { main { padding-top:12px; } canvas { height:clamp(300px,50dvh,460px); } .controls { gap:8px; } button { padding:6px 9px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>营地空间小样</h1><p>把角色放到同一段栏杆的两侧，看看谁挡住谁。</p></div>
+    <a href="/?room=hall">返回像素连廊</a>
+  </header>
+  <div class="scene">
+    <canvas id="scene" tabindex="0" aria-label="可走动的 3D 河岸、桥和连廊"></canvas>
+    <p id="unsupported" role="alert" hidden></p>
+  </div>
+  <div class="controls">
+    <div class="group" role="group" aria-label="角色起点">
+      <span>切换起点</span>
+      <button data-spot="front" aria-pressed="false">栏杆前</button>
+      <button data-spot="back" aria-pressed="true">栏杆后</button>
+      <button data-spot="bridge" aria-pressed="false">桥头</button>
+      <button id="reset-camera">重置视角</button>
+    </div>
+    <div class="directions" role="group" aria-label="按住方向移动">
+      <button data-move="up" aria-label="向北走">↑</button>
+      <button data-move="left" aria-label="向西走">←</button>
+      <button data-move="down" aria-label="向南走">↓</button>
+      <button data-move="right" aria-label="向东走">→</button>
+    </div>
+  </div>
+  <p class="hint">WASD / 方向键移动 · 拖动画面转视角 · 从台阶缺口进入连廊</p>
+  <p id="status" role="status"></p>
+</main>
+<script type="module" src="./corridor-3d.mjs"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -37,6 +37,10 @@ export const BASE_KINDS = {
   plan: { impulse: 0.2, cost: 0.05, label: '勘察并奠基' },
   build: { impulse: 0.3, cost: 0.1, label: '施工' },
   repair: { impulse: 0.2, cost: 0.06, label: '维修建筑' },
+  // §17 产出循环：仅在 survival 候选里出现，lab/town 的候选集逐位不变。
+  forage: { impulse: 0.2, cost: 0.05, label: '采一捧浆果' },
+  exchange: { impulse: 0.15, cost: 0.03, label: '兑换收成' },
+  expand: { impulse: 0.2, cost: 0.08, label: '扩建蓄养或果树' },
 };
 
 // §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
@@ -285,6 +289,21 @@ export function affordancesFor(world, agentId) {
       if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
     if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
+    // §17 产出循环：AI 与玩家拿到完全相同的候选，走同一套规则层裁决。
+    // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，
+    // 否则无人值守会退化成原地刷产出（E1a/E1g 实测踩到过）。兑换另设 70% 仓容门槛，
+    // 避免把公仓顶满后灾害削不动缓冲（P2-4）。
+    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t)
+      out.push({ id: 'forage', kind: 'forage', label: BASE_KINDS.forage.label, cost: 0.12, impulse: 0.05, serves: { energy: 0.08 } });
+    // §17 改量#12：所有者裁定 AI 也要能自动兑换，与玩家完全同权。
+    // 仍保留 70% 仓容门槛与低吸引力：兑换是"顺手可做"的低优先动作，不能挤掉收种与建设。
+    for (const [kind, rate] of Object.entries(EXCHANGE))
+      if ((s0.produce?.[kind] ?? 0) >= 1 && !(rate.store && s0.store >= (s0.storeCap ?? 24) * .7))
+        out.push({ id: `exchange:${kind}`, kind: 'exchange', type: kind, label: `兑换·${PRODUCE_LABEL[kind]}`, cost: 0.12, impulse: 0.05, serves: { energy: 0.12 } });
+    // 扩建只在材料富余时出现：留够一份建筑料，避免把木石吃光拖垮建房（P2-7 实测）。
+    for (const [type, cost] of Object.entries(EXPAND))
+      if ((s0.livestock?.[type] ?? 0) < LIVESTOCK_CAP && (s0.inv?.wood ?? 0) >= cost.wood + 4 && (s0.inv?.stone ?? 0) >= cost.stone + 3)
+        out.push({ id: `expand:${type}`, kind: 'expand', type, label: `扩建·${EXPAND_LABEL[type]}`, cost: 0.15, impulse: 0.05, serves: { stimulation: 0.15 } });
     const bag0 = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
     const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);
@@ -461,6 +480,24 @@ function actuateInner(world, agentId, action) {
       const already = world.companions.some((p) => (p[0] === agentId && p[1] === other) || (p[1] === agentId && p[0] === other));
       if (!already) world.companions.push([agentId, other]);
       return { action, ok: true, code: 'OK', observation: `和${world.agents[other]?.name ?? other}结伴了`, satiated: 'social', amount: 0.15, evt: evt({ kind: 'companion', valence: 0.4, serves: 'social', about: other }) };
+    }
+    case 'forage': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doForage(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: '采到一捧浆果', evt: evt({ kind: 'forage', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'exchange': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doExchange(world, agentId, action.type);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: `兑换收成：${r.gained}`, evt: evt({ kind: 'exchange', valence: 0.25, serves: 'energy' }) };
+    }
+    case 'expand': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doExpand(world, agentId, action.type);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: `扩建：${r.label}`, evt: evt({ kind: 'expand', valence: 0.3, serves: 'stimulation' }) };
     }
     case 'harvest': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
