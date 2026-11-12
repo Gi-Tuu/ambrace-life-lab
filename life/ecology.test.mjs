@@ -15,11 +15,14 @@ test('G1 交付可玩（§15.4 改量 3 人消耗口径）：默认＋玩家脚�
   assert.ok(r.filter((x) => x.end.won).length >= 2, `won=${r.map((x) => x.end.won).join(',')}`);
 });
 
-test('G2 buffer stakes（§15.4 改量 3 人口径）：disasters 开使 storeIntegral 更低（≥2/3 seed）', async () => {
+test('G2 stakes 改量#14：disasters 开必须制造更多损伤（≥2/3 seed，且至少 1 seed 严格更多）', async () => {
+  // 改量理由（phase1-plan §20）：产出经济+谷仓封顶后 storeIntegral 饱和，不再对灾害灵敏；
+  // 且 seed 修正后 seed 11 本身无风暴。改用直接因果量：损伤事件。
   const on = await Promise.all(SEEDS.map((s) => run(s, { ...PLAYABLE, flags: { playerEats: false, disasters: true } })));
   const off = await Promise.all(SEEDS.map((s) => run(s, { ...PLAYABLE, flags: { playerEats: false, disasters: false } })));
-  const ok = on.filter((x, i) => x.storeIntegral < off[i].storeIntegral).length;
-  assert.ok(ok >= 2, `pass=${ok}/3 integral=${on.map((x, i) => `${off[i].storeIntegral}->${x.storeIntegral}`).join(',')}`);
+  const ge = on.filter((x, i) => x.damageEvents >= off[i].damageEvents).length;
+  const gt = on.filter((x, i) => x.damageEvents > off[i].damageEvents).length;
+  assert.ok(ge >= 2 && gt >= 1, `dmg=${on.map((x, i) => `${off[i].damageEvents}->${x.damageEvents}`).join(',')}`);
 });
 
 test('G3 预警领先：stakes 配置每次灾害 onset 前≥1 天有预警（warnBad=0）', async () => {
@@ -38,7 +41,7 @@ test('G5 确定：同 seed 两跑 digest 相同', async () => {
   for (const s of SEEDS) assert.equal((await run(s, { forage: true })).digest, (await run(s, { forage: true })).digest);
 });
 
-test('G6 可逆：全关＝OFF_BASE；新机制关（forage/repair 保持）＝BASELINE3（复抓#11 按 seed）', async () => {
+test('G6 可逆：全关＝OFF_BASE；新机制关（forage/repair 保持）＝BASELINE3（复抓#14 按 seed）', async () => {
   for (const s of SEEDS) {
     assert.equal((await run(s, OFF)).digest, OFF_BASE[s]);
     assert.equal((await run(s, OFF2)).digest, BASELINE3[s]);

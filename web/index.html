@@ -331,9 +331,18 @@
   .bp-item img { justify-self:center; image-rendering:pixelated; }
   #btnBag, #btnUse { font-size:12px; }
   #toolHint { max-width:220px; font-size:12px; color:var(--dim); }
-  #backpack, #campPropDialog { width:min(560px,calc(100vw - 24px)); padding:12px; color:var(--ink); background:var(--panel);
+  #backpack, #campPropDialog, #talkDlg { width:min(560px,calc(100vw - 24px)); padding:12px; color:var(--ink); background:var(--panel);
     border:2px solid var(--line-hi); box-shadow:4px 4px 0 var(--shadow); }
-  #backpack::backdrop, #campPropDialog::backdrop { background:rgba(0,0,0,.72); }
+  #backpack::backdrop, #campPropDialog::backdrop, #talkDlg::backdrop { background:rgba(0,0,0,.72); }
+  #talkDlg { width:min(520px,calc(100vw - 24px)); }
+  #talkLog { display:grid; gap:6px; max-height:240px; overflow:auto; margin:8px 0; padding:8px;
+    background:var(--sunken); border:2px solid var(--line); font-size:12px; line-height:1.5; }
+  #talkLog .me { color:var(--gold); }
+  #talkLog .sys { color:var(--dim); }
+  #talkRow { display:flex; gap:6px; }
+  #talkText { flex:1; min-height:36px; padding:4px 8px; font:inherit; font-size:12px; color:var(--ink);
+    background:var(--sunken); border:2px solid var(--line); }
+  #talkDlg button { font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line); padding:4px 10px; cursor:pointer; }
   .bp-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
   .bp-row h2 { margin:0 auto 0 0; font-size:16px; line-height:20px; }
   #backpack button, #campPropDialog button { font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line); padding:4px 10px; cursor:pointer; }
@@ -531,6 +540,18 @@
   </div>
   <div id="bpBody"></div>
   <div class="bp-note">存入公仓供全体每日分配；取出放进个人背包用于奠基/维修。F 键用当前工具交互。</div>
+</dialog>
+<dialog id="talkDlg" aria-labelledby="talkTitle">
+  <div class="bp-row">
+    <h2 id="talkTitle">交谈</h2>
+    <button id="talkClose" type="button">走开（Esc）</button>
+  </div>
+  <div id="talkLog" role="log" aria-live="polite"></div>
+  <div id="talkRow">
+    <input id="talkText" maxlength="200" placeholder="说点什么…（他们可能不理你、走开或发火）" autocomplete="off" />
+    <button id="talkSend" type="button">说</button>
+  </div>
+  <div class="bp-note">对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。</div>
 </dialog>
 <dialog id="campPropDialog" aria-labelledby="campPropTitle" aria-describedby="campPropText">
   <div class="bp-row">

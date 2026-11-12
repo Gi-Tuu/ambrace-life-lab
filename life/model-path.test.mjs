@@ -38,7 +38,8 @@ await host.start();
 host.stop();
 
 const snap = () => host.snapshot();
-const sumCounter = (k) => ['A', 'B'].reduce((s, side) => s + Object.values(snap()[side].agents).reduce((t, a) => t + (a.counters[k] ?? 0), 0), 0);
+const sumCounter = (k) => ['A', 'B'].reduce((s, side) => s + Object.values(snap()[side].agents).reduce((t, a) => t + (a.counters[k] ?? 0), 0), 0)
+  + Object.values(snap().survival?.agents ?? {}).reduce((t, a) => t + (a.counters?.[k] ?? 0), 0);
 const runTicks = async (n, { touch = false } = {}) => {
   for (let i = 0; i < n; i += 1) {
     if (touch) host.touch();
@@ -91,11 +92,12 @@ test('M4 供应商 500 ⇒ 记录 attempts、退回替身、账面不多记', as
   const tk0 = snap().model.tokens;
   const t0 = snap().A.t;
   host.touch();
-  await runTicks(12, { touch: true });
+  const a0 = (snap().model.attempts ?? []).length;
+  for (let i = 0; i < 80 && (snap().model.attempts ?? []).length === a0; i += 1) await runTicks(1, { touch: true });
   const st = snap();
-  assert.ok(st.A.t > t0, '上游全失败把世界弄停了');
-  assert.ok((st.model.attempts ?? []).length > 0, '失败尝试没有进 attempts（运维看不到原因）');
-  assert.ok(String(st.model.attempts.at(-1)).includes('500'), `attempts 里没有 HTTP 500：${JSON.stringify(st.model.attempts.slice(-2))}`);
+  assert.ok(st.A.t > t0, `上游全失败把世界弄停了 calls=${st.model.calls} attempts=${JSON.stringify(st.model.attempts.slice(-2))}`);
+  assert.ok((st.model.attempts ?? []).length > 0, `失败尝试没有进 attempts（运维看不到原因） calls=${st.model.calls}`);
+  assert.ok(String(st.model.attempts.at(-1)).includes('500'), `attempts 里没有 HTTP 500：${JSON.stringify(st.model.attempts.slice(-2))} calls=${st.model.calls} budget=${st.model.budget}`);
   assert.equal(st.model.calls, c0, '失败的调用仍然记了账 ⇒ 额度被白吃');
   assert.equal(st.model.tokens, tk0, '失败的调用仍然累加了 token');
   fake.mode = 'ok';

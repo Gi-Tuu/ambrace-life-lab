@@ -40,7 +40,7 @@ test('K3 机制单元：强制连晴 3 日界 ⇒ drought 且水多扣 0.06/干�
   assert.ok(gOn < gOff, `干旱生长应更慢 ${gOn} vs ${gOff}`);
 });
 
-test('K5 可逆：droughts 及其余新机制关 ⇒ BASELINE3（复抓#11 按 seed；#7 含 occupancy 崩溃冻结轨迹，2026-11-12 作废）', async () => {
+test('K5 可逆：droughts 及其余新机制关 ⇒ BASELINE3（复抓#14 按 seed）', async () => {
   for (const s of SEEDS) assert.equal((await run(s, OFF2)).digest, BASELINE3[s]);
 });
 // K7（seed 轴不再全同）：§13 曾判负；§15 同权升级后 Organism rng 使三 seed 互异 ⇒ 退化随同权修复，见 §15 回填。

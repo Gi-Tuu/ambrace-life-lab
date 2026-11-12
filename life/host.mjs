@@ -11,6 +11,7 @@ import { makeWorld, spawn, scanSecrets, LOCS, hail, workUsedToday } from './body
 import { phaseOf, scheduledLoc, weatherFor, dayOf } from './clock.mjs';
 import { presetOf } from './presets.mjs';
 import { speechLine, classifySay } from './speech.mjs';
+import { openTalk, sayTo, closeTalk } from './dialogue.mjs';
 import { tell } from './gossip.mjs';
 import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
@@ -276,6 +277,49 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
     } finally {
       clearTimeout(to);
     }
+  }
+  return null;
+}
+
+// 对话模型：只负责"怎么说"，态度已由 dialogue.sayTo 在服务端裁决。
+// 与决策模型共用同一本每日预算与在场闸门；任何失败都返回 null，让模板兜底。
+async function modelTalk({ npc, world, history, text, trust }) {
+  if (!CFG.providers.length || !CFG.keys.some(Boolean)) return null;
+  if (CFG.brain !== 'model') return null;
+  budgetTick(S.model, new Date().toISOString().slice(0, 10));
+  if (S.model.calls >= BUDGET) return null;
+  if (!observerActive(S.viewers.survival, Date.now())) return null;
+  if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
+  S.asksThisTick = (S.asksThisTick ?? 0) + 1;
+  const here = (world.locs ?? LOCS)[world.loc[npc.id]] ?? world.loc[npc.id];
+  const turns = (history ?? []).slice(-6).map((h) => `${h.who === 'p1' ? '对方' : npc.name}：${h.text}`).join('\n');
+  const prompt = [
+    `你叫${npc.name}，${npc.traits?.archetype ?? '谨慎'}型性格，此刻在${here}。`,
+    `你手里的活：${npc.last?.kind ?? '空闲'}；能量 ${(npc.drives?.v?.energy ?? 0.7).toFixed(2)}，社交 ${(npc.drives?.v?.social ?? 0.5).toFixed(2)}。`,
+    `你对玩家（对方）的信任：${Math.round(trust)}/100。`,
+    turns ? `刚才的对话：\n${turns}` : '',
+    `对方刚说：${text}`,
+    '只回一句中文台词，不超过 40 字。可以冷淡、敷衍、不耐烦或发火；不要旁白，不要解释设定，不要加引号。',
+  ].filter(Boolean).join('\n');
+  for (let i = 0; i < CFG.providers.length; i++) {
+    const mdl = CFG.models[i] ?? CFG.model;
+    if (!mdl) continue;
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 15000);
+    try {
+      const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
+        body: JSON.stringify({ model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }),
+        signal: ac.signal,
+      });
+      if (!res.ok) continue;
+      const j = await res.json();
+      S.model.calls += 1;
+      S.model.tokens += j.usage?.total_tokens ?? 0;
+      const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
+      if (line) return line.slice(0, 80);
+    } catch { /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
   }
   return null;
 }
@@ -755,6 +799,10 @@ export const host = {
     if (body?.mode === 'survival') {
       if (!S.surv) return {ok:false,error:'NO_SURV'};
       if (body.kind==='camp_sleep') return sleepSurvival();
+      // P0 对话：服务端定态度，模型只说人话；没有模型时退模板。
+      if (body.kind==='talk_open') return openTalk(S.surv,body);
+      if (body.kind==='talk_say') { const r=await sayTo(S.surv,body,modelTalk); if (r.ok) await save(); return r; }
+      if (body.kind==='talk_close') return closeTalk(S.surv);
       if (sleepPending) return {ok:false,code:'SLEEP_BUSY'};
       const result = survAct(S.surv,body);
       if (result.ok && (String(body.kind).startsWith('family_') || body.kind==='camp_resident')) await save();

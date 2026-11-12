@@ -19,6 +19,8 @@ const amount=(bag,item)=>bag?.[item]??0;
 const setCount=(bag,item,n)=>{bag[item]=n;};
 
 const playerHome=(world,site)=>site==='home' || (Boolean(site) && site===world.housing?.p1);
+// P0-3：玩家动作与居民同权，也付存续代价（只在动作成功时扣）。
+const pay=(world,cost)=>{world.agents.p1?.viab?.spend?.(cost);};
 export function campTimberView(world) {
   const cut=world.survival.campTrees??{};
   return Object.fromEntries((world.campLayout?.grove??TIMBER_GROVE).map(tree=>{
@@ -79,13 +81,18 @@ export function campAction(world,body) {
     if (to===stored && Object.values(stored).reduce((sum,n)=>sum+n,0)>=(table?6:24)) return fail('CONTAINER_FULL');
     setCount(from,item,amount(from,item)-1);
     setCount(to,item,amount(to,item)+1);
+    pay(world,0.005);
     return ok();
   }
   if (kind==='camp_eat') {
     if (!playerHome(world,site)) return fail('NOT_HOME');
+    if (amount(bag,'tray')<1) return fail('NEED_TRAY'); // 托盘是餐具：没有它只能看着饭
     const meal=s.campContainers?.[`${site}:meal`];
     if (!FOOD.has(item) || !amount(meal,item)) return fail('EMPTY');
     setCount(meal,item,amount(meal,item)-1);
+    const pl=world.agents.p1;
+    pl?.viab?.regen?.(1);              // 一份饭按 mealYield 折算；低于 mealMin 不算进食
+    pl?.drives?.reward?.('energy',0.35);
     s.mealsEaten=(s.mealsEaten??0)+1;
     return ok();
   }
@@ -96,7 +103,9 @@ export function campAction(world,body) {
     const trees=(s.campTrees??={});
     if ((trees[target]??0)>world.t) return fail('TREE_GROWING');
     trees[target]=world.t+3*DAY_TICKS;
-    return doGather(world,'p1');
+    const cut=doGather(world,'p1');
+    if (cut.ok) pay(world,0.02);
+    return cut;
   }
   if (kind==='camp_craft') {
     if (!['workshop','yard'].includes(site)) return fail('NOT_WORKBENCH');
@@ -104,13 +113,16 @@ export function campAction(world,body) {
     if (amount(bag,'wood')<2) return fail('NO_MATERIAL');
     bag.wood-=2;
     bag.tray=amount(bag,'tray')+1;
+    pay(world,0.01);
     return ok();
   }
   if (kind==='camp_plant') {
     if (site!=='garden') return fail('NOT_GARDEN');
     if (tool!=='hoe') return fail('NEED_TOOL');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
-    return doPlant(world,'p1',plot);
+    const done=doPlant(world,'p1',plot);
+    if (done.ok) pay(world,0.02);
+    return done;
   }
   if (kind==='camp_water') {
     if (site!=='garden') return fail('NOT_GARDEN');
@@ -119,6 +131,7 @@ export function campAction(world,body) {
     if (s.water>=1) return fail('WATER_FULL');
     bag.water-=1;
     s.water=Math.min(1,s.water+.12);
+    pay(world,0.01);
     return ok();
   }
   if (kind!=='camp_collect') return fail('UNKNOWN_KIND');
@@ -144,5 +157,6 @@ export function campAction(world,body) {
     s.produce[item]-=1;
   }
   bag[item]=amount(bag,item)+1;
+  pay(world,0.02);
   return ok();
 }
