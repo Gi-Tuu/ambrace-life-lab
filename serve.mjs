@@ -158,7 +158,9 @@ async function handle(req, res) {
   // H-03：观众在场打点只认**读**路径。/act、/ctl 是写路由——让它们自己 touch 自己，
   // 等于任何人都能用一条 POST 把 watching 顶成 true 并烧真模型额度（实测 4 条 say 烧完 5 次调用）。
   // /healthz 也不算（平台探活会让"有观众"恒真）。/chat 同理。
-  if (p === '/' || p === '/index.html' || p === '/world') host.touch();
+  if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
+  const viewMode = url.searchParams.get('mode');
+  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode);
 
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
@@ -194,8 +196,8 @@ async function handle(req, res) {
       return json(res, 400, { error: 'BAD_JSON' });
     }
     // H-02c：reset 是唯一会把整段历史丢掉的动作，必须显式确认，避免误点与 CSRF 成功。
-    if (p === '/ctl' && body?.action === 'reset' && body?.confirm !== true) {
-      return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 {"action":"reset","confirm":true}' });
+    if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
+      return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
     return json(res, 200, await (p === '/act' ? host.act(body) : host.ctl(body)));
   }

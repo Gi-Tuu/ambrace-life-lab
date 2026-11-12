@@ -1,14 +1,15 @@
+import { householdPlans, houseLabor } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
 // ——talk 的对象被硬写成 others[0]、wander 是固定循环。没有分岔，偏好就没有可表达的地方。
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
-import { scheduledLoc, weatherFor, dayOf } from './clock.mjs';
+import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -37,6 +38,10 @@ export const BASE_KINDS = {
   plan: { impulse: 0.2, cost: 0.05, label: '勘察并奠基' },
   build: { impulse: 0.3, cost: 0.1, label: '施工' },
   repair: { impulse: 0.2, cost: 0.06, label: '维修建筑' },
+  // §17 产出循环：仅在 survival 候选里出现，lab/town 的候选集逐位不变。
+  forage: { impulse: 0.2, cost: 0.05, label: '采一捧浆果' },
+  exchange: { impulse: 0.15, cost: 0.03, label: '兑换收成' },
+  expand: { impulse: 0.2, cost: 0.08, label: '扩建蓄养或果树' },
 };
 
 // §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
@@ -215,10 +220,15 @@ export function affordancesFor(world, agentId) {
 
   // 路径二：走到某处——目的地有谁，满足的需求就不同（这是原来 wander 完全没有的分岔）
   const feats = world.features ?? {};
+  const ownHome=world.housing?.[agentId];
+  const privateRooms=world.survival?.households ? Object.keys(world.survival.households.deeds) :
+    world.housing ? Object.values(world.housing) : [];
+  const houseGoal=world.survival?.households ? householdPlans(world,agentId) : null;
+  const homeAtNight=ownHome && survivalPhaseOf(world.t)==='夜';
   for (const loc of Object.keys(world.locs ?? LOCS)) {
-    if (loc === here) continue;
+    if (loc===here || (privateRooms.includes(loc) && (loc!==ownHome || !homeAtNight))) continue;
     const crowd = (world.occupancy[loc] ?? []).filter((x) => x !== agentId);
-    const serves = crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
+    const serves=loc===houseGoal?{energy:.7,safety:1,stimulation:1}:loc===ownHome?{energy:.46,safety:.2}:crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
     out.push({ id: `move_to:${loc}`, kind: 'move_to', to: loc, label: `走到${(world.locs ?? LOCS)[loc] ?? loc}`, cost: 0.06, impulse: 0.15, serves });
   }
 
@@ -284,7 +294,23 @@ export function affordancesFor(world, agentId) {
       if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 + urg } });
       if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
-    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: { stimulation: 0.55 } });
+    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: '为自己的房子加工木石', cost: .08, impulse: .4, serves: { safety: 1, stimulation: .9, energy: .55 } });
+    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: houseGoal===here ? { safety: 1, energy: .65, stimulation: .9 } : { stimulation: 0.55 } });
+    // §17 产出循环：AI 与玩家拿到完全相同的候选，走同一套规则层裁决。
+    // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，
+    // 否则无人值守会退化成原地刷产出（E1a/E1g 实测踩到过）。兑换另设 70% 仓容门槛，
+    // 避免把公仓顶满后灾害削不动缓冲（P2-4）。
+    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t)
+      out.push({ id: 'forage', kind: 'forage', label: BASE_KINDS.forage.label, cost: 0.12, impulse: 0.05, serves: { energy: 0.08 } });
+    // §17 改量#12：所有者裁定 AI 也要能自动兑换，与玩家完全同权。
+    // 仍保留 70% 仓容门槛与低吸引力：兑换是"顺手可做"的低优先动作，不能挤掉收种与建设。
+    for (const [kind, rate] of Object.entries(EXCHANGE))
+      if ((s0.produce?.[kind] ?? 0) >= 1 && !(rate.store && s0.store >= (s0.storeCap ?? 24) * .7))
+        out.push({ id: `exchange:${kind}`, kind: 'exchange', type: kind, label: `兑换·${PRODUCE_LABEL[kind]}`, cost: 0.12, impulse: 0.05, serves: { energy: 0.12 } });
+    // 扩建只在材料富余时出现：留够一份建筑料，避免把木石吃光拖垮建房（P2-7 实测）。
+    for (const [type, cost] of Object.entries(EXPAND))
+      if ((s0.livestock?.[type] ?? 0) < LIVESTOCK_CAP && (s0.inv?.wood ?? 0) >= cost.wood + 4 && (s0.inv?.stone ?? 0) >= cost.stone + 3)
+        out.push({ id: `expand:${type}`, kind: 'expand', type, label: `扩建·${EXPAND_LABEL[type]}`, cost: 0.15, impulse: 0.05, serves: { stimulation: 0.15 } });
     const bag0 = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
     const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);
@@ -462,6 +488,24 @@ function actuateInner(world, agentId, action) {
       if (!already) world.companions.push([agentId, other]);
       return { action, ok: true, code: 'OK', observation: `和${world.agents[other]?.name ?? other}结伴了`, satiated: 'social', amount: 0.15, evt: evt({ kind: 'companion', valence: 0.4, serves: 'social', about: other }) };
     }
+    case 'forage': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doForage(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: '采到一捧浆果', evt: evt({ kind: 'forage', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'exchange': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doExchange(world, agentId, action.type);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: `兑换收成：${r.gained}`, evt: evt({ kind: 'exchange', valence: 0.25, serves: 'energy' }) };
+    }
+    case 'expand': {
+      if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE' };
+      const r = doExpand(world, agentId, action.type);
+      if (!r.ok) return { action, ok: false, code: r.code };
+      return { action, ok: true, code: 'OK', observation: `扩建：${r.label}`, evt: evt({ kind: 'expand', valence: 0.3, serves: 'stimulation' }) };
+    }
     case 'harvest': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
       const r = doHarvest(world, agentId);
@@ -473,6 +517,12 @@ function actuateInner(world, agentId, action) {
       const r = doPlant(world, agentId);
       if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_WATER' ? '水分不足，播不了种' : '没有空菜畦' };
       return { action, ok: true, code: 'OK', observation: '播下种子，等它长大', evt: evt({ kind: 'plant', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'house_work': {
+      const ok = houseLabor(world, agentId, true);
+      return { action, ok, code: ok ? 'OK' : 'NO_HOUSE_WORK',
+        observation: ok ? '加工了一批建房用料' : '今天没有可做的建房工作',
+        evt: evt({ kind: 'house_work', valence: ok ? .3 : -.1, serves: 'stimulation' }) };
     }
     case 'gather': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可采集的' };

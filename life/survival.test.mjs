@@ -6,6 +6,7 @@ import { makeWorld, spawn, actuate, scanSecrets, move } from './body.mjs';
 import { validate } from './rules.mjs';
 import { advanceSurvival, doHarvest, SURV } from './worldstate.mjs';
 import { blockersOf } from './geometry.mjs';
+import { constructionLot } from '../web/camp-layout.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
 
 function survWorld() {
@@ -132,7 +133,8 @@ test('B5 建筑占地进入服务端 blockers；lab/town 为空', () => {
   const bl = blockersOf(w);
   assert.equal(bl.length, 1);
   assert.equal(bl[0].type, 'granary');
-  assert.equal(bl[0].w, 3); assert.equal(bl[0].h, 2);
+  const {x,z,w:width,d}=constructionLot('yard');
+  assert.deepEqual(bl[0],{x,y:z,w:width,h:d,type:'granary'});
   for (const preset of ['lab', 'town']) assert.deepEqual(blockersOf(makeWorld({ preset, seed: 7 })), []);
 });
 
