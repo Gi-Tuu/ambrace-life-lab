@@ -56,6 +56,7 @@ export class M5ModulatorBank{
   if(!Number.isFinite(this.slow))throw new RangeError('M5 慢状态非有限');
  }
  snapshot(){return {...this.m};}
+ restore(m){if(m&&typeof m==='object')for(const d of DIMS)if(Number.isFinite(m[d]))this.fast.m[d]=clamp01(m[d]);}
  summary(){return ModulatorBank.prototype.summary.call(this);}
  dumpM5(){return {version:2,slowScale:PARAMS.m5.slowScale,delay:this.options.delay,fast:{...this.fast.m},pending:{...this.pending},slow:this.slow,load:this.load,queue:[...this.queue],exposure:this.exposure.dump()};}
  loadM5(state,legacyM){

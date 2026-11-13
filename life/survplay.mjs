@@ -476,8 +476,13 @@ export function dumpSurv(sp) {
     habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(),
     traits: structuredClone(a.traits),
     dead: !!a.dead, death: a.death ?? null, hurtBy: a.hurtBy ?? null, // P0-1：死亡事实入档
+    rng: a.rng?.state?.() ?? null, setpoint: { ...a.drives.setpoint }, aloneTicks: a.drives.aloneTicks,
+    bankPending: { ...a.bank.pending }, bankM5: a.bank.dumpM5?.() ?? null, counters: { ...a.counters }, dayTally: structuredClone(a.dayTally),
+    m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null,
+    m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
+    informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, seed: w.seed, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, survival: w.survival, log: sp.log,
+  return { t: w.t, seed: w.seed, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
@@ -500,6 +505,15 @@ export function loadSurv(raw,seed=7,options) {
     restoreHouseholds(w, raw.housing);
     w.weather = weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
+    sp.world.pending = structuredClone(raw.pending ?? []);
+    if (raw.locs) sp.world.locs = { ...sp.world.locs, ...raw.locs };
+    if (raw.outdoor) sp.world.outdoor = raw.outdoor.slice();
+    if (raw.stash) sp.world.stash = { ...sp.world.stash, ...raw.stash };
+    if (raw.expect) sp.world.expect = { ...sp.world.expect, ...raw.expect };
+    if (Number.isFinite(raw.pantry)) sp.world.pantry = raw.pantry;
+    if (Number.isFinite(raw.riskyPortion)) sp.world.riskyPortion = raw.riskyPortion;
+    if (typeof raw.weatherEnabled === 'boolean') sp.world.weatherEnabled = raw.weatherEnabled;
+    sp.world.secrets = (raw.secrets ?? []).map((x) => ({ ...x, known: new Set(x.known ?? []) }));
     // occupancy 是派生数据但顺序进感知/候选：dumpSurv 不存它，读档必须按 loc 重建，
     // 否则创建期的 spawn 占位与存档位置错位，下一次 move() 取 occupancy[from] 落空。
     sp.world.occupancy = {};
@@ -524,6 +538,20 @@ export function loadSurv(raw,seed=7,options) {
       const a = sp.world.agents[id];
       if (!a || !a.drives || !st) continue;
       Object.assign(a.drives.v, st.drives ?? {});
+      if (st.setpoint) Object.assign(a.drives.setpoint, st.setpoint);
+      if (Number.isFinite(st.aloneTicks)) a.drives.aloneTicks = st.aloneTicks;
+      if (st.bankPending) Object.assign(a.bank.pending, st.bankPending);
+      if (st.bankM5 !== undefined && typeof a.bank.loadM5 === 'function') a.bank.loadM5(st.bankM5, st.m);
+      if (st.counters) Object.assign(a.counters, st.counters);
+      if (st.dayTally) a.dayTally = structuredClone(st.dayTally);
+      if (st.m3Last !== undefined) a.m3Last = structuredClone(st.m3Last);
+      if (st.m3PrevGoal !== undefined) a.m3PrevGoal = st.m3PrevGoal;
+      if (st.m3Planner && typeof a.m3Planner?.load === 'function') a.m3Planner.load(st.m3Planner);
+      if (st.coupling && typeof a.coupling?.restore === 'function') a.coupling.restore(st.coupling);
+      if (st.informedTick !== undefined) a.informedTick = st.informedTick;
+      if (Number.isFinite(st.lpFast)) a.lpFast = st.lpFast;
+      if (Number.isFinite(st.lpSlow)) a.lpSlow = st.lpSlow;
+      if (Number.isFinite(st.plasticGateNow)) a.plasticGateNow = st.plasticGateNow;
       if (typeof a.bank.restore === 'function') a.bank.restore(st.m);
       a.memory.load(Array.isArray(st.memory) ? { rows: st.memory } : st.memory);
       a.relations.map = new Map(st.rel ?? []);
@@ -533,6 +561,7 @@ export function loadSurv(raw,seed=7,options) {
       a.viab.restore(st.viab);
       Object.assign(a.traits, st.traits ?? {});
       a.dead = !!st.dead; a.death = st.death ?? null; a.hurtBy = st.hurtBy ?? null; // P0-1：读档恢复死亡事实
+      if (st.rng != null && typeof a.rng?.restore === 'function') a.rng.restore(st.rng); // C2：继续原随机序列
     }
     if (w.independentWorld) {
       const s = w.survival;
@@ -546,6 +575,27 @@ export function loadSurv(raw,seed=7,options) {
     }
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
     sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
+
+    // C3：占位顺序会进入感知/候选（crowd[0]）；存档带 occupancy 且与 loc 一致就沿用原顺序。
+    const expected = {};
+    for (const [id, l] of Object.entries(sp.world.loc)) {
+      const a = sp.world.agents[id];
+      if (!l || a?.dead) continue;
+      (expected[l] ??= []).push(id);
+    }
+    const rawOcc = raw.occupancy;
+    let occOk = Boolean(rawOcc) && typeof rawOcc === 'object';
+    if (occOk) {
+      const keys = Object.keys(rawOcc).filter((k) => (rawOcc[k] ?? []).length);
+      occOk = keys.length === Object.keys(expected).length;
+      if (occOk) for (const k of keys) {
+        const arr = rawOcc[k];
+        if (!Array.isArray(arr) || arr.length !== (expected[k] ?? []).length || new Set(arr).size !== arr.length || !arr.every((x) => sp.world.loc[x] === k && !sp.world.agents[x]?.dead)) { occOk = false; break; }
+      }
+    }
+    sp.world.occupancy = occOk
+      ? Object.fromEntries(Object.entries(rawOcc).map(([k, arr]) => [k, Array.isArray(arr) ? arr.slice() : []]))
+      : expected;
   }
   return sp;
 }

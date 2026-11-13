@@ -51,6 +51,12 @@ export class ModulatorBank {
     return { ...this.m };
   }
 
+  // C3：调制态入档（含 pending），读档后不改变下一次决策。
+  restore(m) {
+    if (!m || typeof m !== 'object') return;
+    for (const d of DIMS) if (Number.isFinite(m[d])) this.m[d] = clamp01(m[d]);
+  }
+
   // 离散化摘要：C2-neg 只允许这一层进入提示词，且不得进入四个通道
   summary() {
     const word = (v) => (v < 0.33 ? '低' : v < 0.66 ? '中' : '高');

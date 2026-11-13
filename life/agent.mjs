@@ -134,6 +134,41 @@ export class Organism {
     if (reason) this.counters.triggered += 1;
     if (told) this.informedTick = null;
 
+    // P1-A：基础代谢只结算一次；正式游戏先于反射判断（反射不免代谢），
+    // 研究模式保持旧顺序（反射提前 return 不结算），保护既有实验轨迹。
+    const metabolize = () => {
+      // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
+      const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
+      const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
+      // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
+      // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
+      if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
+      const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
+      this.bank.tick(1);
+      if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
+      // M6-L（PLAN §25.6）：在线相对进度 = 误差双 EMA 的 (slow−fast)/slow。只在 lpExplore 且 forwardLearn 开时写；
+      // 没学习就没有"进度"（L2 负控）。误差只用本次更新前的预测 mu，因果、无未来信息。
+      if (this.ch.lpExplore && this.ch.forwardLearn) {
+        const err = DIMS.reduce((s, d) => s + Math.abs(this.bank.m[d] - prediction.mu[d]), 0) / DIMS.length;
+        this.lpFast = this.lpFast === undefined ? err : this.lpFast + (err - this.lpFast) * PARAMS.lp.fast;
+        this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
+      }
+      const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
+      this.drives.tick(1, contact);
+      // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
+      if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[this.id])) {
+        this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008);
+      }
+      const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
+      if (erosion) this.noteErosion(erosion, t);
+
+      const ch = this.ch;
+      const effUtil = ch.util ? this.bank.m : { ...this.traits.baseline };
+      this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
+      return { ch, prediction };
+    };
+    const preMetab = world.independentWorld ? metabolize() : null;
+
     for (const p of percepts) {
       for (const r of REFLEXES) {
         if (!r.when(p, this.drives)) continue;
@@ -145,34 +180,8 @@ export class Organism {
       }
     }
 
-    // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
-    const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
-    const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
-    // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
-    // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
-    if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
-    const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
-    this.bank.tick(1);
-    if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
-    // M6-L（PLAN §25.6）：在线相对进度 = 误差双 EMA 的 (slow−fast)/slow。只在 lpExplore 且 forwardLearn 开时写；
-    // 没学习就没有"进度"（L2 负控）。误差只用本次更新前的预测 mu，因果、无未来信息。
-    if (this.ch.lpExplore && this.ch.forwardLearn) {
-      const err = DIMS.reduce((s, d) => s + Math.abs(this.bank.m[d] - prediction.mu[d]), 0) / DIMS.length;
-      this.lpFast = this.lpFast === undefined ? err : this.lpFast + (err - this.lpFast) * PARAMS.lp.fast;
-      this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
-    }
-    const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
-    this.drives.tick(1, contact);
-    // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
-    if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[this.id])) {
-      this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008);
-    }
-    const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
-    if (erosion) this.noteErosion(erosion, t);
-
-    const ch = this.ch;
-    const effUtil = ch.util ? this.bank.m : { ...this.traits.baseline };
-    this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
+    const metab = preMetab ?? metabolize();
+    const { ch, prediction } = metab;
     const affs = affordancesFor(world, this.id);
     const weights = ch.precision ? prediction.weights : null;
     const visible = visibleActions(affs, this.traits, ch, this.bank, weights);

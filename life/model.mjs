@@ -193,7 +193,8 @@ export function makeHabit() {
     },
     // L13 用的"完整度"读数：0~1，就是学习率本身（部件还剩多少能力，不是它干过多少活）
     availability: () => Number(plasticity.toFixed(4)),
-    dump: () => ({ plasticity: Number(plasticity.toFixed(3)), rows: Object.fromEntries([...table].map(([k, v]) => [k, { ema: Number(v.ema.toFixed(3)), n: v.n }])) }),
+    // C4：存档必须是全精度——toFixed(3) 会让读档后的习惯 EMA 与连续运行永久错位。
+    dump: () => ({ plasticity, rows: Object.fromEntries([...table].map(([k, v]) => [k, { ema: v.ema, n: v.n }])) }),
     load(d) {
       if (!d) return;
       // 旧存档直接把行表当整个 dump 存（还没有 plasticity 的时代），认得出来就不丢习惯

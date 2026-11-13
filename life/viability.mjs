@@ -114,7 +114,8 @@ export class SelfMaintain {
   }
 
   dump() {
-    return { v: Number(this.v.toFixed(4)), reserve: Number(this.reserve.toFixed(4)), stage: this.stage, age: Number(this.age.toFixed(3)), upkeepPaid: this.upkeepPaid, upkeepAuditComplete: this.upkeepAuditComplete, ledger: this.ledger };
+    // C4：全精度入档；显示用的 toFixed 只在 summary/UI 层。
+    return { v: this.v, reserve: this.reserve, stage: this.stage, age: this.age, upkeepPaid: this.upkeepPaid, upkeepAuditComplete: this.upkeepAuditComplete, ledger: this.ledger };
   }
 
   restore(d) {
