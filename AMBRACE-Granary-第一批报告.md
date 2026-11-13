@@ -100,6 +100,31 @@ HUD 同步显示「粮 23/24」可佐证注入生效。
 
 ---
 
+## 6. 实机入口与默认可见性（2026-11-13 补充，重要边界）
+
+**默认开局看不到 Granary，这不是 bug 而是游戏规则**：`initProduction()` 里
+`s.sites = []`、`s.buildings = []`，建筑必须由玩家 `plan`（granary 需木 5 / 石 3 / 劳力 6）
+再逐步 `build` 才会出现。因此第 2 节的四态截图是**通过 CDP 改写 `/world` 真实状态**拍的，
+走的是正常游戏数据链路（HUD 同步显示「粮 23/24」可佐证），但**不是靠自然推进的存档**。
+
+为了让验收方能直接点开看，另建了一个**独立演示存档**（不改仓库代码、不动 `data/world.json`）：
+
+| 项 | 值 |
+|---|---|
+| 存档 | `D:/Codex-Projects/output/ambrace-granary-demo/world.json` |
+| 启动 | `DATA_DIR=<上述目录> PORT=7970 HOST=127.0.0.1 BRAIN=local node serve.mjs` |
+| 直达 URL | `http://127.0.0.1:7970/` → 点「继续生存」 |
+| 预置状态 | `buildings` 含 granary（yard 地块、integrity 1）、`store` 22、`loc.p1 = yard` |
+
+**未注入实机核验**：`D:/Codex-Projects/output/granary-实机-无注入.png`，
+真 Chrome 直接打开该 URL，`renderer:"3d"`、`mode:"view"`、JS 错误 0，
+画面里可见红顶粮仓、门楣牌匾、谷穗、门前粮袋木桶货箱。
+HUD 显示 **粮 17/36** —— `storeCap` 因 granary 从 24 提升到 36，
+证明该建筑在**规则层也真实生效**，不是孤立的模型演示。
+服务运行期间世界仍在自主推进（第 4 天、store 22→17、AI 又自建了 shelter/workshop）。
+
+---
+
 ## 5. 后续接手信息（给下一个编程助手）
 
 ### 模块入口
