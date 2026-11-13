@@ -34,7 +34,11 @@ const M5_ENABLED = process.env.M5_ENABLED === '1';
 // 它属于世界配置而非内部通道，所以 A/B 两侧同样生效（B 侧是内部状态切断的负向对照，不是规则差异的对照）。
 const WORK_CAP = process.env.WORK_CAP === undefined || process.env.WORK_CAP === '' ? undefined : Number(process.env.WORK_CAP);
 const TICK_MS = Number(process.env.TICK_MS ?? 7500); // §14 统一游戏时间：24 刻/天 × 7.5s = 3 分钟/天（env 可覆盖）
+// P1-7 运行模式：research（默认）每拍同推 A/B 研究世界＋生存；game 仅推进生存世界（正式游戏省算力）。
+// 默认 research ⇒ 现行为逐位不变；game 为显式 opting-in，不影响 lab/sweep（它们走 simulate/run，不经 host tick）。
+const GAME_MODE = process.env.GAME_MODE === 'game' ? 'game' : 'research';
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
+const SURV_CATCHUP_CAP = Number(process.env.SURV_CATCHUP_CAP ?? 120); // P1-8 生存离线补时刻上限（默认 120 刻＝5 游戏日），超长截断
 const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 // BUG-14：每个角色保留多少条 trace。实测 4.19 KB/行、6.49 行/刻 ⇒ 生产 TICK_MS=6000 时
@@ -328,7 +332,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
 async function tickBody(onError = null) {
   // 单拍调用计数：PER_TICK_CAP 默认 0（不设上限），此时这一行与本变量都不影响任何行为。
   S.asksThisTick = 0;
-  for (const key of ['A', 'B']) {
+  if (GAME_MODE !== 'game') for (const key of ['A', 'B']) { // P1-7：game 模式不推进 A/B 研究世界（省算力）
     const p = S.packs[key];
     p.world.t += 1;
     // PLAN §28：天气按 (seed, day) 确定性推进；lab 的 weatherEnabled=false。
@@ -397,7 +401,8 @@ async function tickBody(onError = null) {
     if (p.series.length > SERIES_CAP) p.series.splice(0, p.series.length - SERIES_CAP);
   }
   if (S.surv) await tickSurvPlay(S.surv);   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
-  if (S.packs.A.world.t % SAVE_EVERY === 0) await save();
+  const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
+  if (saveTick % SAVE_EVERY === 0) await save();
 }
 
 // ─────────────────── 单写者调度器（H-08 / H-10 / H-11）───────────────────
@@ -483,6 +488,28 @@ function catchUp(minutes) {
     }
     p.log.push({ t: p.world.t, who: '系统', kind: 'disc', text: `休眠 ${S.missed.minutes} 分钟后醒来，已把这段真实时间补进内部状态${S.missed.capped ? '（超出上限，被截断）' : ''}` });
   }
+}
+
+// P1-8 生存世界离线补时：从存档刻继续推进（不重复结算已结算的日），有界（SURV_CATCHUP_CAP 刻）、
+// 本地自主（临时撤 deliberator，不烧模型预算）、终局/失败即停。游戏时间换算＝真实毫秒/TICK_MS。
+// 与床加速（sleepSurvival，玩家主动）和服务暂停恢复（本函数，被动）区分；超长空档如实标 capped。
+async function catchUpSurvival(minutes) {
+  if (!S.surv || !(minutes > 0)) return;
+  const want = Math.round(minutes * 60000 / TICK_MS);
+  const steps = Math.min(SURV_CATCHUP_CAP, Math.max(0, want));
+  if (steps <= 0) return;
+  const sp = S.surv;
+  const savedDelib = sp.world.survivalDeliberator;
+  setSurvivalDeliberator(sp, null); // 离线补时走本地替身
+  const start = sp.world.t;
+  try {
+    for (let i = 0; i < steps && !sp.world.survival.ended && !sp.world.survival.failed; i += 1) await tickSurvPlay(sp);
+  } finally {
+    setSurvivalDeliberator(sp, savedDelib);
+  }
+  const applied = sp.world.t - start;
+  S.missed = { ...S.missed, survival: { applied, capped: want > SURV_CATCHUP_CAP } };
+  sp.log.push({ t: sp.world.t, kind: 'catchup', ok: true, code: `离线补 ${applied} 刻${want > SURV_CATCHUP_CAP ? '（超上限截断）' : ''}` });
 }
 
 function serialize() {
@@ -719,6 +746,7 @@ export const host = {
     S.startRaw ??= structuredClone(serialize());
     // Phase D：生存单世界独立挂载（additive）。存档有 survival 键则续跑，否则新建；不影响 A/B。
     S.surv=loadSurv(S.startRaw?.survival,CFG.seed,survivalOptions());
+    await catchUpSurvival(S.missed?.minutes ?? 0); // P1-8：生存世界从存档刻补离线时间（有界、本地）
     S.savedAt = Date.now();
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
@@ -791,7 +819,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, running: S.running, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { savedAt: S.savedAt, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   async act(body) {
     if (!S.packs) return { ok: false, error: 'NO_WORLD' };
@@ -929,6 +957,7 @@ export const host = {
       const m = Number(body.minutes ?? 30);
       if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
       catchUp(m);
+      await catchUpSurvival(m); // P1-8：手动补时也推进生存世界
     }
     // 暂停状态下的"单步"必须真的推进一刻（走同一把锁，排队而不是绕过）
     if (body.action === 'step') await manualTick();
