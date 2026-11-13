@@ -4,7 +4,7 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
-import { initProduction, effectiveMods, dailyWear, regenResources } from './production.mjs';
+import { initProduction, effectiveMods, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 
 export const SURV = Object.freeze({
@@ -119,6 +119,8 @@ export function advanceSurvival(world) {
       }
     } else if (s.coldStreak >= 2) s.disasterToday = 'coldsnap';
   }
+
+  regrowWildBerries(world, day);
 
   // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。P0-1：死者不占配给。
   const pop = livingResidents(world).length;

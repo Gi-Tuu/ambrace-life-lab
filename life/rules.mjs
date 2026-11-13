@@ -4,7 +4,7 @@ import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
@@ -44,6 +44,10 @@ export function validate(world, agentId, intent) {
     if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   // Phase B 建设动作：采集/奠基/施工/维修。
+  if (kind === 'forage' && world.survival?.wildBerries) {
+    const gate = forageRule(world, agentId);
+    if (!gate.ok) return fail(gate.code, '当前无法采集浆果');
+  }
   if (kind === 'gather') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
     if (!GATHER_BY_LOC[here]) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控

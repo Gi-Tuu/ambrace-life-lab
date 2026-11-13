@@ -2,9 +2,9 @@
 // （含前置移动/采集）。planGoal 每次调用重评⇒资源/环境变化或失败后自动重规划。
 // 复用既有 affordances/validate/actuate，不另造决策器；基础动作仍由规则层裁决、世界计算结果。
 // 示范目标用于验证组合能力（派单允许少量示范）；自主层默认决策环不受影响。
-import { BUILDINGS, GATHER_BY_LOC } from './production.mjs';
-import { validate } from './rules.mjs';
-import { actuate } from './body.mjs';
+import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
+import { validate, actionId } from './rules.mjs';
+import { actuate, BASE_KINDS, SURV_COST, livingResidents } from './body.mjs';
 
 const completed = (w, type) => w.survival.buildings.some(b => b.type === type && b.integrity > 0);
 const founded = (w, type) => completed(w,type) || w.survival.sites.some(s => s.type === type);
@@ -36,8 +36,11 @@ function buildAction(w, id, type) {
   return w.loc[id] === site.loc ? { kind: 'build' } : { kind: 'move_to', to: site.loc };
 }
 function forageAction(w, id) {
-  if ((w.outdoor ?? []).includes(w.loc[id])) return { kind: 'forage' };
-  const loc = (w.outdoor ?? [])[0];
+  const available = loc => !w.survival.wildBerries || (w.survival.wildBerries[loc] ?? 0) >= 1;
+  const here = w.loc[id];
+  if ((w.outdoor ?? []).includes(here) && available(here))
+    return forageRule(w,id).ok ? { kind: 'forage' } : null;
+  const loc = (w.outdoor ?? []).find(available);
   return loc ? { kind: 'move_to', to: loc } : null;
 }
 function exchangeAction(w, id) {
@@ -75,6 +78,23 @@ export function planGoal(w, id, goalId) {
     }
   }
   return null;
+}
+
+export function goalCandidates(w, id) {
+  if (!w.autonomousGoals || !w.survival || w.agents[id]?.isPlayer) return [];
+  const a = w.agents[id], s = w.survival;
+  const energy = a.drives.v.energy;
+  const foodPressure = Math.max(0, 1 - s.store / Math.max(3, livingResidents(w).length * 2));
+  const priorities = { shelter: energy > .28 ? .62 * energy * a.viab.v : 0, food: .72 * foodPressure };
+  return Object.entries(priorities).flatMap(([goal, value]) => {
+    const action = value > 0 && planGoal(w,id,goal);
+    if (!action || !validate(w,id,action).ok) return [];
+    const base = BASE_KINDS[action.kind];
+    const key = action.type ? `${action.kind}:${action.type}` : actionId(action);
+    return [{ ...action, id: key, label: `${GOALS[goal].label}·${base.label}`,
+      cost: SURV_COST[action.kind], impulse: base.impulse, serves: { energy: goal==='food' ? .2 : 0 },
+      goalValue: value }];
+  });
 }
 
 export function goalProgress(w, id, goalId) {

@@ -486,12 +486,17 @@ export class Organism {
     this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
-    if (world.unifiedCooperation && result.ok) {
+    if ((world.unifiedCooperation || world.autonomousGoals) && result.ok) {
       const audit = world.survival.actionAudit ??= {};
       const row = audit[this.id] ??= { ordinary: {}, cooperation: {}, paid: 0 };
       const counts = action.cooperation ? row.cooperation : row.ordinary;
       counts[action.kind] = (counts[action.kind] ?? 0) + 1;
       row.paid += paid;
+      if (action.goal) {
+        const goals = row.goals ??= {};
+        const goal = goals[action.goal] ??= {};
+        goal[action.kind] = (goal[action.kind] ?? 0) + 1;
+      }
     }
     if (silent && result.ok) {
       this.counters.spontaneous += 1;

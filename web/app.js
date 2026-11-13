@@ -2134,7 +2134,7 @@ const CAMP_ANIMAL_ITEM={chickens:'egg',cows:'milk',sheep:'wool'};
 const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
 const campCodes={NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
-  FORAGE_COOLDOWN:'稍后再采',BAD_PLOT:'这里没有可用菜畦'};
+  FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
 
 const GATHER_RES = { yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' };
@@ -2152,7 +2152,7 @@ function contextAction(s, tool = ui.tool) {
     if (s.plots.some((p) => p.growth === 0) && s.water >= 0.06) cands.push({ kind: 'plant', tool: 'hoe' });
   }
   // 采浆果：手（1）在户外、未冷却、产出账未满时可用；合法性最终由规则层 forageRule 裁决。
-  if ((s.outdoor ?? []).includes(here) && (s.produce?.berry ?? 0) < (s.produceCap ?? 24) && (s.forageCd ?? 0) <= (s.t ?? 0))
+  if ((s.outdoor ?? []).includes(here) && (s.produce?.berry ?? 0) < (s.produceCap ?? 24) && (s.forageCd ?? 0) <= (s.t ?? 0) && (!s.wildBerries || s.wildBerries[here] >= 1))
     cands.push({ kind: 'forage', tool: 'hand' });
   const res = GATHER_RES[here];
   if (res && (s.outdoor ?? []).includes(here)) cands.push({ kind: 'gather', tool: res === 'wood' ? 'axe' : 'pick' });

@@ -1,3 +1,4 @@
+import { goalCandidates } from './goals.mjs';
 import { householdPlans, houseLabor, laborStage } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
@@ -9,7 +10,7 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -314,7 +315,7 @@ export function affordancesFor(world, agentId) {
     // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，
     // 否则无人值守会退化成原地刷产出（E1a/E1g 实测踩到过）。兑换另设 70% 仓容门槛，
     // 避免把公仓顶满后灾害削不动缓冲（P2-4）。
-    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t)
+    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t && (!s0.wildBerries || forageRule(world,agentId).ok))
       out.push({ id: 'forage', kind: 'forage', label: BASE_KINDS.forage.label, cost: SURV_COST.forage, impulse: 0.05, serves: { energy: 0.08 } });
     // §17 改量#12：所有者裁定 AI 也要能自动兑换，与玩家完全同权。
     // 仍保留 70% 仓容门槛与低吸引力：兑换是"顺手可做"的低优先动作，不能挤掉收种与建设。
@@ -385,6 +386,15 @@ export function affordancesFor(world, agentId) {
   if (world.survival?.households && !laborStage(world, agentId)) {
     const LABOR = new Set(['harvest', 'plant', 'gather', 'house_work', 'forage', 'exchange', 'expand', 'build', 'plan', 'repair', 'deposit', 'withdraw']);
     for (let i = out.length - 1; i >= 0; i -= 1) if (LABOR.has(out[i].kind)) out.splice(i, 1);
+  }
+  for (const proposed of goalCandidates(world, agentId)) {
+    const ordinary = out.find(a => a.id === proposed.id);
+    if (ordinary) {
+      if ((ordinary.goalValue ?? 0) < proposed.goalValue) {
+        ordinary.goal = proposed.goal;
+        ordinary.goalValue = proposed.goalValue;
+      }
+    } else out.push(proposed);
   }
   const cooperation = cooperationCandidate(world, agentId);
   if (cooperation) {

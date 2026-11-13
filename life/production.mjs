@@ -151,11 +151,25 @@ const SEASON_YIELD = Object.freeze({
 });
 export const PRODUCE_CAP = 24;
 
+export const WILD_BERRIES = Object.freeze({ yard: 5, garden: 4, watch: 3, well: 2 });
+
+export function regrowWildBerries(world, day) {
+  const s = world.survival;
+  if (!s.wildBerries) return;
+  const season = [1, 1.2, .7, .15][seasonOf(day)];
+  const weather = s.disasterToday === 'coldsnap' ? 0 : world.weather === 'cold' ? .3 : 1;
+  const water = s.drought ? .12 * s.water : .3 + .7 * s.water;
+  for (const [loc, cap] of Object.entries(WILD_BERRIES)) {
+    s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + season * weather * water * .85);
+  }
+}
+
 export function forageRule(world, id) {
   const s = world.survival;
   if (!s) return { ok: false, code: 'NO_SURVIVAL' };
   if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
   if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
+  if (s.wildBerries && (s.wildBerries[world.loc[id]] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
   if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
   return { ok: true, code: 'OK' };
 }
@@ -186,10 +200,9 @@ export const FORAGE_COOLDOWN = 2;
 
 export function doForage(world, id) {
   const s = world.survival;
-  if (!s) return { ok: false, code: 'NOT_AVAILABLE' };
-  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
-  if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
-  if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
+  const gate = forageRule(world,id);
+  if (!gate.ok) return gate;
+  if (s.wildBerries) s.wildBerries[world.loc[id]] -= 1;
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
   s.forageCd = world.t + FORAGE_COOLDOWN;

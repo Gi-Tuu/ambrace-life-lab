@@ -7,7 +7,7 @@ import { leaveTalk } from './dialogue.mjs';
 import { campAction, campTimberView } from './camp-play.mjs';
 import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
@@ -31,10 +31,12 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   world.unifiedCooperation = unifiedCooperation;
   world.independentWorld = independentWorld;
+  world.autonomousGoals = autonomousGoals;
+  if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
   world.layoutVersion = layoutVersion;
   if (layoutVersion === 1) {
@@ -399,6 +401,7 @@ export function survView(sp) {
     yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
     log: sp.log.slice(-12),
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? DEFAULT_LIVESTOCK) },
+    wildBerries: s.wildBerries,
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
     produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
     economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
