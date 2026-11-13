@@ -63,9 +63,13 @@ const dependents = (w, id) => Object.keys(w.survival.households.residents).filte
 const canShare = (w, a, b) => Boolean(w.housing[b] && w.housing[a] !== w.housing[b] &&
   hasBed(w, w.housing[b]) && residentsAt(w, w.housing[b]) + dependents(w, a).length < bedsPerHome(w));
 const willing = (w, a, b) => trust(w, a, b) >= MARRIAGE_TRUST && (relation(w,a,b)?.familiarity ?? 0) >= .45;
+const marriageMode = w => w.familyExperiment?.marriage ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'remarry' : 'legacy');
+export const maritalStatus = (h, id) => h.spouses[id] ? 'married' : h.widowed?.[id] ? 'widowed' : 'single';
+
 const canMarry = (w, a, b) => {
   const h = w.survival.households;
   if (!adult(w, a) || !adult(w, b) || a === b || h.spouses[a] || h.spouses[b]) return false;
+  if (marriageMode(w) === 'widowOnly' && (h.widowed?.[a] || h.widowed?.[b])) return false;
   const parents = h.residents[a]?.parents ?? [];
   const otherParents = h.residents[b]?.parents ?? [];
   return !parents.includes(b) && !otherParents.includes(a) && !parents.some(id => otherParents.includes(id));
@@ -86,6 +90,39 @@ function unite(w, a, b) {
   h.spouses[b] = a;
   h.marriedAt ??= {};
   h.marriedAt[a] = h.marriedAt[b] = w.t;
+  if (marriageMode(w) !== 'legacy') {
+    const remarried = [a, b].filter(id => h.widowed?.[id]);
+    (h.marriages ??= []).push({ partners: [a, b].sort(), t: w.t, remarried });
+    for (const id of remarried) delete h.widowed[id];
+  }
+}
+
+// Reconcile after all deaths in a tick have been recorded, including when loading an old V2 archive.
+export function settleMarriages(w) {
+  const h = w.survival.households;
+  if (!h || marriageMode(w) === 'legacy') return;
+  h.offers = h.offers.filter(({ from, to }) => !w.agents[from]?.dead && !w.agents[to]?.dead);
+  for (const [a, b] of Object.entries(h.spouses)) {
+    if (h.spouses[a] !== b || h.spouses[b] !== a) continue;
+    const deaths = [a, b].filter(id => w.agents[id]?.dead);
+    if (!deaths.length) continue;
+    const partners = [a, b].sort();
+    const t = h.marriedAt?.[a] ?? h.marriedAt?.[b] ?? null;
+    const ended = Math.min(...deaths.map(id => w.agents[id].death?.t ?? w.t));
+    const deceased = deaths.filter(id => (w.agents[id].death?.t ?? w.t) === ended).sort();
+    const marriages = h.marriages ??= [];
+    let record = marriages.findLast(m => m.ended === undefined && m.partners[0] === partners[0] && m.partners[1] === partners[1]);
+    if (!record) {
+      record = { partners, t, remarried: [] };
+      marriages.push(record);
+    }
+    Object.assign(record, { ended, deceased });
+    for (const id of partners) {
+      delete h.spouses[id];
+      if (h.marriedAt) delete h.marriedAt[id];
+      if (!deceased.includes(id)) (h.widowed ??= {})[id] = { spouse: deceased[0], t: ended };
+    }
+  }
 }
 
 export function houseAction(w, actor, { kind, target, accept }) {
@@ -104,6 +141,7 @@ export function houseAction(w, actor, { kind, target, accept }) {
     if (!adult(w, offer.from) || !sameRoom(w, actor, offer.from)) return fail('MEET_REQUIRED');
     if (offer.kind === 'family_marry') {
       if (!canMarry(w, offer.from, actor)) return fail('MARRIAGE_UNAVAILABLE');
+      if (marriageMode(w) !== 'legacy' && !willing(w, offer.from, actor)) return fail('OFFER_DECLINED');
       unite(w, offer.from, actor);
     } else {
       if (h.spouses[offer.from] !== actor || !canShare(w, offer.from, actor) ||
@@ -116,6 +154,8 @@ export function houseAction(w, actor, { kind, target, accept }) {
   if (kind === 'family_marry' || kind === 'family_move') {
     if (!adult(w, target) || !sameRoom(w, actor, target)) return fail('MEET_REQUIRED');
     if (kind === 'family_marry' && !canMarry(w, actor, target)) return fail('MARRIAGE_UNAVAILABLE');
+    if (kind === 'family_marry' && marriageMode(w) !== 'legacy' && !w.agents[actor].isPlayer &&
+        !willing(w, actor, target)) return fail('OFFER_DECLINED');
     if (kind === 'family_move' && (h.spouses[actor] !== target || !canShare(w, actor, target))) return fail('NO_BED');
     if (w.agents[target].isPlayer) {
       if (!h.offers.some(o => o.to === target && o.from === actor)) {

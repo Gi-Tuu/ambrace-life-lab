@@ -13,7 +13,7 @@ import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 const SURV_LOG_LIMIT = 200;
@@ -160,6 +160,7 @@ function reapDeaths(w, log) {
       s.talk = null;
     }
   }
+  if (changed) settleMarriages(w);
   return changed;
 }
 
@@ -630,6 +631,7 @@ export function loadSurv(raw,seed=7,options) {
     for (const a of Object.values(sp.world.agents)) {
       if (a.dead) { const l = sp.world.loc[a.id]; if (l) sp.world.occupancy[l] = (sp.world.occupancy[l] ?? []).filter((x) => x !== a.id); }
     }
+    settleMarriages(w);
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
     sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
     if (w.independentWorld) sp.log = sp.log.slice(-SURV_LOG_LIMIT);
