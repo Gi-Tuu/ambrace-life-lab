@@ -648,6 +648,166 @@ export function timberStage(timber, grove=TIMBER_GROVE) {
   }
   return s;
 }
+// ── 第一批样板：储粮设施 Granary ────────────────────────────────────────
+// 设计约束（HY4 派单 §3）：4×3.2 地块内做「架空防潮粮仓」——石基 + 承重立柱 + 抬高木平台
+// + 双坡屋檐 + 门洞小台阶 + 木板分层 + 储粮道具。轮廓要能在俯视斜角下一眼认出"存粮的地方"。
+// 状态全部来自 record（progress / integrity）与 world（store / storeCap），无计时自完工。
+const GR_STONE = ['#8A8F83', '#676D68', '#A7AA97'];
+const GR_PLANK = ['#BA8752', '#C9955D', '#D8A667', '#C48D57'];
+
+function grPlanks(s, x, y, z, w, h, d, skipFrontDoor = false) {
+  const step = .28;
+  for (let row = 0; row * step < h - .04; row += 1) {
+    const yy = y + row * step + .02, hh = Math.min(step - .04, y + h - yy);
+    const color = GR_PLANK[(row * 3 + 1) % GR_PLANK.length];
+    for (const side of [0, 1, -1]) {
+      if (side === 0 && skipFrontDoor) continue;
+      const len = side ? d : w, pitch = side ? .8 : 1.05;
+      for (let k = 0, start = -(row % 2) * pitch / 2; start < len - .04; start += pitch, k += 1) {
+        const a = Math.max(.01, start + .02), b = Math.min(len - .01, start + pitch - .02);
+        if (b <= a) continue;
+        const c = GR_PLANK[(k + row + (side ? 2 : 0)) % GR_PLANK.length];
+        if (side) s.box(side > 0 ? x + w + .004 : x - .018, yy, z + a, .014, hh, b - a, c);
+        else s.box(x + a, yy, z + d + .004, b - a, hh, .014, c);
+      }
+    }
+    if (skipFrontDoor) {
+      // 正面留 1.05 宽门洞，左右各补一段板墙
+      const dw = (w - 1.05) / 2;
+      s.box(x, yy, z + d + .004, dw - .02, hh, .014, color);
+      s.box(x + w - dw + .02, yy, z + d + .004, dw - .02, hh, .014, color);
+    }
+  }
+}
+
+function grGable(s, x, y, z, w, d, color, missing = 0) {
+  // 阶梯式双坡：沿 z 向中心逐层收缩，形成俯视可读的屋脊与南北两坡。
+  for (let i = 0; i < 5; i += 1) {
+    if (i < missing) continue;                    // 破损态：屋脊缺层
+    const shrink = i * d * .088, rise = i * .27;
+    s.box(x - .16, y + rise, z + shrink, w + .32, .13, d - 2 * shrink, i % 2 ? color : '#B97A45');
+  }
+  // 深色屋脊长条 + 两道檐口，明确「两坡 + 屋檐」而不是平顶瓦片
+  s.box(x - .2, y + 1.12, z + d / 2 - .11, w + .4, .12, .22, '#5B4434');
+  s.box(x - .28, y - .06, z - .28, w + .56, .1, d + .56, DARK);
+  s.box(x - .34, y - .16, z + d + .22, w + .68, .07, .12, LIGHT);
+}
+
+function grContainer(s, kind, x, z, tilt = 0) {
+  if (kind === 'sack') {
+    s.box(x, .02 + tilt, z, .62, .12, .5, '#A39B88');
+    s.box(x + .06, .14 + tilt, z + .04, .5, .46, .42, '#D8C3A0');
+    s.box(x + .16, .6 + tilt, z + .1, .3, .12, .26, '#EFE4CA');
+  } else if (kind === 'barrel') {
+    s.box(x, .02, z, .5, .12, .5, '#5B4434');
+    s.box(x + .04, .14, z + .04, .42, .5, .42, '#976744');
+    s.box(x, .3, z, .5, .09, .5, '#6D7165');
+    s.box(x, .54, z, .5, .09, .5, '#6D7165');
+    s.box(x + .04, .64, z + .04, .42, .06, .42, '#C18F58');
+  } else {
+    s.box(x, .02, z, .7, .56, .62, '#976744');
+    s.box(x + .04, .58, z + .04, .62, .07, .54, '#C18F58');
+    s.box(x + .04, .25, z + .64, .62, .08, .04, '#5B4434');
+  }
+}
+
+function granary3d(s, lot, record, world) {
+  const { x, z, w, d } = lot;
+  const X = x + .22, Z = z + .22, W = w - .44, D = d - .44;
+  const phase = constructionStage(record);
+  const labor = world.buildingsDef?.[record.type]?.labor ?? 6;
+  const ratio = phase === 'frame' ? Math.max(.2, Math.min(1, (record.progress ?? 0) / labor)) : 1;
+  const damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
+  const deck = .78, wallTop = 2.42;
+  const id = `work:${record.loc}:${record.type}`;
+
+  // 地基：石墩 + 施工平台，四态共有（完工时藏在平台下）
+  s.box(x + .04, 0, z + .04, w - .08, .14, d - .08, '#7A7667', true, 'ground');
+  for (const px of [X + .12, X + W - .46]) for (const pz of [Z + .12, Z + D - .46]) {
+    s.box(px, .14, pz, .34, .5, .34, GR_STONE[(Math.round(px * 3 + pz * 5)) % 3], false, false);
+  }
+
+  if (phase === 'foundation') {
+    // 待用材料：木料堆、石料堆、一卷草席；不放任何主体结构
+    for (let i = 0; i < 3; i++) s.box(X + .2, .18 + i * .17, Z + .3 + i * .06, 1.15, .14, .28, GR_PLANK[i % 4], false, 'ground');
+    s.box(X + W - 1.1, .18, Z + .3, .8, .3, .6, GR_STONE[1], false, 'ground');
+    s.box(X + W - .95, .48, Z + .42, .5, .16, .4, GR_STONE[2], false, 'ground');
+    return;
+  }
+
+  // 承重立柱：刻意放在墙体四角之外，让俯视斜角也能看见「架空防潮」的结构。
+  const postH = phase === 'frame' ? .5 + ratio * 1.25 : 1.86;
+  for (const px of [X - .08, X + W - .14]) for (const pz of [Z - .08, Z + D - .14]) {
+    const h = damaged && px > X + 1 && pz > Z + 1 ? postH * .72 : postH;
+    s.box(px, .62, pz, .22, h, .22, DARK, false, phase === 'frame');
+    s.box(px - .05, .62, pz - .05, .32, .13, .32, LIGHT, false, phase === 'frame');
+    s.box(px - .02, .62, pz - .02, .26, .3, .26, GR_STONE[1]);   // 柱脚石础
+  }
+  // 架空平台：比墙体四周各外挑 .14，形成可读的台基边线
+  s.box(X - .14, deck - .12, Z - .14, W + .28, .14, D + .28, WOOD, false, phase === 'frame');
+  for (let i = 1; i < 6; i++) s.box(X + i * W / 6, deck + .025, Z + .04, .025, .02, D - .08, '#8A633F');
+  s.box(X - .14, deck - .13, Z + D + .14, W + .28, .09, .06, LIGHT);  // 前沿亮边
+  // 台基下的横撑与阴影带：俯视斜角下也能读出「下面是空的、由柱子撑着」
+  if (phase !== 'frame') {
+    s.box(X - .14, deck - .26, Z + D + .14, W + .28, .1, .08, '#5B4434');
+    s.box(X + .06, .3, Z + D + .02, W - .12, .12, .1, DARK);
+    for (const px of [X + .4, X + W - .56]) s.box(px, .14, Z + D + .02, .14, .34, .12, LIGHT);
+  }
+
+  if (phase === 'frame') {
+    // 施工中：横梁 + 按进度逐层补墙板，屋架只出现到一半
+    const built = Math.ceil(ratio * 6);
+    for (let row = 0; row < built; row += 1) {
+      const yy = deck + .02 + row * .28;
+      s.box(X, yy, Z + D + .004, W - (row < 2 ? 1.05 : 0), .22, .014, GR_PLANK[row % 4]);
+      for (const side of [-1, 1]) s.box(side > 0 ? X + W + .004 : X - .018, yy, Z, .014, .22, D, GR_PLANK[(row + 2) % 4]);
+    }
+    for (const pz of [Z, Z + D - .16]) s.box(X, deck + 1.6, pz, W, .14, .16, WOOD, false, true);
+    if (ratio > .72) s.box(X - .1, deck + 1.78, Z + D * .3, W + .2, .1, D * .4, DARK, false, true);
+    return;
+  }
+
+  // 完工 / 破损：完整墙体、门洞、双坡屋顶
+  s.box(X + .06, deck, Z + .06, W - .12, wallTop - deck, D - .12, '#72513B', false, true);
+  grPlanks(s, X + .06, deck, Z + .06, W - .12, wallTop - deck - .06, D - .12, true);
+  // 门洞 + 门楣 + 台阶
+  const front = Z + D;
+  s.box(X + W / 2 - .52, deck, front - .04, 1.04, 1.42, .08, '#514134', false, true);
+  s.box(X + W / 2 - .42, deck + .08, front + .045, .84, 1.2, .04, '#AB5236', false, true);
+  s.box(X + W / 2 - .56, deck + 1.42, front - .02, 1.12, .13, .12, LIGHT, false, true);
+  // 门楣牌匾：纯色块、不写文字（文案一律引擎内渲染），配合两束谷穗点明「粮」
+  s.box(X + W / 2 - .34, wallTop - .76, front + .07, .68, .2, .05, '#EDC787', false, true);
+  s.box(X + W / 2 - .28, wallTop - .72, front + .12, .56, .05, .03, '#FFA300', false, true);
+  for (let i = 0; i < 3; i++) s.box(X + W / 2 - .72, .16 + i * .2, front + .06 + i * .22, 1.44, .2, .28, i % 2 ? LIGHT : WOOD);
+  // 山墙通风窗（小木格），破损时脱落
+  if (!damaged) {
+    s.box(X + W / 2 - .34, wallTop - .34, front + .01, .68, .34, .04, '#1D2B53');
+    s.box(X + W / 2 - .02, wallTop - .34, front + .05, .04, .34, .04, WOOD);
+    s.box(X + W / 2 - .34, wallTop - .17, front + .05, .68, .04, .04, WOOD);
+  }
+  grGable(s, X - .06, wallTop, Z - .06, W + .12, D + .12, damaged ? '#5F574F' : '#B3643C', damaged ? 2 : 0);
+  // 檐下横梁 + 两束谷穗（可辨认"粮"）
+  s.box(X - .1, wallTop - .1, front + .06, W + .2, .12, .12, DARK);
+  if (!damaged) for (const dx of [-1.1, 1.0]) {
+    s.box(X + W / 2 + dx, wallTop - .5, front + .1, .12, .34, .1, '#FFEC27');
+    s.box(X + W / 2 + dx - .04, wallTop - .58, front + .1, .2, .1, .1, '#FFA300');
+  }
+
+  // 储粮量分档：0 / 少量 / 部分 / 明显增多。store=0 时一个容器都不画。
+  const cap = Math.max(1, world.storeCap ?? 24), store = Math.max(0, world.store ?? 0);
+  const level = Math.min(1, store / cap);
+  const count = store <= 0 ? 0 : level < .15 ? 1 : level < .6 ? 3 : 5;
+  const slots = [
+    ['sack', X + .35, front + .34], ['barrel', X + 1.05, front + .38],
+    ['crate', X + W - .85, front + .34], ['sack', X + W - .45, front + .62],
+    ['barrel', X + .7, front + .78],
+  ];
+  for (let i = 0; i < count; i += 1) {
+    const [kind, px, pz] = slots[i];
+    grContainer(s, kind, px, pz, damaged && i === count - 1 ? .06 : 0);
+  }
+}
+
 export function constructionStage(record) {
   if (!Object.hasOwn(record,'progress')) return 'complete';
   if (record.progress<=0) return 'foundation';
@@ -666,6 +826,8 @@ export function addCampWork(boxes, world) {
     const s={box(x,y,z,w,h,d,color,solid=false,rise=false) {
       boxes.push({x,y,z,w,h,d,color,solid,occluder:id,rise});
     }};
+    // 第一批样板：储粮设施走专属建模，其余建筑继续沿用原有通用结构（不改动它们）。
+    if (record.type === 'granary') { granary3d(s, lot, record, world); return; }
     const baseRise=phase==='foundation'?'ground':false;
     s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
     for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])

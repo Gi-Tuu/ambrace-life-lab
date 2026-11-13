@@ -340,8 +340,13 @@ function worldWithCollisions(sites, w) {
   const timber=w.camp?.timber;
   const treeSignature=timber?worldCache.grove.map(t=>timber[t.id]?.stage??'mature').join(','):'';
   const houseWork=Object.entries(w.households?.projects??{});
+  // 储粮分档也要进签名，否则 store 变化时粮袋/木桶数量不刷新。
+  // 只记档位（0/1/2/3）不记原始数值，避免每份粮食都重建整份 work3d。
+  const storeCap=Math.max(1,w.storeCap??24), storeNow=Math.max(0,w.store??0);
+  const storeLevel=storeNow/storeCap;
+  const storeTier=storeNow<=0?0:storeLevel<.15?1:storeLevel<.6?2:3;
   const signature = houseWork.map(([room,p])=>room+':'+p.progress).join(',')+'|'+buildings.map(b=>b.type+'@'+b.loc+':'+(b.integrity<1)).join(',')+'|' +
-    (w.sites??[]).map(b=>b.type+'@'+b.loc+':'+b.progress).join(',')+'|'+treeSignature;
+    (w.sites??[]).map(b=>b.type+'@'+b.loc+':'+b.progress).join(',')+'|'+treeSignature+'|'+storeTier;
   if (worldCache.buildingMaskSignature !== signature) {
     const { assetWalk, scene3d } = worldCache;
     if (scene3d) {
