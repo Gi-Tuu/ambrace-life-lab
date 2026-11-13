@@ -34,7 +34,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -54,10 +54,11 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
     for (const plot of world.survival.plots) plot.at = [x+plot.id%2,z+Math.floor(plot.id/2)];
   }
   world.survivalDeliberator = deliberator;
+  world.residentChannelMask = residentChannelMask;
   // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
   world.sex = { a1: 'M', a2: 'F', a3: sexOf(seed, 'a3'), p1: sexOf(seed, 'p1') };
   for (const [id, name, archetype] of ROSTER) {
-    const a = new Organism({ id, name, archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator });
+    const a = new Organism({ id, name, archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator, channelMask: residentChannelMask });
     world.agents[id] = a;
     spawn(world, id, 'home');
   }
@@ -287,7 +288,7 @@ function newChild(w, id, parents = null) {
     ? [pa.traits.archetype, pb.traits.archetype][hashSeed(seed, `arch:${id}`) % 2]
     : ARCHETYPES[hashSeed(seed, `arch:${id}`) % 3];
   return new Organism({ id, name: CHILD_NAMES[index % CHILD_NAMES.length],
-    archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator: w.survivalDeliberator });
+    archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator: w.survivalDeliberator, channelMask: w.residentChannelMask });
 }
 function reproduce(w, log) {
   const s = w.survival;

@@ -164,7 +164,7 @@ export class Organism {
 
       const ch = this.ch;
       const effUtil = ch.util ? this.bank.m : { ...this.traits.baseline };
-      this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
+      if (ch.driveRegulation !== 0) this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
       return { ch, prediction };
     };
     const preMetab = world.independentWorld ? metabolize() : null;
@@ -204,7 +204,7 @@ export class Organism {
     // O1-M（PLAN §23.1）：反事实影响度。默认关（cfUsage:0）⇒ 这一步与下面习惯分支里的计数都不执行，零开销、轨迹逐位不变。
     if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
 
-    const hb = this.habit.best();
+    const hb = ch.habitChoice === 0 ? null : this.habit.best();
     // R1（第二次审计 P0）：习惯分支**原先不做任何规则校验**就直接 execute ——
     // "规则层是唯一裁决者"因此是假的。实测 50159 次执行里 693 次非法动作真的改了世界：
     // 607 次夜里 look_out（LOCKED_HOUR）、86 次空缸 eat（DEPLETED）。这里先验一次：
@@ -495,6 +495,7 @@ export class Organism {
     this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
+    if (result.ok) world.observeResidentAction?.({ id: this.id, t, kind: action.kind, cooperation: Boolean(action.cooperation), goal: action.goal, paid });
     if ((world.unifiedCooperation || world.autonomousGoals) && result.ok) {
       const audit = world.survival.actionAudit ??= {};
       const row = audit[this.id] ??= { ordinary: {}, cooperation: {}, paid: 0 };

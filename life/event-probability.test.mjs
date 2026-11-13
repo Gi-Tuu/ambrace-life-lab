@@ -86,3 +86,25 @@ test('C05/C11 V2 婚育仅限成年，子代身份、性别及版本跨档',asyn
   assert.equal(loadSurv(raw,7,options).world.eventRulesVersion,1);
   assert.equal(loadSurv(undefined,7,options).world.eventRulesVersion,2);
 });
+
+
+test('C08/C09 生存通道负控只切断调节、记忆评分与习惯选择', async () => {
+  const options = { eventRulesVersion: 2, independentWorld: true };
+  const baseline = createSurvPlay(7, options);
+  const off = createSurvPlay(7, { ...options, residentChannelMask: { driveRegulation: 0, mem: 0, habitChoice: 0 } });
+  const counts = [0, 0];
+  for (const [i, sp] of [baseline, off].entries()) {
+    const a = sp.world.agents.a1;
+    const regulate = a.drives.regulate.bind(a.drives);
+    a.drives.regulate = (...args) => { counts[i] += 1; return regulate(...args); };
+    for (let tick = 0; tick < 96; tick++) await tickSurvPlay(sp);
+  }
+  assert.deepEqual(counts, [96, 0]);
+  assert.ok(baseline.world.agents.a1.counters.habit > 0);
+  const actor = off.world.agents.a1;
+  assert.equal(actor.counters.habit, 0);
+  assert.ok(Object.keys(actor.habit.dump().rows).length > 0);
+  assert.ok(actor.memory.rows.length > 0);
+  assert.ok(actor.trace.some(row => row.parts));
+  assert.ok(actor.trace.every(row => !row.parts || row.parts['记忆'] === 0));
+});
