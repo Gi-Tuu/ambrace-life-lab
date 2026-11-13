@@ -1,6 +1,5 @@
-import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { goalCandidates } from './goals.mjs';
-import { householdPlans, houseLabor, laborAllowed } from './households.mjs';
+import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
@@ -420,7 +419,7 @@ export function affordancesFor(world, agentId) {
 
 // §15 同权观测：居民（非玩家）在生存世界的成功动作计数，供同权闸门断言
 export function actuate(world, agentId, action) {
-  if (world.eventRulesVersion === CURRENT_EVENT_RULES && !laborAllowed(world, agentId, action.kind)) {
+  if (strictLifecycle(world) && !laborAllowed(world, agentId, action.kind)) {
     return { action, ok: false, code: 'TOO_YOUNG' };
   }
   const r = actuateInner(world, agentId, action);

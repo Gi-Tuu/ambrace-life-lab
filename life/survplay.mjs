@@ -13,7 +13,7 @@ import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 const SURV_LOG_LIMIT = 200;
@@ -190,7 +190,8 @@ function stepLifecycle(w, log) {
     }
     rec.stage = stage;
     if (stage === 'elder') {
-      const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - ELDER_DAYS) * 0.01);
+      const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - ELDER_DAYS) * 0.01) *
+        (w.populationExperiment?.elderHazardScale ?? 1);
       if (survivalRoll(w, 'elder-death', a.id, day) < p) { a.hurtBy = '衰老'; a.viab.v = 0; }
     }
   }
@@ -290,21 +291,32 @@ function newChild(w, id, parents = null) {
 }
 function reproduce(w, log) {
   const s = w.survival;
-  if (s.ended || (s.failed && !w.independentWorld)) return;
   const day = dayOf(w.t);
-  if (day - (s.lastBirthDay ?? -99) < 10) return;
+  const experiment = w.populationExperiment;
+  const report = (reason, detail={}) => w.observeBirth?.({day,reason,...detail});
+  if (s.ended || (s.failed && !w.independentWorld)) { report('ended'); return; }
+  const interval = experiment?.birthInterval ?? 10;
+  if (!experiment?.pairCooldown && day - (s.lastBirthDay ?? -99) < interval) { report('cooldown'); return; }
   const pop = livingResidents(w).length; // P0-1：繁衍门槛按存活人口
-  if (pop >= RESIDENT_CAP) return; // P1-3：人口上限（算力/生态承载），不无限生成
-  if (s.store < pop * 2) return;
+  if (pop >= (experiment?.residentCap ?? RESIDENT_CAP)) { report('population'); return; } // P1-3：人口上限（算力/生态承载），不无限生成
+  if (s.store < pop * 2) { report('food'); return; }
   // 有住户系统时，繁衍门槛由"已婚＋同住＋有床"裁决（familyHomeForBirth）；旧的抽象 shelter
   // 检查会让婚姻永远卡在一栋与住所无关的建筑上。无 households 的旧档保留原门槛。
   if (!s.households && !s.buildings.some((b) => b.type === 'shelter' && b.integrity > 0)) return;
   const alive = Object.values(w.agents).filter(isAlive); // P0-1：死者不参与繁衍
+  const rejected = {};
+  let born = false;
   for (const a of alive) for (const b of alive) {
     if (a.id >= b.id) continue;
     if ((w.sex?.[a.id] ?? 'M') === (w.sex?.[b.id] ?? 'F')) continue;
-    const room = s.households ? familyHomeForBirth(w, a.id, b.id) : null;
-    if (s.households ? !room : (a.relations?.get?.(b.id)?.trust ?? 30) < 60) continue;
+    const key = `${a.id}|${b.id}`;
+    const status = s.households ? birthHomeStatus(w,a.id,b.id) : { room: 'home' };
+    const room = status.room;
+    const reason = s.households ? status.reason : (a.relations?.get?.(b.id)?.trust ?? 30) < 60 ? 'trust' : null;
+    const blocked = reason ?? (experiment?.pairCooldown && day - (s.birthsByPairDay?.[key] ?? -99) < interval ? 'pairCooldown' : null);
+    if (blocked) { if (w.observeBirth) rejected[key]=blocked; continue; }
+    if (livingResidents(w).length >= (experiment?.residentCap ?? RESIDENT_CAP) ||
+        s.store < livingResidents(w).length * 2) break;
     const n = (s.births ?? 0) + 1;
     const id = `c${n}`;
     const child = newChild(w, id, [a, b]);
@@ -324,9 +336,13 @@ function reproduce(w, log) {
     spawn(w, id, room ?? 'home');
     s.births = n;
     s.lastBirthDay = day;
+    if (experiment?.pairCooldown) (s.birthsByPairDay ??= {})[key] = day;
+    report('born',{id,parents:[a.id,b.id]});
+    born = true;
     log?.push({ t: w.t, kind: 'birth', ok: true, code: `${child.name}出生（${a.name}×${b.name}）` });
-    return;
+    if (!experiment?.pairCooldown) return;
   }
+  if (!born) report('noPair',{rejected});
 }
 
 // P0-A：玩家行动时间。正式游戏（independentWorld）每世界刻预算 100：

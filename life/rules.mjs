@@ -1,5 +1,4 @@
-import { laborAllowed } from './households.mjs';
-import { CURRENT_EVENT_RULES } from './rng.mjs';
+import { laborAllowed, strictLifecycle } from './households.mjs';
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
@@ -16,7 +15,7 @@ export function validate(world, agentId, intent) {
   const fail = (code, why) => ({ ok: false, code, why });
 
   if (!kind || !BASE_KINDS[kind]) return fail('NOT_AN_ACTION', `规则层不认识 ${kind}`);
-  if (world.eventRulesVersion === CURRENT_EVENT_RULES && !laborAllowed(world, agentId, kind)) {
+  if (strictLifecycle(world) && !laborAllowed(world, agentId, kind)) {
     return fail('TOO_YOUNG', '未成年居民不能执行劳动');
   }
   if (kind === 'eat' && world.pantry <= 0) return fail('DEPLETED', '存粮缸已空，世界没有可消耗的食物');

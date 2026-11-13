@@ -270,11 +270,19 @@ export function householdPlans(w, id) {
   return null;
 }
 
+export const strictLifecycle = w => (w.lifecycleRulesVersion ?? w.eventRulesVersion) === CURRENT_EVENT_RULES;
+
+export function birthHomeStatus(w,a,b) {
+  if (strictLifecycle(w) && (!adult(w,a) || !adult(w,b))) return { reason:'age' };
+  const h=w.survival.households, room=w.housing[a];
+  if (h.spouses[a] !== b) return { reason:'marriage' };
+  if (room !== w.housing[b]) return { reason:'residence' };
+  if (!hasBed(w,room)) return { reason:'beds' };
+  return { room };
+}
+
 export function familyHomeForBirth(w, a, b) {
-  const h = w.survival.households;
-  const room = w.housing[a];
-  if (w.eventRulesVersion === CURRENT_EVENT_RULES && (!adult(w,a) || !adult(w,b))) return null;
-  return h.spouses[a] === b && room === w.housing[b] && hasBed(w, room) ? room : null;
+  return birthHomeStatus(w,a,b).room ?? null;
 }
 
 export function restoreHouseholds(w, housing) {
