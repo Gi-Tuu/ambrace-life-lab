@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSurvPlay, dumpSurv, loadSurv, settleSurvival } from './survplay.mjs';
+import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, tickSurvPlay } from './survplay.mjs';
 import { ADULT_DAYS, ELDER_DAYS, houseAction, houseLabor, maritalStatus, stepRelationships, stepHouseholds } from './households.mjs';
 import { DAY_TICKS } from './clock.mjs';
 
@@ -176,4 +176,35 @@ test('V4-09 已故未成年子女不随迁，也不阻止三人房接纳一名�
   assert.ok(houseAction(w, 'a1', { kind: 'family_move', target: 'a2' }).ok);
   assert.equal(w.housing.a1, to);
   assert.equal(w.housing.c1, from);
+});
+
+
+test('V4-12 分离伴侣独立冷却与单日出生上限，保留人口和粮门槛', async () => {
+  const simulate = async (policy, cap = 10, store = 24) => {
+    const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
+    w.populationExperiment = { ...policy, residentCap: cap };
+    assert.ok(marry(w, 'a1', 'a2').ok);
+    assert.ok(marry(w, 'p1', 'a3').ok);
+    w.sex.a3 = 'M';
+    w.sex.p1 = 'F';
+    w.housing.a2 = w.housing.a1;
+    w.housing.a3 = w.housing.p1;
+    w.t = DAY_TICKS - 1;
+    w.survival.store = store;
+    await tickSurvPlay(sp);
+    return [sp, h];
+  };
+  for (const [policy, expected] of [[{}, 1], [{ pairCooldown: true, multipleBirths: false }, 1],
+    [{ pairCooldown: true, multipleBirths: true }, 2]]) {
+    const [sp, h] = await simulate(policy);
+    assert.equal(sp.world.survival.births, expected);
+    assert.deepEqual(h.residents.c1.parents, ['a1', 'a2']);
+    if (expected === 2) assert.deepEqual(h.residents.c2.parents, ['a3', 'p1']);
+    for (let i = 0; i < DAY_TICKS; i++) await tickSurvPlay(sp);
+    assert.equal(sp.world.survival.births, policy.multipleBirths === false ? 2 : expected);
+  }
+  const [capped] = await simulate({ pairCooldown: true, multipleBirths: true }, 4);
+  assert.equal(capped.world.survival.births, 1);
+  const [short] = await simulate({ pairCooldown: true, multipleBirths: true }, 10, 4);
+  assert.equal(short.world.survival.births ?? 0, 0);
 });

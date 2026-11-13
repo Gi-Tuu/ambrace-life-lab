@@ -315,6 +315,7 @@ function reproduce(w, log) {
   const report = (reason, detail={}) => w.observeBirth?.({day,reason,...detail});
   if (s.ended || (s.failed && !w.independentWorld)) { report('ended'); return; }
   const interval = experiment?.birthInterval ?? 10;
+  const multipleBirths = experiment?.pairCooldown && experiment.multipleBirths !== false;
   if (!experiment?.pairCooldown && day - (s.lastBirthDay ?? -99) < interval) { report('cooldown'); return; }
   const pop = livingResidents(w).length; // P0-1：繁衍门槛按存活人口
   if (pop >= (experiment?.residentCap ?? RESIDENT_CAP)) { report('population'); return; } // P1-3：人口上限（算力/生态承载），不无限生成
@@ -356,10 +357,10 @@ function reproduce(w, log) {
     s.births = n;
     s.lastBirthDay = day;
     if (experiment?.pairCooldown) (s.birthsByPairDay ??= {})[key] = day;
-    report('born',{id,parents:[a.id,b.id]});
+    report('born',{id,parents:[a.id,b.id],sex:w.sex[id],home:room,archetype:child.traits.archetype});
     born = true;
     log?.push({ t: w.t, kind: 'birth', ok: true, code: `${child.name}出生（${a.name}×${b.name}）` });
-    if (!experiment?.pairCooldown) return;
+    if (!multipleBirths) return;
   }
   if (!born) report('noPair',{rejected});
 }

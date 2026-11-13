@@ -2,19 +2,20 @@
 // 统计口径：人口/阶段/出生/死亡原因、存续、行动分布、经济与生态、运行质量。
 import { writeFileSync } from 'node:fs';
 import { createSurvPlay, tickSurvPlay, dumpSurv } from './survplay.mjs';
-import { livingResidents } from './body.mjs';
-import { residentStage, ageDays } from './households.mjs';
+import { LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
+import { isAlive, livingResidents } from './body.mjs';
+import { bedsPerHome, maritalStatus, residentsAt, residentStage } from './households.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { effectiveMods } from './production.mjs';
 
 export const LONG_SEEDS = [7, 13, 29, 41, 53];
 export const GAME_OPTIONS = Object.freeze({
   residentialDecisions: true, ecosystem: true, unifiedCooperation: true,
-  independentWorld: true, wildFood: true, autonomousGoals: true,
+  independentWorld: true, wildFood: true, autonomousGoals: true, eventRulesVersion: CURRENT_EVENT_RULES,
 });
 
 function stages(w) {
-  const out = { child: 0, adult: 0, elder: 0 };
+  const out = { infant: 0, child: 0, adult: 0, elder: 0 };
   for (const a of livingResidents(w)) out[residentStage(w, a.id)] += 1;
   return out;
 }
@@ -31,6 +32,26 @@ function actionCounters(w) {
   }
   return out;
 }
+function familySnapshot(w) {
+  const h = w.survival.households;
+  const res = livingResidents(w);
+  const rooms = Object.keys(h.deeds);
+  return {
+    married: res.filter(a => maritalStatus(h, a.id) === 'married' && isAlive(w.agents[h.spouses[a.id]])).length,
+    widowed: res.filter(a => maritalStatus(h, a.id) === 'widowed').length,
+    marriages: h.marriages?.length ?? null,
+    widowEvents: (h.marriages ?? []).filter(m => m.deceased?.length === 1).length,
+    remarriages: (h.marriages ?? []).filter(m => m.remarried.length > 0).length,
+    homes: rooms.length,
+    emptyHomes: rooms.filter(room => !residentsAt(w, room)).length,
+    vacantForSale: rooms.filter(room => h.deeds[room].listed && !residentsAt(w, room)).length,
+    bedsInUsableHomes: rooms.reduce((sum, room) => sum + (residentsAt(w, room) || h.deeds[room].listed ?
+      Math.max(0, bedsPerHome(w) - residentsAt(w, room)) : 0), 0),
+    projects: Object.fromEntries(Object.entries(h.projects).map(([room, p]) => [room, { ...p, ownerAlive: isAlive(w.agents[p.owner]) }])),
+    completedHomes: (h.housingHistory ?? []).filter(e => e.kind === 'finish').length,
+  };
+}
+
 function snapshot(w) {
   const s = w.survival, res = livingResidents(w), mods = effectiveMods(w);
   const v = res.map((a) => Number((a.viab?.v ?? 0).toFixed(4)));
@@ -46,38 +67,73 @@ function snapshot(w) {
     sites: (s.sites ?? []).length, resStock: { ...(s.resStock ?? {}) },
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? {}) },
     eco: { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length },
-    aiActions: { ...(s.aiActions ?? {}) }, counters: actionCounters(w),
+    family: familySnapshot(w),
+    aiActions: { ...(s.aiActions ?? {}) }, counters: actionCounters(w), actionAudit: structuredClone(s.actionAudit ?? {}),
     coop: { completions: (s.coop?.completions ?? []).length, refusals: s.coop?.refusals ?? 0, replans: s.coop?.replans ?? 0, exits: s.coop?.exits ?? 0 },
     agentErrors: s.agentErrors ?? 0,
   };
 }
 
-export async function runLong(seed, days = 30) {
+export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVENT_RULES,
+  familyExperiment, populationExperiment, recordTimeline = false, checkpoints = [days], observe } = {}) {
   const ticks = days * DAY_TICKS;
-  const sp = createSurvPlay(seed, GAME_OPTIONS);
+  const sp = createSurvPlay(seed, { ...GAME_OPTIONS, eventRulesVersion });
+  const w = sp.world;
+  w.familyExperiment = familyExperiment;
+  w.populationExperiment = populationExperiment;
+  const birthChecks = [], timeline = [], milestones = {}, marriageEvents = [], homeCompletions = [];
+  w.observeFamilyMarriage = event => marriageEvents.push(event);
+  w.observeHomeComplete = event => homeCompletions.push(event);
+  w.observeBirth = event => birthChecks.push(event);
+  const prior = new Map();
+  const checkDays = new Set(checkpoints);
   const initial = snapshot(sp.world);
   let maxTickMs = 0, sumTickMs = 0, lastDay = dayOf(sp.world.t);
   const daily = [];
   const heap0 = process.memoryUsage().heapUsed;
   for (let i = 0; i < ticks; i += 1) {
+    observe?.before?.(w);
     const t0 = Date.now();
     await tickSurvPlay(sp);
     const dt = Date.now() - t0;
+    observe?.after?.(w);
+    if (recordTimeline) for (const [id, person] of Object.entries(w.survival.households.residents)) {
+      const h = w.survival.households;
+      const state = { born: person.born, parents: person.parents, stage: person.stage,
+        sex: w.sex[id], spouse: h.spouses[id] ?? null, status: maritalStatus(h, id),
+        home: w.housing[id], decision: person.decision, death: w.agents[id].death };
+      const signature = JSON.stringify(state);
+      if (signature !== prior.get(id)) {
+        timeline.push({ t: w.t, id, ...state });
+        prior.set(id, signature);
+      }
+    }
     maxTickMs = Math.max(maxTickMs, dt); sumTickMs += dt;
     const d = dayOf(sp.world.t);
     if (d !== lastDay) {
       const h = sp.world.survival.history.at(-1) ?? {};
-      daily.push({ day: d, store: h.store ?? null, need: h.need ?? null, shortfall: h.shortfall ?? null, disaster: h.disaster ?? null });
+      daily.push({ day: d, store: h.store ?? null, need: h.need ?? null, shortfall: h.shortfall ?? null, disaster: h.disaster ?? null,
+        endStore: w.survival.store, drought: h.drought ?? false, weather: w.weather,
+        population: livingResidents(w).length, stages: stages(w) });
+      if (checkDays.has(d)) {
+        milestones[d] = snapshot(w);
+        milestones[d].family.marriages = marriageEvents.length;
+        milestones[d].family.completedHomes = homeCompletions.length;
+      }
       lastDay = d;
     }
   }
   const final = snapshot(sp.world);
+  final.family.marriages = marriageEvents.length;
+  final.family.completedHomes = homeCompletions.length;
   const save = JSON.stringify(dumpSurv(sp)).length;
   const dailyNeed = daily.reduce((a, d) => a + (d.need ?? 0), 0);
   const shortfallDays = daily.filter((d) => (d.shortfall ?? 0) > 0).length;
   const disasterDays = daily.filter((d) => d.disaster).length;
   return {
-    seed, days, ticks, initial, final,
+    seed, days, ticks, eventRulesVersion: w.eventRulesVersion, familyExperiment, populationExperiment, initial, final, milestones,
+    birthChecks, marriageEvents, homeCompletions, deaths: w.survival.deaths, marriages: w.survival.households.marriages ?? [],
+    housingHistory: w.survival.households.housingHistory ?? [], ...(recordTimeline ? { timeline, dailyTimeline: daily } : {}),
     daily: { days: daily.length, needSum: dailyNeed, shortfallDays, disasterDays, last: daily.slice(-5) },
     runtime: {
       avgTickMs: Number((sumTickMs / ticks).toFixed(3)), maxTickMs,
@@ -96,22 +152,21 @@ export function classify(r) {
 }
 
 export async function runExperiment() {
-  const runs30 = [];
-  for (const seed of LONG_SEEDS) runs30.push(await runLong(seed, 30));
-  // 代表性：全部 5 个种子跑 100 日；seed 13 继续到 200 日以取得自然灭绝样本。
-  const runs100 = [];
-  for (const seed of LONG_SEEDS) runs100.push(await runLong(seed, 100));
-  const runs200 = [await runLong(13, 200)];
-  return { generatedAt: new Date().toISOString(), runs30, runs100, runs200, classify: runs30.map((r) => ({ seed: r.seed, status: classify(r) })) };
+  const runs = [];
+  for (const eventRulesVersion of [LEGACY_EVENT_RULES, CURRENT_EVENT_RULES]) {
+    for (const seed of LONG_SEEDS) {
+      runs.push(await runLong(seed, 200, { eventRulesVersion, checkpoints: [30, 100, 200], recordTimeline: seed === 13 }));
+    }
+  }
+  return { runs };
 }
 
 if (process.argv[1]?.endsWith('long-run.mjs')) {
   const out = await runExperiment();
-  writeFileSync('docs/long-run-2026-11-13.json', JSON.stringify(out, null, 2));
-  console.log(JSON.stringify({
-    classify: out.classify,
-    thirty: out.runs30.map((r) => ({ seed: r.seed, pop: r.final.population, births: r.final.births, deaths: r.final.deaths, store: r.final.store, status: classify(r), errors: r.final.agentErrors })),
-    hundred: out.runs100.map((r) => ({ seed: r.seed, pop: r.final.population, births: r.final.births, deaths: r.final.deaths, store: r.final.store, status: classify(r), errors: r.final.agentErrors })),
-    twoHundred: out.runs200.map((r) => ({ seed: r.seed, pop: r.final.population, births: r.final.births, deaths: r.final.deaths, store: r.final.store, status: classify(r), errors: r.final.agentErrors })),
-  }, null, 2));
+  writeFileSync(process.argv[2] ?? 'docs/long-run-v4.json', JSON.stringify(out, null, 2));
+  for (const r of out.runs) {
+    console.log(JSON.stringify({ seed: r.seed, version: r.eventRulesVersion,
+      population: [30, 100, 200].map(day => r.milestones[day].population), births: r.final.births,
+      deaths: r.final.deathCauses, status: classify(r), errors: r.final.agentErrors }));
+  }
 }

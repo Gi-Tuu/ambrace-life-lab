@@ -8,7 +8,7 @@ export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
 export const ELDER_DAYS = 60;   // P1-1：60 天起老年（两季）
 export const RESIDENT_CAP = 10; // P1-3：存活居民上限（算力/生态承载），不含玩家
 const BEDS = 4;
-const bedsPerHome = w => w.populationExperiment?.bedsPerHome ?? BEDS;
+export const bedsPerHome = w => w.populationExperiment?.bedsPerHome ?? BEDS;
 const BUILD = { wood: 5, stone: 3 };
 const PRICE = { wood: 3, stone: 2 };
 const WORK_DAYS = 3;
@@ -55,7 +55,7 @@ const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) ===
 const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
 const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
-const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
+export const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < bedsPerHome(w);
 const housingMode = w => w.familyExperiment?.housing ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'inherit' : 'legacy');
 const canWork = (w, id) => isAlive(w.agents[id]) && laborStage(w, id);
@@ -92,6 +92,7 @@ function unite(w, a, b) {
   h.spouses[b] = a;
   h.marriedAt ??= {};
   h.marriedAt[a] = h.marriedAt[b] = w.t;
+  w.observeFamilyMarriage?.({ t: w.t, partners: [a, b].sort() });
   if (marriageMode(w) !== 'legacy') {
     const remarried = [a, b].filter(id => h.widowed?.[id]);
     (h.marriages ??= []).push({ partners: [a, b].sort(), t: w.t, remarried });
@@ -266,6 +267,7 @@ function finishHome(w, room, project, log) {
   if (isAlive(w.agents[id])) moveHome(w, id, room);
   if (h.residents[id]) mark(h.residents[id], 'built', w);
   if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'finish', room, owner: id });
+  w.observeHomeComplete?.({ t: w.t, room, owner: id });
   log?.push({ t: w.t, kind: 'home', ok: true, code: `${w.agents[id].name}建成新房` });
 }
 
