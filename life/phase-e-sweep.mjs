@@ -117,8 +117,12 @@ export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 �
 // 三者非开关可关的世界事实修复 ⇒ OFF/OFF2 轨迹均漂移；#14 作废。lab 五面逐位不变（已验）。
 // #15 两次跑逐位相同（docs/evidence/p0-batch1-20261113/recapture15.mjs）。
 // 历史值留痕：#14 OFF_BASE {7:63e2bbab…,11:c6a8c639…,13:568d7443…} / BASELINE3 {7:b4dd5799…,11:1b089a83…,13:fe395da9…}。
-export const OFF_BASE = { 7: '3dbb262176b5f14fb91d56c3cebc4ec4', 11: 'e755898b731bd709198d17d4ff0ddbec', 13: '1d6d6df6d27565d74adf857ce9a2bdff' };
-export const BASELINE3 = { 7: '2621b96f97ded45b055b9591bdf16f63', 11: 'ebd2be70a470f2a3bc0c4b6263015ca5', 13: '3f45408a174ae4a0294cec5fb869bada' };
+// 复抓#16（2026-11-13，派单 P1 第二批生命周期）：代际继承（newChild 性格随父/母）＋亲子纽带（初始信任 50）
+// 改变了 sweep 中繁衍后代的轨迹；人口上限 RESIDENT_CAP 亦入繁衍裁决。#15 作废。
+// 生命周期阶段/衰老仅在 households 模式生效，但继承/纽带作用于所有繁衍 ⇒ OFF/OFF2 漂移。lab 五面逐位不变（已验）。
+// #16 两次跑逐位相同。历史值留痕：#15 OFF_BASE {7:3dbb2621…,11:e755898b…,13:1d6d6df6…} / BASELINE3 {7:2621b96f…,11:ebd2be70…,13:3f45408a…}。
+export const OFF_BASE = { 7: '8d40f864e04ac94d24b76a73f2ccc77e', 11: 'e021a501d4a9e8fed2f5c10fa585507a', 13: 'e74a9c9a5e7f11b75987d36a7482e72a' };
+export const BASELINE3 = { 7: '4a6e5e4beabf32971b054135cee00861', 11: '337425457d7607e38a4a1bff216f721c', 13: '959874664b8a5439f078163827d774bf' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 

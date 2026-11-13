@@ -3,6 +3,9 @@ import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
 import { isAlive } from './viability.mjs';
 
 export const ADULT_DAYS = 12;
+export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
+export const ELDER_DAYS = 60;   // P1-1：60 天起老年（两季）
+export const RESIDENT_CAP = 10; // P1-3：存活居民上限（算力/生态承载），不含玩家
 const BEDS = 4;
 const BUILD = { wood: 5, stone: 3 };
 const PRICE = { wood: 3, stone: 2 };
@@ -21,19 +24,33 @@ export function makeHouseholds(housing) {
   };
 }
 
+// P1-1 生命周期阶段：婴幼儿→儿童→成年→老年（死亡由 viability/reapDeaths 管）。
+// 无 households 或无出生记录（初始 roster/旧档）＝成年 ⇒ lab/town 与 sweep 基线逐位不变。
 export function residentStage(w, id) {
   const resident = w.survival.households?.residents[id];
-  return resident && w.t - resident.born < ADULT_DAYS * DAY_TICKS ? 'child' : 'adult';
+  if (!resident) return 'adult';
+  const age = (w.t - resident.born) / DAY_TICKS;
+  if (age < INFANT_DAYS) return 'infant';
+  if (age < ADULT_DAYS) return 'child';
+  if (age < ELDER_DAYS) return 'adult';
+  return 'elder';
 }
+export const ageDays = (w, id) => {
+  const r = w.survival.households?.residents[id];
+  return r ? (w.t - r.born) / DAY_TICKS : ADULT_DAYS;
+};
+export const isChildStage = (stage) => stage === 'infant' || stage === 'child';
+// 劳动能力：成年与老年可劳动（老年减产）；婴幼儿/儿童不能劳动（P1-1：儿童不具成年劳动能力）。
+export const laborStage = (w, id) => { const s = residentStage(w, id); return s === 'adult' || s === 'elder'; };
 
-const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) === 'adult' && isAlive(w.agents[id]); // P0-1：死者不算成年劳动力
+const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) === 'adult' && isAlive(w.agents[id]); // 婚育仅成年（老年不繁衍）；死者排除
 const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
 const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
 const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < BEDS;
 const dependents = (w, id) => Object.keys(w.survival.households.residents).filter(child =>
-  residentStage(w, child)==='child' && w.housing[child]===w.housing[id] &&
+  isChildStage(residentStage(w, child)) && w.housing[child]===w.housing[id] &&
   w.survival.households.residents[child].parents.includes(id));
 const canShare = (w, a, b) => Boolean(w.housing[b] && w.housing[a] !== w.housing[b] &&
   hasBed(w, w.housing[b]) && residentsAt(w, w.housing[b]) + dependents(w, a).length < BEDS);

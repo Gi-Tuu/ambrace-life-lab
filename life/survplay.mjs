@@ -12,7 +12,7 @@ import { initCoop, willingness } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
-import { ADULT_DAYS, makeHouseholds, residentStage, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
 
 const ROSTER = [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']];
 // 只读表现字段：从 Organism.trace 里取最近一次成功动作的 kind，供 3D 姿态与图标使用。
@@ -62,6 +62,8 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
     world.locs = { ...world.locs };
     s.households = makeHouseholds(world.housing);
     restoreHouseholds(world);
+    // P1-1：创始居民也入生命周期（开局即 fresh 成年，随世界时间衰老）；玩家不衰老（死亡走存续）。
+    for (const [id] of ROSTER) s.households.residents[id] ??= { born: -ADULT_DAYS * DAY_TICKS, parents: [], stage: 'adult' };
   }
 
   // 采集/蓄养：独立产出账，缺省 tolerant（旧档没有这些键也能补上）。
@@ -137,6 +139,31 @@ function reapDeaths(w, log) {
   }
 }
 
+// P1-1 老年额外代谢（每刻）：体能随衰老下降。
+const ELDER_DECAY = 0.0004;
+// P1-1 生命周期推进（日界）：阶段跃迁事件（成年/老年）＋老年自然衰老死亡。
+// 死亡概率随龄升、用确定哈希（无 Math.random）⇒ 可复现；置 viab=0 交 reapDeaths 统一收尸记录 cause='衰老'。
+function stepLifecycle(w, log) {
+  const s = w.survival;
+  if (!s.households) return;
+  const day = dayOf(w.t);
+  for (const a of Object.values(w.agents)) {
+    if (a.isPlayer || !isAlive(a)) continue;
+    const rec = s.households.residents[a.id];
+    if (!rec) continue;
+    const stage = residentStage(w, a.id);
+    if (rec.stage && rec.stage !== stage) {
+      if (stage === 'adult') log.push({ t: w.t, kind: 'adult', ok: true, code: `${a.name}成年` });
+      else if (stage === 'elder') log.push({ t: w.t, kind: 'elder', ok: true, code: `${a.name}步入老年` });
+    }
+    rec.stage = stage;
+    if (stage === 'elder') {
+      const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - ELDER_DAYS) * 0.01);
+      if ((hashSeed(w.seed ?? 7, `age:${a.id}:${day}`) % 1000) / 1000 < p) { a.hurtBy = '衰老'; a.viab.v = 0; }
+    }
+  }
+}
+
 export async function tickSurvPlay(sp) {
   const w = sp.world;
   w.t += 1;
@@ -147,7 +174,8 @@ export async function tickSurvPlay(sp) {
   if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   if (dayOf(w.t) !== dayOf(w.t - 1)) {
     if (w.survival.households && !w.survival.ended && !w.survival.failed) stepHouseholds(w, sp.log);
-    reproduce(w); // §15 P2-B 繁衍（日界）
+    if (w.survival.households && !w.survival.ended && !w.survival.failed) stepLifecycle(w, sp.log); // P1-1 阶段跃迁＋衰老
+    reproduce(w, sp.log); // §15 P2-B 繁衍（日界）；P1-3 人口上限＋出生事件
     // 蓄养/果树日界结算：规则层算增量，写独立产出账，不碰 store/inv。
     w.survival.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
     const daily = produceYield(seasonOf(dayOf(w.t)), w.survival.livestock ?? DEFAULT_LIVESTOCK);
@@ -172,6 +200,7 @@ export async function tickSurvPlay(sp) {
       continue;
     }
     try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
     else if (w.survival.allHunger) a.drives.tick(1, false);
@@ -204,19 +233,25 @@ export async function tickSurvPlay(sp) {
 
 // §15 P2-B 繁衍：异性存活对＋住所完好＋粮≥pop×2＋信任≥60＋冷却 10 天 ⇒ 新生 Organism（记忆从空开始）
 const CHILD_NAMES = ['芽', '苗', '穗', '实', '蘖', '籽'];
-function newChild(w, id) {
+const ARCHETYPES = ['谨慎', '冲动', '孤僻'];
+function newChild(w, id, parents = null) {
   const seed = w.seed ?? 7;
   const index = Number(id.slice(1)) - 1;
+  // P1-2 轻量代际继承：性格倾向随一方父/母（确定哈希）；其余特质由独立 rng 采样 ⇒ 独立个体而非父母复制。
+  const pa = parents?.[0], pb = parents?.[1];
+  const archetype = (pa?.traits?.archetype && pb?.traits?.archetype)
+    ? [pa.traits.archetype, pb.traits.archetype][hashSeed(seed, `arch:${id}`) % 2]
+    : ARCHETYPES[hashSeed(seed, `arch:${id}`) % 3];
   return new Organism({ id, name: CHILD_NAMES[index % CHILD_NAMES.length],
-    archetype: ['谨慎', '冲动', '孤僻'][hashSeed(seed, `arch:${id}`) % 3],
-    seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator: w.survivalDeliberator });
+    archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator: w.survivalDeliberator });
 }
-function reproduce(w) {
+function reproduce(w, log) {
   const s = w.survival;
   if (s.ended || s.failed) return;
   const day = dayOf(w.t);
   if (day - (s.lastBirthDay ?? -99) < 10) return;
   const pop = livingResidents(w).length; // P0-1：繁衍门槛按存活人口
+  if (pop >= RESIDENT_CAP) return; // P1-3：人口上限（算力/生态承载），不无限生成
   if (s.store < pop * 2) return;
   // 有住户系统时，繁衍门槛由"已婚＋同住＋有床"裁决（familyHomeForBirth）；旧的抽象 shelter
   // 检查会让婚姻永远卡在一栋与住所无关的建筑上。无 households 的旧档保留原门槛。
@@ -229,17 +264,24 @@ function reproduce(w) {
     if (s.households ? !room : (a.relations?.get?.(b.id)?.trust ?? 30) < 60) continue;
     const n = (s.births ?? 0) + 1;
     const id = `c${n}`;
-    w.agents[id] = newChild(w, id);
+    const child = newChild(w, id, [a, b]);
+    w.agents[id] = child;
     w.sex[id] = sexOf(w.seed ?? 7, id);
     if (w.stash) w.stash[id] = 0;
     if (s.households) {
       w.pinv[id] = { wood: 0, stone: 0 };
-      s.households.residents[id] = { born: w.t, parents: [a.id, b.id] };
+      s.households.residents[id] = { born: w.t, parents: [a.id, b.id], stage: 'infant' };
       w.housing[id] = room;
+    }
+    // P1-2 亲子纽带：子女与父母初始信任/熟悉高于中性（独立关系，随经历演化）。
+    for (const p of [a, b]) {
+      if (child.relations) { const r = child.relations.get(p.id); r.trust = 50; r.familiarity = 0.3; }
+      if (p.relations) { const r = p.relations.get(id); r.trust = 50; r.familiarity = 0.3; }
     }
     spawn(w, id, room ?? 'home');
     s.births = n;
     s.lastBirthDay = day;
+    log?.push({ t: w.t, kind: 'birth', ok: true, code: `${child.name}出生（${a.name}×${b.name}）` });
     return;
   }
 }
@@ -323,7 +365,7 @@ export function survView(sp) {
     housing: w.housing,
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead },
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),

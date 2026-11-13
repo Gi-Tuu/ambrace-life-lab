@@ -2628,7 +2628,8 @@ function runSurvAction(ctx) {
   if (ctx.tool && ui.tool !== ctx.tool) { survFlash = { kind: ctx.kind, ok: false, code: 'NEED_TOOL', tool: ctx.tool }; refresh(); return; }
   api('/act', { mode: 'survival', kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 }
-const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡' };
+const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
+const STAGE_ZH = { infant: '婴幼儿', child: '儿童', adult: '成年', elder: '老年' };
 function updateHotbar() {
   ui.tool ??= 'hand';
   const s = S.view;
@@ -2731,7 +2732,8 @@ function renderVillage(s) {
   const rows = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer).map((a) => {
     if (a.dead) return `<div class="vrow dead"><b>${esc(a.name)}</b><span class="bad">已故</span><span class="dim">${esc(a.death?.cause ?? '')} · 第${(a.death?.day ?? 0) + 1}天</span></div>`;
     const cells = Array.from({ length: 5 }, (_, i) => `<b class="${(i + 0.5) / 5 <= (a.energy ?? 0) ? 'on' : ''}"></b>`).join('');
-    return `<div class="vrow"><b>${esc(a.name)}</b><span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
+    const stage = a.stage && a.stage !== 'adult' ? `<span class="dim">${STAGE_ZH[a.stage] ?? a.stage}</span>` : (a.age != null ? `<span class="dim">${a.age}天</span>` : '');
+    return `<div class="vrow"><b>${esc(a.name)}</b>${stage}<span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
   }).join('');
   el.innerHTML = rows || '<div class="dim">无居民</div>';
 }

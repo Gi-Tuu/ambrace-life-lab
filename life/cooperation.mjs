@@ -5,6 +5,7 @@
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
 import { BUILDINGS, GATHER_BY_LOC, coopPoolGather, doPlan, doBuild } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
+import { laborStage } from './households.mjs';
 // 位置只能经 body.move 改：它同时维护 world.occupancy。直接写 world.loc[id] 会让
 // occupancy 里留着旧地点、新地点没有该角色，下一次 move() 读 occupancy[from] 时崩，
 // 然后 survplay 的 try/catch 每拍吞一条 agentError，工人整条决策环停摆（2026-11-12 实测）。
@@ -60,7 +61,7 @@ const pickBuildLoc = (world, exclude) => {
 };
 
 export const assignWorkers = (world, task) => Object.keys(world.agents)
-  .filter((id) => !world.agents[id].isPlayer && isAlive(world.agents[id])) // P0-1：死者不组队
+  .filter((id) => !world.agents[id].isPlayer && isAlive(world.agents[id]) && laborStage(world, id)) // P0-1 死者不组队；P1-1 儿童不劳动
   .map((id) => ({ id, w: willingness(world, id, task) }))
   .filter((x) => x.w.decision !== 'refuse')
   .sort((a, b) => b.w.score - a.w.score)

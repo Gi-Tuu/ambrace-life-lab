@@ -147,6 +147,9 @@ export function advanceSurvival(world) {
       if (!a.drives || !isAlive(a)) continue; // P0-1：死者不再被喂饱
       a.hurtBy = null;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
+      // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
+      // sweep 研究世界无 households ⇒ 不进入此支，§16 务农动机平衡与基线不受影响。
+      if (s.households && !a.isPlayer) a.viab?.regen(s.feedViab ?? 0.5);
     }
   }
 

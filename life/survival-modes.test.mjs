@@ -39,13 +39,13 @@ test('家庭须双方同意，原住房保留产权，出生和长大能够跨�
   w.t = DAY_TICKS * 2 - 1;
   await tickSurvPlay(sp);
   const first = survView(sp);
-  assert.equal(first.agents.c1.stage, 'child');
+  assert.equal(first.agents.c1.stage, 'infant'); // P1-1： newborn 是婴幼儿（0–3 天），3 天后转 child
   assert.deepEqual(first.households.residents.c1.parents, ['a1','a2']);
   assert.equal(first.housing.c1, room);
   const restored = loadSurv(structuredClone(dumpSurv(sp)), 99, options);
   assert.equal(restored.world.seed, 7);
   assert.equal(restored.world.occupancy[restored.world.loc.c1].includes('c1'),true);
-  assert.equal(survView(restored).agents.c1.stage,'child');
+  assert.equal(survView(restored).agents.c1.stage,'infant'); // P1-1：读档后 newborn 仍婴幼儿
   const rw = restored.world;
   rw.agents.c1.traits.archetype = '谨慎';
   rw.t = h.residents.c1.born + ADULT_DAYS * DAY_TICKS - 1;

@@ -4,6 +4,7 @@
 import { siteOf } from './geometry.mjs';
 import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
+import { residentStage } from './households.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -49,7 +50,7 @@ export function doGather(world, agentId) {
   const stock = (s.resStock ??= { ...RES_STOCK });
   const have = stock[loc] ?? 0;
   if (have <= 0) return { ok: false, code: 'NO_RESOURCE' }; // 采空了，等再生
-  const take = Math.min(2, have);
+  const take = Math.min(residentStage(world, agentId) === 'elder' ? 1 : 2, have); // P1-1：老年体力下降，采集减产
   stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
   bag[res] += take;
@@ -107,7 +108,7 @@ export function doBuild(world, agentId) {
   const s = world.survival;
   const site = atLoc(s.sites, world.loc[agentId]);
   if (!site) return { ok: false, code: 'NO_SITE' };
-  site.progress += LABOR_PER_ACTION;
+  site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
     s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1 });
