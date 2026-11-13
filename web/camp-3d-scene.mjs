@@ -101,13 +101,12 @@ function cladding(s, x, y, z, w, h, d, masonry) {
   }
 }
 
-function house(s, id, x, z, seed, occupied = false) {
+function house(s, id, x, z, seed) {
   const colors = { home:'#AB5236', store:'#D8A667', workshop:'#5F574F', watch:'#83769C' };
   const variant=seed==null?null:Math.floor(campHash(seed,`roof-${id}`)*5);
   const seededColors=['#AB5236','#72513B','#5F574F','#70657A','#526B54'];
-  const color=(variant==null?null:seededColors[variant])??colors[id]??({house1:'#8D593F',house2:'#526B54',house3:'#70657A',house4:'#A17B54'}[id]??'#976A45');
-  const small=Boolean(residentialSite(id));
-  const width=small?5.6:7.2, depth=small?4.6:6.15;
+  const color=(variant==null?null:seededColors[variant])??colors[id]??'#976A45';
+  const width=7.2, depth=6.15;
   const left=x-width/2, back=z-depth-1.7;
   s.box(left,0,back,width,.27,depth,DARK,true);
   const masonry = id === 'workshop' || id === 'watch' || variant===2;
@@ -120,9 +119,9 @@ function house(s, id, x, z, seed, occupied = false) {
   s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
   s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
   s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
-  for (const dx of (small?[-1.95,1.03]:[-2.45,1.57])) {
+  for (const dx of [-2.45,1.57]) {
     s.box(x+dx,1.36,front-.025,.89,.83,.1,'#514134');
-    s.box(x+dx+.09,1.45,front+.079,.71,.65,.035,occupied?'#EDC787':'#458996',false,true);
+    s.box(x+dx+.09,1.45,front+.079,.71,.65,.035,'#458996');
     s.box(x+dx+.12,1.88,front+.116,.28,.16,.02,'#A0D2C6');
   }
   if (id === 'workshop' || id === 'home') {
@@ -355,7 +354,7 @@ export function outdoorStage(world, bridges, rocks) {
     if (id==='hall') hall(s,x,z);
     else if (id==='watch') watchTower(s,x,z);
     else if (['garden','well','yard'].includes(id)) outdoorFixture(s,id,x,z);
-    else s.group(`site:${id}`,()=>house(s,id,x,z,world.layoutSeed,Object.values(world.housing??{}).includes(id)));
+    else if (!residentialSite(id)) s.group(`site:${id}`,()=>house(s,id,x,z,world.layoutSeed));
   }
   for (const [tx,tz] of world.trees) {
     s.group(`tree:${tx}:${tz}`,() => tree(s,tx+.5,tz+.5,(tx*3+tz*7)%4));
@@ -724,7 +723,7 @@ function granary3d(s, lot, record, world) {
   const phase = constructionStage(record);
   const labor = world.buildingsDef?.[record.type]?.labor ?? 6;
   const ratio = phase === 'frame' ? Math.max(.2, Math.min(1, (record.progress ?? 0) / labor)) : 1;
-  const damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
+  const damaged = Boolean(buildingDamage(record));
   const deck = .78, wallTop = 2.42;
   const id = `work:${record.loc}:${record.type}`;
 
@@ -801,9 +800,7 @@ function granary3d(s, lot, record, world) {
   }
 
   // 储粮量分档：0 / 少量 / 部分 / 明显增多。store=0 时一个容器都不画。
-  const cap = Math.max(1, world.storeCap ?? 24), store = Math.max(0, world.store ?? 0);
-  const level = Math.min(1, store / cap);
-  const count = store <= 0 ? 0 : level < .15 ? 1 : level < .6 ? 3 : 5;
+  const count = granaryGoods(world);
   const slots = [
     ['sack', X + .35, front + .34], ['barrel', X + 1.05, front + .38],
     ['crate', X + W - .85, front + .34], ['sack', X + W - .45, front + .62],
@@ -849,7 +846,7 @@ function worksRatio(record, world, laborDefault) {
 function shelter3d(s, lot, record, world) {
   const { x, z, w, d } = lot;
   const X = x + .3, Z = z + .28, W = w - .6, D = d - .85;
-  const phase = constructionStage(record), damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
+  const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
   const ratio = worksRatio(record, world, 6), front = Z + D;
   if (worksBase(s, lot, phase)) return;
 
@@ -889,7 +886,7 @@ function shelter3d(s, lot, record, world) {
 function workshop3d(s, lot, record, world) {
   const { x, z, w, d } = lot;
   const X = x + .22, Z = z + .22, W = w - .44, D = d - .44;
-  const phase = constructionStage(record), damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
+  const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
   const ratio = worksRatio(record, world, 8), front = Z + D;
   if (worksBase(s, lot, phase)) return;
 
@@ -927,8 +924,7 @@ function workshop3d(s, lot, record, world) {
 function wall3d(s, lot, record, world) {
   const { x, z, w, d } = lot;
   const phase = constructionStage(record);
-  const integrity = record.integrity ?? 1;
-  const damage = phase !== 'complete' ? 0 : integrity >= .99 ? 0 : integrity >= .5 ? 1 : 2;
+  const damage = buildingDamage(record);
   const ratio = worksRatio(record, world, 8);
   const Z = z + d / 2 - .25, H = 1.72, seg = 5;
   s.box(x + .04, 0, Z - .1, w - .08, .18, .62, '#8A8F83', true, phase === 'foundation' ? 'ground' : false);
@@ -964,12 +960,12 @@ function wall3d(s, lot, record, world) {
   }
 }
 
-// 私人住宅：形状沿用 house() 的小体量，但状态来自 households 记录。
-function home3d(s, lot, record, world, seed) {
+// 从奠基到登记入住使用同一个地块和木屋外壳。
+function home3d(s, lot, record, seed) {
   const { x, z, w, d } = lot;
   const X = x + .25, Z = z + .25, W = w - .5, D = d - .5;
-  const phase = constructionStage(record), damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
-  const ratio = worksRatio(record, world, 6), front = Z + D;
+  const phase = constructionStage(record);
+  const ratio = Math.min(1, (record.progress ?? HOME_LABOR) / HOME_LABOR), front = Z + D;
   const v = Math.floor(campHash(seed ?? 0, `home-${record.loc}`) * 4);
   const roofColor = ['#8D593F', '#526B54', '#70657A', '#A17B54'][v];
   if (worksBase(s, lot, phase)) return;
@@ -983,36 +979,95 @@ function home3d(s, lot, record, world, seed) {
   }
   s.box(X, .16, Z, W, 1.85, D, '#72513B');
   grPlanks(s, X, .16, Z, W, 1.82, D, true);
-  grGable(s, X - .08, 2.0, Z - .08, W + .16, D + .16, damaged ? '#5F574F' : roofColor, damaged ? 1 : 0);
+  grGable(s, X - .08, 2.0, Z - .08, W + .16, D + .16, roofColor);
   s.box(X + W / 2 - .46, .16, front, .92, 1.42, .08, '#514134');
   s.box(X + W / 2 - .36, .24, front + .05, .72, 1.26, .04, '#AB5236');
-  // 居住状态：从 world.housing（id→room）派生，有人住才亮窗、才有炊烟
-  const residents = Object.values(world.housing ?? {}).filter((room) => room === record.loc).length;
+  const doorX = X + W / 2;
+  s.box(doorX - .6, 0, front + .14, 1.2, .12, .43, '#7A7667');
+  s.box(doorX - .49, .004, front + .57, .98, .04, .39, '#939584');
   for (const dx of [-1.35, .78]) {
     s.box(X + W / 2 + dx, 1.05, front + .01, .54, .58, .06, '#514134');
-    s.box(X + W / 2 + dx + .06, 1.12, front + .075, .42, .44, .03,
-      residents > 0 && !damaged ? '#EDC787' : '#2E3B3A', false, residents > 0 && !damaged);
   }
-  if (residents > 0 && !damaged) {
-    s.box(X + W - .62, 2.35, Z + .45, .34, .72, .34, '#5F574F');
-    s.chimneys?.push?.([X + W - .45, 3.12, Z + .62]);
-    s.box(X + .2, .16, front + .32, .7, .22, .3, WOOD);           // 门口木柴
+  // 烟囱是房屋的一部分。烟、暖窗和柴堆由住户状态决定。
+  s.box(X + W - .62, 2.35, Z + .45, .34, .92, .34, '#5F574F');
+  s.box(X + W - .66, 3.27, Z + .41, .42, .11, .42, '#939584');
+}
+
+const HOME_LABOR = 3;
+
+function homeLot(world, room) {
+  const at = world.layout?.sites[room] ?? residentialSite(room);
+  return at && { x: at[0] - 2.3, z: at[1] - 6.05, w: 4.6, d: 3.7 };
+}
+
+export function homeAppearance(world, sites = world.rooms ?? {}) {
+  const rooms = Object.keys(world.households?.deeds ?? sites).filter(room => residentialSite(room)).sort();
+  const occupied = new Set();
+  for (const [id, room] of Object.entries(world.housing ?? {})) {
+    const agent = world.agents?.[id];
+    if (agent && !agent.dead) occupied.add(room);
   }
+  return rooms.map(room => [room, occupied.has(room)]);
+}
+
+export function outdoorHomes(world, appearance) {
+  const s = stage(0, 0);
+  for (const [room, occupied] of appearance) {
+    const lot = homeLot(world, room);
+    const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
+    s.entrances[room] = { x: x - 1.15, z: front + .05, w: 2.3, d: 1.6 };
+    s.group(`work:${room}:house`, () => {
+      for (const dx of [-1.29, .84]) {
+        s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);
+      }
+      if (occupied) {
+        s.chimneys.push([lot.x + lot.w - .70, 3.4, lot.z + .87]);
+        worldItem(s, 'wood', lot.x + .45, front + .32, .68, .02);
+      }
+    });
+  }
+  return s;
+}
+
+export function buildingDamage(record) {
+  if (constructionStage(record) !== 'complete') return 0;
+  const integrity = record.integrity ?? 1;
+  if (record.type === 'wall') return integrity >= .99 ? 0 : integrity >= .5 ? 1 : 2;
+  return Number(integrity < 1);
+}
+
+export function granaryGoods(world) {
+  const store = Math.max(0, world.store ?? 0);
+  const level = store / Math.max(1, world.storeCap ?? 24);
+  return store === 0 ? 0 : level < .15 ? 1 : level < .6 ? 3 : 5;
+}
+
+export function workModelKey(world, appearance, treeSignature) {
+  const placement = b => [b.type, b.loc, b.lot?.x, b.lot?.z, b.lot?.w, b.lot?.d];
+  const buildings = world.buildings ?? [];
+  return JSON.stringify([
+    buildings.map(b => [...placement(b), buildingDamage(b)]),
+    (world.sites ?? []).map(b => [...placement(b), b.progress, world.buildingsDef?.[b.type]?.labor]),
+    appearance.map(([room]) => room),
+    Object.entries(world.households?.projects ?? {}).map(([room, p]) => [room, p.progress]),
+    treeSignature,
+    buildings.some(b => b.type === 'granary') ? granaryGoods(world) : 0,
+  ]);
 }
 
 export function constructionStage(record) {
-  if (!Object.hasOwn(record,'progress')) return 'complete';
+  if (!Object.hasOwn(record,'progress') || (record.type === 'house' && record.progress >= HOME_LABOR)) return 'complete';
   if (record.progress<=0) return 'foundation';
   return 'frame';
 }
 
-export function addCampWork(boxes, world) {
+export function addCampWork(boxes, world, appearance = homeAppearance(world)) {
   const projects=[];
   const add=(record)=>{
     const lot=record.lot??constructionLot(record.loc,world.layout);
     if (!lot) return;
     const {x,z,w,d}=lot, X=x+.24,Z=z+.24,W=w-.48,D=d-.48;
-    const id=`work:${record.loc}:${record.type}`, labor=world.buildingsDef?.[record.type]?.labor??6;
+    const id=`work:${record.loc}:${record.type}`, labor=record.type === 'house' ? HOME_LABOR : world.buildingsDef?.[record.type]?.labor??6;
     const phase=constructionStage(record);
     projects.push({id,phase,record,lot,labor});
     const s={box(x,y,z,w,h,d,color,solid=false,rise=false) {
@@ -1023,7 +1078,7 @@ export function addCampWork(boxes, world) {
     if (record.type === 'shelter') { shelter3d(s, lot, record, world); return; }
     if (record.type === 'workshop') { workshop3d(s, lot, record, world); return; }
     if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
-    if (record.type === 'house') { home3d(s, lot, record, world, world.layoutSeed); return; }
+    if (record.type === 'house') { home3d(s, lot, record, world.layout ? world.mapSeed : 0); return; }
     const baseRise=phase==='foundation'?'ground':false;
     s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
     for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])
@@ -1051,9 +1106,10 @@ export function addCampWork(boxes, world) {
   };
   for (const building of world.buildings??[]) add(building);
   for (const site of world.sites??[]) add(site);
+  const finished = new Set(appearance.map(([room]) => room));
+  for (const room of finished) add({loc:room,type:'house',lot:homeLot(world, room)});
   for (const [room,project] of Object.entries(world.households?.projects??{})) {
-    const [x,z]=world.layout?.sites[room]??residentialSite(room);
-    add({loc:room,type:'house',progress:project.progress,lot:{x:x-2.3,z:z-6.05,w:4.6,d:3.7}});
+    if (!finished.has(room)) add({loc:room,type:'house',progress:project.progress,lot:homeLot(world, room)});
   }
   return projects;
 }

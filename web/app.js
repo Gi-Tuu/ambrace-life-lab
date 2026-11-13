@@ -10,7 +10,7 @@ import {
   overrideWalk, pathFromWalker, roomAllows,
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
-import { addCampWork, outdoorLife, outdoorStage, penLayout, roomStage, timberStage } from './camp-3d-scene.mjs';
+import { addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
 import { campCamera, coveredModels, createCampRenderer, rayBox } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
@@ -339,19 +339,13 @@ function worldWithCollisions(sites, w) {
   const buildings = w.buildings ?? [];
   const timber=w.camp?.timber;
   const treeSignature=timber?worldCache.grove.map(t=>timber[t.id]?.stage??'mature').join(','):'';
-  const houseWork=Object.entries(w.households?.projects??{});
-  // 储粮分档也要进签名，否则 store 变化时粮袋/木桶数量不刷新。
-  // 只记档位（0/1/2/3）不记原始数值，避免每份粮食都重建整份 work3d。
-  const storeCap=Math.max(1,w.storeCap??24), storeNow=Math.max(0,w.store??0);
-  const storeLevel=storeNow/storeCap;
-  const storeTier=storeNow<=0?0:storeLevel<.15?1:storeLevel<.6?2:3;
-  const signature = houseWork.map(([room,p])=>room+':'+p.progress).join(',')+'|'+buildings.map(b=>b.type+'@'+b.loc+':'+(b.integrity<1)).join(',')+'|' +
-    (w.sites??[]).map(b=>b.type+'@'+b.loc+':'+b.progress).join(',')+'|'+treeSignature+'|'+storeTier;
+  const appearance=homeAppearance(w,sites);
+  const signature=workModelKey(w,appearance,treeSignature);
   if (worldCache.buildingMaskSignature !== signature) {
     const { assetWalk, scene3d } = worldCache;
     if (scene3d) {
       const boxes=[], previous=worldCache.workProjects;
-      const projects=addCampWork(boxes,w);
+      const projects=addCampWork(boxes,w,appearance);
       for (const project of projects) {
         const old=previous?.find(p=>p.id===project.id);
         project.since=previous && old?.phase!==project.phase ? performance.now() : old?.since??-1000;
@@ -359,8 +353,27 @@ function worldWithCollisions(sites, w) {
       worldCache.workProjects=projects;
       boxes.push(...timberStage(timber,worldCache.grove).boxes);
       worldCache.work3d=boxes;
-      worldCache.assetPixels=boxes.length?assetWalk.slice():assetWalk;
-      if (boxes.length) stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,{boxes});
+      const solids=boxes.filter(b=>b.solid);
+      const collisionSignature=JSON.stringify(solids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
+      if (worldCache.solidSignature!==collisionSignature) {
+        worldCache.solidSignature=collisionSignature;
+        worldCache.assetPixels=solids.length?assetWalk.slice():assetWalk;
+        stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,{boxes:solids});
+        worldCache.pixelBase=terrainPixels().map((value,index)=>value & worldCache.assetPixels[index]);
+        worldCache.collisionRevision=-1;
+      }
+      const homeSolids=solids.filter(b=>b.occluder?.endsWith(':house'));
+      const homeBlockerKey=JSON.stringify(homeSolids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
+      if (worldCache.homeBlockerKey!==homeBlockerKey) {
+        worldCache.homeBlockerKey=homeBlockerKey;
+        const blockers=new Set(worldCache.blockers);
+        for (const b of homeSolids) {
+          for (let z=Math.ceil(b.z-.5); z<b.z+b.d-.5; z++) {
+            for (let x=Math.ceil(b.x-.5); x<b.x+b.w-.5; x++) blockers.add(tileKey(x,z));
+          }
+        }
+        worldCache.visibleBlockers=blockers;
+      }
     } else {
       const lots=[...buildings,...(w.sites??[])].map(b=>b.lot??constructionLot(b.loc,w.layout)).filter(Boolean);
       const grove=timberStage(timber,worldCache.grove);
@@ -368,11 +381,18 @@ function worldWithCollisions(sites, w) {
       for (const lot of lots) fillCollisionRect(worldCache.assetPixels,WORLD_W,WORLD_H,
         lot.x*TILE,lot.z*TILE,Math.ceil(lot.w*TILE),Math.ceil(lot.d*TILE),0);
       if (grove.boxes.length) stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,grove);
+      const assets=worldCache.assetPixels;
+      worldCache.pixelBase=assets ? terrainPixels().map((value,index)=>value & assets[index]) : null;
+      worldCache.collisionRevision=-1;
     }
-    const assets = worldCache.assetPixels;
-    worldCache.pixelBase = assets ? terrainPixels().map((value, index) => value & assets[index]) : null;
-    worldCache.buildingMaskSignature = signature;
-    worldCache.collisionRevision = -1;
+    worldCache.buildingMaskSignature=signature;
+  }
+  if (worldCache.scene3d) {
+    const homeKey=JSON.stringify(appearance);
+    if (worldCache.homeKey!==homeKey) {
+      worldCache.homeKey=homeKey;
+      worldCache.homes3d=outdoorHomes(w,appearance);
+    }
   }
   if (worldCache.collisionRevision !== collisionEditor.revision) {
     const cells = worldCache.mapSeed ? new Map() : collisionEditor.cells('map');
@@ -399,7 +419,7 @@ function worldWithCollisions(sites, w) {
       if (lifeLayers.size>8) lifeLayers.delete(lifeLayers.keys().next().value);
     }
   }
-  return { ...worldCache, sites, life3d, timber };
+  return { ...worldCache, sites, life3d, timber, blockers:worldCache.visibleBlockers??worldCache.blockers };
 }
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
@@ -410,12 +430,14 @@ function stampSceneCollision(walk, width, height, scene) {
 }
 
 function buildWorld(w) {
-  const sites = sitesOf(w);
+  const liveSites = sitesOf(w);
   const mapSeed=w.mapSeed??0;
-  const sig=(w.layoutVersion??0)+'|'+mapSeed+'|'+Object.keys(sites).join(',')+'|'+Number(ASSETS.ready)+'|'+Boolean(campRenderer)+'|'+Boolean(w.camp?.timber);
+  const staticSites=campRenderer?Object.fromEntries(Object.entries(liveSites).filter(([room])=>!residentialSite(room))):liveSites;
+  const sites=staticSites;
+  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households)]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
-    return worldWithCollisions(sites, w);
+    return worldWithCollisions(liveSites, w);
   }
   const { river, riverCenter:streamCenter, riverHalfWidth:streamHalfWidth, hills: candidates }=
     campTerrain(mapSeed, Boolean(w.camp), w.layoutVersion);
@@ -451,7 +473,7 @@ function buildWorld(w) {
   const links=w.layout?[...w.layout.links]:[...ROAD_LINKS];
   if (!w.layout) {
     if(sites.well)routeSites.crossing=[Math.round(river(34))-4,34];
-    const homes=w.households?Object.keys(HOUSING_PLOTS):Object.keys(sites).filter(residentialSite);
+    const homes=w.households?Object.keys(HOUSING_PLOTS):Object.keys(liveSites).filter(residentialSite);
     if (homes.length) {
       Object.assign(routeSites,{residential:[75,38],northLane:[89,43],southLane:[89,56],edgeLane:[89,69]});
       links.push(['workshop','residential',[[68,33]]],['residential','northLane',[[79,40]]],['northLane','southLane',[]]);
@@ -660,7 +682,7 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null, housing:w.housing??{} }, bridges, rocks) : null;
+  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
   const habitats=w.layout
     ? [[sites.yard[0]-5,sites.yard[1]+17,'rabbit'],[sites.garden[0]-9,sites.garden[1]+12,'fox'],
       [sites.home[0]-5,sites.home[1]-8,'rabbit'],[sites.well[0]+2,sites.well[1]+7,'deer'],
@@ -688,7 +710,7 @@ function buildWorld(w) {
   worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
-  return worldWithCollisions(sites, w);
+  return worldWithCollisions(liveSites, w);
 }
 
 // 玩家真实视野：从玩家 tile 出发，光半径 + Bresenham 光线投射，树/岩/屋舍挡视线。
@@ -1490,14 +1512,14 @@ function campVisibility(world, cvId, person, phase) {
   let views=campFog.get(world.canvas);
   if(!views){views=new Map();campFog.set(world.canvas,views);}
   const key=x+','+y+'|'+radius, previous=views.get(cvId);
-  if(previous?.key===key) return previous.bytes;
+  if(previous?.key===key && previous.blockers===world.blockers) return previous.bytes;
   const bytes=new Uint8Array(world.tw*world.th);
   for(let py=Math.max(0,y-radius-2);py<=Math.min(world.th-1,y+radius+2);py++){
     for(let px=Math.max(0,x-radius-2);px<=Math.min(world.tw-1,x+radius+2);px++){
       if(losClear(world.blockers,x,y,px,py)) bytes[py*world.tw+px]=255;
     }
   }
-  views.set(cvId,{key,bytes});
+  views.set(cvId,{key,bytes,blockers:world.blockers});
   return bytes;
 }
 
@@ -1823,7 +1845,7 @@ function drawCamp(cv,w) {
   const aspect=ui.fullscreen?Math.max(1.18,(innerWidth-12)/(innerHeight-80)):ui.interior?1.65:1.9;
   const {width,height,room}=campViewport(cv,aspect);
   const overview=ui.overview&&!room;
-  let stage, life, terrain, visibility, sight, waterMask, people=[], animals=[], residentHint, work=[], hearth, x,z,span;
+  let stage, life, homes, terrain, visibility, sight, waterMask, people=[], animals=[], residentHint, work=[], hearth, x,z,span;
   const playerId=cv.id==='cvFull'?'cvA':cv.id;
   if (room) {
     const site=ui.interior;
@@ -1855,7 +1877,7 @@ function drawCamp(cv,w) {
   } else {
     const world=buildWorld(w);
     campWorlds.set(playerId,world);
-    stage=world.scene3d;life=world.life3d;terrain=world.canvas;waterMask=world.waterMask;
+    stage=world.scene3d;life=world.life3d;homes=world.homes3d;terrain=world.canvas;waterMask=world.waterMask;
     const slots=slotsOf(w,world.sites);
     for(const who of Object.keys(slots))ensureWalker(playerId,who,world,slots);
     animals=drawHerd(world,playerId,ACT.motionTime??0,slots);
@@ -1894,8 +1916,8 @@ function drawCamp(cv,w) {
   if (S.soloSurv && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
-  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],work);
-  if(!campRenderer.render({target:cv,stage,life,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
+  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work);
+  if(!campRenderer.render({target:cv,stage,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered};
   if (open && !overview) paintWeather(g,climate,time,ratio);
@@ -1910,6 +1932,7 @@ function drawCamp(cv,w) {
     campBadge(g,camera,[nx,ny,nz],`${npc.name} · ${hint}`,heavy?'build':'talk',16,ratio);
   }
   if(stage.chimneys)campSmoke(g,camera,stage.chimneys,ratio,ACT.frame,light);
+  if(homes)campSmoke(g,camera,homes.chimneys,ratio,ACT.frame,light);
   if(light[0]<.9)campAmbient(g,camera,span,x,z,ratio,ACT.frame);
   // 悬停：≥120ms 才命中，拾取点画角括号，最近的人加金环 + 16px 名牌。
   const h=campHover&&campHover.cv===cv.id?campHover:null;
@@ -2445,7 +2468,7 @@ function propOption(container,label,reason,onClick) {
   container.append(button);
 }
 function entranceAt(world,x,z) {
-  return Object.entries(world.scene3d?.entrances??{}).find(([,e])=>
+  return Object.entries({...world.scene3d?.entrances,...world.homes3d?.entrances}).find(([,e])=>
     x>=e.x && x<=e.x+e.w && z>=e.z && z<=e.z+e.d)?.[0]??null;
 }
 function survRoomAtFeet() {
@@ -3271,7 +3294,7 @@ window.addEventListener('resize', () => { if (ui.fullscreen && S.view) draw($('c
 // 点击画面：把屏幕坐标反算成世界 tile，再落到最近的地点（走过去 / 切换镜头）。
 // 局部视角用相机偏移 + 整数倍缩放；全景用微缩比例。两个世界收到同一个动作。
 function walkToEntrance(room) {
-  const world=buildWorld(S.view), site=room==='grove'?world.groveEntrance:world.sites[room], e=world.scene3d?.entrances[room];
+  const world=buildWorld(S.view), site=room==='grove'?world.groveEntrance:world.sites[room], e=world.homes3d?.entrances[room]??world.scene3d?.entrances[room];
   const walker=ensureWalker('cvA','p1',world,slotsOf(S.view,world.sites));
   if (!walker || !site) return;
   const goal=e ? [e.x+e.w/2-.5,e.z+e.d*.73-.5] : site;
