@@ -39,16 +39,14 @@ function familySnapshot(w) {
   return {
     married: res.filter(a => maritalStatus(h, a.id) === 'married' && isAlive(w.agents[h.spouses[a.id]])).length,
     widowed: res.filter(a => maritalStatus(h, a.id) === 'widowed').length,
-    marriages: h.marriages?.length ?? null,
     widowEvents: (h.marriages ?? []).filter(m => m.deceased?.length === 1).length,
-    remarriages: (h.marriages ?? []).filter(m => m.remarried.length > 0).length,
+    remarriages: (h.marriages ?? []).filter(m => m.remarried?.length > 0).length,
     homes: rooms.length,
     emptyHomes: rooms.filter(room => !residentsAt(w, room)).length,
     vacantForSale: rooms.filter(room => h.deeds[room].listed && !residentsAt(w, room)).length,
     bedsInUsableHomes: rooms.reduce((sum, room) => sum + (residentsAt(w, room) || h.deeds[room].listed ?
       Math.max(0, bedsPerHome(w) - residentsAt(w, room)) : 0), 0),
     projects: Object.fromEntries(Object.entries(h.projects).map(([room, p]) => [room, { ...p, ownerAlive: isAlive(w.agents[p.owner]) }])),
-    completedHomes: (h.housingHistory ?? []).filter(e => e.kind === 'finish').length,
   };
 }
 
@@ -62,7 +60,10 @@ function snapshot(w) {
     playerAlive: !s.playerDead, playerViab: Number((w.agents.p1?.viab?.v ?? 0).toFixed(4)),
     ended: !!s.ended, failed: !!s.failed, won: !!s.won, endReason: s.endReason ?? null,
     viability: { avg: v.length ? Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)) : null, min: v.length ? Math.min(...v) : null },
-    store: s.store, storeCap: mods.storeCap, inv: { ...s.inv }, water: Number((s.water ?? 0).toFixed(3)), soil: Number((s.soil ?? 0).toFixed(3)),
+    store: s.store, storeCap: mods.storeCap, inv: { ...s.inv },
+    materials: Object.fromEntries(['wood', 'stone'].map(kind => [kind, (s.inv[kind] ?? 0) +
+      (s.households.receipts[kind] ?? 0) + [...Object.values(w.pinv), ...Object.values(s.campContainers ?? {})]
+        .reduce((sum, bag) => sum + (bag[kind] ?? 0), 0)])), water: Number((s.water ?? 0).toFixed(3)), soil: Number((s.soil ?? 0).toFixed(3)),
     buildings: (s.buildings ?? []).map((b) => ({ type: b.type, integrity: b.integrity })),
     sites: (s.sites ?? []).length, resStock: { ...(s.resStock ?? {}) },
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? {}) },
@@ -75,12 +76,13 @@ function snapshot(w) {
 }
 
 export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVENT_RULES,
-  familyExperiment, populationExperiment, recordTimeline = false, checkpoints = [days], observe } = {}) {
+  familyExperiment, populationExperiment, recordTimeline = false, checkpoints = [days], observeProduction } = {}) {
   const ticks = days * DAY_TICKS;
   const sp = createSurvPlay(seed, { ...GAME_OPTIONS, eventRulesVersion });
   const w = sp.world;
   w.familyExperiment = familyExperiment;
   w.populationExperiment = populationExperiment;
+  w.observeProduction = observeProduction;
   const birthChecks = [], timeline = [], milestones = {}, marriageEvents = [], homeCompletions = [];
   w.observeFamilyMarriage = event => marriageEvents.push(event);
   w.observeHomeComplete = event => homeCompletions.push(event);
@@ -88,15 +90,14 @@ export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVE
   const prior = new Map();
   const checkDays = new Set(checkpoints);
   const initial = snapshot(sp.world);
+  Object.assign(initial.family, { marriages: 0, completedHomes: 0 });
   let maxTickMs = 0, sumTickMs = 0, lastDay = dayOf(sp.world.t);
   const daily = [];
   const heap0 = process.memoryUsage().heapUsed;
   for (let i = 0; i < ticks; i += 1) {
-    observe?.before?.(w);
     const t0 = Date.now();
     await tickSurvPlay(sp);
     const dt = Date.now() - t0;
-    observe?.after?.(w);
     if (recordTimeline) for (const [id, person] of Object.entries(w.survival.households.residents)) {
       const h = w.survival.households;
       const state = { born: person.born, parents: person.parents, stage: person.stage,
@@ -114,7 +115,8 @@ export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVE
       const h = sp.world.survival.history.at(-1) ?? {};
       daily.push({ day: d, store: h.store ?? null, need: h.need ?? null, shortfall: h.shortfall ?? null, disaster: h.disaster ?? null,
         endStore: w.survival.store, drought: h.drought ?? false, weather: w.weather,
-        population: livingResidents(w).length, stages: stages(w) });
+        population: livingResidents(w).length, stages: stages(w),
+        livestock: { ...w.survival.livestock }, resStock: { ...w.survival.resStock }, wildBerries: { ...w.survival.wildBerries } });
       if (checkDays.has(d)) {
         milestones[d] = snapshot(w);
         milestones[d].family.marriages = marriageEvents.length;

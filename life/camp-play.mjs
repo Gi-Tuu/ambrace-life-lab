@@ -3,7 +3,7 @@ import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../web/camp-layout.mjs';
-import { doForage, doGather, effectiveMods } from './production.mjs';
+import { doForage, doGather } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 
@@ -115,6 +115,7 @@ export function campAction(world,body) {
     if (item!=='tray') return fail('BAD_ITEM');
     if (amount(bag,'wood')<2) return fail('NO_MATERIAL');
     bag.wood-=2;
+    world.observeProduction?.('materialSpent', 'craftWood', 2);
     bag.tray=amount(bag,'tray')+1;
     pay(world,0.01);
     return ok();
@@ -147,20 +148,21 @@ export function campAction(world,body) {
   } else if (item==='crop') {
     if (site!=='garden') return fail('NOT_GARDEN');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
-    const store=s.store;
-    const result=doHarvest(world,'p1',plot);
+    const result=doHarvest(world,'p1',plot,1);
     if (!result.ok) return result;
-    s.store=Math.min(effectiveMods(world).storeCap,store+result.amount-1);
+    world.observeProduction?.('collected', 'crop', 1);
     cost=SURV_COST.harvest;
   } else if (item==='berry') {
     const result=doForage(world,'p1');
     if (!result.ok) return result;
     s.produce.berry-=1;
+    world.observeProduction?.('collected', 'berry', 1);
     cost=SURV_COST.forage;
   } else {
     if (site!==(item==='fruit'?'garden':'yard')) return fail('WRONG_SOURCE');
     if (!amount(s.produce,item)) return fail('NO_PRODUCE');
     s.produce[item]-=1;
+    world.observeProduction?.('collected', item, 1);
   }
   bag[item]=amount(bag,item)+1;
   pay(world,cost);

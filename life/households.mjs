@@ -57,7 +57,7 @@ const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
 export const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < bedsPerHome(w);
-const housingMode = w => w.familyExperiment?.housing ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'inherit' : 'legacy');
+export const housingMode = w => w.familyExperiment?.housing ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'inherit' : 'legacy');
 const canWork = (w, id) => isAlive(w.agents[id]) && laborStage(w, id);
 const dependents = (w, id) => Object.keys(w.survival.households.residents).filter(child =>
   (housingMode(w) === 'legacy' || isAlive(w.agents[child])) && isChildStage(residentStage(w, child)) && w.housing[child]===w.housing[id] &&

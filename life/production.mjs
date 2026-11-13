@@ -101,6 +101,8 @@ export function doPlan(world, agentId, type) {
   if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
+  world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
+  world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
   s.sites.push({ type, loc, at: siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
@@ -126,6 +128,8 @@ export function doRepair(world, agentId) {
   if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, 1); bag.wood -= bw; s.inv.wood -= 1 - bw;
   const bs = Math.min(bag.stone, 1); bag.stone -= bs; s.inv.stone -= 1 - bs;
+  world.observeProduction?.('materialSpent', 'repairWood', 1);
+  world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
   return { ok: true, code: 'OK' };
 }
@@ -244,6 +248,8 @@ export function doExpand(world, id, type) {
   // 与候选侧同一条裁决：材料必须富余（留一份建筑料），不能挤掉建房。
   if ((s.inv?.wood ?? 0) < cost.wood + 4 || (s.inv?.stone ?? 0) < cost.stone + 3) return { ok: false, code: 'NO_MATERIAL' };
   s.inv.wood -= cost.wood; s.inv.stone -= cost.stone;
+  world.observeProduction?.('materialSpent', 'expandWood', cost.wood);
+  world.observeProduction?.('materialSpent', 'expandStone', cost.stone);
   s.livestock[type] = (s.livestock[type] ?? 0) + 1;
   if (s.ecosystem && s.ecoPop && (type === 'chickens' || type === 'orchards')) {
     const prefix = type === 'chickens' ? 'ch' : 'or';

@@ -32,6 +32,7 @@ export const BASE_KINDS = {
   trade: { impulse: 0.3, cost: 0.05, label: '接济/交换一份口粮' },
   companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
   // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
+  house_work: { impulse: .4, cost: .08, label: '为自己的房子加工木石' },
   harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
   plant: { impulse: 0.25, cost: 0.06, label: '在空菜畦播种' },
   // Phase B 建设动作（仅 survival）。
@@ -55,7 +56,7 @@ import { isAlive, livingResidents } from './viability.mjs';
 // P0-2 统一基础行动成本：玩家与 AI 同一动作付同一存续代价（execute 与 survAct/camp 共用此表）。
 // 数值与原 affordancesFor 候选逐字相同 ⇒ AI 轨迹不变；玩家侧从此按同表结算，不再免费劳动。
 export const SURV_COST = Object.freeze({
-  harvest: 0.08, plant: 0.06, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
+  house_work: 0.08, harvest: 0.08, plant: 0.06, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
   deposit: 0.03, withdraw: 0.03, forage: 0.12, exchange: 0.12, expand: 0.15, move_to: 0.06,
 });
 
@@ -309,7 +310,7 @@ export function affordancesFor(world, agentId) {
       if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: SURV_COST.harvest, impulse: 0.3, serves: { energy: 0.8 + urg } });
       if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: SURV_COST.plant, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
-    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: '为自己的房子加工木石', cost: .08, impulse: .4, serves: { safety: 1, stimulation: .9, energy: .55 } });
+    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: BASE_KINDS.house_work.label, cost: SURV_COST.house_work, impulse: BASE_KINDS.house_work.impulse, serves: { safety: 1, stimulation: .9, energy: .55 } });
     if (GATHER_BY_LOC[here] && (s0.resStock?.[here] ?? 0) > 0) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: SURV_COST.gather, impulse: 0.3, serves: houseGoal===here ? { safety: 1, energy: .65, stimulation: .9 } : { stimulation: 0.55 } });
     // §17 产出循环：AI 与玩家拿到完全相同的候选，走同一套规则层裁决。
     // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，

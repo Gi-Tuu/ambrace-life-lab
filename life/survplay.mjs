@@ -335,8 +335,9 @@ function reproduce(w, log) {
     const reason = s.households ? status.reason : (a.relations?.get?.(b.id)?.trust ?? 30) < 60 ? 'trust' : null;
     const blocked = reason ?? (experiment?.pairCooldown && day - (s.birthsByPairDay?.[key] ?? -99) < interval ? 'pairCooldown' : null);
     if (blocked) { if (w.observeBirth) rejected[key]=blocked; continue; }
-    if (livingResidents(w).length >= (experiment?.residentCap ?? RESIDENT_CAP) ||
-        s.store < livingResidents(w).length * 2) break;
+    const currentPop = livingResidents(w).length;
+    if (currentPop >= (experiment?.residentCap ?? RESIDENT_CAP)) { report('population', { pair: key }); break; }
+    if (s.store < currentPop * 2) { report('food', { pair: key }); break; }
     const n = (s.births ?? 0) + 1;
     const id = `c${n}`;
     const child = newChild(w, id, [a, b]);

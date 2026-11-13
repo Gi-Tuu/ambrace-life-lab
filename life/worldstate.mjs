@@ -129,6 +129,7 @@ export function advanceSurvival(world) {
   const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
+    world.observeProduction?.('ration', 'store', Math.min(s.store, need));
     if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
   }
@@ -181,7 +182,7 @@ export function advanceSurvival(world) {
 }
 
 // 行动效果（由 body.actuate 调用，统一走规则校验）。
-export function doHarvest(world, agentId, plot) {
+export function doHarvest(world, agentId, plot, personalPortion = 0) {
   const s = world.survival;
   const p = maturePlots(s).find(p=>plot===undefined || p.id===plot);
   if (!p) return { ok: false, code: 'NO_MATURE' };
@@ -193,7 +194,7 @@ export function doHarvest(world, agentId, plot) {
   s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
   s.harvestCount = (s.harvestCount ?? 0) + 1;
   const before = s.store;
-  s.store = Math.min(mods.storeCap, before + yieldAmt);
+  s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
   world.observeProduction?.('gross', 'crop', yieldAmt);
   world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };

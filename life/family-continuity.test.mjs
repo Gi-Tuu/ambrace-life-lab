@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, tickSurvPlay } from './survplay.mjs';
+import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, tickSurvPlay, survAct } from './survplay.mjs';
 import { ADULT_DAYS, ELDER_DAYS, houseAction, houseLabor, maritalStatus, stepRelationships, stepHouseholds } from './households.mjs';
+import { validate } from './rules.mjs';
 import { DAY_TICKS } from './clock.mjs';
 
 const options = { residentialDecisions: true, independentWorld: true, eventRulesVersion: 2 };
@@ -207,4 +208,45 @@ test('V4-12 分离伴侣独立冷却与单日出生上限，保留人口和粮�
   assert.equal(capped.world.survival.births, 1);
   const [short] = await simulate({ pairCooldown: true, multipleBirths: true }, 10, 4);
   assert.equal(short.world.survival.births ?? 0, 0);
+});
+
+
+test('V4-15 真实玩家采收同时结算背包、公仓和满仓丢弃', async () => {
+  const sp = createSurvPlay(7, options), w = sp.world, s = w.survival;
+  const flows = {};
+  w.observeProduction = (channel, item, n) => { flows[channel + ':' + item] = n; };
+  s.store = 23;
+  s.plots[0].growth = 1;
+  assert.ok(survAct(sp, { kind: 'move', room: 'garden' }).ok);
+  assert.ok(survAct(sp, { kind: 'camp_collect', type: 'crop', tool: 'basket', plot: 0 }).ok);
+  assert.equal(w.pinv.p1.crop, 1);
+  assert.equal(s.store, 24);
+  assert.equal(flows['food:crop'], 1);
+  assert.equal(flows['collected:crop'], 1);
+  assert.ok(flows['gross:crop'] > flows['food:crop'] + flows['collected:crop']);
+  w.agents.a1.viab.v = 0;
+  settleSurvival(sp);
+  w.t = DAY_TICKS - 1;
+  await tickSurvPlay(sp);
+  assert.equal(s.history.at(-1).need, 3);
+  assert.equal(flows['ration:store'], 3);
+});
+
+
+test('V4-05 私房施工经过 Organism 正常选择、规则验证、执行和存续扣费', async () => {
+  const sp = createSurvPlay(13, options), w = sp.world, h = w.survival.households;
+  w.housing.a3 = 'house5';
+  w.pinv.a1 = { wood: 5, stone: 3 };
+  stepHouseholds(w, sp.log);
+  const room = Object.keys(h.projects)[0];
+  assert.equal(validate(w, 'a1', { kind: 'house_work' }).code, 'NO_HOUSE_WORK');
+  w.loc.a1 = 'workshop';
+  assert.ok(validate(w, 'a1', { kind: 'house_work' }).ok);
+  const actions = [];
+  w.observeResidentAction = action => actions.push(action);
+  for (let i = 0; i < 12 * DAY_TICKS && !h.deeds[room]; i++) await tickSurvPlay(sp);
+  const labor = actions.filter(a => a.id === 'a1' && a.kind === 'house_work');
+  assert.equal(labor.length, 3);
+  assert.ok(labor.every(a => a.paid > 0));
+  assert.equal(h.deeds[room].owner, 'a1');
 });

@@ -1,4 +1,4 @@
-import { laborAllowed, strictLifecycle } from './households.mjs';
+import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './households.mjs';
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
@@ -15,9 +15,11 @@ export function validate(world, agentId, intent) {
   const fail = (code, why) => ({ ok: false, code, why });
 
   if (!kind || !BASE_KINDS[kind]) return fail('NOT_AN_ACTION', `规则层不认识 ${kind}`);
+  if (kind === 'house_work' && housingMode(world) === 'legacy') return fail('NOT_AN_ACTION', '历史规则未登记此行动');
   if (strictLifecycle(world) && !laborAllowed(world, agentId, kind)) {
     return fail('TOO_YOUNG', '未成年居民不能执行劳动');
   }
+  if (kind === 'house_work' && !houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
   if (kind === 'eat' && world.pantry <= 0) return fail('DEPLETED', '存粮缸已空，世界没有可消耗的食物');
   if (kind === 'eat' && here !== 'home' && here !== 'store') return fail('NOT_PRESENT', `取粮得在居所或公仓，你在 ${here}`);
   if (kind === 'talk' && !others.length) return fail('NO_TARGET', `${here} 没有可对话的对象`);
