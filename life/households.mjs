@@ -57,8 +57,10 @@ const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
 const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < bedsPerHome(w);
+const housingMode = w => w.familyExperiment?.housing ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'inherit' : 'legacy');
+const canWork = (w, id) => isAlive(w.agents[id]) && laborStage(w, id);
 const dependents = (w, id) => Object.keys(w.survival.households.residents).filter(child =>
-  isChildStage(residentStage(w, child)) && w.housing[child]===w.housing[id] &&
+  (housingMode(w) === 'legacy' || isAlive(w.agents[child])) && isChildStage(residentStage(w, child)) && w.housing[child]===w.housing[id] &&
   w.survival.households.residents[child].parents.includes(id));
 const canShare = (w, a, b) => Boolean(w.housing[b] && w.housing[a] !== w.housing[b] &&
   hasBed(w, w.housing[b]) && residentsAt(w, w.housing[b]) + dependents(w, a).length < bedsPerHome(w));
@@ -200,6 +202,10 @@ function marketHome(w, actor, room) {
   if (!deed.listed || deed.owner === actor || residentsAt(w, room) || !affordable(bag, PRICE)) return false;
   transfer(bag, deed.owner ? w.pinv[deed.owner] : h.receipts, PRICE);
   h.deeds[room] = { owner: actor };
+  if (housingMode(w) !== 'legacy') {
+    recordHousing(w, { kind: 'purchase', room, from: deed.owner, to: actor });
+    w.locs[room] = `${w.agents[actor].name}的小屋`;
+  }
   moveHome(w, actor, room);
   return true;
 }
@@ -210,6 +216,9 @@ function startHome(w, actor, room) {
       Object.hasOwn(h.projects, room) || !affordable(bag, BUILD)) return false;
   transfer(bag, null, BUILD);
   h.projects[room] = { owner: actor, started: w.t, progress: 0 };
+  w.observeProduction?.('materialSpent', 'houseWood', BUILD.wood);
+  w.observeProduction?.('materialSpent', 'houseStone', BUILD.stone);
+  if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'start', room, owner: actor });
   return true;
 }
 
@@ -244,20 +253,87 @@ export function stepRelationships(w, log) {
   }
 }
 
+function recordHousing(w, event) {
+  (w.survival.households.housingHistory ??= []).push({ t: w.t, ...event });
+}
+
+function finishHome(w, room, project, log) {
+  const h = w.survival.households, id = project.owner;
+  delete h.projects[room];
+  if (Object.hasOwn(h.deeds, room)) return;
+  h.deeds[room] = { owner: id };
+  w.locs[room] = `${w.agents[id].name}的小屋`;
+  if (isAlive(w.agents[id])) moveHome(w, id, room);
+  if (h.residents[id]) mark(h.residents[id], 'built', w);
+  if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'finish', room, owner: id });
+  log?.push({ t: w.t, kind: 'home', ok: true, code: `${w.agents[id].name}建成新房` });
+}
+
+export function settleHousing(w, log) {
+  const h = w.survival.households;
+  if (!h || housingMode(w) === 'legacy') return;
+  for (const [room, project] of Object.entries(h.projects)) {
+    if (w.agents[project.owner] && !w.agents[project.owner].dead) continue;
+    if (project.progress >= WORK_DAYS && w.agents[project.owner]) finishHome(w, room, project, log);
+    else if (project.pausedAt == null) {
+      project.pausedAt = w.agents[project.owner]?.death?.t ?? w.t;
+      recordHousing(w, { kind: 'pause', room, owner: project.owner });
+    }
+  }
+  if (housingMode(w) !== 'inherit') return;
+  for (const [room, deed] of Object.entries(h.deeds)) {
+    const owner = deed.owner;
+    if (owner && (!w.agents[owner] || w.agents[owner].dead)) {
+      const spouse = h.spouses[owner] ?? h.marriages?.findLast(m => m.deceased?.includes(owner) &&
+        m.ended === w.agents[owner]?.death?.t)?.partners.find(id => id !== owner);
+      const children = Object.keys(h.residents).filter(id => canWork(w, id) && h.residents[id].parents.includes(owner));
+      children.sort((a, b) => Number(w.housing[b] === room) - Number(w.housing[a] === room) ||
+        h.residents[a].born - h.residents[b].born || a.localeCompare(b));
+      deed.owner = isAlive(w.agents[spouse]) ? spouse : children[0] ?? null;
+      deed.listed = !deed.owner && !residentsAt(w, room);
+      w.locs[room] = deed.owner ? `${w.agents[deed.owner].name}的小屋` : deed.listed ? '待售小屋' : '住用公房';
+      recordHousing(w, { kind: 'inherit', room, from: owner, to: deed.owner });
+    } else if (!owner && !deed.listed && !residentsAt(w, room)) {
+      deed.listed = true;
+      w.locs[room] = '待售小屋';
+      recordHousing(w, { kind: 'list', room });
+    }
+  }
+}
+
+function resumeProjects(w, adults) {
+  const h = w.survival.households;
+  for (const [room, project] of Object.entries(h.projects)) {
+    if (project.pausedAt == null || canWork(w, project.owner)) continue;
+    const successor = adults.find(id => !w.agents[id].isPlayer && h.residents[id]?.decision === 'seeking' &&
+      !Object.values(h.projects).some(other => other.owner === id));
+    if (successor) {
+      const from = project.owner;
+      project.owner = successor;
+      delete project.pausedAt;
+      mark(h.residents[successor], 'building', w);
+      recordHousing(w, { kind: 'resume', room, from, to: successor });
+    } else if (dayOf(w.t) - dayOf(project.pausedAt) >= WORK_DAYS) {
+      // Materials were spent when construction began. Cancelling removes the unfinished work.
+      delete h.projects[room];
+      recordHousing(w, { kind: 'cancel', room, owner: project.owner });
+    }
+  }
+}
+
 export function stepHouseholds(w, log) {
   const h = w.survival.households;
   const day = dayOf(w.t);
   const adults = Object.keys(w.agents).filter(id => adult(w, id));
+  const legacy = housingMode(w) === 'legacy';
+  if (!legacy) {
+    settleHousing(w, log);
+    resumeProjects(w, adults);
+  }
   for (const [room, project] of Object.entries(h.projects)) {
-    if (!adults.includes(project.owner) || project.started === w.t) continue;
-    if (project.lastWorkDay !== day - 1) continue;
-    if (project.progress < WORK_DAYS) continue;
-    h.deeds[room] = { owner: project.owner };
-    w.locs[room] = `${w.agents[project.owner].name}的小屋`;
-    moveHome(w, project.owner, room);
-    mark(h.residents[project.owner], 'built', w);
-    delete h.projects[room];
-    log.push({ t: w.t, kind: 'home', ok: true, code: `${w.agents[project.owner].name}建成新房` });
+    if (project.started === w.t || project.progress < WORK_DAYS) continue;
+    if (legacy ? !adults.includes(project.owner) || project.lastWorkDay !== day - 1 : !canWork(w, project.owner)) continue;
+    finishHome(w, room, project, log);
   }
 
   for (const [id, person] of Object.entries(h.residents)) {
@@ -288,10 +364,10 @@ export function houseLabor(w, id, apply = false) {
   const h = w.survival?.households;
   const work = h && Object.values(h.projects).find(p => p.owner === id);
   const day = dayOf(w.t);
-  if (!work || w.loc[id] !== 'workshop' || work.lastWorkDay === day || work.progress >= WORK_DAYS) return false;
+  if (!work || (housingMode(w) !== 'legacy' && !canWork(w, id)) || w.loc[id] !== 'workshop' || work.lastWorkDay === day || work.progress >= WORK_DAYS) return false;
   if (apply) {
     work.lastWorkDay = day;
-    work.progress += 1;
+    work.progress += housingMode(w) !== 'legacy' && residentStage(w, id) === 'elder' ? .5 : 1;
   }
   return true;
 }
@@ -299,7 +375,12 @@ export function houseLabor(w, id, apply = false) {
 export function householdPlans(w, id) {
   const h = w.survival.households;
   const person = h?.residents[id];
-  if (!person || !adult(w, id)) return null;
+  if (!person) return null;
+  if (housingMode(w) !== 'legacy' && person.decision === 'building' && canWork(w, id)) {
+    const work = Object.values(h.projects).find(p => p.owner === id);
+    return work && work.progress < WORK_DAYS && work.lastWorkDay !== dayOf(w.t) ? 'workshop' : null;
+  }
+  if (!adult(w, id)) return null;
   if (person.decision === 'building') return Object.values(h.projects).some(p=>p.owner===id && p.lastWorkDay===dayOf(w.t)) ? null : 'workshop';
   if (person.decision !== 'seeking') return null;
   const cost = Object.values(h.deeds).some(d => d.listed) ? PRICE : BUILD;
@@ -333,6 +414,6 @@ export function restoreHouseholds(w, housing) {
     if (Object.hasOwn(w.agents, id) && residentialSite(room) && Object.hasOwn(h.deeds, room)) w.housing[id] = room;
   }
   for (const [room, deed] of Object.entries(h.deeds)) {
-    if (residentialSite(room)) w.locs[room] = deed.owner ? `${w.agents[deed.owner]?.name ?? '居民'}的小屋` : '待售小屋';
+    if (residentialSite(room)) w.locs[room] = deed.owner ? `${w.agents[deed.owner]?.name ?? '居民'}的小屋` : housingMode(w) !== 'inherit' || deed.listed ? '待售小屋' : '住用公房';
   }
 }

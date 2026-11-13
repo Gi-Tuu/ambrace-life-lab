@@ -13,7 +13,7 @@ import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 const SURV_LOG_LIMIT = 200;
@@ -160,7 +160,10 @@ function reapDeaths(w, log) {
       s.talk = null;
     }
   }
-  if (changed) settleMarriages(w);
+  if (changed) {
+    settleMarriages(w);
+    settleHousing(w, log);
+  }
   return changed;
 }
 
@@ -634,6 +637,7 @@ export function loadSurv(raw,seed=7,options) {
     settleMarriages(w);
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
     sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
+    settleHousing(w, sp.log);
     if (w.independentWorld) sp.log = sp.log.slice(-SURV_LOG_LIMIT);
 
     // C3：占位顺序会进入感知/候选（crowd[0]）；存档带 occupancy 且与 loc 一致就沿用原顺序。
