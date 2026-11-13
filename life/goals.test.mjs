@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay } from './survplay.mjs';
-import { move } from './body.mjs';
+import { move, actuate } from './body.mjs';
 import { planGoal, goalProgress, executeGoalStep, GOALS } from './goals.mjs';
 
 test('T11a 住所目标：多步骤组合（采木→采石→奠基→施工）自主完工', () => {
@@ -58,4 +58,17 @@ test('T11d 资源稀缺负控：采集点全采空时目标等待，不凭空采
   const r = executeGoalStep(w, 'a1', 'shelter');
   assert.equal(r.ok, false); assert.equal(r.code, 'NO_STEP');
   assert.equal(w.pinv.a1.wood, 0, '不应凭空获得木料');
+});
+test('T23 住所奠基消耗最后一批材料后继续施工，完成后目标结束', () => {
+  const w = createSurvPlay(7).world;
+  w.survival.inv = { wood: 0, stone: 0 };
+  w.pinv.a1 = { wood: 4, stone: 2 };
+  move(w, 'a1', 'yard');
+  assert.equal(planGoal(w, 'a1', 'shelter').kind, 'plan');
+  assert.ok(actuate(w, 'a1', { kind: 'plan', type: 'shelter' }).ok);
+  assert.deepEqual(w.pinv.a1, { wood: 0, stone: 0 });
+  assert.equal(planGoal(w, 'a1', 'shelter').kind, 'build');
+  while (planGoal(w, 'a1', 'shelter')) assert.ok(executeGoalStep(w, 'a1', 'shelter').ok);
+  assert.equal(goalProgress(w, 'a1', 'shelter'), 1);
+  assert.deepEqual(w.pinv.a1, { wood: 0, stone: 0 });
 });

@@ -10,7 +10,7 @@ import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
 import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
-import { initCoop, stepCooperation } from './cooperation.mjs';
+import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -385,6 +385,16 @@ export function affordancesFor(world, agentId) {
   if (world.survival?.households && !laborStage(world, agentId)) {
     const LABOR = new Set(['harvest', 'plant', 'gather', 'house_work', 'forage', 'exchange', 'expand', 'build', 'plan', 'repair', 'deposit', 'withdraw']);
     for (let i = out.length - 1; i >= 0; i -= 1) if (LABOR.has(out[i].kind)) out.splice(i, 1);
+  }
+  const cooperation = cooperationCandidate(world, agentId);
+  if (cooperation) {
+    // 同一行为 ID 只保留一条，保留原需求收益和习惯键。
+    const ordinary = out.find(a => a.id === cooperation.id);
+    if (ordinary) {
+      Object.assign(ordinary, { cooperation: true, cooperationValue: cooperation.cooperationValue, cost: cooperation.cost });
+      for (let i = out.length - 1; i >= 0; i -= 1)
+        if (out[i].id === cooperation.id && out[i] !== ordinary) out.splice(i, 1);
+    } else out.push(cooperation);
   }
   // O10：节律只在这里标注"该在哪"，权重进不进比较由 model 决定；0 权重时标注恒为 0，评分逐位退回旧式子
   // 状态门控：需求紧迫时节律让位（饿着的人不按日程走），松弛时才进入比较——否则它会和稀缺类判据正面相撞

@@ -9,7 +9,7 @@ import { laborStage } from './households.mjs';
 // 位置只能经 body.move 改：它同时维护 world.occupancy。直接写 world.loc[id] 会让
 // occupancy 里留着旧地点、新地点没有该角色，下一次 move() 读 occupancy[from] 时崩，
 // 然后 survplay 的 try/catch 每拍吞一条 agentError，工人整条决策环停摆（2026-11-12 实测）。
-import { move as moveTo } from './body.mjs';
+import { move as moveTo, BASE_KINDS, SURV_COST } from './body.mjs';
 
 export const COOP = Object.freeze({
   assistThreshold: 0.5,
@@ -61,6 +61,7 @@ const pickBuildLoc = (world, exclude) => {
 };
 
 export const assignWorkers = (world, task) => Object.keys(world.agents)
+  .filter(id => !world.unifiedCooperation || !world.agents[id].isPlayer && availableForCooperation(world, id, task))
   .filter((id) => !world.agents[id].isPlayer && isAlive(world.agents[id]) && laborStage(world, id)) // P0-1 死者不组队；P1-1 儿童不劳动
   .map((id) => ({ id, w: willingness(world, id, task) }))
   .filter((x) => x.w.decision !== 'refuse')
@@ -71,6 +72,11 @@ export const assignWorkers = (world, task) => Object.keys(world.agents)
 // 单拍执行：每个工人做一个动作；失败重规划（换选址 / 记拒绝）。
 function execTick(world, t) {
   const s = world.survival; const def = BUILDINGS[t.type];
+  const relocate = (id, loc) => {
+    const changed = world.loc[id] !== loc;
+    moveTo(world, id, loc);
+    if (changed) world.onLegacyLabor?.(id, 'move_to');
+  };
   for (const id of t.workers) {
     if (t.phase === 'gather') {
       const cost = (s.repairEarly && t.repair) ? { wood: 1, stone: 1 } : def.cost; // E3：维修采料 1/1，不按建筑成本
@@ -79,14 +85,17 @@ function execTick(world, t) {
         const res = s.inv.wood < cost.wood ? 'wood' : 'stone';
         const stock = s.resStock ?? {};
         const loc = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res && (stock[l] ?? 0) > 0); // P0-3：去有储量的地点
-        if (loc) { moveTo(world, id, loc); coopPoolGather(world, id); }
+        if (loc) {
+          relocate(id, loc);
+          if (coopPoolGather(world, id).ok) world.onLegacyLabor?.(id, 'gather');
+        }
         // 无储量：本拍等待再生，不空转采集
       }
     }
     if (t.phase === 'plan') {
-      moveTo(world, id, t.loc);
+      relocate(id, t.loc);
       const r = doPlan(world, id, t.type);
-      if (r.ok) t.phase = 'build';
+      if (r.ok) { world.onLegacyLabor?.(id, 'plan'); t.phase = 'build'; }
       else if (r.code === 'OCCUPIED' || r.code === 'NOT_OUTDOOR') {
         const nl = pickBuildLoc(world, t.loc);
         if (nl && nl !== t.loc) { t.loc = nl; s.coop.replans += 1; t.tries = (t.tries ?? 0) + 1; if (t.tries > 3) t.abandoned = true; }
@@ -94,8 +103,9 @@ function execTick(world, t) {
       } else if (r.code === 'NO_MATERIAL') t.phase = 'gather';
     }
     if (t.phase === 'build') {
-      moveTo(world, id, t.loc);
+      relocate(id, t.loc);
       const r = doBuild(world, id);
+      if (r.ok) world.onLegacyLabor?.(id, 'build');
       if (r.completed) { s.coop.completions.push({ type: t.type, tick: world.t, workers: t.workers.length }); return { completed: t.type }; }
       if (!r.ok && r.code === 'NO_SITE') {
         // P0-5：工地消失——玩家已建成则记完工，否则正常结束任务（不空转）。
@@ -104,10 +114,10 @@ function execTick(world, t) {
       }
     }
     if (t.phase === 'repair') {
-      moveTo(world, id, t.loc);
+      relocate(id, t.loc);
       // E3：执行侧阈值与需求侧成对（repairEarly）；旧档/关开关保持 <=0 逐位不变
       const b = (s.buildings ?? []).find((x) => x.loc === t.loc && (s.repairEarly ? x.integrity < 1 : x.integrity <= 0));
-      if (b && s.inv.wood >= 1 && s.inv.stone >= 1) { s.inv.wood -= 1; s.inv.stone -= 1; b.integrity = 1; s.coop.completions.push({ type: t.type, tick: world.t, repair: true }); return { completed: t.type }; }
+      if (b && s.inv.wood >= 1 && s.inv.stone >= 1) { s.inv.wood -= 1; s.inv.stone -= 1; b.integrity = 1; world.onLegacyLabor?.(id, 'repair'); s.coop.completions.push({ type: t.type, tick: world.t, repair: true }); return { completed: t.type }; }
       if (s.repairEarly && !b) t.abandoned = true;   // E3：无目标＝放弃，禁止 fallthrough 重建
       else t.phase = 'gather';
     }
@@ -116,6 +126,79 @@ function execTick(world, t) {
 }
 
 // 每拍调用（仅 coop 开启）：无任务则采纳既有工地或识别公共需求并组队；有任务则推进。
+function syncTask(world, task) {
+  const s = world.survival;
+  const building = s.buildings.find(b => b.loc === task.loc);
+  if (task.repair ? building?.type === task.type && building.integrity >= 1 : building?.type === task.type) {
+    s.coop.completions.push({ type: task.type, tick: world.t, workers: task.workers.length, ...(task.repair ? { repair: true } : {}) });
+    return { completed: task.type };
+  }
+  const site = s.sites.find(b => b.loc === task.loc);
+  if (task.repair ? building?.type !== task.type : (building || site && site.type !== task.type)) {
+    const next = task.repair || task.adopted || task.requester ? null : pickBuildLoc(world, task.loc);
+    if (!next) task.abandoned = true;
+    else { task.loc = next; s.coop.replans += 1; }
+  }
+  if (!task.repair) {
+    if (task.phase === 'build' && !site && (task.adopted || task.requester)) task.abandoned = true;
+    task.phase = site?.type === task.type ? 'build' : 'gather';
+  }
+  return { phase: task.phase };
+}
+
+export function finishCooperation(world) {
+  const c = world.survival.coop;
+  if (!c.task) return;
+  const result = syncTask(world, c.task);
+  if (c.task.abandoned) c.refusals += 1;
+  if (result.completed || c.task.abandoned) c.task = null;
+}
+
+export function cooperationCandidate(world, id) {
+  const s = world.survival;
+  const task = s?.coop?.task;
+  if (!world.unifiedCooperation || !s?.coop?.enabled || !task?.workers.includes(id) || task.abandoned) return null;
+  if (!availableForCooperation(world, id, task)) return null;
+  const agent = world.agents[id];
+  const here = world.loc[id];
+  const bag = world.pinv?.[id] ?? {};
+  const site = s.sites.find(b => b.loc === task.loc && b.type === task.type);
+  const building = s.buildings.find(b => b.loc === task.loc);
+  if (task.repair ? !building || building.integrity >= 1 : building || (!site && (task.adopted || task.requester))) return null;
+  const move = to => ({ kind: 'move_to', to, id: `move_to:${to}`, label: `去${world.locs[to] ?? to}` });
+  let act;
+  const cost = task.repair ? { wood: 1, stone: 1 } : BUILDINGS[task.type].cost;
+  const materials = Object.keys(cost);
+  const missing = materials.find(res => (bag[res] ?? 0) + s.inv[res] < cost[res]);
+  if (site || !missing) {
+    act = here !== task.loc ? move(task.loc)
+      : task.repair ? { kind: 'repair', id: `repair:${task.type}` }
+      : site ? { kind: 'build', id: 'build' } : { kind: 'plan', type: task.type, id: `plan:${task.type}` };
+  } else {
+    const share = materials.find(res => bag[res] > 0 && s.inv[res] < cost[res] &&
+      task.workers.some(other => other !== id && (world.pinv[other]?.[missing] ?? 0) + s.inv[missing] >= cost[missing]));
+    if (share) {
+      act = here === 'store' ? { kind: 'deposit', type: share, id: `deposit:${share}` } : move('store');
+    } else {
+      const source = Object.keys(GATHER_BY_LOC).find(loc => GATHER_BY_LOC[loc] === missing && s.resStock[loc] > 0);
+      if (!source) return null;
+      act = here === source ? { kind: 'gather', id: 'gather' } : move(source);
+    }
+  }
+  const base = BASE_KINDS[act.kind];
+  const willingnessNow = willingness(world, id, task);
+  const value = willingnessNow.score * (agent.drives.v.energy - 0.22) / 0.78;
+  return { ...act, label: `合作·${act.label ?? base.label}（${BUILDINGS[task.type].label}）`,
+    cost: SURV_COST[act.kind], impulse: base.impulse, serves: { social: .15, stimulation: .3 },
+    cooperationValue: value, cooperation: true };
+}
+
+function availableForCooperation(world, id, task) {
+  const a = world.agents[id];
+  return isAlive(a) && laborStage(world, id) && (a.drives?.v?.energy ?? 0) > .22 &&
+    (a.viab?.v ?? 0) > .18 && willingness(world, id, task).decision !== 'refuse';
+}
+
 export function stepCooperation(world) {
   const s = world.survival; if (!s?.coop?.enabled) return null;
   const c = s.coop;
@@ -135,6 +218,7 @@ export function stepCooperation(world) {
   const task = c.task;
   task.workers = task.workers.filter((id) => {
     const a = world.agents[id];
+    if (world.unifiedCooperation && !availableForCooperation(world, id, task)) { c.exits += 1; return false; }
     if (!isAlive(a)) { c.exits += 1; return false; }
     if (task.commit?.[id] === 'alternative' || task.adopted) {
       if (willingness(world, id, task).decision === 'refuse') { c.exits += 1; return false; }
@@ -146,6 +230,7 @@ export function stepCooperation(world) {
     if (!again.length) { c.refusals += 1; c.task = null; return { refused: true }; }
     task.workers = again;
   }
+  if (world.unifiedCooperation) { finishCooperation(world); return c.task; }
   const r = execTick(world, task);
   if (r.completed || task.abandoned) { if (task.abandoned) c.refusals += 1; c.task = null; }
   return r;

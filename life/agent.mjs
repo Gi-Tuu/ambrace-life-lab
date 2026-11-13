@@ -7,7 +7,7 @@ import { Drives } from './drives.mjs';
 import { EpisodicMemory } from './memory.mjs';
 import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
-import { perceptsAt, affordancesFor, actuate, isHailed } from './body.mjs';
+import { perceptsAt, affordancesFor, actuate, isHailed, SURV_COST } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
@@ -448,9 +448,14 @@ export class Organism {
       this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: gate.code, why: gate.why, m: this.bank.snapshot(), cond: this.condition });
       return null;
     }
+    if (world.unifiedCooperation) {
+      const spent = world.survival.residentActionsAt ??= {};
+      if (spent[this.id] === world.t) return null;
+      spent[this.id] = world.t;
+    }
     const result = actuate(world, this.id, action);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
-    const actionCost = action.cost ?? 0.06;
+    const actionCost = (world.unifiedCooperation ? SURV_COST[action.kind] : undefined) ?? action.cost ?? 0.06;
     const eBeforeSpend = this.viab.v + this.viab.reserve;
     const spentNow = this.viab.spend(actionCost);
     const paid = Number((eBeforeSpend - (this.viab.v + this.viab.reserve)).toFixed(6)); // 实际扣掉的：v 归零时少于名义值
@@ -481,6 +486,13 @@ export class Organism {
     this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
+    if (world.unifiedCooperation && result.ok) {
+      const audit = world.survival.actionAudit ??= {};
+      const row = audit[this.id] ??= { ordinary: {}, cooperation: {}, paid: 0 };
+      const counts = action.cooperation ? row.cooperation : row.ordinary;
+      counts[action.kind] = (counts[action.kind] ?? 0) + 1;
+      row.paid += paid;
+    }
     if (silent && result.ok) {
       this.counters.spontaneous += 1;
       if (['talk', 'take_shared', 'look_out'].includes(action.kind) || (action.kind === 'move_to' && (world.occupancy[action.to] ?? []).length > 0)) this.counters.initiated += 1;

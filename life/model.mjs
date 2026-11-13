@@ -104,11 +104,13 @@ export function scoreAll(actions, { drives, traits, bank, ch, memBonus, risk = 0
     // O10 日程项单独立项归因：藏在需求项里就看不见（§27 同一条教训）
     const schedBonus = act.schedBonus ?? 0;
     u += schedBonus;
+    if (act.cooperationValue) u += act.cooperationValue;
     // M6-L（§25.6）：learning progress 重分配探索预算。只加给探索类动作（look_out / 还算新的 move_to），
     // 份额 = 在线相对进度 g × weight；单独立项 `探索`。关开关时 exploreGate=0 ⇒ 精确退回原评分。
     const exploreBonus = exploreIds && exploreIds.has(act.id) ? exploreGate * PARAMS.lp.weight : 0;
     u += exploreBonus;
     const cand = { ...bd, 常数偏移: Number(utilConst.toFixed(4)), 调制: Number(discriminatingMod.toFixed(4)), 记忆: Number(mem.toFixed(4)), 自制压制: Number(inhibitPen.toFixed(4)), 努力折扣: Number(effortPen.toFixed(4)) };
+    if (act.cooperationValue) cand.合作收益 = Number(act.cooperationValue.toFixed(4));
     if (schedBonus) cand.日程 = Number(schedBonus.toFixed(4));
     if (exploreBonus) cand.探索 = Number(exploreBonus.toFixed(4));
     if (expectedDelta) cand.预期份量 = Number(expectedDelta.toFixed(4));

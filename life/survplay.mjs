@@ -8,12 +8,12 @@ import { campAction, campTimberView } from './camp-play.mjs';
 import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
-import { initCoop, willingness } from './cooperation.mjs';
+import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
 
 const ROSTER = [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']];
 // 只读表现字段：从 Organism.trace 里取最近一次成功动作的 kind，供 3D 姿态与图标使用。
@@ -31,8 +31,9 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
+  world.unifiedCooperation = unifiedCooperation;
   world.mapSeed = mapSeed;
   world.layoutVersion = layoutVersion;
   if (layoutVersion === 1) {
@@ -174,7 +175,7 @@ export async function tickSurvPlay(sp) {
   w.percepts = [];
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
-  if (w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
+  if (!w.unifiedCooperation && w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   if (dayOf(w.t) !== dayOf(w.t - 1)) {
     if (w.survival.households && !w.survival.ended && !w.survival.failed) stepHouseholds(w, sp.log);
     if (w.survival.households && !w.survival.ended && !w.survival.failed) stepLifecycle(w, sp.log); // P1-1 阶段跃迁＋衰老
@@ -224,6 +225,7 @@ export async function tickSurvPlay(sp) {
     // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
     a.ch.m3 = w.survival.commitChain === true ? 1 : 0;
   }
+  if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   // 打字太久：居民主动走开（不等你点发送才判）。
   const talk = w.survival.talk;
   if (talk && Date.now() - talk.openAt > talk.patienceMs) {
@@ -327,7 +329,7 @@ export function survAct(sp, body) {
     if (!s.coop?.enabled) return { ok: false, code: 'COOP_OFF' };
     const target = String(body?.target ?? '');
     const a = w.agents[target];
-    if (!a || a.isPlayer || !isAlive(a)) return { ok: false, code: 'NO_RESIDENT' };
+    if (!a || a.isPlayer || !isAlive(a) || (w.unifiedCooperation && !laborStage(w, target))) return { ok: false, code: 'NO_RESIDENT' };
     const site = s.sites.find((x) => x.loc === w.loc.p1);
     if (!site) return { ok: false, code: 'NO_SITE' };
     const wl = willingness(w, target, { type: site.type, severity: 0.7, requester: 'p1', loc: site.loc });
@@ -339,7 +341,10 @@ export function survAct(sp, body) {
     }
     let ct = s.coop.task;
     if (!ct || ct.loc !== site.loc) ct = s.coop.task = { type: site.type, loc: site.loc, phase: 'build', workers: [], startedAt: w.t, severity: 0.7, requester: 'p1' };
-    if (!ct.workers.includes(target)) ct.workers.push(target);
+    if (!ct.workers.includes(target)) {
+      if (w.unifiedCooperation && ct.workers.length >= COOP.maxWorkers) return { ok: false, code: 'TEAM_FULL' };
+      ct.workers.push(target);
+    }
     (ct.commit ??= {})[target] = wl.decision; // assist＝稳定承诺；alternative＝每拍重评，可中途退出
     sp.log.push({ t: w.t, kind, ok: true, code: wl.decision });
     if (sp.log.length > 40) sp.log.shift();

@@ -6,6 +6,8 @@ import { BUILDINGS, GATHER_BY_LOC } from './production.mjs';
 import { validate } from './rules.mjs';
 import { actuate } from './body.mjs';
 
+const completed = (w, type) => w.survival.buildings.some(b => b.type === type && b.integrity > 0);
+const founded = (w, type) => completed(w,type) || w.survival.sites.some(s => s.type === type);
 const pool = (w, id) => {
   const bag = w.pinv?.[id] ?? { wood: 0, stone: 0 };
   return { wood: bag.wood + (w.survival?.inv.wood ?? 0), stone: bag.stone + (w.survival?.inv.stone ?? 0) };
@@ -47,10 +49,10 @@ export const GOALS = Object.freeze({
   shelter: {
     label: '建造住所',
     steps: [
-      { need: (w, id) => pool(w, id).wood >= BUILDINGS.shelter.cost.wood, action: (w, id) => gatherAction(w, id, 'wood') },
-      { need: (w, id) => pool(w, id).stone >= BUILDINGS.shelter.cost.stone, action: (w, id) => gatherAction(w, id, 'stone') },
-      { need: (w, id) => (w.survival.sites ?? []).some((s) => s.type === 'shelter'), action: (w, id) => planAction(w, id, 'shelter') },
-      { need: (w, id) => (w.survival.buildings ?? []).some((b) => b.type === 'shelter' && b.integrity > 0), action: (w, id) => buildAction(w, id, 'shelter') },
+      { need: (w, id) => founded(w, 'shelter') || pool(w, id).wood >= BUILDINGS.shelter.cost.wood, action: (w, id) => gatherAction(w, id, 'wood') },
+      { need: (w, id) => founded(w, 'shelter') || pool(w, id).stone >= BUILDINGS.shelter.cost.stone, action: (w, id) => gatherAction(w, id, 'stone') },
+      { need: (w, id) => founded(w, 'shelter'), action: (w, id) => planAction(w, id, 'shelter') },
+      { need: (w, id) => completed(w, 'shelter'), action: (w, id) => buildAction(w, id, 'shelter') },
     ],
   },
   food: {
