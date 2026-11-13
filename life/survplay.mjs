@@ -218,7 +218,7 @@ export async function tickSurvPlay(sp) {
       try { a.drives.tick(1, false); a.viab.tick(1); } catch { /* 对话优先 */ }
       continue;
     }
-    try { await a.tick(w); } catch (e) { sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
     if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);

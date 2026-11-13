@@ -203,6 +203,9 @@ export function stepCooperation(world) {
   const s = world.survival; if (!s?.coop?.enabled) return null;
   const c = s.coop;
   c.exits ??= 0;
+  // P1-D：聚落灭绝后不再派活/记拒绝；自然生态继续，但没有人可被组织。
+  // 只有真正灭绝（居民都被标记 dead）才停止派活；研究占位 agent 没有 dead 字段，保持原行为。
+  if (!Object.values(world.agents).some((a) => !a.isPlayer && !a.dead)) { if (c.task) c.task = null; return null; }
   if (!c.task) {
     // P0-5：优先采纳既有工地（玩家奠基也算，已奠基⇒直接施工），再考虑自发公共需求。
     const site = (s.sites ?? [])[0];
