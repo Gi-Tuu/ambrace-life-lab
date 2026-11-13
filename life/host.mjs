@@ -18,6 +18,7 @@ import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
 import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
+import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
@@ -48,7 +49,11 @@ const TRACE_CAP = Number(process.env.TRACE_CAP ?? 2000);
 // 为什么需要它：真实模型链路实测一拍最多发 8 次调用（3 角色 × 2 侧 + 2 次驳回重问），
 // 每次约 600 ms ⇒ 单拍最坏 ~4.7 s；而线上 TICK_MS=6000，已经贴着边界。
 // 设成 N 就把单拍调用钳到 N，保证每拍都能在 interval 内跑完（代价是那一拍有些角色退回替身）。
-const PER_TICK_CAP = Number(process.env.MAX_CALLS_PER_TICK ?? 0);
+// 正式游戏默认钳 2 次/拍；research 默认 0 = 不限（保护既有轨迹）。
+const PER_TICK_CAP = Number(process.env.MAX_CALLS_PER_TICK ?? (GAME_MODE === 'game' ? 2 : 0));
+// 单次模型等待上限与整拍模型等待预算：慢端点不能把世界/玩家动作长期卡住。
+const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS ?? (GAME_MODE === 'game' ? 4000 : 20000));
+const MODEL_TICK_BUDGET_MS = Number(process.env.MODEL_TICK_BUDGET_MS ?? (GAME_MODE === 'game' ? 3000 : 0));
 
 const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(process.env.SEED ?? 7), brain: 'local' };
 // 调用预算闸门：线上审议路径必须与离线脚本同源受控，否则"MAX_CALLS"只是文档里的装饰（真实风险：无上限烧第三方余额）
@@ -225,6 +230,20 @@ function survivalOptions() {
   return { residentialDecisions: true, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
+// D3：Qwen3.8 才带关闭思考参数；端点不认（400/422）时同一次尝试内去掉参数重试。
+async function postChat(provider, key, body, mdl, ac) {
+  const url = `${provider}/chat/completions`;
+  const headers = { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+  const send = (payload) => fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: ac.signal });
+  let res = await send(withNoThink(body, mdl));
+  if (!res.ok && (res.status === 400 || res.status === 422) && withNoThink(body, mdl).chat_template_kwargs) {
+    S.model.attempts.push('RETRY_NO_KWARGS');
+    if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift();
+    res = await send(withoutNoThink(withNoThink(body, mdl)));
+  }
+  return res;
+}
+
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
   if (!CFG.providers.length || !CFG.keys.length || world.fastForward) return null;
   const here = world.loc[agent.id];
@@ -258,14 +277,11 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
     const mdl = CFG.models[i] ?? CFG.model;
     if (!mdl) { note('NO_MODEL'); continue; }
     const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), 20000);
+    const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
+    if (waitMs <= 0) return null;
+    const to = setTimeout(() => ac.abort(), waitMs);
     try {
-      const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
-        body: JSON.stringify({ model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100, ...noThink(mdl) }),
-        signal: ac.signal,
-      });
+      const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
       if (!res.ok) { note(`HTTP ${res.status}`); continue; }
       const j = await res.json();
       S.model.calls += 1;
@@ -284,9 +300,6 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   }
   return null;
 }
-
-// Qwen3.8 系默认会把 reasoning 写进 content；关 thinking 才能得到一句干净台词/一个 JSON。
-const noThink = (mdl) => String(mdl ?? '').includes('qwen3.8') ? { chat_template_kwargs: { enable_thinking: false } } : {};
 
 // 对话模型：只负责"怎么说"，态度已由 dialogue.sayTo 在服务端裁决。
 // 与决策模型共用同一本每日预算与在场闸门；任何失败都返回 null，让模板兜底。
@@ -312,14 +325,9 @@ async function modelTalk({ npc, world, history, text, trust }) {
     const mdl = CFG.models[i] ?? CFG.model;
     if (!mdl) continue;
     const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), 15000);
+    const to = setTimeout(() => ac.abort(), MODEL_TIMEOUT_MS);
     try {
-      const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
-        body: JSON.stringify({ model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120, ...noThink(mdl) }),
-        signal: ac.signal,
-      });
+      const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
       if (!res.ok) continue;
       const j = await res.json();
       S.model.calls += 1;
@@ -445,6 +453,8 @@ async function sleepSurvival() {
 
 function enqueueTick() {
   return queueWorldWrite(async () => {
+    // D2：整拍模型等待预算。慢端点/多角色串行时，到点即退回本地替身，世界与玩家动作不被拖死。
+    S.modelDeadline = MODEL_TICK_BUDGET_MS > 0 ? Date.now() + MODEL_TICK_BUDGET_MS : 0;
     // H-07：错误只在**本拍完全成功**时清除。旧版没有清零点（永久脏）；但若像刚才那样
     // 在 tick 末尾无条件清空，本拍内的异常就会被自己抹掉。用一个局部标记区分。
     let failed = false;
@@ -453,6 +463,8 @@ function enqueueTick() {
       if (!failed) S.tickError = null;
     } catch (e) {
       S.tickError = String(e?.message ?? e).slice(0, 120);
+    } finally {
+      S.modelDeadline = 0;
     }
   });
 }
