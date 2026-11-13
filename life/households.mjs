@@ -83,7 +83,9 @@ function unite(w, a, b) {
 export function houseAction(w, actor, { kind, target, accept }) {
   const h = w.survival.households;
   if (!h || !adult(w, actor)) return fail('ADULT_REQUIRED');
-  if (w.survival.ended || w.survival.failed) return fail('FAMILY_ENDED');
+  // P0-B2：危机（failed=crisis）不等于灭绝；正式游戏里家庭仍可行动。
+  if (w.survival.ended) return fail('FAMILY_ENDED');
+  if (!w.independentWorld && w.survival.failed) return fail('FAMILY_ENDED');
   if (kind === 'family_answer') {
     const offer = h.offers.find(o => o.to === actor && o.from === target);
     if (!offer) return fail('NO_OFFER');

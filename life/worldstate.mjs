@@ -137,6 +137,7 @@ export function advanceSurvival(world) {
   if (!ended && shortfall > 0) shortfall = drainCampPantry(world, shortfall);
   if (!ended && shortfall > 0) {
     s.starveDays += 1;
+    s.wasCrisis = true;
     for (const a of Object.values(world.agents)) {
       if (!a.viab || !isAlive(a)) continue; // P0-1：死者不再受饥饿压力
       a.hurtBy = '饥饿';
@@ -144,6 +145,8 @@ export function advanceSurvival(world) {
     }
   } else if (!ended) {
     s.starveDays = 0;
+    // 恢复中：危机已解除但公仓还没回到双倍人口的安全线；回到安全线才算 normal。
+    if (s.wasCrisis && s.store >= eaters * 2) s.wasCrisis = false;
     // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
     if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
       if (!a.drives || !isAlive(a)) continue; // P0-1：死者不再被喂饱

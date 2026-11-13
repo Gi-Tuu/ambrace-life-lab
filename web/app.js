@@ -2124,7 +2124,7 @@ function pushToasts(pack) {
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survFlash = null;
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
@@ -2794,7 +2794,12 @@ function coopPanel(s) {
 
 // P2 新玩家目标引导：按当前世界状态给出"下一步该做什么"的上下文提示（编号递进）。
 function objectiveHint(s) {
-  if (!s || s.player?.dead || s.failed || s.ended) return '';
+  if (!s || s.player?.dead) return '';
+  if (s.settlement === 'extinct' || s.ended) return '聚落已没有存活居民；自然生态仍在演化，可继续观察世界。';
+  if (s.settlement === 'crisis' || s.settlement === 'recovering' || s.failed) {
+    const goals = (s.crisisGoals ?? []).map((g, i) => `${i + 1}) ${g}`).join(' ');
+    return `⚠ 缺粮危机${s.crisisDays ? `（连续 ${s.crisisDays} 天缺口）` : ''}：${goals || '先补食物并恢复公仓；危机不是终局。'}`;
+  }
   const has = (t) => (s.buildings ?? []).some((x) => x.type === t && x.integrity > 0);
   const shelterSite = (s.sites ?? []).some((x) => x.type === 'shelter');
   const poolW = (s.pinv?.p1?.wood ?? 0) + (s.inv?.wood ?? 0);
@@ -2820,7 +2825,7 @@ function renderSurv(s) {
   const here = s.loc?.p1;
   const outdoor = (s.outdoor ?? []).includes(here);
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
-  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落陷入缺粮危机。</div>' : '';
+  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
   el.innerHTML = `
     ${banner}
     ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
@@ -2831,11 +2836,11 @@ function renderSurv(s) {
         ? `<span class="bad">${[s.stormTomorrow ? '风暴预警' : '', s.coldsnapTomorrow ? '寒潮预警' : '', s.drought ? '干旱' : '', s.disasterToday ? `今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}` : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
       ${flash}</div>
-    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''} <span class="dim">与居民同一套存续规则：不吃饭会死</span></div>
+    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''} <span class="dim">与居民同一套存续规则：不吃饭会死${s.player?.timeLeft != null ? ` · 本刻行动 ${s.player.timeLeft}/100` : ''}</span></div>
     <div class="survrow survhere">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       · 手持 <b>${TOOL_ZH[ui.tool] ?? '空手'}</b>
       <span class="dim">F 交互 · E 背包 · 1–8 换工具 · 地点在顶栏切换</span>
-      ${s.player?.dead || s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
+      ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
       <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
       <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>

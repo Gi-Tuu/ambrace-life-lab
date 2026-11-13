@@ -73,13 +73,19 @@ test('T25 模型等待期间排队采集、奠基、施工、睡眠和保存', a
     release();
     await running;
     const results=await Promise.all(requests);
-    assert.ok(results.slice(0,6).every(r=>r.ok),JSON.stringify(results));
+    // P0-A：同一刻已有一次重劳动（gather），后续重劳动必须被行动预算拒绝；移动/睡眠仍可用。
+    assert.equal(results[0].ok,true,JSON.stringify(results));
+    assert.equal(results[1].code,'ACTION_BUDGET',JSON.stringify(results));
+    assert.equal(results[2].code,'ACTION_BUDGET',JSON.stringify(results));
+    assert.equal(results[3].code,'ACTION_BUDGET',JSON.stringify(results));
+    assert.equal(results[4].ok,true,JSON.stringify(results));
+    assert.equal(results[5].ok,true,JSON.stringify(results));
     const after=host.snapshot().survival;
     const disk=JSON.parse(await readFile(join(dir,'world.json'),'utf8'));
     assert.equal(disk.survival.t,after.t);
     assert.equal(after.t,before.t+results[5].ticks);
     assert.deepEqual(disk.survival.pinv,after.pinv);
-    assert.ok(disk.survival.log.find(x=>x.kind==='build'&&x.ok));
+    assert.ok(disk.survival.log.find(x=>x.kind==='gather'&&x.ok));
   } finally {
     release?.();
     globalThis.fetch=originalFetch;

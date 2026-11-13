@@ -267,7 +267,7 @@ function newChild(w, id, parents = null) {
 }
 function reproduce(w, log) {
   const s = w.survival;
-  if (s.ended || s.failed && !w.independentWorld) return;
+  if (s.ended || (s.failed && !w.independentWorld)) return;
   const day = dayOf(w.t);
   if (day - (s.lastBirthDay ?? -99) < 10) return;
   const pop = livingResidents(w).length; // P0-1：繁衍门槛按存活人口
@@ -306,7 +306,49 @@ function reproduce(w, log) {
   }
 }
 
+// P0-A：玩家行动时间。正式游戏（independentWorld）每世界刻预算 100：
+// 重劳动 75、中劳动 50、移动/轻交互 25；研究模式不计，保护既有实验轨迹。
+// 一个角色在同一世界刻不可能完成两次实质劳动；AI 由决策环天然每刻一次。
+export const PLAYER_TIME = Object.freeze({
+  move: 25, gather: 75, harvest: 75, plant: 75, plan: 75, build: 75, repair: 75,
+  forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
+  camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
+  camp_store: 25, camp_take: 25, camp_eat: 25, coop_request: 25,
+});
+const PLAYER_BUDGET = 100;
+function playerTimeCost(w, kind) {
+  if (!w.independentWorld) return 0;
+  if (kind.startsWith('family_')) return 10;
+  if (kind === 'camp_sleep' || kind.startsWith('talk_')) return 0;
+  return PLAYER_TIME[kind] ?? 0;
+}
+function budgetLeft(w) {
+  const s = w.survival;
+  if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
+  return s.p1BudgetLeft;
+}
+export function playerTimeLeft(w) { budgetLeft(w); return w.survival.p1BudgetLeft; }
+function spendTime(w, cost) {
+  budgetLeft(w);
+  if (w.survival.p1BudgetLeft + 1e-9 < cost) return false;
+  w.survival.p1BudgetLeft -= cost;
+  return true;
+}
+
 export function survAct(sp, body) {
+  const w = sp.world, kind = String(body?.kind ?? '');
+  const cost = playerTimeCost(w, kind);
+  if (cost > 0 && !spendTime(w, cost)) {
+    sp.log.push({ t: w.t, kind, ok: false, code: 'ACTION_BUDGET' });
+    if (sp.log.length > 40) sp.log.shift();
+    return { ok: false, code: 'ACTION_BUDGET', why: '本世界刻的行动时间已用完，等下一拍' };
+  }
+  const r = survActInner(sp, body);
+  if (!r.ok && cost > 0) { budgetLeft(w); w.survival.p1BudgetLeft += cost; } // 失败退还，避免误点吃掉整刻
+  return r;
+}
+
+function survActInner(sp, body) {
   const w = sp.world;
   const kind = String(body?.kind ?? '');
   if (w.independentWorld && !isAlive(w.agents.p1)) return { ok: false, code: 'PLAYER_DEAD', error: 'GAME_OVER' };
@@ -374,6 +416,19 @@ export function survAct(sp, body) {
   return r;
 }
 
+// P0-B3：危机阶段的目标提示（服务端给出，前端只负责呈现）。
+function crisisGoals(w) {
+  const s = w.survival;
+  if (!w.independentWorld || s.ended || !(s.failed || s.starveDays > 0 || s.wasCrisis)) return [];
+  const goals = [];
+  if ((s.store ?? 0) < 3) goals.push("先补食物：收获成熟菜畦 / 采浆果 / 兑换收成");
+  if ((s.plots ?? []).some((p) => p.growth === 0)) goals.push("重新播种空菜畦，恢复每日产出");
+  if ((s.buildings ?? []).some((b) => b.integrity < 1)) goals.push("修复受损的生产建筑");
+  if (s.coop?.enabled) goals.push("在工地按「请居民协助」集合人手");
+  if (s.stormTomorrow || s.coldsnapTomorrow) goals.push("下一场灾害将至：储备食物并加固住所");
+  return goals.slice(0, 4);
+}
+
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   return {
@@ -391,9 +446,9 @@ export function survView(sp) {
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead,
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
       ...(w.independentWorld ? { result: s.playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
-    ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : s.failed ? 'crisis' : 'active' } : {}),
+    ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,
