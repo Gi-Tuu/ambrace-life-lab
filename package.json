@@ -1,6 +1,6 @@
 {
   "name": "ambrace-life-lab",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "持续运行的微型生活世界：AI 居民的内部状态驱动行为，规则层裁决，判据配负向对照。",
   "license": "Apache-2.0",

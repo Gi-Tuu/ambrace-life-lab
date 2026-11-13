@@ -2983,6 +2983,9 @@ async function refresh() {
     const j = await api('/world?mode='+requestedMode);
     if (requestedMode!==(ui.menu?'menu':ui.compare?'compare':'survival') || resettingSurvival) return;
     renderPlayMode(j.survival);
+    $('startCompare').closest('.start-card').hidden=j.mode==='game';
+    $('btnCompare').hidden=j.mode==='game';
+    if (j.mode==='game' && ui.compare) { selectWorld(false); return; }
     if (ui.menu) return;
     // 交谈结束（不耐烦/走开/服务端清空）：收尾，别让输入框停在死对话上。
     if (ui.talk && j.survival && !j.survival.talk) {

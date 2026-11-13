@@ -4,7 +4,7 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
-**版本 `0.1.0`** · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+**版本 `0.1.1`** · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 它不是什么
 
@@ -38,7 +38,7 @@
 
 **世界预设**：`lab`（4 房间，全部研究读数与五份面用它）与 `town`（演示用：8 房间、物件、天气、工作/换粮/接济/结伴、群体规范、自然语言台词）。离线 `simulate` 默认 `lab`；`serve` 演示默认 `town`；预设随存档走。美术资源接入时按 `rooms/grid/things` 数据挂图，不改逻辑。
 
-**语言层的边界**：NPC 的话是**状态条件化的确定性模板**；玩家的话走**关键词意图分类**（问候/讨食/警告/指责/道歉/分享，其余按中立），**不是语义理解**——交付文案按这个口径写。
+**研究预设的语言层**：NPC 的话是**状态条件化的确定性模板**；玩家的话走**关键词意图分类**（问候/讨食/警告/指责/道歉/分享，其余按中立），**不是语义理解**——交付文案按这个口径写。
 
 L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask` 不传），关掉时不消费额外随机数、不写状态，轨迹与没有这两层时逐位相同。
 离线实验用 `channelMask` 打开它们并单独计量；演示页上的 `M3 承诺期 / M4 耦合调制` 两个开关只是同一件事的入口，且只叠加在 A 侧（B 侧是切断承重通道的负向对照，把内部状态接回决策就不再是对照）。
@@ -57,7 +57,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ worldstate.mjs / production.mjs / geometry.mjs   # 生存 Phase A/B（有限资源 + 建设闭环）
 │  ├─ cooperation.mjs                     # Phase C AI 合作（意愿/公共需求/分解/重规划，默认关）
 │  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
-│  ├─ *.test.mjs          #   55 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   63 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
@@ -87,6 +87,10 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 node serve.mjs          # http://localhost:7860
 ```
 
+启动生存试玩时可设 `GAME_MODE=game`，服务器只推进生存世界。需要实时 A/B 对照时用 `GAME_MODE=research`（默认）。生存玩法为无尽经营，个人死亡后可继续观察世界。关闭页面或未操作时，已运行的服务器照常推进；服务暂停只接受显式单步或补时。重新加载存档时，离线补时默认最多 120 刻并走本地决策。床铺睡眠是玩家主动操作，和离线补时分别处理。
+
+生存世界使用一份共享存档，多位玩家访问同一服务时会互相影响。将 `DATA_DIR` 放在持久卷上可以跨容器恢复。没有持久卷的平台只能在容器存续期间保存进度。
+
 未配置模型端点时世界自动退回本地确定性替身，照常运行。接入真实模型：
 
 ```bash
@@ -101,6 +105,8 @@ MODEL_PROVIDERS=  # 供应商端点，逗号分隔可配多个，按序退回（
 MODEL_KEYS=       # 与端点按位对应的密钥（兼容旧名 MODEL_KEY）
 MODEL_NAME=       # 单供应商模型 id；多供应商用 MODEL_NAMES 按位对应
 MAX_CALLS=        # 每日调用预算闸门（跨天归零）
+GAME_MODE=        # research（默认）| game（只推进生存世界）
+SURV_CATCHUP_CAP= # 生存离线补时上限，默认 120 刻
 BRAIN=            # local（默认，0 成本）| model
 TICK_MS=          # 每拍间隔，毫秒
 PRESENCE_MS=      # 无人观看多久后停调真模型。**单位是毫秒**：60 秒要写 60000
@@ -115,8 +121,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 ## 判据与复现
 
 ```bash
-npm run lint      # 静态检查：语法 184 文件 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 55 个测试文件 / 403 条断言（发现式点名，不会漏文件）
+npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
+npm test          # 63 个测试文件 / 440 条检查（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
 npm run check     # lint + test
 ```
