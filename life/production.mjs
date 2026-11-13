@@ -220,5 +220,9 @@ export function doExpand(world, id, type) {
   if ((s.inv?.wood ?? 0) < cost.wood + 4 || (s.inv?.stone ?? 0) < cost.stone + 3) return { ok: false, code: 'NO_MATERIAL' };
   s.inv.wood -= cost.wood; s.inv.stone -= cost.stone;
   s.livestock[type] = (s.livestock[type] ?? 0) + 1;
+  if (s.ecosystem && s.ecoPop && (type === 'chickens' || type === 'orchards')) {
+    const prefix = type === 'chickens' ? 'ch' : 'or';
+    s.ecoPop[type].push({ id: `${prefix}${++s.ecoSeq[prefix]}`, born: world.t, health: 1 }); // P1-5 扩建个体从幼体成长
+  }
   return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
 }

@@ -218,7 +218,7 @@ function modelConfigured() {
 }
 
 function survivalOptions() {
-  return { residentialDecisions: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, ecosystem: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {

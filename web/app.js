@@ -2822,6 +2822,7 @@ function renderSurv(s) {
       <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
       <div class="survrow">收成 浆果 ${s.produce?.berry ?? 0} · 果 ${s.produce?.fruit ?? 0} · 蛋 ${s.produce?.egg ?? 0} · 奶 ${s.produce?.milk ?? 0} · 毛 ${s.produce?.wool ?? 0}
         ｜ 存栏 鸡 ${s.livestock?.chickens ?? 3} 牛 ${s.livestock?.cows ?? 2} 羊 ${s.livestock?.sheep ?? 2} 果树 ${s.livestock?.orchards ?? 3}</div>
+      ${s.eco ? `<div class="survrow dim">生态 鸡群 ${s.eco.chickens}/${s.eco.chickenCap} · 果树 ${s.eco.orchards}/${s.eco.orchardCap}（自行出生/进食/繁殖/衰老，受水分与灾害影响）</div>` : ''}
       <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}`).join('、') || '无'}</div>
       <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${esc(s.coop.task.phase)}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
       <div class="survrow survlog">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>
