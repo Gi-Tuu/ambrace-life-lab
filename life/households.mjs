@@ -8,6 +8,7 @@ export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
 export const ELDER_DAYS = 60;   // P1-1：60 天起老年（两季）
 export const RESIDENT_CAP = 10; // P1-3：存活居民上限（算力/生态承载），不含玩家
 const BEDS = 4;
+const bedsPerHome = w => w.populationExperiment?.bedsPerHome ?? BEDS;
 const BUILD = { wood: 5, stone: 3 };
 const PRICE = { wood: 3, stone: 2 };
 const WORK_DAYS = 3;
@@ -55,12 +56,12 @@ const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
 const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
 const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
-const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < BEDS;
+const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < bedsPerHome(w);
 const dependents = (w, id) => Object.keys(w.survival.households.residents).filter(child =>
   isChildStage(residentStage(w, child)) && w.housing[child]===w.housing[id] &&
   w.survival.households.residents[child].parents.includes(id));
 const canShare = (w, a, b) => Boolean(w.housing[b] && w.housing[a] !== w.housing[b] &&
-  hasBed(w, w.housing[b]) && residentsAt(w, w.housing[b]) + dependents(w, a).length < BEDS);
+  hasBed(w, w.housing[b]) && residentsAt(w, w.housing[b]) + dependents(w, a).length < bedsPerHome(w));
 const willing = (w, a, b) => trust(w, a, b) >= MARRIAGE_TRUST && (relation(w,a,b)?.familiarity ?? 0) >= .45;
 const canMarry = (w, a, b) => {
   const h = w.survival.households;
@@ -226,7 +227,7 @@ export function stepHouseholds(w, log) {
     const allowed = parents.length > 0 && parents.every(p =>
       w.agents[p].isPlayer ? person.stayAllowed === true : trust(w, p, id) >= 30);
     const bag = w.pinv[id];
-    const crowded = !room || residentsAt(w, room) >= BEDS;
+    const crowded = !room || residentsAt(w, room) >= bedsPerHome(w);
     const stayScore = allowed && !crowded ? (w.agents[id].traits.archetype === '孤僻' ? 1 : 4) : 0;
     const sale = Object.keys(h.deeds).find(k => h.deeds[k].listed && h.deeds[k].owner !== id && !residentsAt(w, k));
     const plot = Object.keys(HOUSING_PLOTS).find(k => !Object.hasOwn(h.deeds, k) && !Object.hasOwn(h.projects, k));
