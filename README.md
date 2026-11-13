@@ -57,12 +57,15 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ worldstate.mjs / production.mjs / geometry.mjs   # 生存 Phase A/B（有限资源 + 建设闭环）
 │  ├─ cooperation.mjs                     # Phase C AI 合作（意愿/公共需求/分解/重规划，默认关）
 │  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
-│  ├─ *.test.mjs          #   67 个测试文件（闸门，含负向对照）
+│  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
+│  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
+│  ├─ *.test.mjs          #   70 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
 │  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
+│  ├─ camp-3d-scene.mjs   #   3D 营地几何（代码定义的 box 模型，随 progress/integrity/季节重建）
 │  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
 │  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体
 ├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
@@ -122,8 +125,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 67 个测试文件 / 455 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 95.3% / 分支 87.6% / 函数 93.6%，43 个被加载模块）
+npm test          # 70 个测试文件 / 475 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 88.8% / 分支 87.8% / 函数 91.1%，69 个被加载模块）
 npm run check     # lint + test
 ```
 
