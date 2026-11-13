@@ -389,10 +389,12 @@ function worldWithCollisions(sites, w) {
     const plots=(w.plots ?? []).map(({growth})=>({
       growth:growth>0 ? Math.max(1,Math.floor(growth*20))/20 : 0,
     }));
-    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,...plots.map(p=>p.growth)].join(',');
+    const berryStock=Object.values(w.wildBerries??{}).reduce((a,b)=>a+(Number(b)||0),0);
+    const berryTier=berryStock<=0?0:berryStock<12?1:2;
+    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,...plots.map(p=>p.growth),w.season,berryTier].join(',');
     life3d=lifeLayers.get(key);
     if (!life3d) {
-      life3d=outdoorLife({ ...worldCache, sites, plots, livestock });
+      life3d=outdoorLife({ ...worldCache, sites, plots, livestock, season:w.season, wildBerries:w.wildBerries, produce:w.produce, housing:w.housing });
       lifeLayers.set(key,life3d);
       if (lifeLayers.size>8) lifeLayers.delete(lifeLayers.keys().next().value);
     }
@@ -658,7 +660,7 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
+  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null, housing:w.housing??{} }, bridges, rocks) : null;
   const habitats=w.layout
     ? [[sites.yard[0]-5,sites.yard[1]+17,'rabbit'],[sites.garden[0]-9,sites.garden[1]+12,'fox'],
       [sites.home[0]-5,sites.home[1]-8,'rabbit'],[sites.well[0]+2,sites.well[1]+7,'deer'],
