@@ -59,8 +59,8 @@ export function forecastDisasters(world) {
   const w = weatherFor(world.seed ?? 7, day); // 与 tickSurvPlay 同源：新开一局换 seed 后预警必须跟着换
   return {
     forecast: w,
-    stormTomorrow: s.disasters === true && stormOn(day, s.lastStormDay, world.seed ?? 7),
-    coldsnapTomorrow: s.disasters === true && w === 'cold' && (s.coldStreak ?? 0) >= 1,
+    stormTomorrow: s.disasters === true && !world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7),
+    coldsnapTomorrow: s.disasters === true && !world.ecologyExperiment?.noColdsnap && w === 'cold' && (s.coldStreak ?? 0) >= 1,
   };
 }
 
@@ -94,7 +94,7 @@ export function advanceSurvival(world) {
   s.clearStreak = rain || cold ? 0 : (s.clearStreak ?? 0) + 1;
   s.coldStreak = cold ? (s.coldStreak ?? 0) + 1 : 0;
   const thr = s.droughts === false ? 3 : (s.droughtThreshold ?? 3); // §13：droughts=0 复原阶段A（阈值3）；备选档经 droughtThreshold=2
-  s.drought = s.clearStreak >= thr;
+  s.drought = !world.ecologyExperiment?.noDrought && s.clearStreak >= thr;
   const dis = s.disasters === true;
   s.water = clamp01(s.water + (rain ? (s.rainRefill ?? 0.25) : -0.08) - (dis && s.drought ? 0.06 : 0)); // §15.5 M2 雨补挂开关
   const empty = s.plots.filter((p) => p.growth === 0).length;
@@ -108,7 +108,7 @@ export function advanceSurvival(world) {
   // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
   s.disasterToday = null;
   if (dis && day >= 3) {
-    if (stormOn(day, s.lastStormDay, world.seed ?? 7)) {
+    if (!world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7)) {
       s.lastStormDay = day;
       s.disasterToday = 'storm';
       for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
@@ -117,7 +117,7 @@ export function advanceSurvival(world) {
         const p = growing[Math.floor(hash01(world.seed ?? 7, day * 13 + 5) * growing.length)];
         p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
       }
-    } else if (s.coldStreak >= 2) s.disasterToday = 'coldsnap';
+    } else if (!world.ecologyExperiment?.noColdsnap && s.coldStreak >= 2) s.disasterToday = 'coldsnap';
   }
 
   regrowWildBerries(world, day);
@@ -192,7 +192,10 @@ export function doHarvest(world, agentId, plot) {
   s.soil = clamp01(s.soil - 0.15);
   s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
   s.harvestCount = (s.harvestCount ?? 0) + 1;
-  s.store = Math.min(mods.storeCap, s.store + yieldAmt);
+  const before = s.store;
+  s.store = Math.min(mods.storeCap, before + yieldAmt);
+  world.observeProduction?.('gross', 'crop', yieldAmt);
+  world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };
 }
 export function doPlant(world, agentId, plot) {

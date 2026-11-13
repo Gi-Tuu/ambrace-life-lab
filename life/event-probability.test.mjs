@@ -5,6 +5,7 @@ import { createSurvPlay, dumpSurv, loadSurv, tickSurvPlay } from './survplay.mjs
 import { actuate, affordancesFor, move } from './body.mjs';
 import { validate } from './rules.mjs';
 import { DAY_TICKS } from './clock.mjs';
+import { GAME_OPTIONS } from './long-run.mjs';
 import { familyHomeForBirth, ELDER_DAYS, ADULT_DAYS } from './households.mjs';
 
 function correlation(s) {
@@ -107,4 +108,26 @@ test('C08/C09 生存通道负控只切断调节、记忆评分与习惯选择', 
   assert.ok(actor.memory.rows.length > 0);
   assert.ok(actor.trace.some(row => row.parts));
   assert.ok(actor.trace.every(row => !row.parts || row.parts['记忆'] === 0));
+});
+
+
+test('C11 V2 生存存档从第 47 天跨过衰老判定继续推进', async () => {
+  const options = { ...GAME_OPTIONS, eventRulesVersion: 2 };
+  const live = createSurvPlay(13, options);
+  while (live.world.t < 47 * DAY_TICKS + 3) await tickSurvPlay(live);
+  assert.ok(live.world.survival.births > 0);
+  const snapshot = JSON.parse(JSON.stringify(dumpSurv(live)));
+  const resumed = loadSurv(snapshot, 7, options);
+  const state = ({ world: w }) => {
+    const s = w.survival;
+    return [w.t, w.seed, w.eventRulesVersion, s.households, w.housing, w.sex, w.loc,
+      s.deaths, s.ecoPop, s.produce, s.store, s.buildings, s.history.at(-1)];
+  };
+  assert.deepEqual(state(resumed), state(live));
+  for (let tick = 0; tick < 13 * DAY_TICKS; tick++) {
+    await tickSurvPlay(live);
+    await tickSurvPlay(resumed);
+    assert.deepEqual(state(resumed), state(live), `tick ${live.world.t}`);
+  }
+  assert.ok(live.world.survival.deaths.some(death => death.cause === '衰老'));
 });

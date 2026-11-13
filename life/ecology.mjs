@@ -47,6 +47,7 @@ export function stepEcosystem(world, log) {
     if (ageDays(t, tr.born) > ECO.orchardLifespan) tr.health = 0; // 自然衰老
   }
   for (let i = orchards.length - 1; i >= 0; i -= 1) if (orchards[i].health <= 0) { orchards.splice(i, 1); deaths += 1; }
+  world.observeProduction?.('naturalDeath', 'orchards', deaths);
   const matureOr = orchards.filter((tr) => ageDays(t, tr.born) >= ECO.orchardMatureDays && tr.health > 0.3);
   const fruit = Math.round(matureOr.length * SEASON_FRUIT[season] * (drought ? 0.5 : 1)); // P1-6 干旱减产
   if (orchards.length < ECO.orchardCap && water >= 0.3 && !drought) {
@@ -58,6 +59,9 @@ export function stepEcosystem(world, log) {
     }
   }
 
+  world.observeProduction?.('naturalBirth', 'orchards', births);
+  const orchardBirths = births, orchardDeaths = deaths;
+
   // ── 鸡（动物）：进食（植物性产出→公仓）→健康→繁殖/死亡→产蛋 ──
   const chickens = s.ecoPop.chickens;
   const need = Math.ceil(chickens.length * ECO.chickenFeed);
@@ -65,9 +69,19 @@ export function stepEcosystem(world, log) {
   for (const k of ['berry', 'fruit']) { // 先吃植物性产出（生态链：植物不足→鸡挨饿）
     const have = s.produce?.[k] ?? 0;
     const take = Math.min(have, need - consumed);
-    if (take > 0) { s.produce[k] -= take; consumed += take; }
+    if (take > 0) {
+      s.produce[k] -= take;
+      consumed += take;
+      world.observeProduction?.('chickenFeed', k, take);
+    }
   }
-  if (consumed < need) { const take = Math.min(s.store ?? 0, need - consumed); s.store -= take; consumed += take; }
+  if (consumed < need) {
+    const take = Math.min(s.store ?? 0, need - consumed);
+    s.store -= take;
+    consumed += take;
+    world.observeProduction?.('chickenFeed', 'store', take);
+  }
+  world.observeProduction?.('chickenFeed', 'unmet', need - consumed);
   const fedRatio = need > 0 ? consumed / need : 1;
   for (const c of chickens) {
     c.health = clamp01(c.health + (fedRatio >= 0.99 ? 0.03 : -0.12 * (1 - fedRatio)));
@@ -85,6 +99,8 @@ export function stepEcosystem(world, log) {
     }
   }
 
+  world.observeProduction?.('naturalBirth', 'chickens', births - orchardBirths);
+  world.observeProduction?.('naturalDeath', 'chickens', deaths - orchardDeaths);
   s.livestock.chickens = chickens.length; // 同步存栏数（doExpand/survView/produceYield 用）
   s.livestock.orchards = orchards.length;
   if (births || deaths) log?.push({ t, kind: 'eco', ok: true, code: `出生${births}/死亡${deaths} 鸡${chickens.length}果${orchards.length}` });

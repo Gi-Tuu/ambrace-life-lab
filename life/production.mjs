@@ -54,6 +54,7 @@ export function doGather(world, agentId) {
   stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
   bag[res] += take;
+  world.observeProduction?.('gather', res, take);
   return { ok: true, code: 'OK', res, amount: take };
 }
 
@@ -205,6 +206,8 @@ export function doForage(world, id) {
   if (s.wildBerries) s.wildBerries[world.loc[id]] -= 1;
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
+  world.observeProduction?.('gross', 'berry', 1);
+  world.observeProduction?.('stock', 'berry', 1);
   s.forageCd = world.t + FORAGE_COOLDOWN;
   return { ok: true, code: 'OK', amount: 1 };
 }
@@ -219,8 +222,17 @@ export function doExchange(world, id, kind) {
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
   s.produce[kind] -= 1;
   let gained;
-  if (rate.store) { s.store = Math.min(cap, s.store + rate.store); gained = `粮+${rate.store}`; }
-  else { s.inv.wood = (s.inv.wood ?? 0) + rate.wood; gained = `木+${rate.wood}`; }
+  if (rate.store) {
+    const before = s.store;
+    s.store = Math.min(cap, before + rate.store);
+    world.observeProduction?.('food', kind, s.store - before);
+    gained = `粮+${rate.store}`;
+  } else {
+    s.inv.wood = (s.inv.wood ?? 0) + rate.wood;
+    world.observeProduction?.('material', kind, rate.wood);
+    gained = `木+${rate.wood}`;
+  }
+  world.observeProduction?.('exchanged', kind, 1);
   return { ok: true, code: 'OK', gained };
 }
 

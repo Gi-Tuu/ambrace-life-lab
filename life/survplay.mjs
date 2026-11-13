@@ -221,7 +221,21 @@ export async function tickSurvPlay(sp) {
     } else {
       daily = produceYield(seasonOf(dayOf(w.t)), w.survival.livestock ?? DEFAULT_LIVESTOCK);
     }
-    for (const [k, v] of Object.entries(daily)) w.survival.produce[k] = Math.min(PRODUCE_CAP * 4, (w.survival.produce[k] ?? 0) + v);
+    const scale = w.ecologyExperiment?.fixedLivestockYieldScale;
+    if (scale !== undefined && scale !== 1) {
+      const carry = w.survival.fixedLivestockCarry ??= { milk: 0, wool: 0 };
+      for (const k of ['milk', 'wool']) {
+        const total = daily[k] * scale + carry[k];
+        daily[k] = Math.floor(total);
+        carry[k] = total - daily[k];
+      }
+    }
+    for (const [k, v] of Object.entries(daily)) {
+      const before = w.survival.produce[k] ?? 0;
+      w.survival.produce[k] = Math.min(PRODUCE_CAP * 4, before + v);
+      w.observeProduction?.('gross', k, v);
+      w.observeProduction?.('stock', k, w.survival.produce[k] - before);
+    }
     sp.log.push({ t: w.t, kind: 'produce', ok: true, code: Object.entries(daily).map(([k, v]) => k + v).join('/') });
     // §15 P2-D 性格-季节慢偏移：冬社交设点降、夏升（人格随季节缓慢变化）
     const season = seasonOf(dayOf(w.t));
