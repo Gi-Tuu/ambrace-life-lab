@@ -1,5 +1,6 @@
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
+import { ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
@@ -62,7 +63,6 @@ function hall(s, x, z) {
   const left = x - 3.55, right = x + 3.55, back = z - 6.8, front = z - 1.1, y = .48;
   s.floor(left, back, right-left, front-back, y, WOOD);
   s.floor(x-1, front, 2, 1.45, y, LIGHT, 'z', 0);
-  s.entrances.hall = { x:x-1, z:front-.25, w:2, d:2.25 };
   rail(s,left,front-.14,x-1-left,.15,y);
   rail(s,x+1,front-.14,right-x-1,.15,y);
   rail(s,left,back,right-left,.15,y);
@@ -115,7 +115,6 @@ function house(s, id, x, z, seed) {
   cladding(s,left,0,back,width,.27,depth,true);
   roof(s,left,back,width,depth,3.08,color,variant===2?3:variant===3?4:5);
   const front = back + depth;
-  s.entrances[id] = { x:x-1.15, z:front-.55, w:2.3, d:1.5 };
   s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
   s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
   s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
@@ -152,11 +151,9 @@ function watchTower(s,x,z) {
   s.group('roof:watch',()=>roof(s,left,back,width,depth,5.32,'#526464'));
   s.box(x-.1,deck+.64,back+.6,.2,1.0,.2,'#6F685F');
   s.box(x-.22,deck+1.42,back-.18,.44,.37,1.35,'#837C69');
-  s.entrances.watch={x:x-.95,z:front+2.19,w:1.9,d:1.35};
 }
 
 function outdoorFixture(s, id, x, z) {
-  s.entrances[id] = { x:x-1.1, z:z-1.35, w:2.2, d:1.5 };
   if (id === 'well') {
     s.box(x+.2,0,z-4,2.6,.72,2.65,'#67675E',true);
     cladding(s,x+.2,0,z-4,2.6,.72,2.65,true);
@@ -209,30 +206,33 @@ function tree(s, x, z, variant) {
     plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx,y,z+dz,w,h,d,shades[i]));
 }
 function flora3d(s, world) {
-  const orchards=world.livestock?.orchards ?? 3;
-  // 果实数量读真实世界状态：冬季不挂果；野果存量分档决定灌木上红果数。
-  // 这些都是派生量，不改任何资源规则，也不写存档。
-  const winter=(world.season??'')==='冬';
-  const berryStock=Object.values(world.wildBerries??{}).reduce((a,b)=>a+(Number(b)||0),0);
-  const berryCount=berryStock<=0?0:berryStock<12?2:3;
-  const fruitCount=winter?0:3;
-  (world.flora ?? []).forEach(([tx,tz,seed],index) => {
-    const x=tx+.5, z=tz+.5, v=(tx*7+tz*13)%4, shades=LEAF_RAMPS[v];
-    if (index < orchards) {
-      s.gatherables.push({x,z,item:'fruit'});
-      s.group(`fruit:${tx}:${tz}`, () => {
+  const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion);
+  for (const plant of nodes) {
+    const {x,z,item,id,site}=plant, v=Math.floor(x*7+z*13)%4, shades=LEAF_RAMPS[v];
+    s.gatherables.push(plant);
+    s.group(id,()=>{
+      if (item==='fruit') {
         s.box(x-.16,0,z-.16,.32,1.45,.32,DARK);
         plantBox(s,x+z,.12,false,x-.82,1.28,z-.76,1.64,.96,1.52,shades[1]);
         plantBox(s,x+z,.12,false,x-.52,2.16,z-.48,1.04,.66,1.0,shades[2]);
-        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,fruitCount))
+        const count=world.season==='冬'?0:Math.min(3,world.produce?.fruit??0);
+        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
           plantBox(s,x+z,.12,false,x+dx,y,z+dz,.17,.17,.17,'#CF4E53');
-      });
-    } else if (seed < .052) {
-      if (seed < .022) s.gatherables.push({x,z,item:'berry'});
+      } else {
+        for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
+          plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
+        const count=Math.min(3,Math.floor(world.wildBerries?.[site]??3));
+        for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,count))
+          plantBox(s,x+z,.08,false,x+dx,y,z+dz,.11,.11,.11,'#CE6274');
+      }
+    });
+  }
+  for (const [tx,tz,seed] of world.flora??[]) {
+    const x=tx+.5,z=tz+.5,v=(tx*7+tz*13)%4;
+    if (nodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) continue;
+    if (seed<.052) {
       for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
-        plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
-      if (seed < .022) for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,berryCount))
-        plantBox(s,x+z,.08,false,x+dx,y,z+dz,.11,.11,.11,'#CE6274');
+        plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,LEAF_RAMPS[v][Math.min(i+1,3)]);
     } else {
       const color=['#FFEC27','#FF77A8','#FFF0CC','#68ADD4'][v];
       for (const [dx,h,dz] of [[-.16,.25,.08],[.07,.39,-.11],[.26,.19,.13]]) {
@@ -242,7 +242,7 @@ function flora3d(s, world) {
         plantBox(s,phase,.08,false,x+dx-.025,h+.048,z+dz-.025,.05,.026,.05,'#FFA300');
       }
     }
-  });
+  }
 }
 
 function grass3d(s, sites) {
@@ -268,8 +268,7 @@ function crops3d(s, world) {
 }
 
 export function penLayout(sites) {
-  const yard=sites.yard;
-  return yard ? {x:yard[0]-9,z:yard[1]-4,w:7,d:6.4,gate:2.75,opening:1.5} : null;
+  return campPen(sites.yard);
 }
 function livestockPen(s, sites) {
   const p=penLayout(sites);
@@ -290,9 +289,9 @@ function livestock3d(s, world) {
   if (!pen) return;
   const stock=world.livestock ?? {};
   const specs=[
-    ['chickens',stock.chickens??3,4,.38,1.11,2.82,.98],
-    ['cows',stock.cows??2,3,.59,1.16,1.06,1.43],
-    ['sheep',stock.sheep??2,3,.52,2.97,4.91,1.29],
+    ['chickens',stock.chickens??3,ANIMAL_LIMITS.chickens,.38,1.11,2.82,.98],
+    ['cows',stock.cows??2,ANIMAL_LIMITS.cows,.59,1.16,1.06,1.43],
+    ['sheep',stock.sheep??2,ANIMAL_LIMITS.sheep,.52,2.97,4.91,1.29],
   ];
   for (const [kind,count,limit,r,x,z,spacing] of specs) for (let i=0;i<Math.min(count,limit);i+=1) {
     const px=pen.x+x+i*spacing, pz=pen.z+z+(i%2)*.11;
@@ -351,10 +350,14 @@ export function outdoorStage(world, bridges, rocks) {
   }
   for (const [id,[sx,sy]] of Object.entries(world.sites)) {
     const x = sx+.5, z = sy+.5;
-    if (id==='hall') hall(s,x,z);
-    else if (id==='watch') watchTower(s,x,z);
-    else if (['garden','well','yard'].includes(id)) outdoorFixture(s,id,x,z);
-    else if (!residentialSite(id)) s.group(`site:${id}`,()=>house(s,id,x,z,world.layoutSeed));
+    if (residentialSite(id)) continue;
+    s.group(`site:${id}`,()=>{
+      if (id==='hall') hall(s,x,z);
+      else if (id==='watch') watchTower(s,x,z);
+      else if (['garden','well','yard'].includes(id)) outdoorFixture(s,id,x,z);
+      else house(s,id,x,z,world.layoutSeed);
+    });
+    s.entrances[id]=campEntrance(id,[sx,sy]);
   }
   for (const [tx,tz] of world.trees) {
     s.group(`tree:${tx}:${tz}`,() => tree(s,tx+.5,tz+.5,(tx*3+tz*7)%4));
@@ -1015,7 +1018,7 @@ export function outdoorHomes(world, appearance) {
   for (const [room, occupied] of appearance) {
     const lot = homeLot(world, room);
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
-    s.entrances[room] = { x: x - 1.15, z: front + .05, w: 2.3, d: 1.6 };
+    s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room));
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
         s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);

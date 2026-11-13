@@ -152,16 +152,25 @@ function turnBox(x,z,w,d,turn) {
 }
 function animalMesh(data,animals,time) {
   for (const a of animals) {
-    const turn=a.direction??0, gait=a.moving?Math.sin(time*10+a.phase)*.08:0;
-    for (const b of a.boxes) {
-      const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
-      const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
-      const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
-      prism(data,{...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod});
-    }
+    for (const box of animalBoxes(a,time)) prism(data,box);
   }
 }
-function actor(data,p,frame) {
+export function animalBoxes(a,time) {
+  const turn=a.direction??0, gait=a.moving?Math.sin(time*10+a.phase)*.08:0;
+  return a.boxes.map(b=>{
+    const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
+    const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
+    const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
+    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod};
+  });
+}
+function actor(data,p,frame) { actorGeometry(p,frame,box=>prism(data,box)); }
+export function actorBoxes(p,frame) {
+  const boxes=[];
+  actorGeometry(p,frame,box=>boxes.push(box));
+  return boxes;
+}
+function actorGeometry(p,frame,emit) {
   const {x,y,z}=p, t=frame%4, gait=p.moving ? [0,.15,0,-.15][t] : 0;
   const turn={down:0,left:1,up:2,right:3}[p.direction]??0;
   const child=p.stage==='child';
@@ -182,7 +191,7 @@ function actor(data,p,frame) {
       h*=head?.81:.63;
     }
     if (p.pose==='sleep') {
-      prism(data,{x:x-dy-h+.74,y:y+dz+.23,z:z+dx,w:h,h:d,d:w,color});
+      emit({x:x-dy-h+.74,y:y+dz+.23,z:z+dx,w:h,h:d,d:w,color});
       return;
     }
     if (p.pose==='sit') {
@@ -191,7 +200,7 @@ function actor(data,p,frame) {
     }
     if (dy>.4) dz+=bend;
     const [px,pz,pw,pd]=turnBox(dx,dz,w,d,turn);
-    prism(data,{x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
+    emit({x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
   };
   if (!p.pose) draw(-.27,.004,-.20,.54,0,.45,'#72513B');
   draw(-.20,0,-.12+gait,.15,.46,.25,'#324D59');

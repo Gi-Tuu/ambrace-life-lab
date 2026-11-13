@@ -3,11 +3,13 @@
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate, isAlive, livingResidents, SURV_COST } from './body.mjs';
 import { validate } from './rules.mjs';
+import { campEntrance, campSite, distanceToRect, pointIn } from '../web/camp-interaction.mjs';
+import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { campAction, campTimberView } from './camp-play.mjs';
 import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { doBuild, doRepair, effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
@@ -379,7 +381,7 @@ const PLAYER_BUDGET = 100;
 function playerTimeCost(w, kind) {
   if (!w.independentWorld) return 0;
   if (kind.startsWith('family_')) return 10;
-  if (kind === 'camp_sleep' || kind.startsWith('talk_')) return 0;
+  if (kind === 'camp_exit' || kind === 'camp_sleep' || kind.startsWith('talk_')) return 0;
   return PLAYER_TIME[kind] ?? 0;
 }
 function budgetLeft(w) {
@@ -414,13 +416,38 @@ function survActInner(sp, body) {
   const kind = String(body?.kind ?? '');
   if (w.independentWorld && !isAlive(w.agents.p1)) return { ok: false, code: 'PLAYER_DEAD', error: 'GAME_OVER' };
   if (!w.independentWorld && (w.survival.failed || w.survival.ended)) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
+  if (kind === 'camp_exit') {
+    w.campPlayerRoom=null;
+    if (w.survival.talk?.contact?.room) w.survival.talk=null;
+    return {ok:true};
+  }
   if (kind === 'move') {
     const room = String(body?.room ?? '');
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
+    if (body.entrance) {
+      const previous=w.campPlayerRoom;
+      const adjacent=previous && (previous==='hall' && ['home','store'].includes(room));
+      const gate=campEntrance(room,campSite(room,w.campLayout));
+      if (!adjacent && (previous || !gate || !pointIn(body.from,WORLD_TW,WORLD_TH) ||
+          distanceToRect(body.from,gate)>.12)) return {ok:false,code:'OUT_OF_REACH'};
+      w.campPlayerRoom=room;
+    } else w.campPlayerRoom=null;
     w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
     w.loc.p1 = room; (w.occupancy[room] ??= []).push('p1');
     w.agents.p1?.viab?.spend(SURV_COST.move_to); // P0-2：移动与 AI move_to 同价
     return { ok: true };
+  }
+  if ((kind==='build'||kind==='repair') && Object.hasOwn(body,'from')) {
+    const records=kind==='build'?w.survival.sites:w.survival.buildings;
+    const building=records.find(b=>`work:${b.loc}:${b.type}`===body.target);
+    if (!building) return {ok:false,code:kind==='build'?'NO_SITE':'NO_REPAIR'};
+    const lot=building.lot??constructionLot(building.loc,w.campLayout);
+    if (w.campPlayerRoom || !lot || !pointIn(body.from,WORLD_TW,WORLD_TH) ||
+        distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+    const result=(kind==='build'?doBuild:doRepair)(w,'p1',building.loc);
+    if (result.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
+    sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
+    return result;
   }
   if (kind.startsWith('family_')) {
     const result = houseAction(w, 'p1', body);

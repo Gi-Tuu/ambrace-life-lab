@@ -173,7 +173,9 @@ test('靠近角色才可空手交谈，重工具损伤存续与信任且随档�
   assert.equal(use('basket').code,'RESIDENT_NEED_HAND');
   assert.equal(npc.viab.v,1);
   assert.equal(use('hand').code,'RESIDENT_TALKED');
-  assert.ok(use('hand',{from:[10.1,10],to:[10,10]}).line, '行走中的居民也可交谈');
+  assert.equal(use('hand',{from:[10.1,10],to:[10,10]}).code,'RESIDENT_OUT_OF_REACH');
+  w.residentTravel={a1:{from:'hall',to:'home',t:w.t}};
+  assert.ok(use('hand',{from:[26,24.5],to:[26.8,24.5]}).line, '行走中的居民也可交谈');
   assert.equal(npc.relations.get('p1').trust,34);
   assert.equal(use('hammer').code,'RESIDENT_HURT');
   assert.equal(npc.viab.v,.86);

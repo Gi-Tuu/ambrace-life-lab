@@ -42,9 +42,8 @@ export function effectiveMods(world) {
   };
 }
 
-export function doGather(world, agentId) {
+export function doGather(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const loc = world.loc[agentId];
   const res = GATHER_BY_LOC[loc];
   if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
   const stock = (s.resStock ??= { ...RES_STOCK });
@@ -107,9 +106,9 @@ export function doPlan(world, agentId, type) {
   return { ok: true, code: 'OK' };
 }
 
-export function doBuild(world, agentId) {
+export function doBuild(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const site = atLoc(s.sites, world.loc[agentId]);
+  const site = atLoc(s.sites, loc);
   if (!site) return { ok: false, code: 'NO_SITE' };
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
@@ -120,9 +119,9 @@ export function doBuild(world, agentId) {
   return { ok: true, code: 'OK', completed: null, progress: site.progress };
 }
 
-export function doRepair(world, agentId) {
+export function doRepair(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const b = atLoc(s.buildings, world.loc[agentId]);
+  const b = atLoc(s.buildings, loc);
   if (!b || b.integrity >= 1) return { ok: false, code: 'NO_REPAIR' };
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
   if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
@@ -169,12 +168,12 @@ export function regrowWildBerries(world, day) {
   }
 }
 
-export function forageRule(world, id) {
+export function forageRule(world, id, site = world.loc?.[id]) {
   const s = world.survival;
   if (!s) return { ok: false, code: 'NO_SURVIVAL' };
-  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
+  if (!(world.outdoor ?? []).includes(site)) return { ok: false, code: 'NOT_OUTDOOR' };
   if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
-  if (s.wildBerries && (s.wildBerries[world.loc[id]] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
+  if (s.wildBerries && (s.wildBerries[site] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
   if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
   return { ok: true, code: 'OK' };
 }
@@ -203,11 +202,11 @@ export const PRODUCE_LABEL = Object.freeze({ berry: '浆果', fruit: '果', egg:
 export const LIVESTOCK_CAP = 12;
 export const FORAGE_COOLDOWN = 2;
 
-export function doForage(world, id) {
+export function doForage(world, id, site = world.loc[id]) {
   const s = world.survival;
-  const gate = forageRule(world,id);
+  const gate = forageRule(world,id,site);
   if (!gate.ok) return gate;
-  if (s.wildBerries) s.wildBerries[world.loc[id]] -= 1;
+  if (s.wildBerries) s.wildBerries[site] -= 1;
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
   world.observeProduction?.('gross', 'berry', 1);

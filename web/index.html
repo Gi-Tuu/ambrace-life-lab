@@ -97,6 +97,19 @@
   }
   /* 字号阶梯收口：顶栏这几个按钮原先没写字号，继承到 13.33px 破坏了 12/16/20 三档。 */
   #mapbar > button { font-size:12px; line-height:20px; }
+  /* 顶栏统一按钮态：原先 主菜单/全屏/背包 三个是浏览器默认白底，与深色面板冲突 */
+  #mapbar > button, #ctlCluster button {
+    background:var(--sunken); color:var(--dim); border:2px solid var(--line);
+    padding:4px 10px; cursor:pointer; font:inherit; font-size:12px; line-height:20px;
+    box-shadow:2px 2px 0 0 var(--shadow); font-family:inherit;
+  }
+  #mapbar > button:hover, #ctlCluster button:hover { color:var(--ink); border-color:var(--a); background:var(--panel); }
+  #mapbar > button.on, #ctlCluster button.on, #mapbar > button[aria-pressed="true"], #ctlCluster button[aria-pressed="true"] {
+    color:var(--bg); background:var(--gold); border-color:var(--line-hi);
+  }
+  #ctlCluster { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding-left:10px; border-left:1px solid var(--line); }
+  #mapbar .spacer { flex:1 1 auto; }
+
   #minimap button:active, #btnOverview:active, .ctl button:active, .say button:active,
   .hailrow button:active, .secrets .who button:active {
     transform:translate(1px,1px); box-shadow:1px 1px 0 0 var(--shadow);
@@ -404,11 +417,21 @@
   }
   /* 触屏统一收口：点击区 ≥44、动作条 ≥104 */
   @media (pointer:coarse) {
-    body.surv-mode { padding-bottom:132px; }
     #mapbar button, .mv, .ctl button, #backpack button, .survbtns button, details.grp > summary { min-height:44px; }
     #hotbar { min-height:104px; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 16px); padding:10px; }
     #hotbar .slot { width:44px; height:44px; font-size:16px; }
     #toolHint { flex-basis:100%; text-align:center; max-width:none; }
+  }
+  /* ── UI 重排覆盖（必须放在最后，覆盖上方原规则）────────────────── */
+  /* 地点导航随居民增多会无限变长，按需求收起（保留 DOM 供脚本引用，仅隐藏） */
+  #minimap, #visionInfo { display:none !important; }
+  /* 旧的世界标题行（"生存 · 单世界 / 第 N 天…"）由工具栏取代 */
+  .wtit { display:none; }
+  /* 工具栏：从底部悬浮改为顶栏下方内联条 */
+  #hotbar {
+    position:static; left:auto; bottom:auto; transform:none;
+    margin:0 16px 8px; padding:6px 10px; justify-content:center;
+    border:2px solid var(--line); background:var(--panel); box-shadow:3px 3px 0 0 var(--shadow);
   }
 </style>
 </head>
@@ -446,15 +469,24 @@
   </div>
 </main>
 <header>
-  <h1>拥爱生命实验室<span id="tagline">同一颗种子、两个世界：左边内部状态参与决策，右边切断。</span></h1>
+  <h1>拥爱生命实验室<span id="tagline">无尽生存 · 在荒野与居民共同生活 ｜ 长期经营：维持食物、住所和生态，应对四季与灾害 ｜ 与居民同一套存续规则：不吃饭会死</span></h1>
   <div id="backend" class="backend">后端：读取中…</div>
   <button id="btnCollision" type="button" disabled hidden>碰撞编辑</button>
 </header>
 <div id="mapbar">
   <button id="btnMenu" type="button">主菜单</button>
-  <span class="lbl">镜头</span>
-  <div id="minimap"></div>
-  <span class="lbl" id="visionInfo"></span>
+  <div id="minimap" hidden></div>
+  <span class="lbl" id="visionInfo" hidden></span>
+  <span id="ctlCluster">
+    <button id="btnRun" class="on">▶ 运行</button>
+    <button id="btnStep">单步</button>
+    <button id="btnSleep" title="假装容器休眠 45 分钟">休眠 45 分钟</button>
+    <button id="btnReset">重置世界</button>
+    <button id="btnBrain" class="town-only" title="切换内心来源">内心：本地替身</button>
+    <button id="btnM3" class="town-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>
+    <button id="btnM4" class="town-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
+  </span>
+  <span class="spacer"></span>
   <button id="btnCampAngle" type="button" hidden>转视角</button>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
@@ -464,6 +496,19 @@
   <details id="keysHelp"><summary>按键</summary>
     <div>WASD/方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板</div>
   </details>
+</div>
+<div id="hotbar" class="surv-only" role="toolbar" aria-label="工具栏">
+  <button class="slot on" data-tool="hand" title="空手（1）：公仓存取 / 查看">手<i>1</i></button>
+  <button class="slot" data-tool="axe" title="斧（2）：到伐木林砍木">斧<i>2</i></button>
+  <button class="slot" data-tool="pick" title="镐（3）：采石（瞭台/井台）">镐<i>3</i></button>
+  <button class="slot" data-tool="hoe" title="锄（4）：收获/播种（菜园）">锄<i>4</i></button>
+  <button class="slot" data-tool="hammer" title="锤（5）：奠基/施工/维修">锤<i>5</i></button>
+  <button class="slot" data-tool="basket" title="篮子（6）：采浆果、水果、蔬菜、鸡蛋">篮<i>6</i></button>
+  <button class="slot" data-tool="shears" title="剪刀（7）：剪羊毛">剪<i>7</i></button>
+  <button class="slot" data-tool="bucket" title="桶（8）：取水、挤奶、浇水">桶<i>8</i></button>
+  <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
+  <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
+  <span id="toolHint">手持 · 空手</span>
 </div>
 <section id="playNotice" role="status" aria-live="polite">
   <p id="playNoticeText">正在连接生存世界…</p>
@@ -489,18 +534,6 @@
     <details id="grpSurv" class="grp surv-only" open>
       <summary>生存状态</summary>
       <section id="survPanel"></section>
-    </details>
-    <details id="grpCtl" class="grp" open>
-      <summary>控制</summary>
-      <div class="ctl">
-        <button id="btnRun" class="on">▶ 运行</button>
-        <button id="btnStep">单步</button>
-        <button id="btnBrain" class="town-only" title="切换内心来源">内心：本地替身</button>
-        <button id="btnM3" class="town-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>
-        <button id="btnM4" class="town-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
-        <button id="btnSleep" title="假装容器休眠 45 分钟">休眠 45 分钟</button>
-        <button id="btnReset">重置世界</button>
-      </div>
     </details>
     <details id="grpVillage" class="grp surv-only" open>
       <summary>聚落一览</summary>
@@ -534,19 +567,7 @@
     </details>
   </aside>
 </main>
-<div id="hotbar" class="surv-only" role="toolbar" aria-label="工具栏">
-  <button class="slot on" data-tool="hand" title="空手（1）：公仓存取 / 查看">手<i>1</i></button>
-  <button class="slot" data-tool="axe" title="斧（2）：到伐木林砍木">斧<i>2</i></button>
-  <button class="slot" data-tool="pick" title="镐（3）：采石（瞭台/井台）">镐<i>3</i></button>
-  <button class="slot" data-tool="hoe" title="锄（4）：收获/播种（菜园）">锄<i>4</i></button>
-  <button class="slot" data-tool="hammer" title="锤（5）：奠基/施工/维修">锤<i>5</i></button>
-  <button class="slot" data-tool="basket" title="篮子（6）：采浆果、水果、蔬菜、鸡蛋">篮<i>6</i></button>
-  <button class="slot" data-tool="shears" title="剪刀（7）：剪羊毛">剪<i>7</i></button>
-  <button class="slot" data-tool="bucket" title="桶（8）：取水、挤奶、浇水">桶<i>8</i></button>
-  <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
-  <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
-  <span id="toolHint"></span>
-</div>
+
 <p id="saveNotice" role="alert" hidden></p>
 <output id="campToast" role="status"></output>
 <dialog id="backpack" aria-labelledby="bpTitle">
