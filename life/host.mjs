@@ -263,7 +263,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
       const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
-        body: JSON.stringify({ model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }),
+        body: JSON.stringify({ model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100, ...noThink(mdl) }),
         signal: ac.signal,
       });
       if (!res.ok) { note(`HTTP ${res.status}`); continue; }
@@ -284,6 +284,9 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   }
   return null;
 }
+
+// Qwen3.8 系默认会把 reasoning 写进 content；关 thinking 才能得到一句干净台词/一个 JSON。
+const noThink = (mdl) => String(mdl ?? '').includes('qwen3.8') ? { chat_template_kwargs: { enable_thinking: false } } : {};
 
 // 对话模型：只负责"怎么说"，态度已由 dialogue.sayTo 在服务端裁决。
 // 与决策模型共用同一本每日预算与在场闸门；任何失败都返回 null，让模板兜底。
@@ -314,7 +317,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
       const res = await fetch(`${CFG.providers[i]}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${CFG.keys[i] ?? CFG.keys[0]}` },
-        body: JSON.stringify({ model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }),
+        body: JSON.stringify({ model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120, ...noThink(mdl) }),
         signal: ac.signal,
       });
       if (!res.ok) continue;
