@@ -1,10 +1,11 @@
+import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './households.mjs';
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
@@ -14,6 +15,11 @@ export function validate(world, agentId, intent) {
   const fail = (code, why) => ({ ok: false, code, why });
 
   if (!kind || !BASE_KINDS[kind]) return fail('NOT_AN_ACTION', `规则层不认识 ${kind}`);
+  if (kind === 'house_work' && housingMode(world) === 'legacy') return fail('NOT_AN_ACTION', '历史规则未登记此行动');
+  if (strictLifecycle(world) && !laborAllowed(world, agentId, kind)) {
+    return fail('TOO_YOUNG', '未成年居民不能执行劳动');
+  }
+  if (kind === 'house_work' && !houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
   if (kind === 'eat' && world.pantry <= 0) return fail('DEPLETED', '存粮缸已空，世界没有可消耗的食物');
   if (kind === 'eat' && here !== 'home' && here !== 'store') return fail('NOT_PRESENT', `取粮得在居所或公仓，你在 ${here}`);
   if (kind === 'talk' && !others.length) return fail('NO_TARGET', `${here} 没有可对话的对象`);
@@ -44,7 +50,15 @@ export function validate(world, agentId, intent) {
     if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   // Phase B 建设动作：采集/奠基/施工/维修。
-  if (kind === 'gather' && !world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
+  if (kind === 'forage' && world.survival?.wildBerries) {
+    const gate = forageRule(world, agentId);
+    if (!gate.ok) return fail(gate.code, '当前无法采集浆果');
+  }
+  if (kind === 'gather') {
+    if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
+    if (!GATHER_BY_LOC[here]) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
+    if ((world.survival.resStock?.[here] ?? 0) <= 0) return fail('NO_RESOURCE', '这里的资源采空了，等它恢复'); // P0-3：储量门控
+  }
   if (kind === 'plan') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里不能建造');
     if (!(world.outdoor ?? []).includes(here)) return fail('NOT_OUTDOOR', '只能在户外奠基');

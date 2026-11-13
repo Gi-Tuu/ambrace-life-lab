@@ -58,6 +58,7 @@
     border:2px solid var(--line-hi); border-top:4px solid var(--gold);
     background:var(--sunken); color:var(--ink); box-shadow:4px 4px 0 var(--shadow);
   }
+  .start-card[hidden] { display:none; }
   .start-card.compare { border-top-color:var(--a); background:var(--panel); }
   .start-card h2 { margin:0; font-size:20px; line-height:28px; }
   .start-card p { margin:12px 0 20px; line-height:1.55; color:var(--dim); }
@@ -66,6 +67,10 @@
   .start-actions .primary { background:var(--gold); color:var(--bg); border-color:var(--gold); font-weight:bold; }
   .start-actions button:hover:not(:disabled) { outline:2px solid var(--ink); outline-offset:2px; }
   .start-actions button:disabled { opacity:.55; cursor:default; }
+  .start-guide { margin:0 0 16px; font-size:13px; }
+  .start-guide summary { cursor:pointer; color:var(--ink); border:1px solid var(--line); padding:4px 10px; background:var(--bg); }
+  .start-guide div { padding:8px 12px; border:1px solid var(--line); border-top:none; background:var(--bg); }
+  .start-guide p { margin:6px 0; line-height:1.5; color:var(--dim); }
   #startStatus { min-height:1.2em; margin:12px 0 0; }
   .family-panel li { margin-block:5px; }
   @media (max-width:620px) {
@@ -239,6 +244,7 @@
   #survPanel { margin:0 16px 8px; padding:10px 12px; border:2px solid var(--line); background:var(--bg); color:var(--ink); font-size:12px; display:flex; flex-direction:column; gap:6px; }
   #survPanel[hidden] { display:none; }
   #survPanel .survrow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  #survPanel .survhint { border:1px solid var(--gold); background:var(--panel); padding:6px 10px; color:var(--ink); font-size:13px; line-height:1.5; }
   /* flex:0 0 auto：按钮文字比自身宽时不许被压缩（实测兑换/扩建按钮被压窄 6px 而溢出）。 */
   #survPanel .survbtns { gap:6px; }
   #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; flex:0 0 auto; white-space:nowrap; min-width:max-content; }
@@ -359,6 +365,7 @@
   .bp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(62px,1fr)); gap:6px; }
   .bp-item { display:grid; align-content:space-between; gap:6px; min-height:50px; padding:6px; border:2px solid var(--line); background:var(--sunken); }
   .bp-item b { color:var(--gold); text-align:right; }
+  #saveNotice { position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:100; padding:8px; color:var(--ink); background:var(--panel); border:2px solid var(--warn); }
   #campToast { position:fixed; z-index:65; bottom:135px; left:50%; transform:translateX(-50%); color:var(--gold); background:var(--panel); padding:3px 8px; pointer-events:none; }
   #campToast:empty { display:none; }
   #campPropOptions { max-height:48dvh; overflow:auto; }
@@ -414,6 +421,14 @@
       <section class="start-card">
         <h2>生存模式</h2>
         <p>和居民一起采集、耕作、修建住所，看聚落走过四季。</p>
+        <details class="start-guide"><summary>玩法指引</summary>
+          <div>
+            <p><b>目标</b>：在四季中维持聚落。行动消耗存续，记得备粮和进食。</p>
+            <p><b>核心循环</b>：① 采集木石 → ② 奠基并建造住所 → ③ 耕种/采果储备食物 → ④ 请居民协助建设 → ⑤ 应对四季与灾害。</p>
+            <p><b>操作</b>：WASD 走路 · 1–5 选工具（手/斧/镐/锄/锤）· F 用工具交互 · E 背包 · 靠近居民空手 F 交谈。</p>
+            <p><b>居民自主</b>：他们有自己的需求与关系，是否帮你取决于信任、自身处境与天气，不会无条件听从。</p>
+          </div>
+        </details>
         <div class="start-actions">
           <button id="startSurvival" class="primary" type="button" disabled>继续生存</button>
           <button id="startNew" type="button" disabled>新开一局</button>
@@ -532,6 +547,7 @@
   <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
   <span id="toolHint"></span>
 </div>
+<p id="saveNotice" role="alert" hidden></p>
 <output id="campToast" role="status"></output>
 <dialog id="backpack" aria-labelledby="bpTitle">
   <div class="bp-row">

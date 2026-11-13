@@ -117,6 +117,7 @@ test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作
     assert.equal(Object.keys(snap.A.rooms).length, 8, 'A 侧仍 town（8 房间）');
     assert.ok(snap.A.rooms && snap.B.rooms, 'A/B 对照仍在');
     const locBefore = JSON.stringify(snap.A.loc);
+    await host.act({ mode: 'survival', kind: 'move', room: 'yard' }); // P0-3：采集须在资源地点（开局 hall 不可采）
     const r = await host.act({ mode: 'survival', kind: 'gather' });
     assert.equal(r.ok, true);
     const after = host.snapshot();

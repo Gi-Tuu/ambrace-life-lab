@@ -4,7 +4,8 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
-import { initProduction, effectiveMods, dailyWear } from './production.mjs';
+import { initProduction, effectiveMods, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
+import { isAlive, livingResidents } from './viability.mjs';
 
 export const SURV = Object.freeze({
   startStore: 6,          // 初始公共粮仓
@@ -58,8 +59,8 @@ export function forecastDisasters(world) {
   const w = weatherFor(world.seed ?? 7, day); // 与 tickSurvPlay 同源：新开一局换 seed 后预警必须跟着换
   return {
     forecast: w,
-    stormTomorrow: s.disasters === true && stormOn(day, s.lastStormDay, world.seed ?? 7),
-    coldsnapTomorrow: s.disasters === true && w === 'cold' && (s.coldStreak ?? 0) >= 1,
+    stormTomorrow: s.disasters === true && !world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7),
+    coldsnapTomorrow: s.disasters === true && !world.ecologyExperiment?.noColdsnap && w === 'cold' && (s.coldStreak ?? 0) >= 1,
   };
 }
 
@@ -85,6 +86,7 @@ export function advanceSurvival(world) {
   s.lastDay = day;
   const mods = effectiveMods(world);
   dailyWear(world, mods);
+  regenResources(world); // P0-3：资源随世界时间再生（含树木再生回补木料账）
 
   // 水分：雨补、晴耗；土壤：休闲分解回流（§11 R2：空畦额外养土，仅 eco 开）。
   const rain = world.weather === 'rain';
@@ -92,7 +94,7 @@ export function advanceSurvival(world) {
   s.clearStreak = rain || cold ? 0 : (s.clearStreak ?? 0) + 1;
   s.coldStreak = cold ? (s.coldStreak ?? 0) + 1 : 0;
   const thr = s.droughts === false ? 3 : (s.droughtThreshold ?? 3); // §13：droughts=0 复原阶段A（阈值3）；备选档经 droughtThreshold=2
-  s.drought = s.clearStreak >= thr;
+  s.drought = !world.ecologyExperiment?.noDrought && s.clearStreak >= thr;
   const dis = s.disasters === true;
   s.water = clamp01(s.water + (rain ? (s.rainRefill ?? 0.25) : -0.08) - (dis && s.drought ? 0.06 : 0)); // §15.5 M2 雨补挂开关
   const empty = s.plots.filter((p) => p.growth === 0).length;
@@ -106,7 +108,7 @@ export function advanceSurvival(world) {
   // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
   s.disasterToday = null;
   if (dis && day >= 3) {
-    if (stormOn(day, s.lastStormDay, world.seed ?? 7)) {
+    if (!world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7)) {
       s.lastStormDay = day;
       s.disasterToday = 'storm';
       for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
@@ -115,16 +117,19 @@ export function advanceSurvival(world) {
         const p = growing[Math.floor(hash01(world.seed ?? 7, day * 13 + 5) * growing.length)];
         p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
       }
-    } else if (s.coldStreak >= 2) s.disasterToday = 'coldsnap';
+    } else if (!world.ecologyExperiment?.noColdsnap && s.coldStreak >= 2) s.disasterToday = 'coldsnap';
   }
 
-  // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。
-  const pop = Object.values(world.agents).filter((a) => !a.isPlayer).length;
-  const eaters = pop + (s.playerEats === true ? 1 : 0);
+  regrowWildBerries(world, day);
+
+  // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。P0-1：死者不占配给。
+  const pop = livingResidents(world).length;
+  const eaters = pop + (s.playerEats === true && isAlive(world.agents.p1) ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
-  const ended = (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
+  const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
+    world.observeProduction?.('ration', 'store', Math.min(s.store, need));
     if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
   }
@@ -133,28 +138,41 @@ export function advanceSurvival(world) {
   if (!ended && shortfall > 0) shortfall = drainCampPantry(world, shortfall);
   if (!ended && shortfall > 0) {
     s.starveDays += 1;
+    s.wasCrisis = true;
     for (const a of Object.values(world.agents)) {
-      if (!a.viab) continue;
+      if (!a.viab || !isAlive(a)) continue; // P0-1：死者不再受饥饿压力
+      a.hurtBy = '饥饿';
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
   } else if (!ended) {
     s.starveDays = 0;
+    // 恢复中：危机已解除但公仓还没回到双倍人口的安全线；回到安全线才算 normal。
+    if (s.wasCrisis && s.store >= eaters * 2) s.wasCrisis = false;
     // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
     if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
-      if (!a.drives) continue;
+      if (!a.drives || !isAlive(a)) continue; // P0-1：死者不再被喂饱
+      a.hurtBy = null;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
+      // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
+      // sweep 研究世界无 households ⇒ 不进入此支，§16 务农动机平衡与基线不受影响。
+      if (s.households && !a.isPlayer) a.viab?.regen(s.feedViab ?? 0.5);
     }
   }
 
   // §15 P2-B 无尽终局：存活集合中不存在异性对 ⇒ 无法繁衍＝必定灭绝（含只剩 1 人/同性对）；先于 failed 判定
-  if (!s.ended) {
-    const alive = Object.values(world.agents).filter((a) => a.isPlayer || (a.viab?.v ?? 1) > 0);
+  if (world.independentWorld) {
+    s.ended = livingResidents(world).length === 0;
+    s.endReason = s.ended ? 'extinct' : null;
+    s.failed = !s.ended && s.starveDays >= SURV.starveDaysToFail;
+    if (isAlive(world.agents.p1) && day >= SURV.targetDays) s.playerMilestone = true;
+  } else if (!s.ended) {
+    const alive = Object.values(world.agents).filter(isAlive); // P0-1：死者不算存活集合
     const sexes = alive.map((a) => world.sex?.[a.id]);
     const hasPair = sexes.includes('M') && sexes.includes('F');
     if (!hasPair) { s.ended = true; s.endReason = alive.length <= 1 ? 'sole' : 'noPair'; }
   }
-  const allDead = Object.values(world.agents).filter((a) => !a.isPlayer).every((a) => (a.viab?.v ?? 1) <= 0);
-  if (!s.ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
+  const allDead = livingResidents(world).length === 0; // P0-1：存活居民为零＝聚落饿垮
+  if (!world.independentWorld && !s.ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
   if (!s.failed && day >= SURV.targetDays) s.won = true; // 里程碑徽章（无尽模式不终局）
 
   const summary = { day, store: s.store, need, shortfall, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)), mature: maturePlots(s).length, failed: s.failed, won: s.won, drought: !!s.drought, disaster: s.disasterToday };
@@ -164,7 +182,7 @@ export function advanceSurvival(world) {
 }
 
 // 行动效果（由 body.actuate 调用，统一走规则校验）。
-export function doHarvest(world, agentId, plot) {
+export function doHarvest(world, agentId, plot, personalPortion = 0) {
   const s = world.survival;
   const p = maturePlots(s).find(p=>plot===undefined || p.id===plot);
   if (!p) return { ok: false, code: 'NO_MATURE' };
@@ -175,7 +193,10 @@ export function doHarvest(world, agentId, plot) {
   s.soil = clamp01(s.soil - 0.15);
   s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
   s.harvestCount = (s.harvestCount ?? 0) + 1;
-  s.store = Math.min(mods.storeCap, s.store + yieldAmt);
+  const before = s.store;
+  s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
+  world.observeProduction?.('gross', 'crop', yieldAmt);
+  world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };
 }
 export function doPlant(world, agentId, plot) {

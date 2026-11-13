@@ -1,4 +1,5 @@
-import { householdPlans, houseLabor } from './households.mjs';
+import { goalCandidates } from './goals.mjs';
+import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
@@ -9,8 +10,8 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
-import { initCoop, stepCooperation } from './cooperation.mjs';
+import { BUILDINGS, GATHER_BY_LOC, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -31,6 +32,7 @@ export const BASE_KINDS = {
   trade: { impulse: 0.3, cost: 0.05, label: '接济/交换一份口粮' },
   companion: { impulse: 0.35, cost: 0.08, label: '结伴' },
   // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
+  house_work: { impulse: .4, cost: .08, label: '为自己的房子加工木石' },
   harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
   plant: { impulse: 0.25, cost: 0.06, label: '在空菜畦播种' },
   // Phase B 建设动作（仅 survival）。
@@ -46,6 +48,17 @@ export const BASE_KINDS = {
   exchange: { impulse: 0.15, cost: 0.03, label: '兑换收成' },
   expand: { impulse: 0.2, cost: 0.08, label: '扩建蓄养或果树' },
 };
+
+// P0-1 统一生命闸：单一来源在 viability（叶模块），这里转出口供 survplay/cooperation 使用。
+export { isAlive, livingResidents } from './viability.mjs';
+import { isAlive, livingResidents } from './viability.mjs';
+
+// P0-2 统一基础行动成本：玩家与 AI 同一动作付同一存续代价（execute 与 survAct/camp 共用此表）。
+// 数值与原 affordancesFor 候选逐字相同 ⇒ AI 轨迹不变；玩家侧从此按同表结算，不再免费劳动。
+export const SURV_COST = Object.freeze({
+  house_work: 0.08, harvest: 0.08, plant: 0.06, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
+  deposit: 0.03, withdraw: 0.03, forage: 0.12, exchange: 0.12, expand: 0.15, move_to: 0.06,
+});
 
 // §30：town 的三个社会门槛原先直接写死在候选式里，扫描装置碰不到它们。提成一份可覆盖的常量，
 // 默认值与原式逐位相同；只有 world.townGates 显式给值时才偏离（产品默认档一个都不覆盖，§30 G4）。
@@ -275,7 +288,7 @@ export function affordancesFor(world, agentId) {
   if (world.survival) {
     // §15.4 状态依赖紧迫度：公仓低时抬收获/播种的能量权重，让 AI 在聚落饥饿时真种地（系数挂开关供网格）
     const s0 = world.survival;
-    const pop0 = Object.values(world.agents).filter((a) => !a.isPlayer).length;
+    const pop0 = livingResidents(world).length; // P0-1：人口统计排除死者
     // §15.7 R1：农夫用更高阈值＋更强 boost（持久驻菜园动机）；其余居民原口径
     const isFarmer = s0.roleFarmer === true && agentId === s0.farmerId;
     const thr = pop0 * (isFarmer ? 3 : (s0.urgencyThreshold ?? 1));
@@ -294,44 +307,44 @@ export function affordancesFor(world, agentId) {
       }
     }
     if (here === 'garden') {
-      if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: 0.08, impulse: 0.3, serves: { energy: 0.8 + urg } });
-      if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: 0.06, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
+      if (maturePlots(world.survival).length) out.push({ id: 'harvest', kind: 'harvest', label: BASE_KINDS.harvest.label, cost: SURV_COST.harvest, impulse: 0.3, serves: { energy: 0.8 + urg } });
+      if (world.survival.plots.some((p) => p.growth === 0)) out.push({ id: 'plant', kind: 'plant', label: BASE_KINDS.plant.label, cost: SURV_COST.plant, impulse: 0.25, serves: { energy: 0.3 + urg * 0.7 } });
     }
-    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: '为自己的房子加工木石', cost: .08, impulse: .4, serves: { safety: 1, stimulation: .9, energy: .55 } });
-    if (GATHER_BY_LOC[here]) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: 0.07, impulse: 0.3, serves: houseGoal===here ? { safety: 1, energy: .65, stimulation: .9 } : { stimulation: 0.55 } });
+    if (houseLabor(world,agentId)) out.push({ id: 'house_work', kind: 'house_work', label: BASE_KINDS.house_work.label, cost: SURV_COST.house_work, impulse: BASE_KINDS.house_work.impulse, serves: { safety: 1, stimulation: .9, energy: .55 } });
+    if (GATHER_BY_LOC[here] && (s0.resStock?.[here] ?? 0) > 0) out.push({ id: 'gather', kind: 'gather', label: `${BASE_KINDS.gather.label}（${GATHER_BY_LOC[here] === 'wood' ? '木料' : '石料'}）`, cost: SURV_COST.gather, impulse: 0.3, serves: houseGoal===here ? { safety: 1, energy: .65, stimulation: .9 } : { stimulation: 0.55 } });
     // §17 产出循环：AI 与玩家拿到完全相同的候选，走同一套规则层裁决。
     // 刻意低吸引：收种要移到菜园且 energy 收益 0.8+，这些"顺手可做"的动作不能把收种挤掉，
     // 否则无人值守会退化成原地刷产出（E1a/E1g 实测踩到过）。兑换另设 70% 仓容门槛，
     // 避免把公仓顶满后灾害削不动缓冲（P2-4）。
-    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t)
-      out.push({ id: 'forage', kind: 'forage', label: BASE_KINDS.forage.label, cost: 0.12, impulse: 0.05, serves: { energy: 0.08 } });
+    if ((world.outdoor ?? []).includes(here) && (s0.produce?.berry ?? 0) < (s0.produceCap ?? PRODUCE_CAP) && (s0.forageCd ?? 0) <= world.t && (!s0.wildBerries || forageRule(world,agentId).ok))
+      out.push({ id: 'forage', kind: 'forage', label: BASE_KINDS.forage.label, cost: SURV_COST.forage, impulse: 0.05, serves: { energy: 0.08 } });
     // §17 改量#12：所有者裁定 AI 也要能自动兑换，与玩家完全同权。
     // 仍保留 70% 仓容门槛与低吸引力：兑换是"顺手可做"的低优先动作，不能挤掉收种与建设。
     for (const [kind, rate] of Object.entries(EXCHANGE))
       if ((s0.produce?.[kind] ?? 0) >= 1 && !(rate.store && s0.store >= (s0.storeCap ?? 24) * .7))
-        out.push({ id: `exchange:${kind}`, kind: 'exchange', type: kind, label: `兑换·${PRODUCE_LABEL[kind]}`, cost: 0.12, impulse: 0.05, serves: { energy: 0.12 } });
+        out.push({ id: `exchange:${kind}`, kind: 'exchange', type: kind, label: `兑换·${PRODUCE_LABEL[kind]}`, cost: SURV_COST.exchange, impulse: 0.05, serves: { energy: 0.12 } });
     // 扩建只在材料富余时出现：留够一份建筑料，避免把木石吃光拖垮建房（P2-7 实测）。
     for (const [type, cost] of Object.entries(EXPAND))
       if ((s0.livestock?.[type] ?? 0) < LIVESTOCK_CAP && (s0.inv?.wood ?? 0) >= cost.wood + 4 && (s0.inv?.stone ?? 0) >= cost.stone + 3)
-        out.push({ id: `expand:${type}`, kind: 'expand', type, label: `扩建·${EXPAND_LABEL[type]}`, cost: 0.15, impulse: 0.05, serves: { stimulation: 0.15 } });
+        out.push({ id: `expand:${type}`, kind: 'expand', type, label: `扩建·${EXPAND_LABEL[type]}`, cost: SURV_COST.expand, impulse: 0.05, serves: { stimulation: 0.15 } });
     const bag0 = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
     const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);
     const built = world.survival.buildings.find((b) => b.loc === here);
-    if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${BUILDINGS[site.type]?.label ?? site.type}`, cost: 0.1, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
+    if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${BUILDINGS[site.type]?.label ?? site.type}`, cost: SURV_COST.build, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
     else if (!built && (world.outdoor ?? []).includes(here)) {
       for (const [type, def] of Object.entries(BUILDINGS)) {
         if (poolW >= def.cost.wood && poolS >= def.cost.stone)
-          out.push({ id: `plan:${type}`, kind: 'plan', type, label: `奠基·${def.label}`, cost: 0.05, impulse: 0.2, serves: { stimulation: 0.3 } });
+          out.push({ id: `plan:${type}`, kind: 'plan', type, label: `奠基·${def.label}`, cost: SURV_COST.plan, impulse: 0.2, serves: { stimulation: 0.3 } });
       }
     }
     if (built && built.integrity < 1 && poolW >= 1 && poolS >= 1)
-      out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${BUILDINGS[built.type]?.label ?? built.type}`, cost: 0.06, impulse: 0.2, serves: { stimulation: 0.2 } });
+      out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${BUILDINGS[built.type]?.label ?? built.type}`, cost: SURV_COST.repair, impulse: 0.2, serves: { stimulation: 0.2 } });
     // §15 P2-C 公仓存取（同权动作集）：在公仓可存/取个人包
     if (here === 'store') {
       for (const res of ['wood', 'stone']) {
-        if (bag0[res] > 0) out.push({ id: `deposit:${res}`, kind: 'deposit', type: res, label: `存${res === 'wood' ? '木' : '石'}入公仓`, cost: 0.03, impulse: 0.1, serves: { social: 0.2 } });
-        if (world.survival.inv[res] > 0) out.push({ id: `withdraw:${res}`, kind: 'withdraw', type: res, label: `从公仓取${res === 'wood' ? '木' : '石'}`, cost: 0.03, impulse: 0.1, serves: { stimulation: 0.15 } });
+        if (bag0[res] > 0) out.push({ id: `deposit:${res}`, kind: 'deposit', type: res, label: `存${res === 'wood' ? '木' : '石'}入公仓`, cost: SURV_COST.deposit, impulse: 0.1, serves: { social: 0.2 } });
+        if (world.survival.inv[res] > 0) out.push({ id: `withdraw:${res}`, kind: 'withdraw', type: res, label: `从公仓取${res === 'wood' ? '木' : '石'}`, cost: SURV_COST.withdraw, impulse: 0.1, serves: { stimulation: 0.15 } });
       }
     }
   }
@@ -369,6 +382,29 @@ export function affordancesFor(world, agentId) {
       out.push({ id: `refuse:${worst}`, kind: 'refuse', target: worst, label: `别理${world.agents[worst]?.name ?? worst}`, cost: BASE_KINDS.refuse.cost, impulse: BASE_KINDS.refuse.impulse, serves: { social: -0.25, stimulation: COUPLING_EFFECTS.refuse.relief } });
     }
   }
+  // P1-1：婴幼儿/儿童不具成年劳动能力——从候选移除劳动类动作（保留移动/休息/交谈/瞭望＝成长与学习）。
+  // 仅 households 模式生效；玩家无出生记录＝成年、lab/town 无 households ⇒ 逐位不变。
+  for (let i = out.length - 1; i >= 0; i -= 1)
+    if (!laborAllowed(world, agentId, out[i].kind)) out.splice(i, 1);
+  for (const proposed of goalCandidates(world, agentId)) {
+    const ordinary = out.find(a => a.id === proposed.id);
+    if (ordinary) {
+      if ((ordinary.goalValue ?? 0) < proposed.goalValue) {
+        ordinary.goal = proposed.goal;
+        ordinary.goalValue = proposed.goalValue;
+      }
+    } else out.push(proposed);
+  }
+  const cooperation = cooperationCandidate(world, agentId);
+  if (cooperation) {
+    // 同一行为 ID 只保留一条，保留原需求收益和习惯键。
+    const ordinary = out.find(a => a.id === cooperation.id);
+    if (ordinary) {
+      Object.assign(ordinary, { cooperation: true, cooperationValue: cooperation.cooperationValue, cost: cooperation.cost });
+      for (let i = out.length - 1; i >= 0; i -= 1)
+        if (out[i].id === cooperation.id && out[i] !== ordinary) out.splice(i, 1);
+    } else out.push(cooperation);
+  }
   // O10：节律只在这里标注"该在哪"，权重进不进比较由 model 决定；0 权重时标注恒为 0，评分逐位退回旧式子
   // 状态门控：需求紧迫时节律让位（饿着的人不按日程走），松弛时才进入比较——否则它会和稀缺类判据正面相撞
   const w = world.scheduleWeight ?? PARAMS.schedule.weight;
@@ -384,6 +420,9 @@ export function affordancesFor(world, agentId) {
 
 // §15 同权观测：居民（非玩家）在生存世界的成功动作计数，供同权闸门断言
 export function actuate(world, agentId, action) {
+  if (strictLifecycle(world) && !laborAllowed(world, agentId, action.kind)) {
+    return { action, ok: false, code: 'TOO_YOUNG' };
+  }
   const r = actuateInner(world, agentId, action);
   if (world.survival && agentId !== 'p1' && r.ok) {
     const c = (world.survival.aiActions ??= {});
@@ -530,6 +569,7 @@ function actuateInner(world, agentId, action) {
     case 'gather': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可采集的' };
       const r = doGather(world, agentId);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_RESOURCE' ? '这里的资源采空了，等它恢复' : '这里没有可采集的' };
       return { action, ok: true, code: 'OK', observation: `采集到 ${r.amount} 份${r.res === 'wood' ? '木料' : '石料'}`, evt: evt({ kind: 'gather', valence: 0.2, serves: 'stimulation' }) };
     }
     case 'plan': {

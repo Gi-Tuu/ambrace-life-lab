@@ -1,3 +1,4 @@
+import { isAlive } from './viability.mjs';
 // 居民对话层（P0 对话）：玩家输入自由文本，居民按自身状态决定理不理、耐不耐烦、
 // 是否发火甚至动手。语言本身可以来自真实模型；**决策不交给模型**——理睬/离开/攻击的
 // 门槛在服务端按关系、能量、性格、忙碌状态裁决，模型只负责把已定的态度说成人话。
@@ -27,13 +28,18 @@ export function engagementOf(world, npc) {
   return 'open';
 }
 
+export function talkInRange(world, talk) {
+  return Boolean(talk) && isAlive(world.agents.p1) && isAlive(world.agents[talk.target]) &&
+    world.loc.p1 === world.loc[talk.target];
+}
+
 export function openTalk(sp, body) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
-  if (s.ended || s.failed) return { ok: false, code: 'CAMP_ENDED' };
+  if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   const npc = w.agents[target];
   if (!npc || npc.isPlayer || !npc.drives) return { ok: false, code: 'NO_RESIDENT' };
   if (w.loc.p1 !== w.loc[target]) return { ok: false, code: 'NOT_TOGETHER', why: `${npc.name} 不在这里` };
-  if ((npc.viab?.v ?? 1) <= 0) return { ok: false, code: 'RESIDENT_GONE' };
+  if (!isAlive(npc)) return { ok: false, code: 'RESIDENT_GONE' };
   const engage = engagementOf(w, npc);
   // 不耐烦按服务器墙钟计（世界 tick 可能很慢：1 tick≈12s 时“10 刻”不是人能感知的耐心）。
   s.talk = { target, openTick: w.t, openAt: Date.now(), count: 0, engage, history: [], patienceMs: engage === 'open' ? 20000 : 12000 };
@@ -81,10 +87,13 @@ export async function sayTo(sp, body, ask = null) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   const text = String(body?.text ?? '').trim().slice(0, 240);
   const talk = s.talk;
-  if (s.ended || s.failed) return { ok: false, code: 'CAMP_ENDED' };
+  if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   if (!talk || talk.target !== target) return { ok: false, code: 'NO_TALK' };
+  if (!talkInRange(w, talk)) {
+    s.talk = null;
+    return { ok: false, code: 'NOT_TOGETHER' };
+  }
   const npc = w.agents[target];
-  if (!npc) return { ok: false, code: 'NO_RESIDENT' };
   if (!text) return { ok: false, code: 'EMPTY_TEXT' };
   if (Date.now() - talk.openAt > talk.patienceMs) {
     return { ok: true, left: true, ...leaveTalk(sp) };

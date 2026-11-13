@@ -39,13 +39,13 @@ test('家庭须双方同意，原住房保留产权，出生和长大能够跨�
   w.t = DAY_TICKS * 2 - 1;
   await tickSurvPlay(sp);
   const first = survView(sp);
-  assert.equal(first.agents.c1.stage, 'child');
+  assert.equal(first.agents.c1.stage, 'infant'); // P1-1： newborn 是婴幼儿（0–3 天），3 天后转 child
   assert.deepEqual(first.households.residents.c1.parents, ['a1','a2']);
   assert.equal(first.housing.c1, room);
   const restored = loadSurv(structuredClone(dumpSurv(sp)), 99, options);
   assert.equal(restored.world.seed, 7);
   assert.equal(restored.world.occupancy[restored.world.loc.c1].includes('c1'),true);
-  assert.equal(survView(restored).agents.c1.stage,'child');
+  assert.equal(survView(restored).agents.c1.stage,'infant'); // P1-1：读档后 newborn 仍婴幼儿
   const rw = restored.world;
   rw.agents.c1.traits.archetype = '谨慎';
   rw.t = h.residents.c1.born + ADULT_DAYS * DAY_TICKS - 1;
@@ -112,10 +112,11 @@ test('玩家可拒绝求婚，未会面时不能登记，同住需要空床', ()
   assert.equal(h.spouses.p1,undefined);
   assert.ok(take('family_marry','a1').ok);
   const room=w.housing.a1;
-  w.housing.a2=w.housing.a3=w.housing.test=room;
+  w.agents.c1={id:'c1',name:'芽',viab:{v:1}}; // P0-1：床位按存活居民计；用真实第4人凑满床（旧 test 占位无角色，已被存活过滤正确排除）
+  w.housing.a2=w.housing.a3=w.housing.c1=room;
   assert.equal(take('family_move','a1').code,'NO_BED');
   assert.equal(w.housing.p1,'house1');
-  delete w.housing.test;
+  delete w.housing.c1;
   assert.ok(take('family_move','a1').ok);
   assert.equal(w.housing.p1,room);
 });

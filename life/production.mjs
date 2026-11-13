@@ -4,6 +4,7 @@
 import { siteOf } from './geometry.mjs';
 import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
+import { residentStage } from './households.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -14,10 +15,16 @@ export const BUILDINGS = Object.freeze({
 export const GATHER_BY_LOC = Object.freeze({ yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' });
 export const LABOR_PER_ACTION = 2;
 
+// P0-3 轻量资源储量：每个采集地点一份可耗尽的账，采集扣减、随世界时间再生。
+// 木料地点与树木砍伐/再生同步（camp_chop 扣同一份账、树再生时回补）；石料地点按日缓慢恢复。
+export const RES_STOCK = Object.freeze({ yard: 12, garden: 6, watch: 10, well: 10 });
+export const RES_REGEN = 1; // 每游戏日每地点恢复量（上限＝初始储量）
+
 export function initProduction(s) {
   s.inv = { wood: 0, stone: 0 };
   s.sites = [];      // {type, at:[x,y], loc, progress}
   s.buildings = [];  // {type, at, loc, integrity:1}
+  s.resStock = { ...RES_STOCK };
 }
 
 const atLoc = (list, loc) => list.find((b) => b.loc === loc);
@@ -36,10 +43,39 @@ export function effectiveMods(world) {
 }
 
 export function doGather(world, agentId) {
-  const res = GATHER_BY_LOC[world.loc[agentId]] ?? 'wood';
+  const s = world.survival;
+  const loc = world.loc[agentId];
+  const res = GATHER_BY_LOC[loc];
+  if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
+  const stock = (s.resStock ??= { ...RES_STOCK });
+  const have = stock[loc] ?? 0;
+  if (have <= 0) return { ok: false, code: 'NO_RESOURCE' }; // 采空了，等再生
+  const take = Math.min(residentStage(world, agentId) === 'elder' ? 1 : 2, have); // P1-1：老年体力下降，采集减产
+  stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
-  bag[res] += 2;
-  return { ok: true, code: 'OK', res, amount: 2 };
+  bag[res] += take;
+  world.observeProduction?.('gather', res, take);
+  return { ok: true, code: 'OK', res, amount: take };
+}
+
+// P0-3 资源再生（日界调用）：每地点 +RES_REGEN 封顶初始储量；被砍的树再生时回补木料账。
+export function regenResources(world) {
+  const s = world.survival;
+  const stock = (s.resStock ??= { ...RES_STOCK });
+  for (const loc of Object.keys(RES_STOCK)) stock[loc] = Math.min(RES_STOCK[loc], (stock[loc] ?? 0) + RES_REGEN);
+  // 树木视觉与资源账同源：regrowAt 到期 ⇒ 树成熟并回补 2 木料（与 camp_chop 扣减对称），随后清零。
+  const trees = s.campTrees;
+  if (trees) {
+    const grove = world.campLayout?.grove ?? [];
+    for (const tree of grove) {
+      const at = trees[tree.id] ?? 0;
+      if (at > 0 && at <= world.t) {
+        const loc = tree.site;
+        if (GATHER_BY_LOC[loc] === 'wood') stock[loc] = Math.min(RES_STOCK[loc] ?? 12, (stock[loc] ?? 0) + 2);
+        trees[tree.id] = 0;
+      }
+    }
+  }
 }
 // §15 P2-C 集体劳动：coop 采集归公仓（个人包→公仓），供合作阶段检查与奠基消耗
 export function coopPoolGather(world, agentId) {
@@ -65,6 +101,8 @@ export function doPlan(world, agentId, type) {
   if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
+  world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
+  world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
   s.sites.push({ type, loc, at: siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
@@ -73,7 +111,7 @@ export function doBuild(world, agentId) {
   const s = world.survival;
   const site = atLoc(s.sites, world.loc[agentId]);
   if (!site) return { ok: false, code: 'NO_SITE' };
-  site.progress += LABOR_PER_ACTION;
+  site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
     s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1 });
@@ -90,6 +128,8 @@ export function doRepair(world, agentId) {
   if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, 1); bag.wood -= bw; s.inv.wood -= 1 - bw;
   const bs = Math.min(bag.stone, 1); bag.stone -= bs; s.inv.stone -= 1 - bs;
+  world.observeProduction?.('materialSpent', 'repairWood', 1);
+  world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
   return { ok: true, code: 'OK' };
 }
@@ -116,11 +156,25 @@ const SEASON_YIELD = Object.freeze({
 });
 export const PRODUCE_CAP = 24;
 
+export const WILD_BERRIES = Object.freeze({ yard: 5, garden: 4, watch: 3, well: 2 });
+
+export function regrowWildBerries(world, day) {
+  const s = world.survival;
+  if (!s.wildBerries) return;
+  const season = [1, 1.2, .7, .15][seasonOf(day)];
+  const weather = s.disasterToday === 'coldsnap' ? 0 : world.weather === 'cold' ? .3 : 1;
+  const water = s.drought ? .12 * s.water : .3 + .7 * s.water;
+  for (const [loc, cap] of Object.entries(WILD_BERRIES)) {
+    s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + season * weather * water * .85);
+  }
+}
+
 export function forageRule(world, id) {
   const s = world.survival;
   if (!s) return { ok: false, code: 'NO_SURVIVAL' };
   if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
   if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
+  if (s.wildBerries && (s.wildBerries[world.loc[id]] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
   if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
   return { ok: true, code: 'OK' };
 }
@@ -151,12 +205,13 @@ export const FORAGE_COOLDOWN = 2;
 
 export function doForage(world, id) {
   const s = world.survival;
-  if (!s) return { ok: false, code: 'NOT_AVAILABLE' };
-  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
-  if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
-  if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
+  const gate = forageRule(world,id);
+  if (!gate.ok) return gate;
+  if (s.wildBerries) s.wildBerries[world.loc[id]] -= 1;
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
+  world.observeProduction?.('gross', 'berry', 1);
+  world.observeProduction?.('stock', 'berry', 1);
   s.forageCd = world.t + FORAGE_COOLDOWN;
   return { ok: true, code: 'OK', amount: 1 };
 }
@@ -171,8 +226,17 @@ export function doExchange(world, id, kind) {
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
   s.produce[kind] -= 1;
   let gained;
-  if (rate.store) { s.store = Math.min(cap, s.store + rate.store); gained = `粮+${rate.store}`; }
-  else { s.inv.wood = (s.inv.wood ?? 0) + rate.wood; gained = `木+${rate.wood}`; }
+  if (rate.store) {
+    const before = s.store;
+    s.store = Math.min(cap, before + rate.store);
+    world.observeProduction?.('food', kind, s.store - before);
+    gained = `粮+${rate.store}`;
+  } else {
+    s.inv.wood = (s.inv.wood ?? 0) + rate.wood;
+    world.observeProduction?.('material', kind, rate.wood);
+    gained = `木+${rate.wood}`;
+  }
+  world.observeProduction?.('exchanged', kind, 1);
   return { ok: true, code: 'OK', gained };
 }
 
@@ -184,6 +248,12 @@ export function doExpand(world, id, type) {
   // 与候选侧同一条裁决：材料必须富余（留一份建筑料），不能挤掉建房。
   if ((s.inv?.wood ?? 0) < cost.wood + 4 || (s.inv?.stone ?? 0) < cost.stone + 3) return { ok: false, code: 'NO_MATERIAL' };
   s.inv.wood -= cost.wood; s.inv.stone -= cost.stone;
+  world.observeProduction?.('materialSpent', 'expandWood', cost.wood);
+  world.observeProduction?.('materialSpent', 'expandStone', cost.stone);
   s.livestock[type] = (s.livestock[type] ?? 0) + 1;
+  if (s.ecosystem && s.ecoPop && (type === 'chickens' || type === 'orchards')) {
+    const prefix = type === 'chickens' ? 'ch' : 'or';
+    s.ecoPop[type].push({ id: `${prefix}${++s.ecoSeq[prefix]}`, born: world.t, health: 1 }); // P1-5 扩建个体从幼体成长
+  }
   return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
 }

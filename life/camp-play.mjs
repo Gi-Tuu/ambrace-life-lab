@@ -3,7 +3,8 @@ import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../web/camp-layout.mjs';
-import { doForage, doGather, effectiveMods } from './production.mjs';
+import { doForage, doGather } from './production.mjs';
+import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 
 const STORAGE = Object.freeze({
@@ -30,7 +31,7 @@ export function campTimberView(world) {
 }
 export function campSleepTicks(world) {
   if (!playerHome(world,world.loc.p1)) return fail('NOT_HOME');
-  if (world.survival.ended || world.survival.failed) return fail('CAMP_ENDED');
+  if (!isAlive(world.agents.p1) || (!world.independentWorld && (world.survival.ended || world.survival.failed))) return fail('CAMP_ENDED');
   const hour=world.t%DAY_TICKS;
   return {...ok(),ticks:Math.min(24,hour>=12?DAY_TICKS-hour:4)};
 }
@@ -48,6 +49,7 @@ function interactWithResident(world,{target,tool,room,from,to}) {
     const wounds=s.campWounds??={};
     if (world.t-(wounds[target]?.t??-Infinity)<2) return fail('RESIDENT_COOLDOWN');
     const before=npc.viab.v;
+    npc.hurtBy='受伤'; // P0-1：致死原因可追溯
     npc.viab.v=Math.max(0,before-.14);
     const damage=before-npc.viab.v;
     wounds[target]={t:world.t,total:(wounds[target]?.total??0)+damage};
@@ -67,7 +69,7 @@ function interactWithResident(world,{target,tool,room,from,to}) {
 
 export function campAction(world,body) {
   const {kind,type:item,target,tool,plot}=body, site=world.loc.p1, s=world.survival;
-  if (s.ended || s.failed) return fail('CAMP_ENDED');
+  if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
   if (kind==='camp_resident') return interactWithResident(world,body);
   const bag=world.pinv.p1;
   if (kind==='camp_store' || kind==='camp_take') {
@@ -102,9 +104,10 @@ export function campAction(world,body) {
     if (!tree || tree.site!==site) return fail('NO_TREE');
     const trees=(s.campTrees??={});
     if ((trees[target]??0)>world.t) return fail('TREE_GROWING');
-    trees[target]=world.t+3*DAY_TICKS;
     const cut=doGather(world,'p1');
-    if (cut.ok) pay(world,0.02);
+    if (!cut.ok) return cut; // P0-3：储量采空不能砍，树不标记（与资源账同步，等再生）
+    trees[target]=world.t+3*DAY_TICKS;
+    pay(world,SURV_COST.gather); // P0-2：与 AI gather 同价
     return cut;
   }
   if (kind==='camp_craft') {
@@ -112,6 +115,7 @@ export function campAction(world,body) {
     if (item!=='tray') return fail('BAD_ITEM');
     if (amount(bag,'wood')<2) return fail('NO_MATERIAL');
     bag.wood-=2;
+    world.observeProduction?.('materialSpent', 'craftWood', 2);
     bag.tray=amount(bag,'tray')+1;
     pay(world,0.01);
     return ok();
@@ -121,7 +125,7 @@ export function campAction(world,body) {
     if (tool!=='hoe') return fail('NEED_TOOL');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
     const done=doPlant(world,'p1',plot);
-    if (done.ok) pay(world,0.02);
+    if (done.ok) pay(world,SURV_COST.plant); // P0-2：与 AI plant 同价
     return done;
   }
   if (kind==='camp_water') {
@@ -137,26 +141,30 @@ export function campAction(world,body) {
   if (kind!=='camp_collect') return fail('UNKNOWN_KIND');
   if (!Object.hasOwn(TOOLS,item)) return fail('BAD_ITEM');
   if (tool!==TOOLS[item]) return fail('NEED_TOOL');
+  let cost=0.02; // P0-2：与 AI 基础动作同表；crop/berry 分别对齐 harvest/forage，其余营地采集保留小成本
   if (item==='water') {
     if (site!=='well') return fail('NOT_WELL');
     if (amount(bag,'water')>=3) return fail('BUCKET_FULL');
   } else if (item==='crop') {
     if (site!=='garden') return fail('NOT_GARDEN');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
-    const store=s.store;
-    const result=doHarvest(world,'p1',plot);
+    const result=doHarvest(world,'p1',plot,1);
     if (!result.ok) return result;
-    s.store=Math.min(effectiveMods(world).storeCap,store+result.amount-1);
+    world.observeProduction?.('collected', 'crop', 1);
+    cost=SURV_COST.harvest;
   } else if (item==='berry') {
     const result=doForage(world,'p1');
     if (!result.ok) return result;
     s.produce.berry-=1;
+    world.observeProduction?.('collected', 'berry', 1);
+    cost=SURV_COST.forage;
   } else {
     if (site!==(item==='fruit'?'garden':'yard')) return fail('WRONG_SOURCE');
     if (!amount(s.produce,item)) return fail('NO_PRODUCE');
     s.produce[item]-=1;
+    world.observeProduction?.('collected', item, 1);
   }
   bag[item]=amount(bag,item)+1;
-  pay(world,0.02);
+  pay(world,cost);
   return ok();
 }

@@ -10,7 +10,7 @@ import {
   overrideWalk, pathFromWalker, roomAllows,
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
-import { addCampWork, outdoorLife, outdoorStage, penLayout, roomStage, timberStage } from './camp-3d-scene.mjs';
+import { addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
 import { campCamera, coveredModels, createCampRenderer, rayBox } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
@@ -96,7 +96,15 @@ const ui = { menu: !launch.has('room') && launch.get('full')!=='1' &&
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result.persisted === false) {
+    const warning = $('saveNotice');
+    warning.hidden = false;
+    warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
+  } else if (result.persisted === true || path.startsWith('/world') && !result.saveError) {
+    $('saveNotice').hidden = true;
+  }
+  return result;
 }
 
 // ── 自然世界地图 ──────────────────────────────────────────────────────────────
@@ -331,14 +339,13 @@ function worldWithCollisions(sites, w) {
   const buildings = w.buildings ?? [];
   const timber=w.camp?.timber;
   const treeSignature=timber?worldCache.grove.map(t=>timber[t.id]?.stage??'mature').join(','):'';
-  const houseWork=Object.entries(w.households?.projects??{});
-  const signature = houseWork.map(([room,p])=>room+':'+p.progress).join(',')+'|'+buildings.map(b=>b.type+'@'+b.loc+':'+(b.integrity<1)).join(',')+'|' +
-    (w.sites??[]).map(b=>b.type+'@'+b.loc+':'+b.progress).join(',')+'|'+treeSignature;
+  const appearance=homeAppearance(w,sites);
+  const signature=workModelKey(w,appearance,treeSignature);
   if (worldCache.buildingMaskSignature !== signature) {
     const { assetWalk, scene3d } = worldCache;
     if (scene3d) {
       const boxes=[], previous=worldCache.workProjects;
-      const projects=addCampWork(boxes,w);
+      const projects=addCampWork(boxes,w,appearance);
       for (const project of projects) {
         const old=previous?.find(p=>p.id===project.id);
         project.since=previous && old?.phase!==project.phase ? performance.now() : old?.since??-1000;
@@ -346,8 +353,27 @@ function worldWithCollisions(sites, w) {
       worldCache.workProjects=projects;
       boxes.push(...timberStage(timber,worldCache.grove).boxes);
       worldCache.work3d=boxes;
-      worldCache.assetPixels=boxes.length?assetWalk.slice():assetWalk;
-      if (boxes.length) stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,{boxes});
+      const solids=boxes.filter(b=>b.solid);
+      const collisionSignature=JSON.stringify(solids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
+      if (worldCache.solidSignature!==collisionSignature) {
+        worldCache.solidSignature=collisionSignature;
+        worldCache.assetPixels=solids.length?assetWalk.slice():assetWalk;
+        stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,{boxes:solids});
+        worldCache.pixelBase=terrainPixels().map((value,index)=>value & worldCache.assetPixels[index]);
+        worldCache.collisionRevision=-1;
+      }
+      const homeSolids=solids.filter(b=>b.occluder?.endsWith(':house'));
+      const homeBlockerKey=JSON.stringify(homeSolids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
+      if (worldCache.homeBlockerKey!==homeBlockerKey) {
+        worldCache.homeBlockerKey=homeBlockerKey;
+        const blockers=new Set(worldCache.blockers);
+        for (const b of homeSolids) {
+          for (let z=Math.ceil(b.z-.5); z<b.z+b.d-.5; z++) {
+            for (let x=Math.ceil(b.x-.5); x<b.x+b.w-.5; x++) blockers.add(tileKey(x,z));
+          }
+        }
+        worldCache.visibleBlockers=blockers;
+      }
     } else {
       const lots=[...buildings,...(w.sites??[])].map(b=>b.lot??constructionLot(b.loc,w.layout)).filter(Boolean);
       const grove=timberStage(timber,worldCache.grove);
@@ -355,11 +381,18 @@ function worldWithCollisions(sites, w) {
       for (const lot of lots) fillCollisionRect(worldCache.assetPixels,WORLD_W,WORLD_H,
         lot.x*TILE,lot.z*TILE,Math.ceil(lot.w*TILE),Math.ceil(lot.d*TILE),0);
       if (grove.boxes.length) stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,grove);
+      const assets=worldCache.assetPixels;
+      worldCache.pixelBase=assets ? terrainPixels().map((value,index)=>value & assets[index]) : null;
+      worldCache.collisionRevision=-1;
     }
-    const assets = worldCache.assetPixels;
-    worldCache.pixelBase = assets ? terrainPixels().map((value, index) => value & assets[index]) : null;
-    worldCache.buildingMaskSignature = signature;
-    worldCache.collisionRevision = -1;
+    worldCache.buildingMaskSignature=signature;
+  }
+  if (worldCache.scene3d) {
+    const homeKey=JSON.stringify(appearance);
+    if (worldCache.homeKey!==homeKey) {
+      worldCache.homeKey=homeKey;
+      worldCache.homes3d=outdoorHomes(w,appearance);
+    }
   }
   if (worldCache.collisionRevision !== collisionEditor.revision) {
     const cells = worldCache.mapSeed ? new Map() : collisionEditor.cells('map');
@@ -376,15 +409,17 @@ function worldWithCollisions(sites, w) {
     const plots=(w.plots ?? []).map(({growth})=>({
       growth:growth>0 ? Math.max(1,Math.floor(growth*20))/20 : 0,
     }));
-    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,...plots.map(p=>p.growth)].join(',');
+    const berryStock=Object.values(w.wildBerries??{}).reduce((a,b)=>a+(Number(b)||0),0);
+    const berryTier=berryStock<=0?0:berryStock<12?1:2;
+    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,...plots.map(p=>p.growth),w.season,berryTier].join(',');
     life3d=lifeLayers.get(key);
     if (!life3d) {
-      life3d=outdoorLife({ ...worldCache, sites, plots, livestock });
+      life3d=outdoorLife({ ...worldCache, sites, plots, livestock, season:w.season, wildBerries:w.wildBerries, produce:w.produce, housing:w.housing });
       lifeLayers.set(key,life3d);
       if (lifeLayers.size>8) lifeLayers.delete(lifeLayers.keys().next().value);
     }
   }
-  return { ...worldCache, sites, life3d, timber };
+  return { ...worldCache, sites, life3d, timber, blockers:worldCache.visibleBlockers??worldCache.blockers };
 }
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
@@ -395,12 +430,14 @@ function stampSceneCollision(walk, width, height, scene) {
 }
 
 function buildWorld(w) {
-  const sites = sitesOf(w);
+  const liveSites = sitesOf(w);
   const mapSeed=w.mapSeed??0;
-  const sig=(w.layoutVersion??0)+'|'+mapSeed+'|'+Object.keys(sites).join(',')+'|'+Number(ASSETS.ready)+'|'+Boolean(campRenderer)+'|'+Boolean(w.camp?.timber);
+  const staticSites=campRenderer?Object.fromEntries(Object.entries(liveSites).filter(([room])=>!residentialSite(room))):liveSites;
+  const sites=staticSites;
+  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households)]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
-    return worldWithCollisions(sites, w);
+    return worldWithCollisions(liveSites, w);
   }
   const { river, riverCenter:streamCenter, riverHalfWidth:streamHalfWidth, hills: candidates }=
     campTerrain(mapSeed, Boolean(w.camp), w.layoutVersion);
@@ -436,7 +473,7 @@ function buildWorld(w) {
   const links=w.layout?[...w.layout.links]:[...ROAD_LINKS];
   if (!w.layout) {
     if(sites.well)routeSites.crossing=[Math.round(river(34))-4,34];
-    const homes=w.households?Object.keys(HOUSING_PLOTS):Object.keys(sites).filter(residentialSite);
+    const homes=w.households?Object.keys(HOUSING_PLOTS):Object.keys(liveSites).filter(residentialSite);
     if (homes.length) {
       Object.assign(routeSites,{residential:[75,38],northLane:[89,43],southLane:[89,56],edgeLane:[89,69]});
       links.push(['workshop','residential',[[68,33]]],['residential','northLane',[[79,40]]],['northLane','southLane',[]]);
@@ -673,7 +710,7 @@ function buildWorld(w) {
   worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
-  return worldWithCollisions(sites, w);
+  return worldWithCollisions(liveSites, w);
 }
 
 // 玩家真实视野：从玩家 tile 出发，光半径 + Bresenham 光线投射，树/岩/屋舍挡视线。
@@ -1475,14 +1512,14 @@ function campVisibility(world, cvId, person, phase) {
   let views=campFog.get(world.canvas);
   if(!views){views=new Map();campFog.set(world.canvas,views);}
   const key=x+','+y+'|'+radius, previous=views.get(cvId);
-  if(previous?.key===key) return previous.bytes;
+  if(previous?.key===key && previous.blockers===world.blockers) return previous.bytes;
   const bytes=new Uint8Array(world.tw*world.th);
   for(let py=Math.max(0,y-radius-2);py<=Math.min(world.th-1,y+radius+2);py++){
     for(let px=Math.max(0,x-radius-2);px<=Math.min(world.tw-1,x+radius+2);px++){
       if(losClear(world.blockers,x,y,px,py)) bytes[py*world.tw+px]=255;
     }
   }
-  views.set(cvId,{key,bytes});
+  views.set(cvId,{key,bytes,blockers:world.blockers});
   return bytes;
 }
 
@@ -1808,7 +1845,7 @@ function drawCamp(cv,w) {
   const aspect=ui.fullscreen?Math.max(1.18,(innerWidth-12)/(innerHeight-80)):ui.interior?1.65:1.9;
   const {width,height,room}=campViewport(cv,aspect);
   const overview=ui.overview&&!room;
-  let stage, life, terrain, visibility, sight, waterMask, people=[], animals=[], residentHint, work=[], hearth, x,z,span;
+  let stage, life, homes, terrain, visibility, sight, waterMask, people=[], animals=[], residentHint, work=[], hearth, x,z,span;
   const playerId=cv.id==='cvFull'?'cvA':cv.id;
   if (room) {
     const site=ui.interior;
@@ -1840,7 +1877,7 @@ function drawCamp(cv,w) {
   } else {
     const world=buildWorld(w);
     campWorlds.set(playerId,world);
-    stage=world.scene3d;life=world.life3d;terrain=world.canvas;waterMask=world.waterMask;
+    stage=world.scene3d;life=world.life3d;homes=world.homes3d;terrain=world.canvas;waterMask=world.waterMask;
     const slots=slotsOf(w,world.sites);
     for(const who of Object.keys(slots))ensureWalker(playerId,who,world,slots);
     animals=drawHerd(world,playerId,ACT.motionTime??0,slots);
@@ -1879,8 +1916,8 @@ function drawCamp(cv,w) {
   if (S.soloSurv && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
-  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],work);
-  if(!campRenderer.render({target:cv,stage,life,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
+  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work);
+  if(!campRenderer.render({target:cv,stage,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered};
   if (open && !overview) paintWeather(g,climate,time,ratio);
@@ -1895,6 +1932,7 @@ function drawCamp(cv,w) {
     campBadge(g,camera,[nx,ny,nz],`${npc.name} · ${hint}`,heavy?'build':'talk',16,ratio);
   }
   if(stage.chimneys)campSmoke(g,camera,stage.chimneys,ratio,ACT.frame,light);
+  if(homes)campSmoke(g,camera,homes.chimneys,ratio,ACT.frame,light);
   if(light[0]<.9)campAmbient(g,camera,span,x,z,ratio,ACT.frame);
   // 悬停：≥120ms 才命中，拾取点画角括号，最近的人加金环 + 16px 名牌。
   const h=campHover&&campHover.cv===cv.id?campHover:null;
@@ -2124,17 +2162,17 @@ function pushToasts(pack) {
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survFlash = null;
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
 const CAMP_FOOD=['berry','fruit','crop','egg','milk'];
 const CAMP_TOOL={berry:'basket',fruit:'basket',crop:'basket',egg:'basket',wool:'shears',milk:'bucket',water:'bucket'};
 const CAMP_ANIMAL_ITEM={chickens:'egg',cows:'milk',sheep:'wool'};
-const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉'};
+const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
 const campCodes={NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
-  FORAGE_COOLDOWN:'稍后再采',BAD_PLOT:'这里没有可用菜畦'};
+  FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
 
 const GATHER_RES = { yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' };
@@ -2152,7 +2190,7 @@ function contextAction(s, tool = ui.tool) {
     if (s.plots.some((p) => p.growth === 0) && s.water >= 0.06) cands.push({ kind: 'plant', tool: 'hoe' });
   }
   // 采浆果：手（1）在户外、未冷却、产出账未满时可用；合法性最终由规则层 forageRule 裁决。
-  if ((s.outdoor ?? []).includes(here) && (s.produce?.berry ?? 0) < (s.produceCap ?? 24) && (s.forageCd ?? 0) <= (s.t ?? 0))
+  if ((s.outdoor ?? []).includes(here) && (s.produce?.berry ?? 0) < (s.produceCap ?? 24) && (s.forageCd ?? 0) <= (s.t ?? 0) && (!s.wildBerries || s.wildBerries[here] >= 1))
     cands.push({ kind: 'forage', tool: 'hand' });
   const res = GATHER_RES[here];
   if (res && (s.outdoor ?? []).includes(here)) cands.push({ kind: 'gather', tool: res === 'wood' ? 'axe' : 'pick' });
@@ -2430,7 +2468,7 @@ function propOption(container,label,reason,onClick) {
   container.append(button);
 }
 function entranceAt(world,x,z) {
-  return Object.entries(world.scene3d?.entrances??{}).find(([,e])=>
+  return Object.entries({...world.scene3d?.entrances,...world.homes3d?.entrances}).find(([,e])=>
     x>=e.x && x<=e.x+e.w && z>=e.z && z<=e.z+e.d)?.[0]??null;
 }
 function survRoomAtFeet() {
@@ -2628,7 +2666,8 @@ function runSurvAction(ctx) {
   if (ctx.tool && ui.tool !== ctx.tool) { survFlash = { kind: ctx.kind, ok: false, code: 'NEED_TOOL', tool: ctx.tool }; refresh(); return; }
   api('/act', { mode: 'survival', kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 }
-const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工' };
+const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
+const STAGE_ZH = { infant: '婴幼儿', child: '儿童', adult: '成年', elder: '老年' };
 function updateHotbar() {
   ui.tool ??= 'hand';
   const s = S.view;
@@ -2729,8 +2768,10 @@ function renderGauges(s) {
 function renderVillage(s) {
   const el = $('villagePanel'); if (!el || !s) return;
   const rows = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer).map((a) => {
+    if (a.dead) return `<div class="vrow dead"><b>${esc(a.name)}</b><span class="bad">已故</span><span class="dim">${esc(a.death?.cause ?? '')} · 第${(a.death?.day ?? 0) + 1}天</span></div>`;
     const cells = Array.from({ length: 5 }, (_, i) => `<b class="${(i + 0.5) / 5 <= (a.energy ?? 0) ? 'on' : ''}"></b>`).join('');
-    return `<div class="vrow"><b>${esc(a.name)}</b><span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
+    const stage = a.stage && a.stage !== 'adult' ? `<span class="dim">${STAGE_ZH[a.stage] ?? a.stage}</span>` : (a.age != null ? `<span class="dim">${a.age}天</span>` : '');
+    return `<div class="vrow"><b>${esc(a.name)}</b>${stage}<span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
   }).join('');
   el.innerHTML = rows || '<div class="dim">无居民</div>';
 }
@@ -2776,6 +2817,42 @@ function familyPanel(s) {
   </details>`;
 }
 
+function coopPanel(s) {
+  if (!s.coop?.enabled) return '';
+  const here = s.loc?.p1;
+  const site = (s.sites ?? []).find((x) => x.loc === here);
+  const task = s.coop.task;
+  const residents = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer && !a.dead && (a.viab ?? 1) > 0);
+  const reqBtns = site ? residents.map((a) => `<button data-coop="${esc(a.id)}">请${esc(a.name)}协助</button>`).join('') : '';
+  return `<details class="survdetail"><summary>合作施工</summary>
+    <div class="survrow">${task ? `当前任务 ${esc(task.type)}·${esc(task.phase)}·${task.workers.length}人` : '暂无任务'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 退出 ${s.coop.exits ?? 0}</div>
+    ${site ? `<div class="survrow survbtns">你在工地 ${esc(site.type)}：${reqBtns}</div>` : '<div class="survrow dim">站在工地上可向居民请求协助；居民按自身需求、对你的信任、天气与任务价值决定是否参与，也可能中途退出。</div>'}
+  </details>`;
+}
+
+// P2 新玩家目标引导：按当前世界状态给出"下一步该做什么"的上下文提示（编号递进）。
+function objectiveHint(s) {
+  if (!s || s.player?.dead) return '';
+  if (s.settlement === 'extinct' || s.ended) return '聚落已没有存活居民；自然生态仍在演化，可继续观察世界。';
+  if (s.settlement === 'crisis' || s.settlement === 'recovering' || s.failed) {
+    const goals = (s.crisisGoals ?? []).map((g, i) => `${i + 1}) ${g}`).join(' ');
+    return `⚠ 缺粮危机${s.crisisDays ? `（连续 ${s.crisisDays} 天缺口）` : ''}：${goals || '先补食物并恢复公仓；危机不是终局。'}`;
+  }
+  const has = (t) => (s.buildings ?? []).some((x) => x.type === t && x.integrity > 0);
+  const shelterSite = (s.sites ?? []).some((x) => x.type === 'shelter');
+  const poolW = (s.pinv?.p1?.wood ?? 0) + (s.inv?.wood ?? 0);
+  const poolS = (s.pinv?.p1?.stone ?? 0) + (s.inv?.stone ?? 0);
+  if (s.stormTomorrow || s.coldsnapTomorrow) return '⚠ 灾害将至：维修加固建筑、储备食物；住所可减半饥饿压力。';
+  if (!has('shelter') && !shelterSite) {
+    if (poolW < 4 || poolS < 2) return '① 采集木石：院子/树林持斧采木，瞭台/井台持镐采石（住所要 4 木 2 石）。';
+    return '② 奠基住所：到户外空地持锤奠基，再施工建成（降低饥饿压力）。';
+  }
+  if (shelterSite) return '③ 施工：站在工地持锤施工；在「合作施工」请居民协助可加快进度。';
+  if ((s.store ?? 0) < 6) return '④ 储备食物：菜园持锄收获/播种，或采浆果到公仓兑换；公仓养活聚落。';
+  if (!has('granary')) return '⑤ 建储粮设施提高粮仓上限；居民信任越高越愿意协助。';
+  return '⑥ 长期经营：维持食物、住所和生态，应对四季与灾害。';
+}
+
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 面板每 900ms 由轮询重建；先记下折叠区状态，重建后原样恢复，否则用户点开会被自动合上。
@@ -2786,9 +2863,10 @@ function renderSurv(s) {
   const here = s.loc?.p1;
   const outdoor = (s.outdoor ?? []).includes(here);
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
-  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : '';
+  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
   el.innerHTML = `
     ${banner}
+    ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
     <div class="survrow survtop"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day+1} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
       <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
       <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>
@@ -2796,21 +2874,23 @@ function renderSurv(s) {
         ? `<span class="bad">${[s.stormTomorrow ? '风暴预警' : '', s.coldsnapTomorrow ? '寒潮预警' : '', s.drought ? '干旱' : '', s.disasterToday ? `今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}` : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
       ${flash}</div>
-    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''} <span class="dim">与居民同一套存续规则：不吃饭会死</span></div>
+    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''} <span class="dim">与居民同一套存续规则：不吃饭会死${s.player?.timeLeft != null ? ` · 本刻行动 ${s.player.timeLeft}/100` : ''}</span></div>
     <div class="survrow survhere">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       · 手持 <b>${TOOL_ZH[ui.tool] ?? '空手'}</b>
       <span class="dim">F 交互 · E 背包 · 1–8 换工具 · 地点在顶栏切换</span>
-      ${s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
+      ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
       <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
       <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
       <div class="survrow">收成 浆果 ${s.produce?.berry ?? 0} · 果 ${s.produce?.fruit ?? 0} · 蛋 ${s.produce?.egg ?? 0} · 奶 ${s.produce?.milk ?? 0} · 毛 ${s.produce?.wool ?? 0}
         ｜ 存栏 鸡 ${s.livestock?.chickens ?? 3} 牛 ${s.livestock?.cows ?? 2} 羊 ${s.livestock?.sheep ?? 2} 果树 ${s.livestock?.orchards ?? 3}</div>
+      ${s.eco ? `<div class="survrow dim">生态 鸡群 ${s.eco.chickens}/${s.eco.chickenCap} · 果树 ${s.eco.orchards}/${s.eco.orchardCap}（自行出生/进食/繁殖/衰老，受水分与灾害影响）</div>` : ''}
       <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}`).join('、') || '无'}</div>
       <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${esc(s.coop.task.phase)}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
       <div class="survrow survlog">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>
     </details>
     ${familyPanel(s)}
+    ${coopPanel(s)}
     <details class="surveco"><summary>收成兑换 / 蓄养扩建（玩家与 AI 同权）</summary>
       <div class="survrow survbtns">
         ${Object.keys(s.economy?.exchange ?? {}).map((k) => `<button data-sk="exchange" data-type="${k}"${(s.produce?.[k] ?? 0) < 1 ? ' disabled data-need="缺收成"' : ''}>兑${(s.economy?.produceLabel ?? {})[k] ?? k}</button>`).join('')}
@@ -2946,6 +3026,9 @@ async function refresh() {
     const j = await api('/world?mode='+requestedMode);
     if (requestedMode!==(ui.menu?'menu':ui.compare?'compare':'survival') || resettingSurvival) return;
     renderPlayMode(j.survival);
+    $('startCompare').closest('.start-card').hidden=j.mode==='game';
+    $('btnCompare').hidden=j.mode==='game';
+    if (j.mode==='game' && ui.compare) { selectWorld(false); return; }
     if (ui.menu) return;
     // 交谈结束（不耐烦/走开/服务端清空）：收尾，别让输入框停在死对话上。
     if (ui.talk && j.survival && !j.survival.talk) {
@@ -3184,6 +3267,14 @@ $('survPanel').addEventListener('click', (e) => {
     }).catch(()=>{ $('campToast').textContent='无法登记，请重试。'; });
     return;
   }
+  const coop=e.target.closest('button[data-coop]');
+  if (coop) {
+    api('/act',{mode:'survival',kind:'coop_request',target:coop.dataset.coop}).then((r)=>{
+      survFlash={kind:'coop_request',ok:!!r.ok,code:r.decision ?? r.code ?? 'OK'};
+      coop.blur(); refresh();
+    });
+    return;
+  }
   const btn = e.target.closest('button[data-sk]'); if (!btn || btn.disabled) return;
   api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then((r) => { survFlash = { kind: btn.dataset.sk, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 });
@@ -3203,7 +3294,7 @@ window.addEventListener('resize', () => { if (ui.fullscreen && S.view) draw($('c
 // 点击画面：把屏幕坐标反算成世界 tile，再落到最近的地点（走过去 / 切换镜头）。
 // 局部视角用相机偏移 + 整数倍缩放；全景用微缩比例。两个世界收到同一个动作。
 function walkToEntrance(room) {
-  const world=buildWorld(S.view), site=room==='grove'?world.groveEntrance:world.sites[room], e=world.scene3d?.entrances[room];
+  const world=buildWorld(S.view), site=room==='grove'?world.groveEntrance:world.sites[room], e=world.homes3d?.entrances[room]??world.scene3d?.entrances[room];
   const walker=ensureWalker('cvA','p1',world,slotsOf(S.view,world.sites));
   if (!walker || !site) return;
   const goal=e ? [e.x+e.w/2-.5,e.z+e.d*.73-.5] : site;

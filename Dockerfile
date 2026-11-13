@@ -8,6 +8,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=7860 \
+    GAME_MODE=game \
     DATA_DIR=/data
 
 # 只需要这四样：服务器、引擎、前端、固定历史起点

@@ -416,7 +416,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,life,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -462,6 +462,7 @@ export function createCampRenderer() {
       const faded=[];
       paintStage(stageBuffer(stage),covered,faded,Boolean(terrain));
       if (life) paintStage(stageBuffer(life),covered,faded);
+      if (homes) paintStage(stageBuffer(homes),covered,faded);
       const moving=[];
       const translucent=[];
       for (const box of work) prism(covered.has(box.occluder)?translucent:moving,box);
