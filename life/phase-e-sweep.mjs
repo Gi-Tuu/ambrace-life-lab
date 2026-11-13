@@ -84,6 +84,7 @@ export async function run(seed, { forage = false, player = false, policy = 'cont
     forageStats: s.forageStats ?? null,
     repairs: s.coop.completions.filter((c) => c.repair).length,
     builds: s.coop.completions.filter((c) => !c.repair).length,
+    buildTypes: s.coop.completions.filter((c) => !c.repair).map((c) => c.type),
     refusals: s.coop.refusals,
     damageEvents,
     intact: s.buildings.filter((b) => b.integrity >= 1).length,
@@ -109,8 +110,15 @@ export const BASELINE2 = '05d3cd7c72de4cbe70fbb42864a91499'; // 历史：§11 �
 // 复抓#14（2026-11-13，P0 玩法收口）：玩家同权（p1 有存续/驱动、占一份日配给、动作付存续）
 // ⇒ 默认日耗 3→4 人、玩家动作成本进入轨迹；风暴/预警改吃 world.seed（seed 11 不再借用 7 的风暴）。
 // #13 因此作废；#14 两次跑逐位相同。改量披露见 phase1-plan §20。
-export const OFF_BASE = { 7: '63e2bbab4b7441c6fff4dd675fb49543', 11: 'c6a8c639d08ccbe19d8cb105fd228919', 13: '568d7443aaa4fbccf5851e917acb143a' };
-export const BASELINE3 = { 7: 'b4dd5799b3e5bfe9c09ef9dfa223907b', 11: '1b089a8308dfbdb7a69ef6fc4496d946', 13: 'fe395da9fc364ded904f6bb7b6dea213' };
+// 复抓#15（2026-11-13，派单 P0 第一批）：三项核心一致性修复进入轨迹——
+// ① P0-1 统一死亡（死者退出决策/配给/繁衍/床位，居民可真实死亡）；
+// ② P0-2 玩家动作按 SURV_COST 与 AI 同表结算（旧 survAct 动作免费）；
+// ③ P0-3 采集地点门控＋有限储量再生（旧 gather 任意地点无限产）。
+// 三者非开关可关的世界事实修复 ⇒ OFF/OFF2 轨迹均漂移；#14 作废。lab 五面逐位不变（已验）。
+// #15 两次跑逐位相同（docs/evidence/p0-batch1-20261113/recapture15.mjs）。
+// 历史值留痕：#14 OFF_BASE {7:63e2bbab…,11:c6a8c639…,13:568d7443…} / BASELINE3 {7:b4dd5799…,11:1b089a83…,13:fe395da9…}。
+export const OFF_BASE = { 7: '3dbb262176b5f14fb91d56c3cebc4ec4', 11: 'e755898b731bd709198d17d4ff0ddbec', 13: '1d6d6df6d27565d74adf857ce9a2bdff' };
+export const BASELINE3 = { 7: '2621b96f97ded45b055b9591bdf16f63', 11: 'ebd2be70a470f2a3bc0c4b6263015ca5', 13: '3f45408a174ae4a0294cec5fb869bada' };
 export const OFF = { forage: false, flags: { repairEarly: false, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 export const OFF2 = { forage: true, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false, roleFarmer: false, allHunger: false, moveUrgency: false, workFeeds: false, storeHunger: false, plantWater: 0.1, rainRefill: 0.25, hungerK: 1, hungerGate: 0.4, commitChain: false } };
 

@@ -112,10 +112,11 @@ test('玩家可拒绝求婚，未会面时不能登记，同住需要空床', ()
   assert.equal(h.spouses.p1,undefined);
   assert.ok(take('family_marry','a1').ok);
   const room=w.housing.a1;
-  w.housing.a2=w.housing.a3=w.housing.test=room;
+  w.agents.c1={id:'c1',name:'芽',viab:{v:1}}; // P0-1：床位按存活居民计；用真实第4人凑满床（旧 test 占位无角色，已被存活过滤正确排除）
+  w.housing.a2=w.housing.a3=w.housing.c1=room;
   assert.equal(take('family_move','a1').code,'NO_BED');
   assert.equal(w.housing.p1,'house1');
-  delete w.housing.test;
+  delete w.housing.c1;
   assert.ok(take('family_move','a1').ok);
   assert.equal(w.housing.p1,room);
 });

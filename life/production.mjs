@@ -14,10 +14,16 @@ export const BUILDINGS = Object.freeze({
 export const GATHER_BY_LOC = Object.freeze({ yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' });
 export const LABOR_PER_ACTION = 2;
 
+// P0-3 轻量资源储量：每个采集地点一份可耗尽的账，采集扣减、随世界时间再生。
+// 木料地点与树木砍伐/再生同步（camp_chop 扣同一份账、树再生时回补）；石料地点按日缓慢恢复。
+export const RES_STOCK = Object.freeze({ yard: 12, garden: 6, watch: 10, well: 10 });
+export const RES_REGEN = 1; // 每游戏日每地点恢复量（上限＝初始储量）
+
 export function initProduction(s) {
   s.inv = { wood: 0, stone: 0 };
   s.sites = [];      // {type, at:[x,y], loc, progress}
   s.buildings = [];  // {type, at, loc, integrity:1}
+  s.resStock = { ...RES_STOCK };
 }
 
 const atLoc = (list, loc) => list.find((b) => b.loc === loc);
@@ -36,10 +42,38 @@ export function effectiveMods(world) {
 }
 
 export function doGather(world, agentId) {
-  const res = GATHER_BY_LOC[world.loc[agentId]] ?? 'wood';
+  const s = world.survival;
+  const loc = world.loc[agentId];
+  const res = GATHER_BY_LOC[loc];
+  if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
+  const stock = (s.resStock ??= { ...RES_STOCK });
+  const have = stock[loc] ?? 0;
+  if (have <= 0) return { ok: false, code: 'NO_RESOURCE' }; // 采空了，等再生
+  const take = Math.min(2, have);
+  stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
-  bag[res] += 2;
-  return { ok: true, code: 'OK', res, amount: 2 };
+  bag[res] += take;
+  return { ok: true, code: 'OK', res, amount: take };
+}
+
+// P0-3 资源再生（日界调用）：每地点 +RES_REGEN 封顶初始储量；被砍的树再生时回补木料账。
+export function regenResources(world) {
+  const s = world.survival;
+  const stock = (s.resStock ??= { ...RES_STOCK });
+  for (const loc of Object.keys(RES_STOCK)) stock[loc] = Math.min(RES_STOCK[loc], (stock[loc] ?? 0) + RES_REGEN);
+  // 树木视觉与资源账同源：regrowAt 到期 ⇒ 树成熟并回补 2 木料（与 camp_chop 扣减对称），随后清零。
+  const trees = s.campTrees;
+  if (trees) {
+    const grove = world.campLayout?.grove ?? [];
+    for (const tree of grove) {
+      const at = trees[tree.id] ?? 0;
+      if (at > 0 && at <= world.t) {
+        const loc = tree.site;
+        if (GATHER_BY_LOC[loc] === 'wood') stock[loc] = Math.min(RES_STOCK[loc] ?? 12, (stock[loc] ?? 0) + 2);
+        trees[tree.id] = 0;
+      }
+    }
+  }
 }
 // §15 P2-C 集体劳动：coop 采集归公仓（个人包→公仓），供合作阶段检查与奠基消耗
 export function coopPoolGather(world, agentId) {

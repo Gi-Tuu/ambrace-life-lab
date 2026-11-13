@@ -132,3 +132,8 @@ export class SelfMaintain {
     return `存续 ${(this.v * 100).toFixed(0)}%（储能 ${(this.reserve * 100).toFixed(0)}%）${this.ledger.length ? ` · 已永久失去 ${this.ledger.map((l) => l.organ).join('、')}` : ''}`;
   }
 }
+
+// P0-1 统一生命闸（叶模块，供 worldstate/households/cooperation/body 共用，避免循环引用）。
+// 死亡＝不可逆事实：dead 标记或存续归零都算死；缺 viab 的占位角色按活处理。仅 survival 路径调用。
+export const isAlive = (a) => Boolean(a) && !a.dead && (a.viab?.v ?? 1) > 0;
+export const livingResidents = (w) => Object.values(w.agents).filter((a) => !a.isPlayer && isAlive(a));

@@ -1,5 +1,6 @@
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
+import { isAlive } from './viability.mjs';
 
 export const ADULT_DAYS = 12;
 const BEDS = 4;
@@ -25,12 +26,11 @@ export function residentStage(w, id) {
   return resident && w.t - resident.born < ADULT_DAYS * DAY_TICKS ? 'child' : 'adult';
 }
 
-const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) === 'adult' &&
-  (w.agents[id].viab?.v ?? 1) > 0;
+const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) === 'adult' && isAlive(w.agents[id]); // P0-1：死者不算成年劳动力
 const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
 const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b];
-const residentsAt = (w, room) => Object.values(w.housing).filter(home => home === room).length;
+const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < BEDS;
 const dependents = (w, id) => Object.keys(w.survival.households.residents).filter(child =>
   residentStage(w, child)==='child' && w.housing[child]===w.housing[id] &&

@@ -4,7 +4,7 @@ import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS } from './production.mjs';
+import { BUILDINGS, GATHER_BY_LOC } from './production.mjs';
 
 export function validate(world, agentId, intent) {
   const here = world.loc[agentId];
@@ -44,7 +44,11 @@ export function validate(world, agentId, intent) {
     if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   // Phase B 建设动作：采集/奠基/施工/维修。
-  if (kind === 'gather' && !world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
+  if (kind === 'gather') {
+    if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
+    if (!GATHER_BY_LOC[here]) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
+    if ((world.survival.resStock?.[here] ?? 0) <= 0) return fail('NO_RESOURCE', '这里的资源采空了，等它恢复'); // P0-3：储量门控
+  }
   if (kind === 'plan') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里不能建造');
     if (!(world.outdoor ?? []).includes(here)) return fail('NOT_OUTDOOR', '只能在户外奠基');

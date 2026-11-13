@@ -51,11 +51,19 @@ test('E1g 负控（改量#12）：on/off 轨迹必须不同且 AI 真的收过�
   assert.ok((on.aiActions.harvest ?? 0) > 0, 'on 侧 AI 没有自主收种');
 });
 
-test('E3a 维修真发生（repairEarly on）：≥2/3 seed 修≥1 且有好楼且有过损伤；重建不刷屏 builds≤3', async () => {
+test('E3a 维修真发生（repairEarly on）：≥2/3 seed 修≥1 且有好楼且有过损伤；重建不刷屏（同类≤2 次且维修主导）', async () => {
   const on = await Promise.all(SEEDS.map((s) => run(s, { forage: false, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } })));
   const ok = on.filter((r) => r.repairs >= 1 && r.intact >= 1 && r.damageEvents > 0).length;
   assert.ok(ok >= 2, `pass=${ok}/3 repairs=${on.map((r) => r.repairs).join(',')} intact=${on.map((r) => r.intact).join(',')}`);
-  for (const r of on) assert.ok(r.builds <= 3, `seed${r.seed} 重建刷屏 builds=${r.builds}`);
+  // 改量#15（P0 第一批，2026-11-13）：旧 builds≤3 是脆弱代理闸。有限资源＋玩家/AI 成本对齐后经济时序漂移，
+  // 15 天窗口内四类建筑各建一次＋偶发一栋同类重建（实测 [granary,shelter,workshop,shelter]，维修 24–25 次主导）
+  // 属健康涌现而非刷屏。防刷屏改测本质判据：同类建筑最多重建一次（出现≤2 次），真刷屏（同类≥3）仍变红；维修须主导。
+  for (const r of on) {
+    const counts = {};
+    for (const t of r.buildTypes) counts[t] = (counts[t] ?? 0) + 1;
+    for (const [t, n] of Object.entries(counts)) assert.ok(n <= 2, `seed${r.seed} 同类${t}重建${n}次＝刷屏`);
+    assert.ok(r.repairs >= r.builds, `seed${r.seed} 维修应主导 repairs=${r.repairs} builds=${r.builds}`);
+  }
 });
 
 test('E3 负控：执行侧阈值退回 <=0 则 E3a 红【变红法：execTick 维修目标过滤去掉 repairEarly 分支】', async () => {

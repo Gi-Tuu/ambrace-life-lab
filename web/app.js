@@ -2124,14 +2124,14 @@ function pushToasts(pack) {
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survFlash = null;
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
 const CAMP_FOOD=['berry','fruit','crop','egg','milk'];
 const CAMP_TOOL={berry:'basket',fruit:'basket',crop:'basket',egg:'basket',wool:'shears',milk:'bucket',water:'bucket'};
 const CAMP_ANIMAL_ITEM={chickens:'egg',cows:'milk',sheep:'wool'};
-const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉'};
+const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
 const campCodes={NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
   FORAGE_COOLDOWN:'稍后再采',BAD_PLOT:'这里没有可用菜畦'};
@@ -2628,7 +2628,7 @@ function runSurvAction(ctx) {
   if (ctx.tool && ui.tool !== ctx.tool) { survFlash = { kind: ctx.kind, ok: false, code: 'NEED_TOOL', tool: ctx.tool }; refresh(); return; }
   api('/act', { mode: 'survival', kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 }
-const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工' };
+const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡' };
 function updateHotbar() {
   ui.tool ??= 'hand';
   const s = S.view;
@@ -2729,6 +2729,7 @@ function renderGauges(s) {
 function renderVillage(s) {
   const el = $('villagePanel'); if (!el || !s) return;
   const rows = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer).map((a) => {
+    if (a.dead) return `<div class="vrow dead"><b>${esc(a.name)}</b><span class="bad">已故</span><span class="dim">${esc(a.death?.cause ?? '')} · 第${(a.death?.day ?? 0) + 1}天</span></div>`;
     const cells = Array.from({ length: 5 }, (_, i) => `<b class="${(i + 0.5) / 5 <= (a.energy ?? 0) ? 'on' : ''}"></b>`).join('');
     return `<div class="vrow"><b>${esc(a.name)}</b><span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
   }).join('');
@@ -2776,6 +2777,19 @@ function familyPanel(s) {
   </details>`;
 }
 
+function coopPanel(s) {
+  if (!s.coop?.enabled) return '';
+  const here = s.loc?.p1;
+  const site = (s.sites ?? []).find((x) => x.loc === here);
+  const task = s.coop.task;
+  const residents = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer && !a.dead && (a.viab ?? 1) > 0);
+  const reqBtns = site ? residents.map((a) => `<button data-coop="${esc(a.id)}">请${esc(a.name)}协助</button>`).join('') : '';
+  return `<details class="survdetail"><summary>合作施工</summary>
+    <div class="survrow">${task ? `当前任务 ${esc(task.type)}·${esc(task.phase)}·${task.workers.length}人` : '暂无任务'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 退出 ${s.coop.exits ?? 0}</div>
+    ${site ? `<div class="survrow survbtns">你在工地 ${esc(site.type)}：${reqBtns}</div>` : '<div class="survrow dim">站在工地上可向居民请求协助；居民按自身需求、对你的信任、天气与任务价值决定是否参与，也可能中途退出。</div>'}
+  </details>`;
+}
+
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 面板每 900ms 由轮询重建；先记下折叠区状态，重建后原样恢复，否则用户点开会被自动合上。
@@ -2811,6 +2825,7 @@ function renderSurv(s) {
       <div class="survrow survlog">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>
     </details>
     ${familyPanel(s)}
+    ${coopPanel(s)}
     <details class="surveco"><summary>收成兑换 / 蓄养扩建（玩家与 AI 同权）</summary>
       <div class="survrow survbtns">
         ${Object.keys(s.economy?.exchange ?? {}).map((k) => `<button data-sk="exchange" data-type="${k}"${(s.produce?.[k] ?? 0) < 1 ? ' disabled data-need="缺收成"' : ''}>兑${(s.economy?.produceLabel ?? {})[k] ?? k}</button>`).join('')}
@@ -3182,6 +3197,14 @@ $('survPanel').addEventListener('click', (e) => {
       family.blur();
       refresh();
     }).catch(()=>{ $('campToast').textContent='无法登记，请重试。'; });
+    return;
+  }
+  const coop=e.target.closest('button[data-coop]');
+  if (coop) {
+    api('/act',{mode:'survival',kind:'coop_request',target:coop.dataset.coop}).then((r)=>{
+      survFlash={kind:'coop_request',ok:!!r.ok,code:r.decision ?? r.code ?? 'OK'};
+      coop.blur(); refresh();
+    });
     return;
   }
   const btn = e.target.closest('button[data-sk]'); if (!btn || btn.disabled) return;
