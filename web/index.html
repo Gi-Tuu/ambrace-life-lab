@@ -365,6 +365,7 @@
   .bp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(62px,1fr)); gap:6px; }
   .bp-item { display:grid; align-content:space-between; gap:6px; min-height:50px; padding:6px; border:2px solid var(--line); background:var(--sunken); }
   .bp-item b { color:var(--gold); text-align:right; }
+  #saveNotice { position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:100; padding:8px; color:var(--ink); background:var(--panel); border:2px solid var(--warn); }
   #campToast { position:fixed; z-index:65; bottom:135px; left:50%; transform:translateX(-50%); color:var(--gold); background:var(--panel); padding:3px 8px; pointer-events:none; }
   #campToast:empty { display:none; }
   #campPropOptions { max-height:48dvh; overflow:auto; }
@@ -546,6 +547,7 @@
   <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
   <span id="toolHint"></span>
 </div>
+<p id="saveNotice" role="alert" hidden></p>
 <output id="campToast" role="status"></output>
 <dialog id="backpack" aria-labelledby="bpTitle">
   <div class="bp-row">

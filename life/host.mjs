@@ -5,7 +5,7 @@ import { randomInt } from 'node:crypto';
 //   2) 时间差推进：免费创空间会休眠。醒来后必须把「没人看的那段时间」补进内部状态，
 //      否则「内部状态持续存在」这个主张在演示现场就会被戳穿。
 //   3) 只补状态、不补决策：休眠期间没有观察者，编造那段时刻的行为等于伪造历史。
-import { mkdir, readFile, writeFile, rename, readdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, readdir, rm, copyFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail, workUsedToday } from './body.mjs';
 import { phaseOf, scheduledLoc, weatherFor, dayOf } from './clock.mjs';
@@ -22,7 +22,7 @@ import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
-import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator } from './survplay.mjs';
+import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
@@ -107,8 +107,12 @@ export function modelCharged(tokens = 0) {
 // 而 stop() 只 clearInterval 不移除监听器 ⇒ 测试里 start×3 就有 6 个监听器（实测），
 // 每次信号会重复 save，最后还会撞 MaxListenersExceededWarning。
 let sigHandlers = null;
+let shuttingDown = false;
 async function onSignal() {
-  await save();
+  if (shuttingDown) return;
+  shuttingDown = true;
+  S.running = false;
+  await queueWorldWrite(save);
   process.exit(0);
 }
 
@@ -181,24 +185,25 @@ function loadArchive(text, opts = {}) {
   return { raw, packs: packsFrom(raw, opts) };
 }
 
-// 载入内置种子（固定历史起点）。种子不走 catchUp——它是初始条件，不是休眠。
-// H-05：种子里的 M5 状态与当前配置不符时同样降级（禁用 M5、保留历史），不许让启动砖死。
-async function loadSeed() {
-  const seedText = await readFile(process.env.SEED_FILE ?? resolve('seed/world.json'), 'utf8');
-  let loaded;
+// 验证整个候选档案，再由启动入口一次提交世界。
+async function readArchive(path) {
+  const source = await readFile(path, 'utf8');
+  let loaded, warning = null;
   try {
-    loaded = loadArchive(seedText);
-  } catch (e) {
-    if (e?.code !== 'M5_STATE_INVALID') throw e;
-    S.saveError = e.message;
-    loaded = loadArchive(seedText, { skipM5: true });
-    loaded.degraded = true;
+    loaded = loadArchive(source);
+  } catch (error) {
+    if (error.code !== 'M5_STATE_INVALID') throw error;
+    warning = error.message;
+    loaded = loadArchive(source, { skipM5: true });
   }
-  S.packs = loaded.packs;
-  S.startRaw = structuredClone(loaded.raw);
-  S.model = loaded.raw.model ?? S.model;
-  const t = S.packs.A.world.t;
-  return `从第 ${t} 刻的历史起点继续（seed=${loaded.raw.seed}${loaded.degraded ? '；M5 状态不符，已禁用 M5' : ''}）`;
+  const survival = loaded.raw.survival;
+  if (survival != null && (!Number.isSafeInteger(survival.t) || survival.t < 0 ||
+    !survival.survival || typeof survival.survival !== 'object' || Array.isArray(survival.survival))) {
+    throw new Error('生存存档结构不完整');
+  }
+  const surv = loadSurv(survival, CFG.seed, survivalOptions());
+  survView(surv); // 同时验证首个读请求依赖的生存结构
+  return { ...loaded, surv, warning };
 }
 
 // 隔离文件不能无限堆：每次约 340KB，免费空间磁盘有限。只留最近 5 份。
@@ -447,8 +452,7 @@ async function sleepSurvival() {
   }
   const ticks=sp.world.t-start;
   sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
-  await save();
-  return {ok:true,code:'OK',ticks};
+  return {ok:true,code:'OK',ticks,persisted:await save()};
 }
 
 function enqueueTick() {
@@ -553,19 +557,30 @@ function save() {
   const run = saveChain.then(async () => {
     const f = join(S.dir, 'world.json');
     const tmp = `${f}.${process.pid}.${(saveSeq += 1)}.tmp`;
+    const backupTmp = `${tmp}.bak`;
     try {
       await mkdir(S.dir, { recursive: true });
       await writeFile(tmp, JSON.stringify(serialize()), 'utf8');
-      // D10：rename 之前先把上一份留成 .bak。免费创空间没有持久卷、也没有快照，
-      // 一份坏档就是整段历史归零；有 .bak 至少能人工回到上一个存档点（只留 1 份，不占空间）。
-      try { await rename(f, `${f}.bak`); } catch { /* 首次保存没有旧档 */ }
-      await rename(tmp, f); // 原子写：休眠/被杀时不会留下半截 JSON
+      // 主档保留到新档发布。先在同目录完成备份，避免中途失去可恢复文件。
+      if (S.preservePrimary) throw new Error('旧存档未能隔离，暂停覆盖');
+      if (S.primaryValid) {
+        let copied = true;
+        try { await copyFile(f, backupTmp); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; copied = false; }
+        if (copied) await rename(backupTmp, `${f}.bak`);
+      }
+      await rename(tmp, f);
+      S.primaryValid = true;
       S.savedAt = Date.now();
       S.saveError = null;
+      return true;
     } catch (e) {
       // 库层不往 stdout 打印：node --test 的子进程里 console.log 会撞上 runner 的二进制消息流。
       // 存档失败改成一个可查询的状态，由应用层决定要不要说、怎么说。
       S.saveError = String(e?.message ?? e).slice(0, 80);
+      return false;
+    } finally {
+      await Promise.allSettled([rm(tmp, { force: true }), rm(backupTmp, { force: true })]);
     }
   });
   saveChain = run.catch(() => {});
@@ -700,61 +715,47 @@ export const host = {
     // BUG-5：装载必须在**副本**上做，全部成功才提交。上一版直接对活 pack 调 applyInto，
     // 任一字段抛错（例如越界的 m3.remaining）就留在半载入状态；catch 又把它当成"没有存档"，
     // 于是下一次 save() 用混合态覆盖掉唯一的历史档 —— 免费创空间没有持久卷，这是唯一的数据丢失路径。
-    S.packs = freshPacks();
-    let note = '没有存档，新建世界';
+    await tickChain;
+    shuttingDown = false;
+    S.primaryValid = false;
+    S.preservePrimary = false;
+    S.startRaw = null;
     const worldFile = join(S.dir, 'world.json');
-    let archiveText = null;
-    try {
-      archiveText = await readFile(worldFile, 'utf8');
-      const { raw, packs } = loadArchive(archiveText);
-      S.packs = packs;
-      S.startRaw = structuredClone(raw);
-      const mins = (Date.now() - (raw.savedAt ?? Date.now())) / 60000;
-      S.model = raw.model ?? S.model;
-      if (mins > 1) catchUp(mins);
-      note = `载入存档：世界已跑到第 ${S.packs.A.world.t} 刻，休眠 ${mins.toFixed(1)} 分钟`;
-    } catch (error) {
-      if (error?.code === 'M5_STATE_INVALID') {
-        // H-05：M5 慢仓状态与当前配置不符（改过 PARAMS.m5.*，或 M5_ENABLED 0→1）时，
-        // 旧版在这里 rethrow ⇒ serve 顶层 await 崩 ⇒ 容器无限重启，且 world.json 原封不动（不可自愈）。
-        // 现在改为：禁用 M5 重装，**历史全部保留**，把降级如实写进 note 与 saveError。
-        S.saveError = error.message;
-        try {
-          const { raw, packs } = loadArchive(archiveText, { skipM5: true });
-          S.packs = packs;
-          S.startRaw = structuredClone(raw);
-          S.model = raw.model ?? S.model;
-          note = `M5 状态与当前配置不符（${String(error.message).slice(0, 40)}），本次禁用 M5 装载：第 ${S.packs.A.world.t} 刻，历史保留`;
-        } catch (e2) {
-          note = `M5 状态不符且降级装载失败（${String(e2?.message ?? e2).slice(0, 40)}）：新建世界`;
-        }
-      } else if (archiveText === null) {
-        // 没有存档文件（免费创空间重新部署即清空 /data）：载入内置种子作固定历史起点。
-        try {
-          note = `载入内置种子存档：${await loadSeed()}`;
-        } catch (e2) {
-          if (e2?.code === 'M5_STATE_INVALID') S.saveError = e2.message;
-          note = '没有存档，新建世界'; // 连种子也没有就是新世界的正常起点
-        }
-      } else {
-        // BUG-5 / H-25 / H-26：坏档先改名留底，再重建。note 必须如实说明发生了哪一种情况。
-        const q = await quarantine(worldFile);
-        const why = error?.code === 'ARCHIVE_SHAPE' ? '结构不完整' : '无法装载';
-        const qNote = q.path ? `已隔离为 ${q.path.split(/[\\/]/).pop()}` : `隔离失败（${q.error}），原档仍在原处`;
-        try {
-          note = `存档${why}（${qNote}），改为载入内置种子：${await loadSeed()}`;
-        } catch (error2) {
-          if (error2?.code === 'M5_STATE_INVALID') S.saveError = error2.message;
-          note = `存档${why}（${qNote}），且没有可用种子：新建世界`;
-        }
+    const seedFile = process.env.SEED_FILE ?? resolve('seed/world.json');
+    let note = '没有存档，新建世界';
+    let loaded = null;
+    let primaryError = null;
+    for (const [path, label] of [[worldFile, '存档'], [`${worldFile}.bak`, '备份存档'], [seedFile, '内置种子存档']]) {
+      try {
+        loaded = await readArchive(path);
+      } catch (error) {
+        if (path === worldFile && error.code !== 'ENOENT') primaryError = error;
+        if (error.code === 'M5_STATE_INVALID') S.saveError = error.message;
+        continue;
       }
+      S.primaryValid = path === worldFile;
+      const minutes = path === seedFile ? 0 : (Date.now() - (loaded.raw.savedAt ?? Date.now())) / 60000;
+      S.packs = loaded.packs;
+      S.surv = loaded.surv;
+      S.startRaw = structuredClone(loaded.raw);
+      S.model = loaded.raw.model ?? S.model;
+      S.saveError = loaded.warning ?? S.saveError;
+      if (minutes > 1) catchUp(minutes);
+      await catchUpSurvival(S.missed.minutes);
+      note = `载入${label}：第 ${S.packs.A.world.t} 刻${loaded.warning ? '；已禁用 M5 降级恢复' : ''}`;
+      break;
     }
-    // 起点没Load到任何东西时，把当前这份新建世界认成本次会话的起点：
-    // 否则切 M3/M4 开关会退回"从零刻重跑"，而重跑出来的世界取决于点了多久，读数没法解释。
-    S.startRaw ??= structuredClone(serialize());
-    // Phase D：生存单世界独立挂载（additive）。存档有 survival 键则续跑，否则新建；不影响 A/B。
-    S.surv=loadSurv(S.startRaw?.survival,CFG.seed,survivalOptions());
-    await catchUpSurvival(S.missed?.minutes ?? 0); // P1-8：生存世界从存档刻补离线时间（有界、本地）
+    if (primaryError) {
+      const diskError = typeof primaryError.code === 'string' && /^E[A-Z0-9]+$/.test(primaryError.code);
+      const isolated = diskError ? null : await quarantine(worldFile);
+      S.preservePrimary = !isolated?.path;
+      note = `主档无法装载${isolated?.path ? '，已隔离' : '，保留原文件'}；${note}`;
+    }
+    if (!loaded) {
+      S.packs = freshPacks();
+      S.surv = loadSurv(undefined, CFG.seed, survivalOptions());
+      S.startRaw = structuredClone(serialize());
+    }
     S.savedAt = Date.now();
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
@@ -841,7 +842,8 @@ export const host = {
         else if (body.kind==='talk_say') result = await sayTo(S.surv,body,modelTalk);
         else if (body.kind==='talk_close') result = closeTalk(S.surv);
         else result = survAct(S.surv,body);
-        if (result.ok) await save();
+        const settled = settleSurvival(S.surv);
+        if (result.ok || settled) return { ...result, persisted: await save() };
         return result;
       }
       const kind = String(body?.kind ?? '');

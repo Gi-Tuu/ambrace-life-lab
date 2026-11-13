@@ -96,7 +96,15 @@ const ui = { menu: !launch.has('room') && launch.get('full')!=='1' &&
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result.persisted === false) {
+    const warning = $('saveNotice');
+    warning.hidden = false;
+    warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
+  } else if (result.persisted === true || path.startsWith('/world') && !result.saveError) {
+    $('saveNotice').hidden = true;
+  }
+  return result;
 }
 
 // ── 自然世界地图 ──────────────────────────────────────────────────────────────

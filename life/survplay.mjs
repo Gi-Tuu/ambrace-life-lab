@@ -3,7 +3,7 @@
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, scanSecrets, actuate, isAlive, livingResidents, SURV_COST } from './body.mjs';
 import { validate } from './rules.mjs';
-import { leaveTalk } from './dialogue.mjs';
+import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { campAction, campTimberView } from './camp-play.mjs';
 import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -14,6 +14,9 @@ import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
 import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
+
+const SURV_TRACE_LIMIT = 2000;
+const SURV_LOG_LIMIT = 200;
 
 const ROSTER = [['a1', '岑', '谨慎'], ['a2', '绛', '冲动'], ['a3', '蓑', '孤僻']];
 // 只读表现字段：从 Organism.trace 里取最近一次成功动作的 kind，供 3D 姿态与图标使用。
@@ -133,8 +136,10 @@ function forageRound(w) {
 // 玩家死亡另触发终局（与聚落饿垮分开）。每拍末调用一次，覆盖代谢/动作/饥饿/伤害所有致死路径。
 function reapDeaths(w, log) {
   const s = w.survival;
+  let changed = false;
   for (const a of Object.values(w.agents)) {
     if (a.dead || !a.viab || a.viab.v > 0) continue;
+    changed = true;
     a.dead = true;
     const cause = a.hurtBy ?? '衰竭';
     a.death = { t: w.t, day: dayOf(w.t), cause };
@@ -148,6 +153,16 @@ function reapDeaths(w, log) {
       s.talk = null;
     }
   }
+  return changed;
+}
+
+export function settleSurvival(sp) {
+  const w = sp.world;
+  const changed = reapDeaths(w, sp.log);
+  const staleTalk = w.survival.talk && !talkInRange(w, w.survival.talk);
+  if (staleTalk) w.survival.talk = null;
+  if (w.independentWorld && sp.log.length > SURV_LOG_LIMIT) sp.log.splice(0, sp.log.length - SURV_LOG_LIMIT);
+  return changed || Boolean(staleTalk);
 }
 
 // P1-1 老年额外代谢（每刻）：体能随衰老下降。
@@ -208,6 +223,7 @@ export async function tickSurvPlay(sp) {
       a.drives.setpoint.social = Math.max(0.2, Math.min(0.6, a.drives.setpoint.social + d));
     }
   }
+  if (w.survival.talk && !talkInRange(w, w.survival.talk)) w.survival.talk = null;
   // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
   for (const id of Object.keys(w.agents)) {
     const a = w.agents[id];
@@ -219,6 +235,7 @@ export async function tickSurvPlay(sp) {
       continue;
     }
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
     if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
     if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
@@ -246,7 +263,7 @@ export async function tickSurvPlay(sp) {
     pl.drives.tick(1, false);
     pl.viab.tick(1);
   }
-  reapDeaths(w, sp.log); // P0-1：统一收尸（含玩家死亡终局），覆盖代谢/动作/饥饿/伤害所有致死路径
+  settleSurvival(sp);
   if (w.survival.households && (w.independentWorld || !w.survival.ended && !w.survival.failed)) stepRelationships(w, sp.log);
   return w;
 }
@@ -344,6 +361,7 @@ export function survAct(sp, body) {
     return { ok: false, code: 'ACTION_BUDGET', why: '本世界刻的行动时间已用完，等下一拍' };
   }
   const r = survActInner(sp, body);
+  if (w.independentWorld && r.ok) settleSurvival(sp);
   if (!r.ok && cost > 0) { budgetLeft(w); w.survival.p1BudgetLeft += cost; } // 失败退还，避免误点吃掉整刻
   return r;
 }
@@ -431,6 +449,7 @@ function crisisGoals(w) {
 
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
+  const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
   return {
     t: w.t, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
@@ -446,8 +465,8 @@ export function survView(sp) {
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
-      ...(w.independentWorld ? { result: s.playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
+      ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
     ...forecastDisasters(w),
@@ -575,6 +594,7 @@ export function loadSurv(raw,seed=7,options) {
     }
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
     sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
+    if (w.independentWorld) sp.log = sp.log.slice(-SURV_LOG_LIMIT);
 
     // C3：占位顺序会进入感知/候选（crowd[0]）；存档带 occupancy 且与 loc 一致就沿用原顺序。
     const expected = {};

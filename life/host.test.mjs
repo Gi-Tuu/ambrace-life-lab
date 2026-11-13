@@ -107,12 +107,14 @@ test('容器重建无存档时载入内置种子；连种子也没有才新建�
   const seedFile = resolve(process.cwd(), 'seed', 'world.json');
   const seedT = JSON.parse(readFileSync(seedFile, 'utf8')).A.world.t;
   rmSync(join(DIR, 'world.json'), { force: true });
+  rmSync(join(DIR, 'world.json.bak'), { force: true });
   process.env.SEED_FILE = seedFile;
   await host.start();
   host.stop();
   assert.equal(host.status().t, seedT, `无存档重启后 t=${host.status().t} ≠ 种子 ${seedT} ⇒ 固定历史起点没接上`);
   assert.ok(Object.values(host.packs.A.agents).some((a) => a.viab.ledger.length > 0), '种子没带不可逆损失 ⇒ 开场看不到掉档历史');
   rmSync(join(DIR, 'world.json'), { force: true });
+  rmSync(join(DIR, 'world.json.bak'), { force: true });
   process.env.SEED_FILE = join(DIR, 'missing.json');
   await host.start();
   host.stop();
