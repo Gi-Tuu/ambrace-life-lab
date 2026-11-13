@@ -829,10 +829,14 @@ function worldItem(s, id, x, z, scale = .8, y = .16) {
 
 function worksBase(s, lot, phase) {
   const { x, z, w, d } = lot;
-  s.box(x + .02, 0, z + .02, w - .04, .16, d - .04, FN_STONE, true, phase === 'foundation' ? 'ground' : false);
+  // 精修①：地基平台压深到 #5B574C，与木料（#976744/#C18F58）和石料（#676D68/#A7AA97）拉开明度差，
+  // 俯视斜角下不再与灰平台糊成一片。材料堆下各垫一块浅色托板，进一步分离。
+  s.box(x + .02, 0, z + .02, w - .04, .16, d - .04, phase === 'foundation' ? '#5B574C' : FN_STONE, true, phase === 'foundation' ? 'ground' : false);
   if (phase !== 'foundation') return false;
-  worldItem(s, 'wood', x + .3, z + .35, .95, .16);
-  worldItem(s, 'stone', x + w - 1.15, z + .35, .85, .16);
+  s.box(x + .26, .16, z + .3, 1.32, .05, .96, '#A79C86', false, 'ground');
+  s.box(x + w - 1.3, .16, z + .3, 1.0, .05, .82, '#B5AA93', false, 'ground');
+  worldItem(s, 'wood', x + .3, z + .35, .95, .21);
+  worldItem(s, 'stone', x + w - 1.25, z + .35, .85, .21);
   return true;
 }
 
@@ -919,34 +923,42 @@ function workshop3d(s, lot, record, world) {
 }
 
 // 防护设施：沿地块长边的线性木墙，不是实心盒子；石基 + 木桩 + 横板 + 斜撑。
+// 精修②：破损分三档（完好 / 轻损 / 重损），由 integrity 派生，不新增字段。
 function wall3d(s, lot, record, world) {
   const { x, z, w, d } = lot;
-  const phase = constructionStage(record), damaged = phase === 'complete' && (record.integrity ?? 1) < 1;
+  const phase = constructionStage(record);
+  const integrity = record.integrity ?? 1;
+  const damage = phase !== 'complete' ? 0 : integrity >= .99 ? 0 : integrity >= .5 ? 1 : 2;
   const ratio = worksRatio(record, world, 8);
   const Z = z + d / 2 - .25, H = 1.72, seg = 5;
   s.box(x + .04, 0, Z - .1, w - .08, .18, .62, '#8A8F83', true, phase === 'foundation' ? 'ground' : false);
   if (phase === 'foundation') {
-    for (let i = 0; i < 3; i++) s.box(x + .4, .18 + i * .15, Z + .1, 1.1, .13, .35, GR_PLANK[i % 4], false, 'ground');
+    s.box(x + .3, .18, Z - .05, 1.3, .05, .5, '#A79C86', false, 'ground');
+    worldItem(s, 'wood', x + .34, Z - .02, .9, .23);
+    worldItem(s, 'stone', x + w - 1.3, Z - .02, .8, .23);
     return;
   }
   const posts = Math.max(2, Math.ceil(ratio * (seg + 1)));
   for (let i = 0; i <= seg; i++) {
     if (i >= posts && phase === 'frame') continue;
     const px = x + .18 + i * (w - .36) / seg;
-    const short = damaged && i === 2;
-    s.box(px, .18, Z, .19, short ? H * .58 : H, .42, DARK, false, phase === 'frame');
+    // 轻损：第 3 根柱矮一截；重损：第 2 根柱断到一半、第 4 根倾斜
+    const short = (damage >= 1 && i === 3) || (damage >= 2 && i === 2);
+    s.box(px, .18, Z, .19, short ? H * (damage >= 2 && i === 2 ? .46 : .62) : H, .42, DARK, false, phase === 'frame');
     s.box(px - .03, .18, Z - .03, .25, .14, .48, GR_STONE[0]);
   }
   const rows = phase === 'frame' ? Math.ceil(ratio * 4) : 4;
   for (let r = 0; r < rows; r++) {
-    if (damaged && r === 2) continue;                    // 破损缺一段横板
+    if (damage >= 1 && r === 3) continue;          // 轻损：缺最上一道横板
+    if (damage >= 2 && r === 1) continue;          // 重损：再缺第二道
     s.box(x + .18, .34 + r * .36, Z + .42, w - .36, .3, .09, GR_PLANK[(r + 1) % 4]);
   }
   if (phase !== 'frame') {
-    s.box(x + .14, .18 + H, Z - .05, w - .28, .13, .52, WOOD);   // 顶部横木
-    for (let i = 0; i < 3; i++) {                                  // 背面斜撑
+    s.box(x + .14, .18 + H, Z - .05, w - .28, .13, .52, WOOD);
+    for (let i = 0; i < 3; i++) {
       const px = x + .7 + i * (w - 1.5) / 2;
-      s.box(px, .4, Z - .38, .16, .95, .16, DARK);
+      const fallen = damage >= 2 && i === 1;        // 重损：中间斜撑倒地
+      s.box(px, fallen ? .2 : .4, Z - (fallen ? .75 : .38), fallen ? .55 : .16, fallen ? .16 : .95, fallen ? .16 : .16, DARK);
       s.box(px, .34, Z - .6, .5, .14, .3, GR_STONE[1]);
     }
   }
