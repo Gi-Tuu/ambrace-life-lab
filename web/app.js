@@ -2792,6 +2792,24 @@ function coopPanel(s) {
   </details>`;
 }
 
+// P2 新玩家目标引导：按当前世界状态给出"下一步该做什么"的上下文提示（编号递进）。
+function objectiveHint(s) {
+  if (!s || s.player?.dead || s.failed || s.ended) return '';
+  const has = (t) => (s.buildings ?? []).some((x) => x.type === t && x.integrity > 0);
+  const shelterSite = (s.sites ?? []).some((x) => x.type === 'shelter');
+  const poolW = (s.pinv?.p1?.wood ?? 0) + (s.inv?.wood ?? 0);
+  const poolS = (s.pinv?.p1?.stone ?? 0) + (s.inv?.stone ?? 0);
+  if (s.stormTomorrow || s.coldsnapTomorrow) return '⚠ 灾害将至：维修加固建筑、储备食物；住所可减半饥饿压力。';
+  if (!has('shelter') && !shelterSite) {
+    if (poolW < 4 || poolS < 2) return '① 采集木石：院子/树林持斧采木，瞭台/井台持镐采石（住所要 4 木 2 石）。';
+    return '② 奠基住所：到户外空地持锤奠基，再施工建成（降低饥饿压力）。';
+  }
+  if (shelterSite) return '③ 施工：站在工地持锤施工；在「合作施工」请居民协助可加快进度。';
+  if ((s.store ?? 0) < 6) return '④ 储备食物：菜园持锄收获/播种，或采浆果到公仓兑换；公仓养活聚落。';
+  if (!has('granary')) return '⑤ 建储粮设施提高粮仓上限；居民信任越高越愿意协助。';
+  return `⑥ 维持聚落：活过第 ${s.targetDays ?? 10} 天达成目标。照顾食物/住所/生态，应对四季与灾害。`;
+}
+
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 面板每 900ms 由轮询重建；先记下折叠区状态，重建后原样恢复，否则用户点开会被自动合上。
@@ -2805,6 +2823,7 @@ function renderSurv(s) {
   const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : '';
   el.innerHTML = `
     ${banner}
+    ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
     <div class="survrow survtop"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day+1} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
       <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
       <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>
