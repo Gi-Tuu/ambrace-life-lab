@@ -4,7 +4,7 @@ import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../web/camp-layout.mjs';
 import { doForage, doGather, effectiveMods } from './production.mjs';
-import { SURV_COST } from './body.mjs';
+import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 
 const STORAGE = Object.freeze({
@@ -31,7 +31,7 @@ export function campTimberView(world) {
 }
 export function campSleepTicks(world) {
   if (!playerHome(world,world.loc.p1)) return fail('NOT_HOME');
-  if (world.survival.ended || world.survival.failed) return fail('CAMP_ENDED');
+  if (!isAlive(world.agents.p1) || (!world.independentWorld && (world.survival.ended || world.survival.failed))) return fail('CAMP_ENDED');
   const hour=world.t%DAY_TICKS;
   return {...ok(),ticks:Math.min(24,hour>=12?DAY_TICKS-hour:4)};
 }
@@ -69,7 +69,7 @@ function interactWithResident(world,{target,tool,room,from,to}) {
 
 export function campAction(world,body) {
   const {kind,type:item,target,tool,plot}=body, site=world.loc.p1, s=world.survival;
-  if (s.ended || s.failed) return fail('CAMP_ENDED');
+  if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
   if (kind==='camp_resident') return interactWithResident(world,body);
   const bag=world.pinv.p1;
   if (kind==='camp_store' || kind==='camp_take') {

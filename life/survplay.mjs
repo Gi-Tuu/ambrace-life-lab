@@ -9,7 +9,7 @@ import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
-import { forecastDisasters } from './worldstate.mjs';
+import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed } from './rng.mjs';
@@ -31,9 +31,10 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   world.unifiedCooperation = unifiedCooperation;
+  world.independentWorld = independentWorld;
   world.mapSeed = mapSeed;
   world.layoutVersion = layoutVersion;
   if (layoutVersion === 1) {
@@ -139,7 +140,11 @@ function reapDeaths(w, log) {
     const loc = w.loc[a.id];
     if (loc) w.occupancy[loc] = (w.occupancy[loc] ?? []).filter((x) => x !== a.id);
     log.push({ t: w.t, kind: 'death', ok: true, code: `${a.name}死亡（${cause}）` });
-    if (a.isPlayer) { s.playerDead = true; s.failed = true; s.endReason = 'player'; }
+    if (a.isPlayer) {
+      s.playerDead = true;
+      if (!w.independentWorld) { s.failed = true; s.endReason = 'player'; }
+      s.talk = null;
+    }
   }
 }
 
@@ -177,8 +182,8 @@ export async function tickSurvPlay(sp) {
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
   if (!w.unifiedCooperation && w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   if (dayOf(w.t) !== dayOf(w.t - 1)) {
-    if (w.survival.households && !w.survival.ended && !w.survival.failed) stepHouseholds(w, sp.log);
-    if (w.survival.households && !w.survival.ended && !w.survival.failed) stepLifecycle(w, sp.log); // P1-1 阶段跃迁＋衰老
+    if (w.survival.households && (w.independentWorld || !w.survival.ended && !w.survival.failed)) stepHouseholds(w, sp.log);
+    if (w.survival.households && (w.independentWorld || !w.survival.ended && !w.survival.failed)) stepLifecycle(w, sp.log); // P1-1 阶段跃迁＋衰老
     reproduce(w, sp.log); // §15 P2-B 繁衍（日界）；P1-3 人口上限＋出生事件
     // 蓄养/果树日界结算：规则层算增量，写独立产出账，不碰 store/inv。
     w.survival.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
@@ -235,12 +240,12 @@ export async function tickSurvPlay(sp) {
   // P0-3：玩家只跑"需求/存续"这两条，不跑决策环。基础代谢与居民同参数；
   // 存续归零 ⇒ 玩家死亡，终局（与"聚落饿垮"分开显示）。动作消耗由 actuate 统一扣。
   const pl = w.agents.p1;
-  if (pl?.drives && !w.survival.ended && !w.survival.failed) {
+  if (pl?.drives && isAlive(pl) && (w.independentWorld || !w.survival.ended && !w.survival.failed)) {
     pl.drives.tick(1, false);
     pl.viab.tick(1);
   }
   reapDeaths(w, sp.log); // P0-1：统一收尸（含玩家死亡终局），覆盖代谢/动作/饥饿/伤害所有致死路径
-  if (w.survival.households && !w.survival.ended && !w.survival.failed) stepRelationships(w, sp.log);
+  if (w.survival.households && (w.independentWorld || !w.survival.ended && !w.survival.failed)) stepRelationships(w, sp.log);
   return w;
 }
 
@@ -260,7 +265,7 @@ function newChild(w, id, parents = null) {
 }
 function reproduce(w, log) {
   const s = w.survival;
-  if (s.ended || s.failed) return;
+  if (s.ended || s.failed && !w.independentWorld) return;
   const day = dayOf(w.t);
   if (day - (s.lastBirthDay ?? -99) < 10) return;
   const pop = livingResidents(w).length; // P0-1：繁衍门槛按存活人口
@@ -302,7 +307,8 @@ function reproduce(w, log) {
 export function survAct(sp, body) {
   const w = sp.world;
   const kind = String(body?.kind ?? '');
-  if (w.survival.failed || w.survival.ended) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
+  if (w.independentWorld && !isAlive(w.agents.p1)) return { ok: false, code: 'PLAYER_DEAD', error: 'GAME_OVER' };
+  if (!w.independentWorld && (w.survival.failed || w.survival.ended)) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
   if (kind === 'move') {
     const room = String(body?.room ?? '');
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
@@ -383,7 +389,9 @@ export function survView(sp) {
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead },
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: !!s.playerDead,
+      ...(w.independentWorld ? { result: s.playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
+    ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : s.failed ? 'crisis' : 'active' } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,
@@ -442,6 +450,12 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    if (w.independentWorld) {
+      const s = w.survival;
+      if (s.endReason === 'player') { s.playerDead = true; s.failed = false; }
+      s.ended = false;
+      s.endReason = null;
+    }
     for (const key of ['buildings','sites']) sp.world.survival[key]=sp.world.survival[key].map(b=>{
       const lot=constructionLot(b.loc, w.campLayout);
       return lot?{...b,lot}:b;
@@ -461,6 +475,12 @@ export function loadSurv(raw,seed=7,options) {
       a.viab.restore(st.viab);
       Object.assign(a.traits, st.traits ?? {});
       a.dead = !!st.dead; a.death = st.death ?? null; a.hurtBy = st.hurtBy ?? null; // P0-1：读档恢复死亡事实
+    }
+    if (w.independentWorld) {
+      const s = w.survival;
+      s.ended = livingResidents(w).length === 0;
+      s.endReason = s.ended ? 'extinct' : null;
+      s.failed = !s.ended && s.starveDays >= SURV.starveDaysToFail;
     }
     // P0-1：死者读档后仍移出占位（与死亡时一致），不被感知/交谈/组队。
     for (const a of Object.values(sp.world.agents)) {

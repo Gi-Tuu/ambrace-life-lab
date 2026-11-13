@@ -222,7 +222,7 @@ function modelConfigured() {
 }
 
 function survivalOptions() {
-  return { residentialDecisions: true, ecosystem: true, unifiedCooperation: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, ecosystem: true, unifiedCooperation: true, independentWorld: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
@@ -415,33 +415,33 @@ async function tickBody(onError = null) {
 //   · reset / mask / brain：先等当前拍落地再换 packs
 let tickChain = Promise.resolve();
 let autoPending = false;
-let sleepPending=false;
+function queueWorldWrite(operation) {
+  const run = tickChain.then(operation);
+  tickChain = run.catch(() => {});
+  return run;
+}
+
 async function sleepSurvival() {
-  if (sleepPending) return {ok:false,code:'SLEEP_BUSY'};
-  sleepPending=true;
-  const run=tickChain.then(async()=>{
-    const sp=S.surv;
-    const result=campSleepTicks(sp.world);
-    if (!result.ok) return result;
-    const start=sp.world.t;
-    sp.world.fastForward = true;
-    try {
-      while (sp.world.t-start<result.ticks && !sp.world.survival.ended && !sp.world.survival.failed)
-        await tickSurvPlay(sp);
-    } finally {
-      delete sp.world.fastForward;
-    }
-    const ticks=sp.world.t-start;
-    sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
-    await save();
-    return {ok:true,code:'OK',ticks};
-  });
-  tickChain=run.catch(()=>{});
-  try { return await run; } finally { sleepPending=false; }
+  const sp=S.surv;
+  const result=campSleepTicks(sp.world);
+  if (!result.ok) return result;
+  const start=sp.world.t;
+  sp.world.fastForward = true;
+  try {
+    while (sp.world.t-start<result.ticks && !sp.world.survival.playerDead &&
+      (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed))
+      await tickSurvPlay(sp);
+  } finally {
+    delete sp.world.fastForward;
+  }
+  const ticks=sp.world.t-start;
+  sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
+  await save();
+  return {ok:true,code:'OK',ticks};
 }
 
 function enqueueTick() {
-  const run = tickChain.then(async () => {
+  return queueWorldWrite(async () => {
     // H-07：错误只在**本拍完全成功**时清除。旧版没有清零点（永久脏）；但若像刚才那样
     // 在 tick 末尾无条件清空，本拍内的异常就会被自己抹掉。用一个局部标记区分。
     let failed = false;
@@ -452,8 +452,6 @@ function enqueueTick() {
       S.tickError = String(e?.message ?? e).slice(0, 120);
     }
   });
-  tickChain = run.catch(() => {});
-  return run;
 }
 
 function autoTick() {
@@ -465,11 +463,6 @@ function autoTick() {
 
 async function manualTick() {
   await enqueueTick(); // 排队，不跳过
-}
-
-// 换 packs 之前必须先让在途的拍落地
-async function quiesce() {
-  await tickChain.catch(() => {});
 }
 
 // 时间差推进：只补慢过程（调制衰减与需求积累），不补决策
@@ -503,7 +496,7 @@ async function catchUpSurvival(minutes) {
   setSurvivalDeliberator(sp, null); // 离线补时走本地替身
   const start = sp.world.t;
   try {
-    for (let i = 0; i < steps && !sp.world.survival.ended && !sp.world.survival.failed; i += 1) await tickSurvPlay(sp);
+    for (let i = 0; i < steps && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed); i += 1) await tickSurvPlay(sp);
   } finally {
     setSurvivalDeliberator(sp, savedDelib);
   }
@@ -821,167 +814,165 @@ export const host = {
     });
     return { savedAt: S.savedAt, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
-  async act(body) {
-    if (!S.packs) return { ok: false, error: 'NO_WORLD' };
-    // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
-    if (body?.mode === 'survival') {
-      if (!S.surv) return {ok:false,error:'NO_SURV'};
-      if (body.kind==='camp_sleep') return sleepSurvival();
-      // P0 对话：服务端定态度，模型只说人话；没有模型时退模板。
-      if (body.kind==='talk_open') return openTalk(S.surv,body);
-      if (body.kind==='talk_say') { const r=await sayTo(S.surv,body,modelTalk); if (r.ok) await save(); return r; }
-      if (body.kind==='talk_close') return closeTalk(S.surv);
-      if (sleepPending) return {ok:false,code:'SLEEP_BUSY'};
-      const result = survAct(S.surv,body);
-      if (result.ok && (String(body.kind).startsWith('family_') || body.kind==='camp_resident')) await save();
-      return result;
-    }
-    const kind = String(body?.kind ?? '');
-    // H-20：旧版没有 kind 白名单。未知 kind 会一路落到末尾，记一条"走到undefined"的玩家日志
-    // 却返回 ok:true（前端只看 ok）。显式拒绝。
-    if (!['move', 'say', 'tell', 'hail'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
-    // BUG-7：房间名与目标 id 必须走 Object.hasOwn，不能靠真值判断。
-    // `(locs ?? LOCS)[room]` 对 'toString' / 'constructor' / '__proto__' 会从原型链上读到函数而"通过校验"，
-    // 随后 loc.p1 被写成 '__proto__'、occupancy['__proto__'].push 抛 TypeError，玩家从所有房间消失，
-    // 而且这个坏态会被存档持久化 —— 远程一条 POST 即可触发，不需要鉴权。
-    if (kind === 'move') {
-      const room = String(body?.room ?? '');
-      if (!room || !Object.hasOwn(S.packs.A.world.locs ?? LOCS, room)) return { ok: false, error: 'NO_LOC' };
-      body = { ...body, room };
-    }
-    if (kind === 'hail' || kind === 'tell') {
-      const target = String(body?.target ?? '');
-      if (!target || !Object.hasOwn(S.packs.A.world.agents, target)) return { ok: false, error: 'NO_TARGET' };
-      // H-20：world.hail 是单槽。允许 target='p1' 会让"喊住了 你"覆盖掉 NPC 的喊住状态。
-      if (target === 'p1') return { ok: false, error: 'BAD_TARGET' };
-      body = { ...body, target };
-    }
-    for (const key of ['A', 'B']) {
-      const w = S.packs[key].world;
-      // 房间名必须真实存在：上一版这里不校验，脚本传了个 undefined 就把玩家从 loc 里写没了
-      // （JSON 会丢掉 undefined 键），整局之后都找不到"你"。
-      if (kind === 'move' && w.loc.p1 !== body.room) {
-        w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
-        w.loc.p1 = body.room;
-        (w.occupancy[body.room] ??= []).push('p1');
+  act(body) {
+    return queueWorldWrite(async () => {
+      if (!S.packs) return { ok: false, error: 'NO_WORLD' };
+      // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
+      if (body?.mode === 'survival') {
+        if (!S.surv) return {ok:false,error:'NO_SURV'};
+        if (body.kind==='camp_sleep') return sleepSurvival();
+        let result;
+        if (body.kind==='talk_open') result = openTalk(S.surv,body);
+        else if (body.kind==='talk_say') result = await sayTo(S.surv,body,modelTalk);
+        else if (body.kind==='talk_close') result = closeTalk(S.surv);
+        else result = survAct(S.surv,body);
+        if (result.ok) await save();
+        return result;
       }
-      if (kind === 'say') {
-        // PLAN §28 D：town 下按关键词意图映射为评价事件与信任增量；lab 保持旧的固定接触事件。
-        const intent = w.speech ? classifySay(body.text) : { kind: 'contact', valence: 0.4, trust: 0 };
-        for (const who of (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1')) {
-          w.pending.push({ for: who, evt: { kind: w.speech ? `say_${intent.kind}` : 'contact', valence: intent.valence, selfCaused: false, about: 'p1', serves: 'social' } });
-          if (w.speech && intent.trust && w.agents[who]?.relations) w.agents[who].relations.meet('p1', w.t, { delta: { trust: intent.trust, familiarity: 0.02 }, why: `玩家说话(${intent.kind})` });
-        }
+      const kind = String(body?.kind ?? '');
+      // H-20：旧版没有 kind 白名单。未知 kind 会一路落到末尾，记一条"走到undefined"的玩家日志
+      // 却返回 ok:true（前端只看 ok）。显式拒绝。
+      if (!['move', 'say', 'tell', 'hail'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+      // BUG-7：房间名与目标 id 必须走 Object.hasOwn，不能靠真值判断。
+      // `(locs ?? LOCS)[room]` 对 'toString' / 'constructor' / '__proto__' 会从原型链上读到函数而"通过校验"，
+      // 随后 loc.p1 被写成 '__proto__'、occupancy['__proto__'].push 抛 TypeError，玩家从所有房间消失，
+      // 而且这个坏态会被存档持久化 —— 远程一条 POST 即可触发，不需要鉴权。
+      if (kind === 'move') {
+        const room = String(body?.room ?? '');
+        if (!room || !Object.hasOwn(S.packs.A.world.locs ?? LOCS, room)) return { ok: false, error: 'NO_LOC' };
+        body = { ...body, room };
       }
-      // 喊住：隔着一间屋也能喊，被喊的人几刻内不换地方。玩家因此能追上人再传话（O12）
-      if (body.kind === 'hail') {
-        const r = hail(w, body.target, Number(body.ticks ?? 3));
-        const who = w.agents[body.target]?.name ?? body.target;
-        const text2 = r.ok ? `喊住了 ${who}（${r.until - w.t} 刻内不换地方）` : `喊不住 ${who}`;
-        const rowH = { t: w.t, who: '玩家', kind: r.ok ? 'hail' : 'rej', text: text2 };
-        S.packs[key].log.push(rowH);
-        S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(rowH).slice(-12);
-        continue;
+      if (kind === 'hail' || kind === 'tell') {
+        const target = String(body?.target ?? '');
+        if (!target || !Object.hasOwn(S.packs.A.world.agents, target)) return { ok: false, error: 'NO_TARGET' };
+        // H-20：world.hail 是单槽。允许 target='p1' 会让"喊住了 你"覆盖掉 NPC 的喊住状态。
+        if (target === 'p1') return { ok: false, error: 'BAD_TARGET' };
+        body = { ...body, target };
       }
-      // S3：传话。规则层裁决能不能说（在场 / 知不知道 / 是不是重复），后果只走"被告知→评价"。
-      // 两个世界各传一次：这是这个 demo 的对照前提——同一句话讲给两个世界。
-      let text = body.kind === 'say' ? `说：${String(body.text ?? '').slice(0, 40)}` : `走到${body.room}`;
-      if (body.kind === 'tell') {
-        const r = tell(w, 'p1', body.target, body.secret, { presence: true });
-        const who = w.agents[body.target]?.name ?? body.target;
-        text = r.ok ? `把「${r.detail}」告诉了 ${who}` : `想告诉 ${who}，被驳回（${r.code}：${r.why}）`;
-        const row = { t: w.t, who: '玩家', kind: r.ok ? 'tell' : 'rej', text };
-        S.packs[key].log.push(row);
-        // 玩家动作单独留一份：主日志只有最后 40 条，而三个角色每刻都在写，
-        // 玩家自己那条几秒就会被挤出窗口——实测因此误判过一次"传话没生效"。
-        S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(row).slice(-12);
-        continue;
-      }
-      const actRow = { t: w.t, who: '玩家', kind: 'act', text };
-      S.packs[key].log.push(actRow);
-      S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(actRow).slice(-12);
-    }
-    return { ok: true, t: S.packs.A.world.t };
-  },
-  async ctl(body) {
-    const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask'];
-    if (body.action === 'pause') S.running = false;
-    if (body.action === 'resume') S.running = true;
-    if (body.action === 'brain') {
-      // H-02b：旧版这里调 buildPacks()，等于**静默把世界打回起点**（实测 t 5→0、stat.决策 15→0、
-      // log 15→0），而日志里一个字都不写。用户点一下"内心：真实模型"就丢掉整段可见历史。
-      // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
-      configure({ brain: body.brain });
-      if (S.surv) setSurvivalDeliberator(S.surv, survivalOptions().deliberator);
       for (const key of ['A', 'B']) {
-        for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
-        S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });
-      }
-    }
-    if (body.action === 'survival_reset') {
-      if (body.confirm !== true) return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
-      const run = tickChain.then(async () => {
-        const old = S.surv;
-        let seed;
-        do { seed = randomInt(1, 0x7fffffff); } while (seed === old?.world.mapSeed);
-        S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: 1 });
-        await save();
-        if (S.saveError) {
-          S.surv = old;
-          return { ...this.status(), ok: false, error: 'SAVE_FAILED' };
+        const w = S.packs[key].world;
+        // 房间名必须真实存在：上一版这里不校验，脚本传了个 undefined 就把玩家从 loc 里写没了
+        // （JSON 会丢掉 undefined 键），整局之后都找不到"你"。
+        if (kind === 'move' && w.loc.p1 !== body.room) {
+          w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
+          w.loc.p1 = body.room;
+          (w.occupancy[body.room] ??= []).push('p1');
         }
-        return { ...this.status(), ok: true, mapSeed: seed };
-      });
-      tickChain = run.catch(() => {});
-      return run;
-    }
-    if (body.action === 'compare_reset' && body.confirm !== true) {
-      return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
-    }
-    if (body.action === 'reset' || body.action === 'compare_reset') {
-      await quiesce(); // H-11：在途的一拍先落地，否则它会用旧 pack 继续写、并触发一次 save 把错位写进盘
-      // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
-      // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
-      S.packs = freshPacks();
-      if (body.action === 'reset') S.surv=createSurvPlay(CFG.seed,survivalOptions());
-      S.startRaw = structuredClone(serialize());
-      // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
-      // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。
-      S.missed = { minutes: 0, applied: 0, capped: false };
-      S.savedAt = Date.now();
-      await save();
-    }
-    if (body.action === 'catchup') {
-      // H-19：minutes 来自 HTTP 载荷。NaN 会写成 {"minutes":null} 进 API 与存档；
-      // 负数被照收；无限次 360 分钟补时能把三个人的 drives 压到 0。
-      const m = Number(body.minutes ?? 30);
-      if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
-      catchUp(m);
-      await catchUpSurvival(m); // P1-8：手动补时也推进生存世界
-    }
-    // 暂停状态下的"单步"必须真的推进一刻（走同一把锁，排队而不是绕过）
-    if (body.action === 'step') await manualTick();
-    if (body.action === 'mask') {
-      const key = body.key;
-      // BUG-7 同族：`key in S.masks` 对 'toString' / '__proto__' 会走原型链而"通过校验"，
-      // 随后 S.masks 被写进一个不该存在的键。这里同样只认自有属性。
-      if (!Object.hasOwn(S.masks, key)) return { ...this.status(), ok: false, error: 'UNKNOWN_MASK' };
-      const next = Boolean(body.on);
-      if (next === S.masks[key]) return this.status();
-      await quiesce(); // H-11：同 reset，换 packs 前等在途拍落地
-      S.masks[key] = next;
-      buildPacks();
-      const label = key === 'm3' ? 'M3 目标承诺层' : 'M4 耦合调制权';
-      const t = S.packs.A.world.t;
-      for (const k of ['A', 'B']) {
-        S.packs[k].log.push({ t, who: '系统', kind: 'mask', text: `${label}${next ? '开' : '关'}（只作用于 A 侧）· 两个世界回到第 ${t} 刻起点重放` });
+        if (kind === 'say') {
+          // PLAN §28 D：town 下按关键词意图映射为评价事件与信任增量；lab 保持旧的固定接触事件。
+          const intent = w.speech ? classifySay(body.text) : { kind: 'contact', valence: 0.4, trust: 0 };
+          for (const who of (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1')) {
+            w.pending.push({ for: who, evt: { kind: w.speech ? `say_${intent.kind}` : 'contact', valence: intent.valence, selfCaused: false, about: 'p1', serves: 'social' } });
+            if (w.speech && intent.trust && w.agents[who]?.relations) w.agents[who].relations.meet('p1', w.t, { delta: { trust: intent.trust, familiarity: 0.02 }, why: `玩家说话(${intent.kind})` });
+          }
+        }
+        // 喊住：隔着一间屋也能喊，被喊的人几刻内不换地方。玩家因此能追上人再传话（O12）
+        if (body.kind === 'hail') {
+          const r = hail(w, body.target, Number(body.ticks ?? 3));
+          const who = w.agents[body.target]?.name ?? body.target;
+          const text2 = r.ok ? `喊住了 ${who}（${r.until - w.t} 刻内不换地方）` : `喊不住 ${who}`;
+          const rowH = { t: w.t, who: '玩家', kind: r.ok ? 'hail' : 'rej', text: text2 };
+          S.packs[key].log.push(rowH);
+          S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(rowH).slice(-12);
+          continue;
+        }
+        // S3：传话。规则层裁决能不能说（在场 / 知不知道 / 是不是重复），后果只走"被告知→评价"。
+        // 两个世界各传一次：这是这个 demo 的对照前提——同一句话讲给两个世界。
+        let text = body.kind === 'say' ? `说：${String(body.text ?? '').slice(0, 40)}` : `走到${body.room}`;
+        if (body.kind === 'tell') {
+          const r = tell(w, 'p1', body.target, body.secret, { presence: true });
+          const who = w.agents[body.target]?.name ?? body.target;
+          text = r.ok ? `把「${r.detail}」告诉了 ${who}` : `想告诉 ${who}，被驳回（${r.code}：${r.why}）`;
+          const row = { t: w.t, who: '玩家', kind: r.ok ? 'tell' : 'rej', text };
+          S.packs[key].log.push(row);
+          // 玩家动作单独留一份：主日志只有最后 40 条，而三个角色每刻都在写，
+          // 玩家自己那条几秒就会被挤出窗口——实测因此误判过一次"传话没生效"。
+          S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(row).slice(-12);
+          continue;
+        }
+        const actRow = { t: w.t, who: '玩家', kind: 'act', text };
+        S.packs[key].log.push(actRow);
+        S.packs[key].playerLog = (S.packs[key].playerLog ?? []).concat(actRow).slice(-12);
       }
-    }
-    // 未知动作必须明说：上一版这里对任何 action 都返回 status()，界面点了没反应也显示"成功"。
-    if (!known.includes(body.action)) return { ...this.status(), ok: false, error: 'UNKNOWN_ACTION' };
-    return { ...this.status(), ok: true };
+      return { ok: true, t: S.packs.A.world.t };
+    });
   },
-  save,
+  ctl(body) {
+    if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
+    return queueWorldWrite(async () => {
+      const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask'];
+      if (body.action === 'pause') S.running = false;
+      if (body.action === 'resume') S.running = true;
+      if (body.action === 'brain') {
+        // H-02b：旧版这里调 buildPacks()，等于**静默把世界打回起点**（实测 t 5→0、stat.决策 15→0、
+        // log 15→0），而日志里一个字都不写。用户点一下"内心：真实模型"就丢掉整段可见历史。
+        // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
+        configure({ brain: body.brain });
+        if (S.surv) setSurvivalDeliberator(S.surv, survivalOptions().deliberator);
+        for (const key of ['A', 'B']) {
+          for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
+          S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });
+        }
+      }
+      if (body.action === 'survival_reset') {
+        if (body.confirm !== true) return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
+          const old = S.surv;
+          let seed;
+          do { seed = randomInt(1, 0x7fffffff); } while (seed === old?.world.mapSeed);
+          S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: 1 });
+          await save();
+          if (S.saveError) {
+            S.surv = old;
+            return { ...this.status(), ok: false, error: 'SAVE_FAILED' };
+          }
+          return { ...this.status(), ok: true, mapSeed: seed };
+      }
+      if (body.action === 'compare_reset' && body.confirm !== true) {
+        return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
+      }
+      if (body.action === 'reset' || body.action === 'compare_reset') {
+        // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
+        // 否则之后切一次 M3/M4 会把已经被丢掉的那个世界又拿回来。
+        S.packs = freshPacks();
+        if (body.action === 'reset') S.surv=createSurvPlay(CFG.seed,survivalOptions());
+        S.startRaw = structuredClone(serialize());
+        // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
+        // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。
+        S.missed = { minutes: 0, applied: 0, capped: false };
+        S.savedAt = Date.now();
+        await save();
+      }
+      if (body.action === 'catchup') {
+        // H-19：minutes 来自 HTTP 载荷。NaN 会写成 {"minutes":null} 进 API 与存档；
+        // 负数被照收；无限次 360 分钟补时能把三个人的 drives 压到 0。
+        const m = Number(body.minutes ?? 30);
+        if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
+        catchUp(m);
+        await catchUpSurvival(m);
+        await save(); // P1-8：手动补时也推进生存世界
+      }
+      // 暂停状态下的"单步"必须真的推进一刻（走同一把锁，排队而不是绕过）
+      if (body.action === 'mask') {
+        const key = body.key;
+        // BUG-7 同族：`key in S.masks` 对 'toString' / '__proto__' 会走原型链而"通过校验"，
+        // 随后 S.masks 被写进一个不该存在的键。这里同样只认自有属性。
+        if (!Object.hasOwn(S.masks, key)) return { ...this.status(), ok: false, error: 'UNKNOWN_MASK' };
+        const next = Boolean(body.on);
+        if (next === S.masks[key]) return this.status();
+        S.masks[key] = next;
+        buildPacks();
+        const label = key === 'm3' ? 'M3 目标承诺层' : 'M4 耦合调制权';
+        const t = S.packs.A.world.t;
+        for (const k of ['A', 'B']) {
+          S.packs[k].log.push({ t, who: '系统', kind: 'mask', text: `${label}${next ? '开' : '关'}（只作用于 A 侧）· 两个世界回到第 ${t} 刻起点重放` });
+        }
+      }
+      // 未知动作必须明说：上一版这里对任何 action 都返回 status()，界面点了没反应也显示"成功"。
+      if (!known.includes(body.action)) return { ...this.status(), ok: false, error: 'UNKNOWN_ACTION' };
+      return { ...this.status(), ok: true };
+    });
+  },
+  save: () => queueWorldWrite(save),
 };
 
 export const DIMS_LIST = DIMS;

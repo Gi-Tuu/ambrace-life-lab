@@ -124,7 +124,7 @@ export function advanceSurvival(world) {
   const pop = livingResidents(world).length;
   const eaters = pop + (s.playerEats === true && isAlive(world.agents.p1) ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
-  const ended = (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
+  const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
     if (s.store >= need) s.store -= need;
@@ -154,14 +154,19 @@ export function advanceSurvival(world) {
   }
 
   // §15 P2-B 无尽终局：存活集合中不存在异性对 ⇒ 无法繁衍＝必定灭绝（含只剩 1 人/同性对）；先于 failed 判定
-  if (!s.ended) {
+  if (world.independentWorld) {
+    s.ended = livingResidents(world).length === 0;
+    s.endReason = s.ended ? 'extinct' : null;
+    s.failed = !s.ended && s.starveDays >= SURV.starveDaysToFail;
+    if (isAlive(world.agents.p1) && day >= SURV.targetDays) s.playerMilestone = true;
+  } else if (!s.ended) {
     const alive = Object.values(world.agents).filter(isAlive); // P0-1：死者不算存活集合
     const sexes = alive.map((a) => world.sex?.[a.id]);
     const hasPair = sexes.includes('M') && sexes.includes('F');
     if (!hasPair) { s.ended = true; s.endReason = alive.length <= 1 ? 'sole' : 'noPair'; }
   }
   const allDead = livingResidents(world).length === 0; // P0-1：存活居民为零＝聚落饿垮
-  if (!s.ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
+  if (!world.independentWorld && !s.ended && !s.failed && (s.starveDays >= SURV.starveDaysToFail || allDead)) s.failed = true;
   if (!s.failed && day >= SURV.targetDays) s.won = true; // 里程碑徽章（无尽模式不终局）
 
   const summary = { day, store: s.store, need, shortfall, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)), mature: maturePlots(s).length, failed: s.failed, won: s.won, drought: !!s.drought, disaster: s.disasterToday };

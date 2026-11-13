@@ -2807,7 +2807,7 @@ function objectiveHint(s) {
   if (shelterSite) return '③ 施工：站在工地持锤施工；在「合作施工」请居民协助可加快进度。';
   if ((s.store ?? 0) < 6) return '④ 储备食物：菜园持锄收获/播种，或采浆果到公仓兑换；公仓养活聚落。';
   if (!has('granary')) return '⑤ 建储粮设施提高粮仓上限；居民信任越高越愿意协助。';
-  return `⑥ 维持聚落：活过第 ${s.targetDays ?? 10} 天达成目标。照顾食物/住所/生态，应对四季与灾害。`;
+  return '⑥ 长期经营：维持食物、住所和生态，应对四季与灾害。';
 }
 
 function renderSurv(s) {
@@ -2820,7 +2820,7 @@ function renderSurv(s) {
   const here = s.loc?.p1;
   const outdoor = (s.outdoor ?? []).includes(here);
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
-  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落饿垮了。点「重新开始」再来一局。</div>' : '';
+  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? '<div class="survbanner bad">聚落陷入缺粮危机。</div>' : '';
   el.innerHTML = `
     ${banner}
     ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
@@ -2835,7 +2835,7 @@ function renderSurv(s) {
     <div class="survrow survhere">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
       · 手持 <b>${TOOL_ZH[ui.tool] ?? '空手'}</b>
       <span class="dim">F 交互 · E 背包 · 1–8 换工具 · 地点在顶栏切换</span>
-      ${s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
+      ${s.player?.dead || s.failed || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
       <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
       <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
