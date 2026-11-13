@@ -1,5 +1,6 @@
+import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { goalCandidates } from './goals.mjs';
-import { householdPlans, houseLabor, laborStage } from './households.mjs';
+import { householdPlans, houseLabor, laborAllowed } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
 // 修订③（同需求多路径）：动作从「每种一个」改成「带对象/带目的地的一条条路径」。
 // 为什么要动这一层：P1b 实测人格参数几乎不改变行为（KL 0.0084），因为同一个需求当时只有一条满足路径
@@ -383,10 +384,8 @@ export function affordancesFor(world, agentId) {
   }
   // P1-1：婴幼儿/儿童不具成年劳动能力——从候选移除劳动类动作（保留移动/休息/交谈/瞭望＝成长与学习）。
   // 仅 households 模式生效；玩家无出生记录＝成年、lab/town 无 households ⇒ 逐位不变。
-  if (world.survival?.households && !laborStage(world, agentId)) {
-    const LABOR = new Set(['harvest', 'plant', 'gather', 'house_work', 'forage', 'exchange', 'expand', 'build', 'plan', 'repair', 'deposit', 'withdraw']);
-    for (let i = out.length - 1; i >= 0; i -= 1) if (LABOR.has(out[i].kind)) out.splice(i, 1);
-  }
+  for (let i = out.length - 1; i >= 0; i -= 1)
+    if (!laborAllowed(world, agentId, out[i].kind)) out.splice(i, 1);
   for (const proposed of goalCandidates(world, agentId)) {
     const ordinary = out.find(a => a.id === proposed.id);
     if (ordinary) {
@@ -421,6 +420,9 @@ export function affordancesFor(world, agentId) {
 
 // §15 同权观测：居民（非玩家）在生存世界的成功动作计数，供同权闸门断言
 export function actuate(world, agentId, action) {
+  if (world.eventRulesVersion === CURRENT_EVENT_RULES && !laborAllowed(world, agentId, action.kind)) {
+    return { action, ok: false, code: 'TOO_YOUNG' };
+  }
   const r = actuateInner(world, agentId, action);
   if (world.survival && agentId !== 'p1' && r.ok) {
     const c = (world.survival.aiActions ??= {});

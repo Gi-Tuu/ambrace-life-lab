@@ -1,3 +1,4 @@
+import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
 import { isAlive } from './viability.mjs';
@@ -42,6 +43,12 @@ export const ageDays = (w, id) => {
 export const isChildStage = (stage) => stage === 'infant' || stage === 'child';
 // 劳动能力：成年与老年可劳动（老年减产）；婴幼儿/儿童不能劳动（P1-1：儿童不具成年劳动能力）。
 export const laborStage = (w, id) => { const s = residentStage(w, id); return s === 'adult' || s === 'elder'; };
+
+const WORK_ACTIONS = new Set(['harvest', 'plant', 'gather', 'house_work', 'forage', 'exchange',
+  'expand', 'build', 'plan', 'repair', 'deposit', 'withdraw']);
+export const isLaborAction = kind => WORK_ACTIONS.has(kind);
+export const laborAllowed = (w, id, kind) =>
+  !w.survival?.households || !isLaborAction(kind) || laborStage(w, id);
 
 const adult = (w, id) => Object.hasOwn(w.agents, id) && residentStage(w, id) === 'adult' && isAlive(w.agents[id]); // 婚育仅成年（老年不繁衍）；死者排除
 const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
@@ -266,6 +273,7 @@ export function householdPlans(w, id) {
 export function familyHomeForBirth(w, a, b) {
   const h = w.survival.households;
   const room = w.housing[a];
+  if (w.eventRulesVersion === CURRENT_EVENT_RULES && (!adult(w,a) || !adult(w,b))) return null;
   return h.spouses[a] === b && room === w.housing[b] && hasBed(w, room) ? room : null;
 }
 

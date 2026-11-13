@@ -1,3 +1,5 @@
+import { laborStage } from './households.mjs';
+import { CURRENT_EVENT_RULES } from './rng.mjs';
 // P1（派单§七）多步骤行动组合：把"目标"分解为有序"需求"，每个需求映射到当前应执行的基础动作
 // （含前置移动/采集）。planGoal 每次调用重评⇒资源/环境变化或失败后自动重规划。
 // 复用既有 affordances/validate/actuate，不另造决策器；基础动作仍由规则层裁决、世界计算结果。
@@ -82,6 +84,7 @@ export function planGoal(w, id, goalId) {
 
 export function goalCandidates(w, id) {
   if (!w.autonomousGoals || !w.survival || w.agents[id]?.isPlayer) return [];
+  if (w.eventRulesVersion === CURRENT_EVENT_RULES && !laborStage(w,id)) return [];
   const a = w.agents[id], s = w.survival;
   const energy = a.drives.v.energy;
   const foodPressure = Math.max(0, 1 - s.store / Math.max(3, livingResidents(w).length * 2));

@@ -12,7 +12,7 @@ import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mj
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { Organism } from './agent.mjs';
-import { hashSeed } from './rng.mjs';
+import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
 import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, familyHomeForBirth, restoreHouseholds } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
@@ -34,8 +34,14 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
+  if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
+    const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
+    error.code = 'SURV_EVENT_VERSION';
+    throw error;
+  }
+  world.eventRulesVersion = eventRulesVersion;
   world.unifiedCooperation = unifiedCooperation;
   world.independentWorld = independentWorld;
   world.autonomousGoals = autonomousGoals;
@@ -185,7 +191,7 @@ function stepLifecycle(w, log) {
     rec.stage = stage;
     if (stage === 'elder') {
       const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - ELDER_DAYS) * 0.01);
-      if ((hashSeed(w.seed ?? 7, `age:${a.id}:${day}`) % 1000) / 1000 < p) { a.hurtBy = '衰老'; a.viab.v = 0; }
+      if (survivalRoll(w, 'elder-death', a.id, day) < p) { a.hurtBy = '衰老'; a.viab.v = 0; }
     }
   }
 }
@@ -303,7 +309,7 @@ function reproduce(w, log) {
     const id = `c${n}`;
     const child = newChild(w, id, [a, b]);
     w.agents[id] = child;
-    w.sex[id] = sexOf(w.seed ?? 7, id);
+    w.sex[id] = survivalRoll(w, 'birth-sex', id, day) < .5 ? 'M' : 'F';
     if (w.stash) w.stash[id] = 0;
     if (s.households) {
       w.pinv[id] = { wood: 0, stone: 0 };
@@ -451,7 +457,7 @@ export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
   return {
-    t: w.t, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
+    t: w.t, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
@@ -501,12 +507,13 @@ export function dumpSurv(sp) {
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, seed: w.seed, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  return { t: w.t, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
-    { ...options, mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: raw?.layoutVersion === 1 ? 1 : 0 });
+    { ...options, eventRulesVersion: raw ? raw.eventRulesVersion ?? LEGACY_EVENT_RULES : options?.eventRulesVersion,
+      mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: raw?.layoutVersion === 1 ? 1 : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
     w.t = raw.t;

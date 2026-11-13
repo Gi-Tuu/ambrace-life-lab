@@ -15,7 +15,7 @@ import { openTalk, sayTo, closeTalk } from './dialogue.mjs';
 import { tell } from './gossip.mjs';
 import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
-import { hashSeed } from './rng.mjs';
+import { hashSeed, CURRENT_EVENT_RULES } from './rng.mjs';
 import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { withNoThink, withoutNoThink } from './model-adapter.mjs';
@@ -232,7 +232,7 @@ function modelConfigured() {
 }
 
 function survivalOptions() {
-  return { residentialDecisions: true, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 // D3：Qwen3.8 才带关闭思考参数；端点不认（400/422）时同一次尝试内去掉参数重试。
@@ -745,6 +745,8 @@ export const host = {
       note = `载入${label}：第 ${S.packs.A.world.t} 刻${loaded.warning ? '；已禁用 M5 降级恢复' : ''}`;
       break;
     }
+    // A valid future-version primary must survive a binary rollback.
+    if (primaryError?.code === 'SURV_EVENT_VERSION') throw primaryError;
     if (primaryError) {
       const diskError = typeof primaryError.code === 'string' && /^E[A-Z0-9]+$/.test(primaryError.code);
       const isolated = diskError ? null : await quarantine(worldFile);

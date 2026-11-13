@@ -26,3 +26,24 @@ export const hashSeed = (base, salt) => {
   for (const ch of String(salt)) h = (Math.imul(h, 31) ^ ch.charCodeAt(0)) >>> 0;
   return h || 1;
 };
+
+// FNV-1a over a framed tuple, then MurmurHash3 fmix32 to avalanche adjacent inputs.
+export function eventRoll(seed, eventType, entityId, day, sequence = 0) {
+  const key = JSON.stringify([seed, eventType, entityId, day, sequence]);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i += 1) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 0x100000000;
+}
+
+export const LEGACY_EVENT_RULES = 1;
+export const CURRENT_EVENT_RULES = 2;
+
+export function survivalRoll(world, type, id, day) {
+  const seed = world.seed ?? 7;
+  if (world.eventRulesVersion === CURRENT_EVENT_RULES) return eventRoll(seed, type, id, day);
+  if (type === 'birth-sex') return (hashSeed(seed, `sex:${id}`) % 2) / 2;
+  const [tag, divisor] = { 'elder-death': ['age', 1000], 'chicken-birth': ['ch', 10000], 'orchard-birth': ['or', 10000] }[type];
+  return (hashSeed(seed, `${tag}:${id}:${day}`) % divisor) / divisor;
+}

@@ -4,7 +4,7 @@
 // lab/town 无 survival、sweep 默认 ecosystem=false ⇒ 逐位不变；host 游戏模式开启。
 // 生态链：水分/季节/干旱→果树健康与结果→鸡吃植物性产出→鸡群健康/繁殖→蛋→居民食物；风暴损果树、墙庇护减损。
 import { dayOf, seasonOf, DAY_TICKS } from './clock.mjs';
-import { hashSeed } from './rng.mjs';
+import { survivalRoll } from './rng.mjs';
 
 export const ECO = Object.freeze({
   orchardCap: 12, chickenCap: 12,
@@ -16,7 +16,6 @@ export const ECO = Object.freeze({
 const SEASON_FRUIT = [2, 3, 1, 0]; // 春夏秋冬每棵成熟果树
 const SEASON_EGG = [3, 3, 2, 1];   // 每只成熟鸡
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
-const roll = (seed, key) => (hashSeed(seed ?? 7, key) % 10000) / 10000;
 const ageDays = (t, born) => (t - born) / DAY_TICKS;
 
 export function initEcoPop(s) {
@@ -53,7 +52,7 @@ export function stepEcosystem(world, log) {
   if (orchards.length < ECO.orchardCap && water >= 0.3 && !drought) {
     for (const tr of matureOr) {
       if (orchards.length >= ECO.orchardCap) break;
-      if (roll(world.seed, `or:${tr.id}:${day}`) < ECO.reproChance * tr.health) {
+      if (survivalRoll(world, 'orchard-birth', tr.id, day) < ECO.reproChance * tr.health) {
         orchards.push({ id: `or${++s.ecoSeq.or}`, born: t, health: 1 }); births += 1;
       }
     }
@@ -80,7 +79,7 @@ export function stepEcosystem(world, log) {
   if (chickens.length < ECO.chickenCap && fedRatio >= 0.99) { // 吃饱才繁殖
     for (const c of matureCh) {
       if (chickens.length >= ECO.chickenCap) break;
-      if (roll(world.seed, `ch:${c.id}:${day}`) < ECO.reproChance * c.health) {
+      if (survivalRoll(world, 'chicken-birth', c.id, day) < ECO.reproChance * c.health) {
         chickens.push({ id: `ch${++s.ecoSeq.ch}`, born: t, health: 1 }); births += 1;
       }
     }
