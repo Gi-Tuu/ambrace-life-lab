@@ -111,10 +111,14 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
   const site = atLoc(s.sites, loc);
   if (!site) return { ok: false, code: 'NO_SITE' };
+  if (s.settlementLife) {
+    const people=site.contributors??={};
+    people[agentId]=(people[agentId]??0)+1;
+  }
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
-    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1 });
+    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1, ...(site.contributors?{contributors:site.contributors}:{}) });
     return { ok: true, code: 'OK', completed: site.type };
   }
   return { ok: true, code: 'OK', completed: null, progress: site.progress };
@@ -131,6 +135,8 @@ export function doRepair(world, agentId, loc = world.loc[agentId]) {
   world.observeProduction?.('materialSpent', 'repairWood', 1);
   world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
+  const task=s.coop?.task;
+  if (s.settlementLife && task?.loc===loc && task.repair) (task.repairedBy??=[]).push(agentId);
   return { ok: true, code: 'OK' };
 }
 

@@ -1,5 +1,6 @@
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
+import { facilityGate } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
@@ -428,6 +429,11 @@ function prop3d(s, kind, x, z, y) {
     for(const dx of [.22,1.42]) for(const dz of [.18,1.06]) b(dx,0,dz,.16,top,.16,DARK);
   };
   switch (kind) {
+    case 'grain':
+      b(.05,0,.05,1.62,.68,1.07,'#9A7044',true);
+      b(.14,.68,.14,1.44,.12,.89,'#C79B61');
+      for (const x of [.13,1.44]) b(x,0,.025,.12,.74,.12,DARK);
+      break;
     case 'bed':
       b(.1,0,.15,1.72,.36,1.28,DARK,true);
       b(.18,.36,.23,1.56,.12,1.12,'#FFF0CC');
@@ -591,13 +597,22 @@ function outdoorRoom(s,site,width,depth,back) {
 
 export function roomStage(site, props, front, width, depth) {
   const s = stage(width, depth);
+  const facility=site.startsWith('facility:') ? site.split(':')[2] : null;
   const outside = ['garden','well','yard'].includes(site);
   const back=outside?2.75:site==='watch'?1.76:1.65, wallWidth=2;
   s.walkBounds={left:wallWidth,right:width-wallWidth,top:back,bottom:depth};
-  const color = outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD;
+  const color = facility==='workshop'?'#77766E':facility==='granary'?'#9C7750':outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD;
   s.floor(0,0,width,depth,0,color);
   if (outside) outdoorRoom(s,site,width,depth,back);
-  if (site==='watch') {
+  if (facility) {
+    s.box(2,0,back-.22,width-4,facility==='workshop'?1.05:2.2,.22,WOOD,true);
+    for (const x of [1.77,width-2]) {
+      s.box(x,0,back,.23,1.1,depth-back,DARK,true);
+      for (const z of [back,depth-1]) s.box(x,0,z,.23,2.22,.23,LIGHT,true);
+    }
+    if (facility==='granary') for (const z of [8.4,9.1,9.8,10.5]) s.floor(6,z,4,.36,.026,LIGHT);
+    if (facility==='workshop') s.floor(2,depth-1.5,width-4,1.5,.01,'#9C8C73');
+  } else if (site==='watch') {
     const rear=back-.24;
     s.box(1.9,0,rear,12.2,.78,.24,DARK,true);
     s.box(1.9,2.28,rear,12.2,.21,.24,WOOD);
@@ -913,9 +928,10 @@ function workshop3d(s, lot, record, world) {
     return;
   }
   // 三面矮墙（正面敞开）
-  for (const pz of [Z, Z + D - .12]) s.box(X, .16, pz, W, 1.15, .12, '#72513B');
+  s.box(X, .16, Z, W, 1.15, .12, '#72513B');
+  if (!world.settlementLife) s.box(X,.16,Z+D-.12,W,1.15,.12,'#72513B');
   for (const px of [X, X + W - .12]) s.box(px, .16, Z, .12, 1.15, D, '#72513B');
-  grPlanks(s, X, .16, Z, W, 1.14, D, false);
+  grPlanks(s, X, .16, Z, W, 1.14, D, Boolean(world.settlementLife));
   // 高挑平坡顶：两侧外挑大檐，与尖顶住所区分
   s.box(X - .42, 2.5, Z - .3, W + .84, .16, D + .6, damaged ? '#5F574F' : '#6B7468');
   for (let i = 0; i < 3; i++) s.box(X - .3 + i * .12, 2.66 + i * .2, Z - .18 + i * .12, W + .6 - i * .24, .14, D + .36 - i * .24, i % 2 ? '#5F574F' : '#837C69');
@@ -1021,18 +1037,23 @@ export function homeAppearance(world, sites = world.rooms ?? {}) {
     const agent = world.agents?.[id];
     if (agent && !agent.dead) occupied.add(room);
   }
-  return rooms.map(room => [room, occupied.has(room)]);
+  return rooms.map(room => [room, occupied.has(room), ...(world.homeAccess ? [world.homeAccess[room]?.damage??0] : [])]);
 }
 
 export function outdoorHomes(world, appearance) {
   const s = stage(0, 0);
-  for (const [room, occupied] of appearance) {
+  for (const [room, occupied, damage] of appearance) {
     const lot = homeLot(world, room);
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
     s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room));
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
         s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);
+      }
+      if (damage>0) {
+        s.box(x-.34,.27,front+.105,.68,1.17,.055,'#342923');
+        s.box(x-.33,.44,front+.17,.46,.13,.07,'#B58656');
+        s.box(x-.2,.94,front+.17,.5,.12,.07,'#B58656');
       }
       if (occupied) {
         s.chimneys.push([lot.x + lot.w - .70, 3.4, lot.z + .87]);
@@ -1060,7 +1081,7 @@ export function workModelKey(world, appearance, treeSignature) {
   const placement = b => [b.type, b.loc, b.lot?.x, b.lot?.z, b.lot?.w, b.lot?.d];
   const buildings = world.buildings ?? [];
   return JSON.stringify([
-    buildings.map(b => [...placement(b), buildingDamage(b)]),
+    buildings.map(b => [...placement(b), buildingDamage(b), ...(world.settlementLife?[b.integrity>0]:[])]),
     (world.sites ?? []).map(b => [...placement(b), b.progress, world.buildingsDef?.[b.type]?.labor]),
     appearance.map(([room]) => room),
     Object.entries(world.households?.projects ?? {}).map(([room, p]) => [room, p.progress]),
@@ -1083,7 +1104,7 @@ export function addCampWork(boxes, world, appearance = homeAppearance(world)) {
     const {x,z,w,d}=lot, X=x+.24,Z=z+.24,W=w-.48,D=d-.48;
     const id=`work:${record.loc}:${record.type}`, labor=record.type === 'house' ? HOME_LABOR : world.buildingsDef?.[record.type]?.labor??6;
     const phase=constructionStage(record);
-    projects.push({id,phase,record,lot,labor});
+    projects.push({id,phase,record,lot,labor,gate:facilityGate(record,world.layout)});
     const s={box(x,y,z,w,h,d,color,solid=false,rise=false) {
       boxes.push({x,y,z,w,h,d,color,solid,occluder:id,rise});
     }};

@@ -1,3 +1,4 @@
+import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
@@ -20,7 +21,7 @@ const fail=code=>({ok:false,code});
 const amount=(bag,item)=>bag?.[item]??0;
 const setCount=(bag,item,n)=>{bag[item]=n;};
 
-const playerHome=(world,site)=>site==='home' || (Boolean(site) && site===world.housing?.p1);
+const playerHome=(world,site)=>site==='home' || (Boolean(site) && (world.survival.settlementLife ? householdAccess(world,'p1',site) : site===world.housing?.p1));
 // P0-3：玩家动作与居民同权，也付存续代价（只在动作成功时扣）。
 const pay=(world,cost)=>{world.agents.p1?.viab?.spend?.(cost);};
 export function campTimberView(world) {
@@ -31,7 +32,7 @@ export function campTimberView(world) {
   }));
 }
 export function campSleepTicks(world) {
-  if (!playerHome(world,world.loc.p1)) return fail('NOT_HOME');
+  if (!playerHome(world,world.loc.p1) || world.survival.settlementLife && world.loc.p1!=='home' && world.campPlayerRoom!==world.loc.p1) return fail('NOT_HOME');
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (world.survival.ended || world.survival.failed))) return fail('CAMP_ENDED');
   const hour=world.t%DAY_TICKS;
   return {...ok(),ticks:Math.min(24,hour>=12?DAY_TICKS-hour:4)};
@@ -131,7 +132,8 @@ export function campAction(world,body) {
   const bag=world.pinv.p1;
   if (kind==='camp_store' || kind==='camp_take') {
     const [room,slot]=typeof target==='string'?target.split(':'):[], table=slot==='meal' && playerHome(world,room);
-    const shelf=room===world.housing?.p1 && slot==='2';
+    const shelf=room!=='home' && playerHome(world,room) && slot==='2';
+    if (s.settlementLife && (table || shelf) && world.campPlayerRoom!==room) return fail('NO_CONTAINER');
     if (room!==site || (!table && !shelf && !STORAGE[room]?.includes(slot)) || target!==`${room}:${slot}`) return fail('NO_CONTAINER');
     if (!ITEMS.has(item) || (table && !FOOD.has(item) && item!=='tray')) return fail('BAD_ITEM');
     const all=(s.campContainers??={}), stored=(all[target]??={});
@@ -144,7 +146,7 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind==='camp_eat') {
-    if (!playerHome(world,site)) return fail('NOT_HOME');
+    if (!playerHome(world,site) || s.settlementLife && world.campPlayerRoom!==site) return fail('NOT_HOME');
     if (amount(bag,'tray')<1) return fail('NEED_TRAY'); // 托盘是餐具：没有它只能看着饭
     const meal=s.campContainers?.[`${site}:meal`];
     if (!FOOD.has(item) || !amount(meal,item)) return fail('EMPTY');

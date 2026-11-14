@@ -1,13 +1,16 @@
+import { facilityGate, facilityOf } from '../web/camp-facility.mjs';
+import { changeHomeAccess, doorWork, homeAccessView, homeEntry, householdAccess } from './home-access.mjs';
+import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 // 生存单世界游玩层（Phase D / §14–15 P2）。居民＝完整 Organism（同权：玩家能做的 AI 都能做）。
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
-import { makeWorld, spawn, scanSecrets, actuate, isAlive, livingResidents, SURV_COST } from './body.mjs';
+import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST } from './body.mjs';
 import { validate } from './rules.mjs';
 import { campEntrance, campSite, distanceToRect, pointIn } from '../web/camp-interaction.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
-import { campAction, campTimberView } from './camp-play.mjs';
-import { constructionLot, RESIDENT_HOMES, generateCampLayout } from '../web/camp-layout.mjs';
+import { campAction, campTimberView, residentContact } from './camp-play.mjs';
+import { constructionLot, RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { doBuild, doRepair, effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
@@ -38,7 +41,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,discussions=true,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -54,6 +57,11 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   world.layoutVersion = layoutVersion;
   if (layoutVersion === 1) world.campLayout = generateCampLayout(mapSeed);
   if (farmLife) world.survival.farmLife = true;
+  if (settlementLife) {
+    world.survival.settlementLife = true;
+    world.discussionsEnabled = discussions;
+    world.survival.discussions = {};
+  }
   restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
   world.residentChannelMask = residentChannelMask;
@@ -74,6 +82,7 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   world.pinv = {}; // §15 P2-C 背包：每角色个人木石
   for (const id of Object.keys(world.agents)) world.pinv[id] = { wood: 0, stone: 0 };
   const s=world.survival;
+  if (s.settlementLife) for (const a of Object.values(world.agents)) a.relations.history=[];
   world.housing=Object.fromEntries(Object.entries(RESIDENT_HOMES).map(([id,entry])=>[id,entry.room]));
   if (residentialDecisions) {
     world.locs = { ...world.locs };
@@ -159,6 +168,7 @@ function reapDeaths(w, log) {
     log.push({ t: w.t, kind: 'death', ok: true, code: `${a.name}死亡（${cause}）` });
     if (a.isPlayer) {
       s.playerDead = true;
+      w.campPlayerRoom=null;
       if (!w.independentWorld) { s.failed = true; s.endReason = 'player'; }
       s.talk = null;
     }
@@ -172,7 +182,20 @@ function reapDeaths(w, log) {
 
 export function settleSurvival(sp) {
   const w = sp.world;
-  const changed = reapDeaths(w, sp.log);
+  let changed = reapDeaths(w, sp.log);
+  if (w.survival.settlementLife) {
+    const room=w.campPlayerRoom;
+    if (room?.startsWith('facility:') && !(facilityOf(w,room)?.integrity>0)) {
+      w.campPlayerRoom=null;
+      changed=true;
+    }
+    for (const id of Object.keys(w.loc)) {
+      if (!isAlive(w.agents[id]) || homeEntry(w,id,w.loc[id]).ok) continue;
+      move(w,id,'hall');
+      changed=true;
+      if (id==='p1') w.campPlayerRoom=null;
+    }
+  }
   const staleTalk = w.survival.talk && !talkInRange(w, w.survival.talk);
   if (staleTalk) w.survival.talk = null;
   if (w.independentWorld && sp.log.length > SURV_LOG_LIMIT) sp.log.splice(0, sp.log.length - SURV_LOG_LIMIT);
@@ -280,6 +303,7 @@ export async function tickSurvPlay(sp) {
     a.ch.m3 = w.survival.commitChain === true ? 1 : 0;
   }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
+  if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
   const talk = w.survival.talk;
   if (talk && Date.now() - talk.openAt > talk.patienceMs) {
@@ -345,6 +369,7 @@ function reproduce(w, log) {
     const n = (s.births ?? 0) + 1;
     const id = `c${n}`;
     const child = newChild(w, id, [a, b]);
+    if (s.settlementLife) child.relations.history=[];
     w.agents[id] = child;
     w.sex[id] = survivalRoll(w, 'birth-sex', id, day) < .5 ? 'M' : 'F';
     if (w.stash) w.stash[id] = 0;
@@ -376,6 +401,7 @@ function reproduce(w, log) {
 export const PLAYER_TIME = Object.freeze({
   move: 25, gather: 75, harvest: 75, plant: 75, plan: 75, build: 75, repair: 75,
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
+  home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
   camp_store: 25, camp_take: 25, camp_eat: 25, coop_request: 25,
 });
@@ -423,9 +449,75 @@ function survActInner(sp, body) {
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
     return {ok:true};
   }
+  if (kind==='home_request') {
+    const host=w.agents[body.target], room=body.home;
+    const failure=residentContact(w,body);
+    if (failure) return {ok:false,code:failure};
+    if (!w.survival.settlementLife || !residentialSite(room) || !householdAccess(w,host.id,room))
+      return {ok:false,code:'NO_AUTHORITY'};
+    const trust=host.relations.map.get('p1')?.trust??30;
+    if (trust < 40 + host.traits.goals.safety*16 || host.drives.v.energy<.3 || w.survival.disasterToday)
+      return {ok:false,code:'INVITE_DECLINED'};
+    return changeHomeAccess(w,host.id,{room,target:'p1',type:'invite',kind:'home_grant'});
+  }
+  if (kind === 'home_grant' || kind === 'home_revoke') return changeHomeAccess(w,'p1',body);
+  if (kind === 'home_break' || kind === 'home_fix') {
+    const gate=campEntrance(body.room,campSite(body.room,w.campLayout));
+    if (w.campPlayerRoom || !gate || !pointIn(body.from,WORLD_TW,WORLD_TH) ||
+        distanceToRect(body.from,gate)>.12) return {ok:false,code:'OUT_OF_REACH'};
+    const result=doorWork(w,'p1',body.room,kind,body.tool);
+    if (result.ok) w.agents.p1.viab.spend(kind==='home_break'?.15:.08);
+    return result;
+  }
+  if (kind==='facility_use') {
+    const s=w.survival, building=facilityOf(w,body.target);
+    if (!s.settlementLife || !building || building.integrity<=0) return {ok:false,code:'NO_FACILITY'};
+    if (building.type==='wall') {
+      const lot=building.lot??constructionLot(building.loc,w.campLayout);
+      if (w.campPlayerRoom || !lot || !pointIn(body.from,WORLD_TW,WORLD_TH) ||
+          distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+      return {ok:true,code:'OK',integrity:building.integrity,shield:effectiveMods(w).shield};
+    }
+    if (w.campPlayerRoom!==body.target) return {ok:false,code:'OUT_OF_REACH'};
+    if (building.type==='granary') {
+      const bag=w.pinv.p1, toStore=body.type==='deposit', take=body.type==='withdraw';
+      if (!toStore && !take) return {ok:false,code:'BAD_ITEM'};
+      if (toStore && !(bag.crop>=1) || take && s.store<1) return {ok:false,code:'EMPTY'};
+      if (toStore && s.store+1>effectiveMods(w).storeCap) return {ok:false,code:'CONTAINER_FULL'};
+      s.store+=toStore?1:-1;
+      bag.crop=(bag.crop??0)+(toStore?-1:1);
+    } else if (building.type==='workshop') {
+      if (body.tool!=='hammer') return {ok:false,code:'NEED_TOOL'};
+      const bag=w.pinv.p1;
+      if (!(bag.wood>=2)) return {ok:false,code:'NO_MATERIAL'};
+      bag.wood-=2;
+      bag.tray=(bag.tray??0)+1;
+      w.observeProduction?.('materialSpent','craftWood',2);
+    } else if (building.type==='shelter') {
+      if (s.lastShelterRest===w.t) return {ok:false,code:'ACTION_BUDGET'};
+      s.lastShelterRest=w.t;
+      w.agents.p1.drives.reward('energy',.15);
+    }
+    w.agents.p1.viab.spend(.01);
+    return {ok:true,code:'OK'};
+  }
   if (kind === 'move') {
     const room = String(body?.room ?? '');
+    const building=w.survival.settlementLife && facilityOf(w,room);
+    if (building) {
+      const gate=facilityGate(building,w.campLayout);
+      if (building.type==='wall' || building.integrity<=0) return {ok:false,code:'NO_FACILITY'};
+      if (w.campPlayerRoom || !body.entrance || !gate || !pointIn(body.from,WORLD_TW,WORLD_TH) ||
+          distanceToRect(body.from,gate)>.12) return {ok:false,code:'OUT_OF_REACH'};
+      move(w,'p1',building.loc);
+      w.campPlayerRoom=room;
+      w.agents.p1.viab.spend(SURV_COST.move_to);
+      return {ok:true,code:'OK'};
+    }
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
+    const access=homeEntry(w,'p1',room);
+    if (!access.ok) return access;
+    if (w.survival.settlementLife && residentialSite(room) && !body.entrance) return {ok:false,code:'OUT_OF_REACH'};
     if (body.entrance) {
       const previous=w.campPlayerRoom;
       const adjacent=previous && (previous==='hall' && ['home','store'].includes(room));
@@ -533,7 +625,7 @@ export function survView(sp) {
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
     camp:{containers:s.campContainers??{},mealsEaten:s.mealsEaten??0,timber:campTimberView(w)},
-    housing: w.housing,
+    housing: w.housing, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
@@ -564,7 +656,7 @@ export function dumpSurv(sp) {
   // §15 P2-C 心智入档：居民内部状态活过重启（镜像 host serialize 的心智字段）
   const minds = Object.fromEntries(Object.values(w.agents).filter((a) => a.drives && a.viab).map((a) => [a.id, {
     m: a.bank.snapshot(), drives: { ...a.drives.v }, memory: a.memory.dump(),
-    rel: [...a.relations.map.entries()], relCeiling: a.relations.ceiling,
+    rel: [...a.relations.map.entries()], ...(a.relations.history?{relHistory:a.relations.history}:{}), relCeiling: a.relations.ceiling,
     habit: a.habit.dump(), forwardModel: a.forwardModel.dump(), viab: a.viab.dump(),
     traits: structuredClone(a.traits),
     dead: !!a.dead, death: a.death ?? null, hurtBy: a.hurtBy ?? null, // P0-1：死亡事实入档
@@ -574,7 +666,7 @@ export function dumpSurv(sp) {
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  return { t: w.t, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
@@ -617,6 +709,10 @@ export function loadSurv(raw,seed=7,options) {
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
     restoreFarmPlots(w);
     restoreSources(w);
+    if (w.survival.settlementLife) {
+      w.survival.discussions ??= {};
+      if (!w.discussionsEnabled) w.survival.discussions.active=null;
+    }
     if (w.independentWorld) {
       const s = w.survival;
       if (s.endReason === 'player') { s.playerDead = true; s.failed = false; }
@@ -650,6 +746,7 @@ export function loadSurv(raw,seed=7,options) {
       if (typeof a.bank.restore === 'function') a.bank.restore(st.m);
       a.memory.load(Array.isArray(st.memory) ? { rows: st.memory } : st.memory);
       a.relations.map = new Map(st.rel ?? []);
+      if (w.survival.settlementLife) a.relations.history=st.relHistory??[];
       if (typeof st.relCeiling === 'number') a.relations.ceiling = st.relCeiling;
       a.habit.load(st.habit);
       a.forwardModel.load(st.forwardModel);
@@ -672,6 +769,16 @@ export function loadSurv(raw,seed=7,options) {
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
     sp.log = (raw.log ?? []).filter((x) => x?.kind !== 'agentError');
     settleHousing(w, sp.log);
+    if (w.survival.settlementLife && !w.agents.p1.dead && typeof raw.campPlayerRoom==='string') {
+      const room=raw.campPlayerRoom, building=facilityOf(w,room);
+      if (room===w.loc.p1 && homeEntry(w,'p1',room).ok || building?.loc===w.loc.p1 && building.integrity>0)
+        w.campPlayerRoom=room;
+    }
+    if (w.survival.settlementLife) {
+      for (const id of Object.keys(w.loc)) {
+        if (isAlive(w.agents[id]) && !homeEntry(w,id,w.loc[id]).ok) w.loc[id]='hall';
+      }
+    }
     if (w.independentWorld) sp.log = sp.log.slice(-SURV_LOG_LIMIT);
 
     // C3：占位顺序会进入感知/候选（crowd[0]）；存档带 occupancy 且与 loc 一致就沿用原顺序。

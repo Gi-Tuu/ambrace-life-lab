@@ -130,7 +130,9 @@ function syncTask(world, task) {
   const s = world.survival;
   const building = s.buildings.find(b => b.loc === task.loc);
   if (task.repair ? building?.type === task.type && building.integrity >= 1 : building?.type === task.type) {
-    s.coop.completions.push({ type: task.type, tick: world.t, workers: task.workers.length, ...(task.repair ? { repair: true } : {}) });
+    s.coop.completions.push({ type: task.type, tick: world.t, workers: task.workers.length, ...(s.settlementLife ? {
+      loc:task.loc, participants:task.repair?task.repairedBy??[]:Object.keys(building.contributors??{}),
+    } : {}), ...(task.repair ? { repair: true } : {}) });
     return { completed: task.type };
   }
   const site = s.sites.find(b => b.loc === task.loc);

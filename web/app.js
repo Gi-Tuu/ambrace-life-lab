@@ -1,3 +1,4 @@
+import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
 import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
@@ -1410,8 +1411,9 @@ const roomDoor = site => site === 'hall' ? hallFront.door : [112,176,32,16];
 const roomMasks = new Map(), campRooms = new Map(), campRoomBounds = new Map();
 function campRoom(site) {
   if (!campRooms.has(site)) {
-    const props = ['garden','well','yard'].includes(site) ? yardProps(site)
-      : (INTERIORS[site]?.props ?? []).map(([kind,x,y])=>[kind,x*TILE,y*TILE]);
+    const facility=facilityOf(S.view??{},site);
+    const props = FACILITY_PROPS[facility?.type] ?? (['garden','well','yard'].includes(site) ? yardProps(site)
+      : (INTERIORS[site]?.props ?? []).map(([kind,x,y])=>[kind,x*TILE,y*TILE]));
     campRooms.set(site,roomStage(site,props,hallFront,ROOM_GRID.width/TILE,ROOM_GRID.height/TILE));
   }
   return campRooms.get(site);
@@ -2203,8 +2205,8 @@ const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPT
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
 const CAMP_FOOD=['berry','fruit','crop','egg','milk'];
-const campLabels={camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
-const campCodes={OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
+const campLabels={facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
+const campCodes={HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
   FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
@@ -2242,6 +2244,7 @@ const ROOM_PROPS = {
   shelf: ['储物架','查看背包和公仓。'],
   crate: ['物资箱','查看背包和公仓。'],
   barrel: ['木桶','查看背包和公仓。'],
+  grain: ['储粮箱','与公共粮仓共用库存。'],
   workbench: ['工作台','查看工坊物资和当前施工。'],
   anvil: ['铁砧','查看工坊物资和当前维修。'],
   rug: ['地毯','铺在地板上的编织地毯。'],
@@ -2279,10 +2282,18 @@ function nearbyProp(site) {
   }
   return best;
 }
+let leavingRoom=false;
 function closeRoom(redraw=true) {
   roomRoute=null;
   outdoorIntent=null;
-  if (ui.interior && S.soloSurv) api('/act',{mode:'survival',kind:'camp_exit'}).catch(()=>{});
+  const leaving=ui.interior && S.soloSurv;
+  if (leaving) {
+    leavingRoom=true;
+    void api('/act',{mode:'survival',kind:'camp_exit'}).catch(()=>{}).finally(()=>{
+      leavingRoom=false;
+      if (redraw) void refresh();
+    });
+  }
   $('campPropDialog').close();
   campPose=null;
   if (campCart) campCart.attached=false;
@@ -2291,7 +2302,7 @@ function closeRoom(redraw=true) {
   ui.camRoom=null;
   ui.overview=false;
   IPOS.site=null;
-  if (redraw) refresh();
+  if (redraw && !leaving) void refresh();
 }
 function useRoom() {
   const site=ui.interior;
@@ -2337,7 +2348,28 @@ function inspectRoomProp(prop) {
     if (['shelf','crate','barrel','cart'].includes(prop.kind)) bindAction('打开背包',openBackpack);
   }
   if (S.soloSurv && S.campReady) {
-    const privateVisitor=residentialSite(ui.interior) && s.housing?.p1!==ui.interior;
+    const privateVisitor=residentialSite(ui.interior) && !(s.homeAccess?.[ui.interior]?.resident ?? (s.housing?.p1===ui.interior));
+    const facility=facilityOf(s,ui.interior);
+    if (facility) {
+      const use=(type,tool)=>performCamp({kind:'facility_use',target:ui.interior,type,tool},ui.interior,()=>inspectRoomProp(prop));
+      if (prop.kind==='grain') {
+        $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap} · 背包作物 ${s.pinv.p1.crop??0}`;
+        propOption(options,'存入一份作物',!(s.pinv.p1.crop>=1)?'背包没有作物':s.store+1>s.storeCap?'公仓已满':'',()=>use('deposit'));
+        propOption(options,'领取一份粮食',s.store<1?'公仓没有整份粮食':'',()=>use('withdraw'));
+      } else if (facility.type==='shelter') {
+        $('campPropDetail').textContent='在避难住所休息可恢复精力。';
+        bindAction('休息',()=>use('rest'));
+      } else {
+        $('campPropDetail').textContent='木料 ×2，制作一个木托盘。';
+        propOption(options,'用锤制作木托盘',(s.pinv.p1.wood??0)<2?'背包木料不足':'',()=>{
+          ui.tool='hammer'; return use('craft','hammer');
+        });
+      }
+      $('campPropDetail').hidden=false;
+      keys.clear();
+      if (!dialog.open) dialog.showModal();
+      return;
+    }
     const stock=`公仓木料 ${s.inv.wood} · 石料 ${s.inv.stone}`;
     const food=`粮食 ${s.store}/${s.storeCap}`;
     const weather=[s.phase,s.weather,s.forecast && `明日 ${s.forecast}`].filter(Boolean).join(' · ');
@@ -2381,6 +2413,18 @@ function inspectRoomProp(prop) {
         bindAction('坐下',()=>{ campPose={kind:'sit',prop}; });
         break;
       case 'telescope': detail=weather; break;
+      case 'banner': {
+        if (ui.interior==='hall' && s.social?.discussions) {
+          const names=Object.fromEntries(s.social.people.map(person=>[person.id,person.name]));
+          const d=s.social.discussions, meeting=d.active??d.history?.at(-1);
+          const topics={famine:'缺粮',storm:'风暴',cold:'寒潮',build:'施工',farm:'开垦',housing:'住房'};
+          detail=meeting ? `第 ${meeting.t} 刻 · ${names[meeting.by]??meeting.by} · ${topics[meeting.topic]} · ${({agreed:'达成共识',split:'意见分歧',no_quorum:'未能成会'})[meeting.result]??'讨论中'}` : '目前没有集体讨论记录。';
+          const task=s.coop?.task;
+          if (task) detail+=` · 协作：${BUILDING_NAMES[task.type]}，地点 ${s.rooms[task.loc]??task.loc}，${task.workers.length} 人。`;
+          for (const [id,advice] of Object.entries(meeting?.advice??{})) propOption(options,`${names[id]??id} · ${advice}`,'讨论记录',null);
+        }
+        break;
+      }
       case 'hearth': detail=[food,weather].filter(Boolean).join(' · '); break;
       case 'table':
         detail=privateVisitor?'住户的餐桌。':showContainer(s,options,`${ui.interior}:meal`,prop,true);
@@ -2417,7 +2461,7 @@ async function performCamp(body,site,done) {
   if (campBusy || !S.campReady) return null;
   campBusy=true;
   try {
-    if (site && !body.from && S.view?.loc?.p1!==site) {
+    if (site && !body.from && S.view?.loc?.p1!==site && S.view?.campPlayerRoom!==site) {
       const moved=await api('/act',{mode:'survival',kind:'move',room:site});
       if (!moved.ok) return moved;
       const walker=WALK[walkKey('cvA','p1')];
@@ -2578,6 +2622,7 @@ async function openTalkWith(target,contact){
     const r=await api('/act',{mode:'survival',kind:'talk_open',target,...contact});
     if(!r.ok){ $('campToast').textContent=r.why ?? campCodes[r.code] ?? (r.code==='NOT_TOGETHER'?'对方不在这里。':r.code==='CAMP_ENDED'?'这一局已经结束。':'现在没法交谈。'); return; }
     ui.talk={target,name:r.name,contact};
+    renderTalkAccess();
     $('talkTitle').textContent=`和 ${r.name} 交谈`;
     $('talkLog').innerHTML='';
     addTalk('npc',r.line);
@@ -2585,6 +2630,34 @@ async function openTalkWith(target,contact){
     $('talkText').value=''; $('talkText').focus(); $('talkSend').disabled=false;
   }catch{ $('campToast').textContent='交谈失败，请重试。'; }
   finally{ campBusy=false; }
+}
+function renderTalkAccess() {
+  const target=ui.talk?.target;
+  if (!target) return;
+  const access=$('talkAccess');
+  access.replaceChildren();
+  const room=S.view.housing?.[target];
+  if (room && S.view.homeAccess?.[room]?.entry===false) {
+    propOption(access,'请求到对方家做客','',async()=>{
+      if (!ui.talk) return;
+      const result=await api('/act',{mode:'survival',kind:'home_request',target,...currentTalkContact(ui.talk),home:room});
+      addTalk('sys',result.ok?'住户邀请你在一天内到访。':'住户暂时没有发出邀请。');
+      if (result.ok) { await refresh(); renderTalkAccess(); }
+    });
+  }
+  for (const [room,h] of Object.entries(S.view.homeAccess??{})) {
+    if (!h.resident) continue;
+    for (const [type,label] of [['invite','邀请一天'],['key','交钥匙'],['permission','授权访问']]) {
+      if (type!=='invite' && h.owner!=='p1') continue;
+      const revoke=h.grants.some(g=>g.to===target && g.type===type && (g.by==='p1'||h.owner==='p1'));
+      propOption(access,`${S.view.rooms[room]} · ${revoke?'撤回 '+label:label}`,'',async()=>{
+        if (!ui.talk) return;
+        const result=await api('/act',{mode:'survival',kind:revoke?'home_revoke':'home_grant',room,target,type});
+        addTalk('sys',result.ok?'已更新住宅访问权限。':'无法更新访问权限。');
+        if (result.ok) { await refresh(); renderTalkAccess(); }
+      });
+    }
+  }
 }
 function currentTalkContact(t) {
   if (!t.contact) return {};
@@ -2651,22 +2724,41 @@ async function survInteract() {
   } else { survFlash={kind:'interact',ok:false,code:'NOTHING_HERE'}; refresh(); }
 }
 let enteringRoom=false;
-async function enterRoom(room) {
-  if (enteringRoom) return;
+async function enterRoom(room,force=false) {
+  if (enteringRoom || leavingRoom) return;
   enteringRoom=true;
   try {
     if (S.soloSurv || S.view?.loc?.p1!==room) {
       const walker=WALK[walkKey('cvA','p1')];
-      const body=S.soloSurv?{mode:'survival',kind:'move',room,entrance:Boolean(campRenderer),
+      const body=S.soloSurv?{mode:'survival',kind:'move',room,entrance:Boolean(campRenderer)||Boolean(S.view?.settlementLife && residentialSite(room)),
         from:walker?[walker.x+.5,walker.y+.5]:null}:{kind:'move',room};
-      const result=await api('/act',body);
+      let result=await api('/act',body);
+      if (S.soloSurv && ui.tool==='hammer' && result.code==='HOME_LOCKED') {
+        if (!force) {
+          const dialog=$('campPropDialog'), action=$('campPropAction');
+          $('campPropTitle').textContent='上锁的房门';
+          $('campPropText').textContent='用锤破门会损坏房门、消耗行动时间并降低住户的信任。';
+          $('campPropDetail').hidden=true;
+          $('campPropOptions').replaceChildren();
+          action.hidden=false; action.textContent='用锤破门';
+          action.onclick=()=>{dialog.close(); void enterRoom(room,true);};
+          keys.clear();
+          if (!dialog.open) dialog.showModal();
+          return;
+        }
+        const broken=await api('/act',{...body,kind:'home_break',tool:ui.tool});
+        if (broken.ok) {
+          result=await api('/act',body);
+          $('campToast').textContent='门已损坏，住户对你的信任下降。';
+        } else result=broken;
+      }
       if (!result.ok) { $('campToast').textContent=campCodes[result.code]??SURV_CODE_ZH[result.code]??'无法进入'; return; }
     }
     const walker=WALK[walkKey('cvA','p1')];
     if (walker) {
       walker.path=[]; walker.pi=0; walker.moving=false;
       // 进入后服务器地点会更新。保留门外实际站位，避免退出时被旧路径拖走。
-      if (S.view?.loc?.p1!==room) walker.holdDoor=room;
+      if (S.view?.loc?.p1!==(facilityOf(S.view??{},room)?.loc??room)) walker.holdDoor=room;
     }
     keys.clear();
     ui.overview=false;
@@ -2688,7 +2780,7 @@ function runSurvAction(ctx) {
   if (ctx.tool && ui.tool !== ctx.tool) { survFlash = { kind: ctx.kind, ok: false, code: 'NEED_TOOL', tool: ctx.tool }; refresh(); return; }
   api('/act', { mode: 'survival', kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 }
-const ACT_ZH = { gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
+const ACT_ZH = { discuss_open:'发起讨论',discuss_join:'参加讨论',discuss_share:'交换意见',discuss_decline:'谢绝讨论',discuss_leave:'离开讨论', gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
 const STAGE_ZH = { infant: '婴幼儿', child: '儿童', adult: '成年', elder: '老年' };
 function updateHotbar() {
   ui.tool ??= 'hand';
@@ -3051,6 +3143,16 @@ async function refresh() {
     $('btnCompare').hidden=j.mode==='game';
     if (j.mode==='game' && ui.compare) { selectWorld(false); return; }
     if (ui.menu) return;
+    if (S.soloSurv && j.survival?.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom &&
+        (ui.interior?.startsWith('facility:') || residentialSite(ui.interior) || j.survival.campPlayerRoom)) {
+      const room=j.survival.campPlayerRoom;
+      if (ui.interior!==room) {
+        ui.interior=room;
+        IPOS.site=null;
+        roomRoute=null;
+        $('campPropDialog').close();
+      }
+    }
     // 交谈结束（不耐烦/走开/服务端清空）：收尾，别让输入框停在死对话上。
     if (ui.talk && j.survival && !j.survival.talk) {
       addTalk('sys', `${ui.talk.name}结束了对话。`);
@@ -3389,11 +3491,16 @@ function outdoorEntities(world,w,people,animals) {
     const rect={x:b.x/TILE,z:b.y/TILE,w:b.w/TILE,d:b.h/TILE};
     return {id:'plot:'+b.id,kind:'plot',bed:b,rect,at:[rect.x+rect.w/2,rect.z+rect.d/2],reach:REACH.plot,name:`第 ${b.id+1} 畦`};
   });
+  const facilities=w.settlementLife ? (world.workProjects??[]).filter(p=>p.record.integrity>0 && p.gate && FACILITY_PROPS[p.record.type]).map(p=>{
+    const rect=p.gate, room=facilityId(p.record);
+    return {id:'door:'+room,kind:'door',room,rect,reach:.1,at:[rect.x+rect.w/2,rect.z+rect.d*.82],
+      name:FACILITY_NAMES[p.record.type]};
+  }) : [];
   const works=(world.workProjects??[]).filter(p=>p.record.type!=='house').map(p=>({
     id:p.id,kind:'work',target:p.id,room:p.record.loc,rect:p.lot,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
     reach:1.15,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
   }));
-  return [...doors,...timber,...plants,...fields,...works,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
+  return [...doors,...facilities,...timber,...plants,...fields,...works,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.wild?'scenery':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
@@ -3443,7 +3550,8 @@ function pointedEntity(cv,ev) {
       const [tag,id,type]=b.occluder?.split(':')??[];
       const e=ids.get(b.occluder)??(tag==='site'||tag==='roof'||tag==='work'&&type==='house'?
         (['yard','garden','hall'].includes(id)&&b.y===0&&b.h<=.22?null:ids.get('door:'+id)):
-        tag==='work'?ids.get(b.occluder):
+        tag==='work'?(ids.get(b.occluder)?.tool===ui.tool ? ids.get(b.occluder) :
+          ids.get('door:facility:'+id+':'+type)??ids.get(b.occluder)):
         tag==='tree'?{id:b.occluder,kind:'scenery',at:[Number(id)+.5,Number(type)+.5],name:'树'}:null);
       surfaces.push([b,e??null]);
     }
@@ -3460,9 +3568,29 @@ function pointedEntity(cv,ev) {
 
 async function useOutdoorEntity(e,from) {
   if (e.kind==='resident') { await useResident({target:e.target,room:null,from,to:e.at}); return; }
-  if (e.kind==='door') { await enterRoom(e.room); return; }
+  if (e.kind==='door') {
+    if (e.room.startsWith('facility:') && ui.tool==='hammer') {
+      const b=facilityOf(S.view,e.room);
+      if (b && b.integrity<1) {
+        await performCamp({kind:'repair',target:'work:'+b.loc+':'+b.type,from});
+        return;
+      }
+    }
+    const access=S.view.homeAccess?.[e.room];
+    if (access?.resident && access.damage && ui.tool==='hammer') {
+      await performCamp({kind:'home_fix',room:e.room,tool:ui.tool,from},null);
+      return;
+    }
+    await enterRoom(e.room); return;
+  }
   if (e.kind==='plot') { inspectPlot(e.bed); return; }
   if (e.kind==='work') {
+    const wall=S.view.settlementLife && ui.tool==='hand' && S.view.buildings?.find(b=>b.type==='wall' && b.loc===e.room && b.integrity>0);
+    if (wall) {
+      const result=await api('/act',{mode:'survival',kind:'facility_use',target:facilityId(wall),from});
+      $('campToast').textContent=result.ok?`防护墙完整度 ${Math.round(result.integrity*100)}% · 正在减轻灾害损耗`:'无法检查防护墙。';
+      return;
+    }
     if (ui.tool!=='hammer') { $('campToast').textContent='需要锤。';return; }
     const site=S.view.sites?.find(s=>s.loc===e.room && `work:${s.loc}:${s.type}`===e.target);
     const building=S.view.buildings?.find(b=>b.loc===e.room && `work:${b.loc}:${b.type}`===e.target);

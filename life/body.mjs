@@ -1,3 +1,5 @@
+import { homeEntry, householdAccess } from './home-access.mjs';
+import { discussionAction, discussionPaths, discussionSupport } from './settlement-social.mjs';
 import { till } from './farmland.mjs';
 import { goalCandidates } from './goals.mjs';
 import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './households.mjs';
@@ -35,6 +37,11 @@ export const BASE_KINDS = {
   // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
   house_work: { impulse: .4, cost: .08, label: '为自己的房子加工木石' },
   harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
+  discuss_open: { impulse:.15, label:'发起集体讨论' },
+  discuss_join: { impulse:.15, label:'参加讨论' },
+  discuss_decline: { impulse:.08, label:'谢绝讨论' },
+  discuss_share: { impulse:.08, label:'继续交换意见' },
+  discuss_leave: { impulse:.08, label:'离开讨论' },
   till: { impulse: 0.3, label: '开垦一块新田' },
   plant: { impulse: 0.25, cost: 0.06, label: '在空菜畦播种' },
   // Phase B 建设动作（仅 survival）。
@@ -58,6 +65,7 @@ import { isAlive, livingResidents } from './viability.mjs';
 // P0-2 统一基础行动成本：玩家与 AI 同一动作付同一存续代价（execute 与 survAct/camp 共用此表）。
 // 数值与原 affordancesFor 候选逐字相同 ⇒ AI 轨迹不变；玩家侧从此按同表结算，不再免费劳动。
 export const SURV_COST = Object.freeze({
+  discuss_open:.05, discuss_join:.04, discuss_share:.035, discuss_decline:.015, discuss_leave:.015,
   house_work: 0.08, harvest: 0.08, plant: 0.06, till: 0.1, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
   deposit: 0.03, withdraw: 0.03, forage: 0.12, exchange: 0.12, expand: 0.15, move_to: 0.06,
 });
@@ -211,6 +219,8 @@ export function perceptsAt(world, id) {
 }
 
 // 路径清单：同一需求给出多条可选路径，代价随关系变化
+const crowdForVisit=(world,loc)=>(world.occupancy[loc]??[]).some(id=>householdAccess(world,id,loc));
+
 export function affordancesFor(world, agentId) {
   const me = world.agents[agentId];
   const here = world.loc[agentId];
@@ -247,9 +257,14 @@ export function affordancesFor(world, agentId) {
   const houseGoal=world.survival?.households ? householdPlans(world,agentId) : null;
   const homeAtNight=ownHome && survivalPhaseOf(world.t)==='夜';
   for (const loc of Object.keys(world.locs ?? LOCS)) {
-    if (loc===here || (privateRooms.includes(loc) && (loc!==ownHome || !homeAtNight))) continue;
+    if (loc===here) continue;
+    if (privateRooms.includes(loc)) {
+      if (world.survival.settlementLife ? !homeEntry(world,agentId,loc).ok ||
+          (loc===ownHome ? !homeAtNight : !crowdForVisit(world,loc)) : loc!==ownHome || !homeAtNight) continue;
+    }
     const crowd = (world.occupancy[loc] ?? []).filter((x) => x !== agentId);
-    const serves=loc===houseGoal?{energy:.7,safety:1,stimulation:1}:loc===ownHome?{energy:.46,safety:.2}:crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
+    const shelter=world.survival?.settlementLife && world.survival.buildings.some(b=>b.type==='shelter' && b.loc===loc && b.integrity>0);
+    const serves=shelter?{energy:.65,safety:.38}:loc===houseGoal?{energy:.7,safety:1,stimulation:1}:loc===ownHome?{energy:.46,safety:.2}:crowd.length ? { social: 0.55, stimulation: 0.2 } : loc === 'watch' ? { stimulation: 0.6 } : loc === 'store' || loc === 'home' ? { energy: 0.35 } : (feats.work && loc === 'workshop') ? { energy: 0.35, stimulation: 0.2 } : { stimulation: 0.25 };
     out.push({ id: `move_to:${loc}`, kind: 'move_to', to: loc, label: `走到${(world.locs ?? LOCS)[loc] ?? loc}`, cost: 0.06, impulse: 0.15, serves });
   }
 
@@ -401,6 +416,14 @@ export function affordancesFor(world, agentId) {
       }
     } else out.push(proposed);
   }
+  for (const {kind,value} of discussionPaths(world,agentId)) out.push({
+    id:kind,kind,label:BASE_KINDS[kind].label,impulse:BASE_KINDS[kind].impulse,cost:SURV_COST[kind],
+    serves:{social:.3}, goalValue:value,
+  });
+  if (world.survival?.settlementLife) for (const action of out) {
+    const support=discussionSupport(world,agentId,action);
+    if (support) action.goalValue=(action.goalValue??0)+support;
+  }
   const cooperation = cooperationCandidate(world, agentId);
   if (cooperation) {
     // 同一行为 ID 只保留一条，保留原需求收益和习惯键。
@@ -476,9 +499,25 @@ function actuateInner(world, agentId, action) {
       const eff = world.agents[me]?.coupling?.apply('refuse');
       return { action, ok: Boolean(eff), code: eff ? 'OK' : 'NO_COUPLING', observation: eff ? `打定主意不理${world.agents[action.target]?.name ?? action.target}` : '这里没有可拒绝的对象', evt: evt({ kind: 'refuse', valence: -0.1, about: action.target, violates: null, serves: 'social' }), coupling: eff };
     }
-    case 'rest':
+    case 'rest': {
+      const sheltered=world.survival?.settlementLife && (householdAccess(world,agentId,here) ||
+        world.survival.buildings.some(b=>b.type==='shelter' && b.loc===here && b.integrity>0));
+      if (sheltered) return {action,ok:true,code:'OK',observation:'在住处休息',satiated:'energy',amount:.15,
+        evt:evt({kind:'rest',valence:.25,serves:'energy'})};
       return { action, ok: true, code: 'OK', observation: '靠着墙歇了会儿', satiated: 'energy', amount: 0.05, evt: evt({ kind: 'rest', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'discuss_open':
+    case 'discuss_join':
+    case 'discuss_share':
+    case 'discuss_decline':
+    case 'discuss_leave': {
+      const r=discussionAction(world,agentId,action.kind,true);
+      return {...r,action,observation:BASE_KINDS[action.kind].label,
+        ...(r.ok?{evt:evt({kind:action.kind,valence:.15,serves:'social'})}:{})};
+    }
     case 'move_to': {
+      const access=homeEntry(world,agentId,action.to);
+      if (!access.ok) return {...access,action};
       move(world, agentId, action.to);
       const crowd = othersAt(world, agentId);
       if (crowd.length) world.pending.push({ for: agentId, evt: evt({ kind: 'company_soon', valence: 0.15, selfCaused: false, about: crowd[0] }) });
