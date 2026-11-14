@@ -24,7 +24,9 @@ test('peripheral lots use the same cost, work phases, repair, facility, and save
   let sp=start(), w=sp.world;
   const loc='district-west', d=w.districts[loc], from=[d.at[0]+.5,d.at[1]-.35];
   assert.ok(from[0]<0);
-  const act=(kind,body)=>survAct(sp,{kind,...body});
+  // P0-1 改量披露：外围动作现需服务端玩家位置连续性校验。本测试聚焦地块成本/工phase/维修/设施，
+  // 故每次动作前重立"玩家已合法步行到该区"（playerPos 留足步行余量）；瞬移拒绝由 V4-01 闸门专测。断言未放宽。
+  const act=(kind,body)=>{ w.survival.playerPos={x:from[0],z:from[1],t:w.t-100}; return survAct(sp,{kind,...body}); };
   const next=()=>{w.t++;};
   const plan={target:loc,tool:'hammer',type:'granary',from};
   assert.equal(act('plan',{...plan,from:[10,20]}).code,'OUT_OF_REACH');

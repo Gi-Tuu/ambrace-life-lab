@@ -9,6 +9,7 @@ process.env.SEED_FILE=join(process.env.DATA_DIR,'none.json');
 process.env.GAME_MODE='game';
 process.env.TICK_MS='1000000';
 const {host}=await import('./host.mjs');
+const {PLAYER_UNITS_PER_TICK}=await import('./body.mjs');
 
 test('game mode advances both comparison worlds while the A/B entry is being viewed',async()=>{
   await host.start();
@@ -38,6 +39,20 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     const control = (action, fields = {}) => host.ctl({mode: 'compare', action, ...fields});
     const original = snapshot().comparison;
     await host.ctl({action: 'survival_reset', confirm: true});
+    // P0-1 改量披露：外围采集现需服务端玩家位置连续性校验（瞬移拒绝由 V4-01 闸门专测）。
+    // 夹具先确立"玩家已合法步行到外围采集点"，再据此派生 A/B 对照档；断言未放宽。
+    {
+      const o = snapshot().survival;
+      const [, dSite] = Object.entries(o.districts).find(([,s])=>s.resource==='wood');
+      const hall = o.layout.sites.hall;
+      await host.act({mode:'survival', kind:'player_sync', from:[hall[0],hall[1]]});
+      const steps = Math.ceil(Math.hypot(dSite.source[0]-hall[0], dSite.source[1]-hall[1])/PLAYER_UNITS_PER_TICK)+1;
+      for (let i=1;i<=steps;i++){
+        await host.ctl({action:'step'});
+        const f=i/steps;
+        await host.act({mode:'survival', kind:'player_sync', from:[hall[0]+(dSite.source[0]-hall[0])*f, hall[1]+(dSite.source[1]-hall[1])*f]});
+      }
+    }
     const official = structuredClone(snapshot().survival);
     const worldFile = join(process.env.DATA_DIR, 'world.json');
     const compareFile = join(process.env.DATA_DIR, 'comparison.json');
@@ -63,7 +78,7 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     const [district, {source: point}] = source;
     const gather = await act('gather', {target:district, tool:'axe', from:point, otherContact:{from:[0,0]}});
     assert.equal(gather.sides.A.ok, true);
-    assert.equal(gather.sides.B.code, 'OUT_OF_REACH');
+    assert.equal(gather.sides.B.code, 'TELEPORT'); // P0-1 改量：B 用 otherContact.from=[0,0] 远处⇒连续性拒绝（原 OUT_OF_REACH）
     const after = snapshot().comparison;
     assert.equal(after.A.pinv.p1.wood, official.pinv.p1.wood+2);
     assert.equal(after.B.pinv.p1.wood, official.pinv.p1.wood);

@@ -191,6 +191,13 @@ export function spawn(world, id, loc) {
 }
 
 // Distant trips consume world time. Occupancy changes once, when the resident arrives.
+// 外围移动速度单一来源：居民 startMove 用 距离/RESIDENT_UNITS_PER_TICK 刻；玩家外围连续性校验
+// （survplay.playerReach）用 PLAYER_UNITS_PER_TICK，且不得快于居民（同权）。改这两个常量即可做负向对照。
+export const RESIDENT_UNITS_PER_TICK = 12;
+// 玩家外围速度上限：自居民 12 格/刻显式换算取 10（保守慢于居民）。居民 startMove 用 ceil(距离/12)+1 刻
+// （含 +1 抵达开销）；玩家取 10 格/刻保证同程刻数 ceil(距离/10) ≥ 居民 ceil(距离/12)+1（外围距离≥60 时恒成立），
+// 即"玩家不得比居民快"。改此常量即可做负向对照（V4-03 变红法：翻倍⇒玩家快于居民⇒红）。
+export const PLAYER_UNITS_PER_TICK = 10;
 export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
@@ -200,7 +207,7 @@ export function startMove(world,id,to) {
     return;
   }
   const start=worldSite(world,from), end=worldSite(world,to);
-  const ticks=Math.max(2,Math.ceil((start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0)/12)+1);
+  const ticks=Math.max(2,Math.ceil((start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0)/RESIDENT_UNITS_PER_TICK)+1);
   (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks};
 }
 

@@ -8,7 +8,7 @@ import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 // 生存单世界游玩层（Phase D / §14–15 P2）。居民＝完整 Organism（同权：玩家能做的 AI 都能做）。
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
-import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST } from './body.mjs';
+import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { validate } from './rules.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
@@ -456,6 +456,28 @@ export function playerTimeLeft(w) {
   const s = w.survival;
   return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
 }
+
+// P0-1（第三阶段·外围同权）：服务端拥有玩家外围位置 w.survival.playerPos={x,z,t}。
+// 带 from 的外围动作先做连续性校验：声称位置相对上次服务端位置的距离 ≤ PLAYER_UNITS_PER_TICK×经过的世界刻。
+// 速度常量与居民 startMove 同源（body.mjs，距离/12 刻），玩家不得快于居民。
+// 首次/旧档无 playerPos ⇒ 按 w.loc.p1 的 worldSite 推定，绝不默认把玩家放在外围任意点。
+// 失败返回 TELEPORT：survAct 包装器自动退还行动预算，viab 仅成功才扣 ⇒ 不补贴。规则层仍是唯一裁决者。
+// 只在 survival 外围生效；lab/town/研究世界无 districts/peripheralHomes ⇒ 不受影响。
+export function playerReach(w, from) {
+  if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
+  const s = w.survival;
+  let last = s.playerPos;
+  if (!last || !Number.isFinite(last.x) || !Number.isFinite(last.z)) {
+    const at = worldSite(w, w.loc.p1);
+    if (!at) return { ok: false, code: 'OUT_OF_REACH' };
+    last = { x: at[0], z: at[1], t: w.t };
+  }
+  const dt = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
+  const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
+  if (dist > PLAYER_UNITS_PER_TICK * dt + 1e-6) return { ok: false, code: 'TELEPORT' };
+  s.playerPos = { x: from[0], z: from[1], t: w.t };
+  return { ok: true };
+}
 function spendTime(w, cost) {
   budgetLeft(w);
   if (w.survival.p1BudgetLeft + 1e-9 < cost) return false;
@@ -486,6 +508,12 @@ function survActInner(sp, body) {
     w.campPlayerRoom=null;
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
     return {ok:true};
+  }
+  if (kind === 'player_sync') {
+    // P0-1：客户端行走器持续上报真实位置（表现层），服务端做连续性校验并拥有 playerPos。
+    // 不扣行动预算/存续（playerTimeCost 无此项）；伪造瞬移⇒TELEPORT。合法逐格步行由此确立位置。
+    const reach=playerReach(w,body.from);
+    return reach.ok ? {ok:true,code:'OK'} : reach;
   }
   if (kind==='animal_feed' || kind==='animal_slaughter') {
     const r=animalAction(w,body);
@@ -564,8 +592,12 @@ function survActInner(sp, body) {
     }
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
     const district=w.districts?.[room];
-    if (district && (body.entrance || w.campPlayerRoom || !regionPoint(body.from) || distanceToRect(body.from,district.pad)>1.15))
-      return {ok:false,code:'OUT_OF_REACH'};
+    if (district) {
+      if (body.entrance || w.campPlayerRoom) return {ok:false,code:'OUT_OF_REACH'};
+      const reach=playerReach(w,body.from); // P0-1：跨区进入也须连续步行，不能瞬移进区
+      if (!reach.ok) return reach;
+      if (distanceToRect(body.from,district.pad)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+    }
     const access=homeEntry(w,'p1',room);
     if (!access.ok) return access;
     if (w.survival.settlementLife && residentialSite(room,w.peripheralHomes) && !body.entrance) return {ok:false,code:'OUT_OF_REACH'};
@@ -587,8 +619,12 @@ function survActInner(sp, body) {
     const building=records.find(b=>`work:${b.loc}:${b.type}`===body.target);
     if (!building) return {ok:false,code:kind==='build'?'NO_SITE':'NO_REPAIR'};
     const lot=building.lot??buildLot(w,building.loc);
-    if (w.campPlayerRoom || !lot || !regionPoint(body.from) ||
-        distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+    if (w.campPlayerRoom || !lot) return {ok:false,code:'OUT_OF_REACH'};
+    // P0-1：仅外围工地需连续性校验；核心营地保持现行为（§三.5）
+    if (w.districts?.[building.loc] || w.peripheralHomes?.[building.loc]) {
+      const reach=playerReach(w,body.from); if (!reach.ok) return reach;
+    } else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
+    if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
     const result=(kind==='build'?doBuild:doRepair)(w,'p1',building.loc);
     if (result.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
@@ -618,8 +654,11 @@ function survActInner(sp, body) {
     if (!site) return {ok:false,code:'NO_SITE'};
     if (positioned || w.districts?.[site.loc]) {
       const lot=site.lot??buildLot(w,site.loc);
-      if (!lot || w.campPlayerRoom || !regionPoint(body.from) || distanceToRect(body.from,lot)>1.15)
-        return {ok:false,code:'OUT_OF_REACH'};
+      if (!lot || w.campPlayerRoom) return {ok:false,code:'OUT_OF_REACH'};
+      if (w.districts?.[site.loc] || w.peripheralHomes?.[site.loc]) {
+        const reach=playerReach(w,body.from); if (!reach.ok) return reach; // P0-1：外围工地连续性校验
+      } else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
+      if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
     }
     const wl = willingness(w, target, { type: site.type, severity: 0.7, requester: 'p1', loc: site.loc });
     if (wl.decision === 'refuse') {
@@ -646,8 +685,10 @@ function survActInner(sp, body) {
   if ((kind==='plan' || kind==='gather') && (Object.hasOwn(body,'from') || w.districts?.[actionLoc])) {
     const district=w.districts?.[body.target];
     const lot=kind==='plan'?buildLot(w,body.target):district && {x:district.source[0]-.42,z:district.source[1]-.42,w:.84,d:.84};
-    if (!lot || w.campPlayerRoom || !regionPoint(body.from) || distanceToRect(body.from,lot)>1.15)
-      return {ok:false,code:'OUT_OF_REACH'};
+    if (!lot || w.campPlayerRoom) return {ok:false,code:'OUT_OF_REACH'};
+    if (district) { const reach=playerReach(w,body.from); if (!reach.ok) return reach; } // P0-1：外围采集/奠基连续性校验，伪造 from 跨区⇒TELEPORT
+    else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
+    if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
     const tool=kind==='plan'?'hammer':district.resource==='wood'?'axe':'pick';
     if (body.tool!==tool) return {ok:false,code:'NEED_TOOL'};
     actionLoc=body.target;
@@ -703,7 +744,7 @@ export function survView(sp) {
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
-    ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock}),
+    ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
     store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
