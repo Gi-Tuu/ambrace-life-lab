@@ -1,4 +1,10 @@
 import { itemBoxes } from './camp-items.mjs';
+import { WALK_DIRECTIONS } from './walk.mjs';
+
+function rotateXZ([x,y,z], angle, px=0, pz=0) {
+  const c=Math.cos(angle), s=Math.sin(angle);
+  return [px+(x-px)*c-(z-pz)*s,y,pz+(x-px)*s+(z-pz)*c];
+}
 
 const rgb = (hex, shade = 1) => [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)*shade/255);
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -30,6 +36,10 @@ export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65 }) {
 
 // 射线用同一相机方向判定点击深度和实际遮挡。
 export function rayBox(origin, direction, b) {
+  if (b.yaw) {
+    origin=rotateXZ(origin,-b.yaw,b.pivotX,b.pivotZ);
+    direction=rotateXZ(direction,-b.yaw);
+  }
   const lower=[b.x,b.y,b.z], upper=[b.x+b.w,b.y+b.h,b.z+b.d];
   let near=0, far=Infinity;
   for (let i=0;i<3;i+=1) {
@@ -67,7 +77,7 @@ function quad(data,a,b,c,d,color,uv=[[0,0],[0,0],[0,0],[0,0]],material=()=>[0,0,
   for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]));
 }
 
-function prism(data,{ x,y,z,w,h,d,color,axis,end,glow,wind }) {
+function prism(data,{ x,y,z,w,h,d,color,axis,end,glow,wind,yaw,pivotX,pivotZ }) {
   if (w <= 0 || d <= 0 || h < 0) return;
   const x1=x+w,z1=z+d;
   const height=(u,v)=>axis==='x' ? y+(end-y)*u : axis==='z' ? y+(end-y)*v : y+h;
@@ -76,7 +86,10 @@ function prism(data,{ x,y,z,w,h,d,color,axis,end,glow,wind }) {
   const A=[x,bottom,z],B=[x1,bottom,z],C=[x1,bottom,z1],D=[x,bottom,z1];
   const material=point=>[wind ? wind.weight*(wind.rooted ? (point[1]-y)/Math.max(h,.01) : 1) : 0,
     wind?.phase??0,Number(Boolean(glow))];
-  const face=(a,b,c,d,shade=1)=>quad(data,a,b,c,d,rgb(color,shade),undefined,material);
+  const face=(a,b,c,d,shade=1)=>{
+    const points=yaw?[a,b,c,d].map(p=>rotateXZ(p,yaw,pivotX,pivotZ)):[a,b,c,d];
+    quad(data,...points,rgb(color,shade),undefined,material);
+  };
   face(a,b,c,d0);
   if (!axis && h===0) return;
   face(a,b,B,A,.70); face(b,c,C,B,.78);
@@ -172,11 +185,11 @@ export function actorBoxes(p,frame) {
 }
 function actorGeometry(p,frame,emit) {
   const {x,y,z}=p, t=frame%4, gait=p.moving ? [0,.15,0,-.15][t] : 0;
-  const turn={down:0,left:1,up:2,right:3}[p.direction]??0;
+  const turn=Math.max(0,WALK_DIRECTIONS.indexOf(p.direction));
   const child=p.stage==='child';
   const feminine=p.sex==='F', hair=p.hair??(feminine?'#573B31':'#403631');
   const act=String(p.act??'idle');
-  const build=/^(build|plan|repair|work)$/.test(act);
+  const build=/^(build|plan|repair|work|till)$/.test(act);
   const gather=/^(gather|harvest|plant|forage|collect)$/.test(act);
   const talk=/^(talk|hail|say|companion)$/.test(act);
   const food=/^(eat|food|trade|buy|take_shared)$/.test(act);
@@ -199,8 +212,12 @@ function actorGeometry(p,frame,emit) {
       if (dy<.3) { h*=.66; dz+=.16; }
     }
     if (dy>.4) dz+=bend;
-    const [px,pz,pw,pd]=turnBox(dx,dz,w,d,turn);
-    emit({x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
+    if (turn % 2) {
+      emit({x:x+dx,y:y+dy+bob,z:z+dz,w,h,d,color,yaw:turn*Math.PI/4,pivotX:x,pivotZ:z});
+    } else {
+      const [px,pz,pw,pd]=turnBox(dx,dz,w,d,turn/2);
+      emit({x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
+    }
   };
   if (!p.pose) draw(-.27,.004,-.20,.54,0,.45,'#72513B');
   draw(-.20,0,-.12+gait,.15,.46,.25,'#324D59');

@@ -4,7 +4,7 @@ import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
-import { astar, isWalkable, stepWalker } from './walk.mjs';
+import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
 import {
   COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
   overrideWalk, pathFromWalker, roomAllows,
@@ -928,7 +928,8 @@ function houseLights(g,o,cam,strength){
 function drawResident(g, who, action, x, y, facing = 'down', stage) {
   const descendant = /^c\d+$/.test(who), child = stage==='child' || (stage==null && descendant);
   const sheet = ACT.chars[who] ?? (descendant ? ACT.chars.a1 : null), size = ACT.size ?? [16, 24], directions = ACT.directions ?? ['down'];
-  const direction = Math.max(0, directions.indexOf(facing));
+  const exact = directions.indexOf(facing);
+  const direction = exact >= 0 ? exact : Math.max(0, directions.indexOf(facing.split('-')[0]));
   const row = action * directions.length + direction;
   const dw = child ? 12 : 16, dh = child ? 18 : 24;
   if (ACT.ready && sheet) g.drawImage(sheet, ACT.frame * size[0], row * size[1], size[0], size[1], x, y - 8, dw, dh);
@@ -956,15 +957,25 @@ function routeForWalker(world, walker, goal) {
   if (!mapAllows(world,...goal)) return null;
   // 快速路线在穿过窄栏杆时可能遗漏细格，逐段复核后再采用。
   if (path) {
-    let x = walker.x, y = walker.y;
-    const complete = [...path, goal];
-    const safe = complete.every(([nx,ny])=>{
-      const steps = Math.max(1,Math.ceil(Math.hypot(nx-x,ny-y)*TILE*2));
-      for(let i=1;i<=steps;i++) if(!mapAllows(world,x+(nx-x)*i/steps,y+(ny-y)*i/steps)) return false;
-      x=nx;y=ny;
+    let x=walker.x, z=walker.y;
+    const complete=[...path,goal], smooth=[];
+    const clear=([nx,nz])=>{
+      const dx=nx-x, dz=nz-z, steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)*TILE*2));
+      for (let i=1;i<=steps;i++) {
+        const px=x+dx*i/steps, pz=z+dz*i/steps;
+        if (!mapAllows(world,px,pz) || !mapAllows(world,px,pz-dz/steps)) return false;
+      }
       return true;
-    });
-    if(safe)return complete;
+    };
+    for (let i=0;i<complete.length;) {
+      let next=Math.min(i+2,complete.length-1);
+      while (next>i && !clear(complete[next])) next-=1;
+      if (!clear(complete[next])) break;
+      [x,z]=complete[next];
+      smooth.push(complete[next]);
+      i=next+1;
+      if (i===complete.length) return smooth;
+    }
   }
   const pixel = v=>Math.floor((v+.5)*TILE);
   const start = [pixel(walker.x),pixel(walker.y)];
@@ -3713,9 +3724,9 @@ loadAssets().finally(() => {
           campCart.x+=(footX-IPOS.x-8)/TILE;
           campCart.z+=(footY-IPOS.y-16)/TILE;
         }
+        IPOS.direction=walkDirection(footX-IPOS.x-8,footY-IPOS.y-16,IPOS.direction);
         IPOS.x = footX - 8;
         IPOS.y = footY - 16;
-        IPOS.direction=Math.abs(dz)>Math.abs(dx)?(dz<0?'up':'down'):(dx<0?'left':'right');
         if (dx) IPOS.face=dx>0?1:-1;
         if (routeMove && step>.01 && !IPOS.moving) {
           roomRoute=null;
@@ -3733,7 +3744,7 @@ loadAssets().finally(() => {
       const manual=player && (mdx || mdy);
       if (!manual && walker.pi>=walker.path.length) { walker.moving=false; continue; }
       const [dx,dy]=manual?[mdx,mdy]:walker.path[walker.pi].map((v,i)=>v-(i?walker.y:walker.x));
-      if (dx || dy) walker.direction=Math.abs(dy)>Math.abs(dx)?(dy<0?'up':'down'):(dx<0?'left':'right');
+      const oldX=walker.x, oldZ=walker.y;
       if (manual) { walker.path=[]; walker.pi=0; outdoorIntent=null; }
       if (campRenderer) {
         const world=campWorlds.get(cvId);
@@ -3745,6 +3756,7 @@ loadAssets().finally(() => {
         walker.moving=x!==walker.x || y!==walker.y;
         walker.x=x; walker.y=y;
       } else stepWalker(walker,mstep);
+      walker.direction=walkDirection(walker.x-oldX,walker.y-oldZ,walker.direction);
       if (dx) walker.face=dx>0?1:-1;
       if (changed && walker.moving && !reduced.matches) {
         (DUST[cvId] ??= []).push({ x: walker.x, y: walker.y + 0.8, age: 0 });
