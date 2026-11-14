@@ -505,6 +505,26 @@
   .eco-icons button:disabled { opacity:.42; cursor:not-allowed; }
   .eco-icons img { width:32px; height:32px; image-rendering:pixelated; }
   .eco-icons .tag { position:absolute; bottom:0; right:1px; font-size:12px; color:var(--gold); text-shadow:1px 1px 0 #000; }
+
+  /* 工具栏最右：书 / 房子 只留图标，无边框无角标 */
+  #hotbar .slot.icon.bare {
+    width:34px; height:34px; border:0; background:transparent; box-shadow:none; padding:0;
+  }
+  #hotbar .slot.icon.bare i { display:none; }
+  #hotbar .slot.icon.bare:hover { background:transparent; border:0; }
+  #btnManual { margin-left:auto; }
+  /* 生存状态 → 游戏画面内悬浮 HUD；侧栏卡片（含标题）整体移除 */
+  .world.side-a { position:relative; }
+  #grpSurv {
+    position:absolute; z-index:20; top:74px; left:18px; width:min(310px,44%);
+    margin:0; padding:8px 10px; background:rgba(50,48,44,.86);
+    border:2px solid var(--line); box-shadow:3px 3px 0 0 rgba(0,0,0,.35);
+    backdrop-filter:blur(2px);
+  }
+  #grpSurv > summary { display:none; }
+  #grpSurv #survPanel { gap:5px; }
+  #grpSurv .stat-icons { gap:8px; font-size:12px; }
+  #grpSurv .survrow { gap:6px; }
 </style>
 </head>
 <body class="menu-mode">
@@ -566,7 +586,7 @@
   <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>
   <button id="btnBagTop" type="button" aria-haspopup="dialog" hidden>背包（E）</button>
   <button id="btnCompare" type="button" aria-pressed="false">研究对照 A/B</button>
-  <details id="keysHelp"><summary>按键</summary>
+  <details id="keysHelp" hidden><summary>按键</summary>
     <div>WASD/方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板</div>
   </details>
 </div>
@@ -590,12 +610,16 @@
         <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
         <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
         <span id="toolHint">手持 · 空手</span>
-  <button class="slot icon" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="22" height="22" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg><i>M</i></button>
-  <button class="slot icon" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="22" height="22" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg><i>H</i></button>
+  <button class="slot icon bare" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg></button>
+  <button class="slot icon bare" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg></button>
       </div>
       
       <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
       <canvas id="cvA" width="384" height="256"></canvas>
+      <details id="grpSurv" class="grp surv-only" open>
+      <summary>生存状态</summary>
+      <section id="survPanel"></section>
+    </details>
       <div id="itemBar" class="surv-only" role="group" aria-label="物品栏"></div>
       <div class="occ" id="occA"></div>
       
@@ -609,10 +633,7 @@
     </div>
   </div>
   <aside>
-    <details id="grpSurv" class="grp surv-only" open>
-      <summary>生存状态</summary>
-      <section id="survPanel"></section>
-    </details>
+
     <details id="grpVillage" class="grp surv-only" open>
       <summary>聚落一览</summary>
       <div id="villagePanel"></div>

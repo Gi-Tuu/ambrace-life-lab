@@ -3207,7 +3207,7 @@ function coopPanel(s) {
   const reqBtns = site ? residents.map((a) => `<button data-coop="${esc(a.id)}">请${esc(a.name)}协助</button>`).join('') : '';
   return `<details class="survdetail"><summary>合作施工</summary>
     <div class="survrow">${task ? `当前任务 ${esc(task.type)}·${esc(task.phase)}·${task.workers.length}人` : '暂无任务'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 退出 ${s.coop.exits ?? 0}</div>
-    ${site ? `<div class="survrow survbtns">你在工地 ${esc(site.type)}：${reqBtns}</div>` : '<div class="survrow dim">站在工地上可向居民请求协助；居民按自身需求、对你的信任、天气与任务价值决定是否参与，也可能中途退出。</div>'}
+    ${site ? `<div class="survrow survbtns">你在工地 ${esc(site.type)}：${reqBtns}</div>` : '<div class="survrow dim">说明书 · 合作施工 查看规则</div>'}
   </details>`;
 }
 
@@ -3263,9 +3263,8 @@ function renderManual(s) {
       '⑤ 建储粮设施提高粮仓上限；居民信任越高越愿意协助。',
       '⑥ 长期经营：维持食物、住所和生态，应对四季与灾害。',
     ].map(line).join('') + '</ul>',
-    h('操作'), '<ul>' + [
-      'WASD / 方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · F 交互 · Esc 关闭面板',
-      '点家具走近使用，到门口进入；靠近居民空手按 F 交谈（重工具会击伤）。',
+    h('按键'), '<ul>' + [
+      'WASD/方向键 走路 · Shift 奔跑 · 1-8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板',
       '工具：手/斧/镐/锄/锤/篮/剪/桶；工具栏右侧显示当前手持与可用动作。',
     ].map(line).join('') + '</ul>',
     h('家庭与住房'), v('子女 12 个游戏日成年。成年后会根据床位、家人意愿和个人物资选择住处。'),
