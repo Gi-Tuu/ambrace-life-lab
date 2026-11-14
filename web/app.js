@@ -1,3 +1,4 @@
+import { solarLight } from './camp-sun.mjs';
 import { createCampOutskirts, moveJoinedWalker } from './camp-outskirts.mjs';
 import { forestDensity, inCamp, WILDS } from './wild-landscape.mjs';
 import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
@@ -2057,9 +2058,14 @@ function drawCamp(cv,w) {
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
   const climate=campClimate(w);
   const time=ACT.motionTime??0, open=!room || ['hall','yard','garden','well','watch'].includes(ui.interior);
-  const light=w.phase==='夜'?[.55,.62,.76]:w.phase==='暮'?[.88,.79,.70]:climate.storm?[.68,.76,.82]:[1,1,1];
+  const elapsed=S.running ? Math.max(0,performance.now()-(S.sunTickAt??performance.now())) : 0;
+  const sun=S.soloSurv ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
+    {storm:climate.storm,overcast:climate.rain||climate.snow,indoor:!open}) : null;
+  const light=sun?.light??(w.phase==='夜'?[.55,.62,.76]:w.phase==='暮'?[.88,.79,.70]:climate.storm?[.68,.76,.82]:[1,1,1]);
   const weather=[time,open?(climate.storm?2.7:climate.rain?1.15:.55):0,Number(open&&climate.drought),
-    w.phase==='夜'?.96:w.phase==='暮'?.48:0];
+    sun?.glow??(w.phase==='夜'?.96:w.phase==='暮'?.48:0)];
+  const sunHint=$('campSunPhase');
+  if (sun && sunHint.textContent!==sun.phase) sunHint.textContent=sun.phase;
   for(const person of people){
         const surface=stage.heightAt(person.x,person.z);
     const ground=extended?.height(person.x,person.z);
@@ -2075,7 +2081,7 @@ function drawCamp(cv,w) {
   }
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered,
     exterior,extended,people,animals,work,visibility,sight,regionDetails};
@@ -2106,7 +2112,7 @@ function drawCamp(cv,w) {
       campBadge(g,camera,[px,hit.labelHeight??Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??0)+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended && !terrain),p1:player?[player.x,player.y,player.z]:null};
+  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended && !terrain),p1:player?[player.x,player.y,player.z]:null};
   cv.dataset.renderer='3d';
   return true;
 }
@@ -3292,7 +3298,13 @@ async function refresh() {
     }
     S.brain = j.brain;
     S.model = j.model;
+    if (S.running!==j.running || S.sunTick!==j.survival?.t || S.sunSeed!==j.survival?.mapSeed) {
+      S.sunTick=j.survival?.t;
+      S.sunSeed=j.survival?.mapSeed;
+      S.sunTickAt=performance.now();
+    }
     S.running = j.running;
+    S.tickMs=j.tickMs;
     S.masks = j.masks ?? S.masks;
     S.viewB = j.B;   // 动画循环重绘 B 侧用；不新增请求、不动载荷形状
     S.layer = j.layer ?? S.layer;

@@ -290,7 +290,7 @@ const FRAGMENT = `
   uniform vec4 uHearth;
   uniform mediump vec4 uWeather;
   uniform float uSeason;
-  uniform vec3 uLight;
+  uniform vec3 uLight, uSun;
   uniform float uAlpha;
   varying vec3 vColor;
   varying vec2 vUV;
@@ -361,7 +361,10 @@ const FRAGMENT = `
       bool known=uVisibility && all(greaterThanEqual(local,vec2(0.))) && all(lessThan(local,vec2(1.)));
       shade=(known?texture2D(uFog,local).r:1.)*radial;
     }
-    vec3 lit=color*uLight*mix(.48,1.,shade);
+    float facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
+    vec3 sunlight=vec3(.27,.123,.046)*uSun.z*(.7+facing*.6);
+    vec3 lit=color*(uLight+sunlight)*mix(.48,1.,shade);
+    if (water>.5) lit+=vec3(.20,.105,.037)*uSun.z*facing;
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
     lit+=vec3(.31,.145,.048)*fire;
@@ -390,7 +393,7 @@ export function createCampRenderer() {
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Sun','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
@@ -502,7 +505,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -512,6 +515,7 @@ export function createCampRenderer() {
       gl.uniformMatrix4fv(uniform.View,false,camera.view);
       gl.uniformMatrix4fv(uniform.Projection,false,camera.projection);
       gl.uniform3fv(uniform.Light,light);
+      gl.uniform3fv(uniform.Sun,sun?[...sun.direction,sun.strength]:[0,0,0]);
       gl.uniform3fv(uniform.Sight,sight);
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
