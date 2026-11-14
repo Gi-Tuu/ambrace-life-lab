@@ -1,7 +1,7 @@
 import { beam, cyl, modelBounds } from './camp-3d-render.mjs';
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
-import { facilityGate } from './camp-facility.mjs';
+import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
@@ -16,10 +16,10 @@ function addModel(boxes,model,occluder) {
 }
 
 function stage(width, depth) {
-  const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [];
+  const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [], parts=new Map();
   let occluder = null;
   return {
-    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, entrances: {},
+    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, parts, entrances: {},
     group(id, build) {
       const previous=occluder;
       occluder=id;
@@ -30,6 +30,7 @@ function stage(width, depth) {
     box(x, y, z, w, h, d, color, solid = false, glow = false, fxKind = null, transform) {
       const item=addModel(boxes,{x,y,z,w,h,d,color,solid,glow,...transform},occluder);
       if (fxKind) { item.fx = fxKind; fxs.push(item); }
+      if (item.part) parts.set(occluder+':'+item.part,item);
       return item;
     },
     beam(...args) { return addModel(boxes,beam(...args),occluder); },
@@ -875,6 +876,10 @@ function granary3d(s, lot, record, world) {
 
   // 储粮量分档：0 / 少量 / 部分 / 明显增多。store=0 时一个容器都不画。
   const count = granaryGoods(world);
+  const scaleX=X+W-.65, scaleZ=front+.12;
+  s.box(scaleX,.89,scaleZ,.42,.7,.05,'#514134',false,false,{part:'stock-scale'});
+  const level=count===0?0:count===1?1:count===3?2:3;
+  s.box(scaleX+.06,.94+level*.17,scaleZ+.06,.30,.08,.055,'#FFEC27',false,false,{part:'stock-marker'});
   const slots = [
     ['sack', X + .35, front + .34], ['barrel', X + 1.05, front + .38],
     ['crate', X + W - .85, front + .34], ['sack', X + W - .45, front + .62],
@@ -917,7 +922,7 @@ function worksRatio(record, world, laborDefault) {
 }
 
 // 住所：落地木屋 + 尖顶 + 门廊 + 侧窗 + 烟囱。与架空粮仓轮廓完全不同。
-function shelter3d(s, lot, record, world) {
+function shelter3d(s, lot, record, world, state) {
   const { x, z, w, d } = lot;
   const X = x + .3, Z = z + .28, W = w - .6, D = d - .85;
   const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
@@ -953,16 +958,23 @@ function shelter3d(s, lot, record, world) {
   s.beam([drainX,2.08,drainZ],[drainX,1.91,front+.53],.052,'#458996');
   s.cyl(drainX,.35,front+.53,.054,1.56,'#458996');
   s.beam([drainX,.35,front+.53],[drainX,.25,front+.87],.055,'#458996');
+  if (state.sheltered) {
+    for (const [i,dx] of [-1.45,1].entries()) {
+      s.box(X+W/2+dx,1.05,front+.12,.58,.61,.055,'#976A45',false,false,{part:'storm-shutter-'+i});
+    }
+  }
+  if (state.occupied && !damaged) {
+    s.box(X+W-.44,3.47,Z+.62,.23,.19,.23,'#C2C3C7',false,false,{part:'hearth-smoke',fx:'smoke'});
+  }
   if (!damaged) {
     s.box(X + W - .75, 2.4, Z + .5, .38, .9, .38, '#5F574F');         // 烟囱
     s.box(X + W - .8, 3.3, Z + .45, .48, .12, .48, '#939584');
-    s.chimneys?.push?.([X + W - .55, 3.42, Z + .7]);
   }
   for (let i = 0; i < 2; i++) s.box(X + W / 2 - .65, .16 + i * .18, front + .3 + i * .18, 1.3, .18, .22, i ? LIGHT : WOOD);
 }
 
 // 生产设施：三面矮墙 + 高挑平坡屋顶 + 正面完全敞开，内部可见工作台/工具架/木料堆。
-function workshop3d(s, lot, record, world) {
+function workshop3d(s, lot, record, world, state) {
   const { x, z, w, d } = lot;
   const X = x + .22, Z = z + .22, W = w - .44, D = d - .44;
   const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
@@ -996,7 +1008,13 @@ function workshop3d(s, lot, record, world) {
   // 储物聚合模型：与背包图标共用 camp-items.mjs 定义，不另写一份几何
   worldItem(s, 'crate', X + W - 1.9, front - 1.35, .72, .16);
   worldItem(s, 'sack', X + W - 1.25, front - 1.35, .68, .16);
-  if (!damaged) s.box(X + W - 1.5, .16, front - .62, .42, .34, .42, '#FFA300', false, 'fire');
+  if (!damaged) {
+    s.box(X+W-1.5,.16,front-.62,.42,.34,.42,'#514134',false,false,{part:'forge-bed'});
+    if (state.occupied) {
+      s.box(X+W-1.47,.49,front-.59,.36,.19,.36,'#FFA300',false,false,{part:'forge-embers',fx:'fire',glow:true});
+      s.box(X+W-1.40,3.74,front-.52,.22,.18,.22,'#C2C3C7',false,false,{part:'forge-smoke',fx:'smoke'});
+    }
+  }
   // The exhaust joins the forge to the roof, with a rain cap on three supports.
   const px=X+W-1.29,pz=front-.41;
   s.cyl(px,.52,pz,.16,2.86,'#5F574F',8);
@@ -1044,7 +1062,7 @@ function wall3d(s, lot, record, world) {
       const fallen = damage >= 2 && i === 1;        // 重损：中间斜撑倒地
       const heel=[px,.46,Z-.59];
       const head=fallen?[px+.55,.22,Z-.75]:[px,1.52,Z+.09];
-      s.beam(heel,head,.093,'#514134');
+      s.beam(heel,head,.093,'#514134').part='wall-brace-'+i;
       s.box(px, .34, Z - .6, .5, .14, .3, GR_STONE[1]);
     }
   }
@@ -1117,7 +1135,10 @@ export function outdoorHomes(world, appearance) {
     s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room,world.peripheralHomes),world.peripheralHomes);
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
-        s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);
+        const side=dx<0?'left':'right';
+        s.box(x+dx,1.12,front+.075,.42,.44,.03,occupied?'#EDC787':'#2E3B3A',false,occupied,null,{part:'window-'+side});
+        const shutter=occupied?(dx<0?x+dx-.2:x+dx+.44):x+dx;
+        s.box(shutter,1.1,front+.115,occupied?.17:.42,.48,.045,'#976A45',false,false,null,{part:'shutter-'+side});
       }
       if (damage>0) {
         s.box(x-.34,.27,front+.105,.68,1.17,.055,'#342923');
@@ -1157,11 +1178,26 @@ export function granaryGoods(world) {
   return store === 0 ? 0 : level < .15 ? 1 : level < .6 ? 3 : 5;
 }
 
+function facilityParts(world,building) {
+  const type=building.type;
+  const canBeOccupied=['shelter','workshop'].includes(type) && (building.integrity??1)>=1;
+  const inside=world.campPlayerRoom===facilityId(building) && !world.agents?.p1?.dead;
+  const active=['shelter','workshop'].includes(type) && (world.occupancy?.[building.loc]??[]).some(id=>{
+    const a=world.agents?.[id];
+    return a && !a.isPlayer && !a.dead && !world.districtTravel?.[id] &&
+      a.loc===building.loc && (type==='shelter'?a.act==='rest':['work','repair'].includes(a.act));
+  });
+  return {
+    occupied:canBeOccupied && (inside || active),
+    sheltered:type==='shelter' && ['rain','cold'].includes(world.weather),
+  };
+}
+
 export function workModelKey(world, appearance, treeSignature) {
   const placement = b => [b.type, b.loc, b.lot?.x, b.lot?.z, b.lot?.w, b.lot?.d];
   const buildings = world.buildings ?? [];
   return JSON.stringify([
-    buildings.map(b => [...placement(b), buildingDamage(b), ...(world.settlementLife?[b.integrity>0]:[])]),
+    buildings.map(b => [...placement(b), buildingDamage(b), ...(world.settlementLife?[b.integrity>0]:[]), facilityParts(world,b)]),
     (world.sites ?? []).map(b => [...placement(b), b.progress, world.buildingsDef?.[b.type]?.labor]),
     appearance.map(([room]) => room),
     Object.entries(world.households?.projects ?? {}).map(([room, p]) => [room, p.progress]),
@@ -1184,53 +1220,60 @@ export function addCampWork(boxes, world, appearance = homeAppearance(world)) {
     const {x,z,w,d}=lot, X=x+.24,Z=z+.24,W=w-.48,D=d-.48;
     const id=`work:${record.loc}:${record.type}`, labor=record.type === 'house' ? HOME_LABOR : world.buildingsDef?.[record.type]?.labor??6;
     const phase=constructionStage(record);
-    projects.push({id,phase,record,lot,labor,gate:facilityGate(record,world.layout)});
-    const s={
-      box(x,y,z,w,h,d,color,solid=false,rise=false,transform) {
-        addModel(boxes,{x,y,z,w,h,d,color,solid,rise,...transform},id);
-      },
-      beam(...args) { return addModel(boxes,beam(...args),id); },
-      cyl(...args) { return addModel(boxes,cyl(...args),id); },
+    const first=boxes.length;
+    const project={id,phase,record,lot,labor,gate:facilityGate(record,world.layout),parts:new Map()};
+    projects.push(project);
+    const state=facilityParts(world,record);
+    const build=()=>{
+      const s={
+        box(x,y,z,w,h,d,color,solid=false,rise=false,transform) {
+          addModel(boxes,{x,y,z,w,h,d,color,solid,rise,...transform},id);
+        },
+        beam(...args) { return addModel(boxes,beam(...args),id); },
+        cyl(...args) { return addModel(boxes,cyl(...args),id); },
+      };
+      // 第一阶段：四种建筑各走专属轮廓，保留已验收的 granary3d 不动。
+      if (record.type === 'granary') {
+        granary3d(s,lot,record,world);
+        if (phase==='complete') {
+          // Loading handrail sits beside the existing stairs.
+          const railX=x+w/2-.72, front=z+d-.17;
+          for (const [y,pz] of [[.22,front+.47],[.8,front-.36]]) s.cyl(railX,y,pz,.042,.55,'#514134',6);
+          s.beam([railX,.77,front+.47],[railX,1.35,front-.36],.053,'#976A45');
+        }
+        return;
+      }
+      if (record.type === 'shelter') { shelter3d(s, lot, record, world,state); return; }
+      if (record.type === 'workshop') { workshop3d(s, lot, record, world,state); return; }
+      if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
+      if (record.type === 'house') { home3d(s, lot, record, world.layout ? world.mapSeed : 0); return; }
+      const baseRise=phase==='foundation'?'ground':false;
+      s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
+      for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])
+        s.box(px,.16,pz,.09,.21,.09,DARK,false,baseRise);
+      if (phase==='foundation') {
+        for (let i=0;i<4;i++) s.box(X+.1,.16+i*.08,Z+.14,1.05,.07,.25,WOOD,false,baseRise);
+        return;
+      }
+      if (phase==='frame') {
+        const ratio=Math.max(.25,Math.min(1,record.progress/labor));
+        const top=.88+ratio*.78;
+        for (const px of [X,X+W-.16]) for (const pz of [Z,Z+D-.16])
+          s.box(px,.16,pz,.16,top,.16,DARK,false,true);
+        for (const pz of [Z,Z+D-.16]) {
+          s.box(X,top+.12,pz,W,.15,.16,WOOD,false,true);
+          s.box(X+.02,.26,pz,W-.04,.16,.16,LIGHT,false,true);
+        }
+        for (const px of [X,X+W-.16]) s.box(px,top+.12,Z,.16,.15,D,WOOD,false,true);
+        return;
+      }
+      s.box(X,.16,Z,W,1.41,D,record.type==='granary'?'#696861':'#72513B',false,true);
+      const canopy={box:(x,y,z,w,h,d,color)=>s.box(x,y,z,w,h,d,color,false,true)};
+      cladding(canopy,X,.16,Z,W,1.41,D,record.type==='granary');
+      roof(canopy,X,Z,W,D,1.57,record.integrity<1?'#5F574F':'#976A45');
     };
-    // 第一阶段：四种建筑各走专属轮廓，保留已验收的 granary3d 不动。
-    if (record.type === 'granary') {
-      granary3d(s,lot,record,world);
-      if (phase==='complete') {
-        // Loading handrail sits beside the existing stairs.
-        const railX=x+w/2-.72, front=z+d-.17;
-        for (const [y,pz] of [[.22,front+.47],[.8,front-.36]]) s.cyl(railX,y,pz,.042,.55,'#514134',6);
-        s.beam([railX,.77,front+.47],[railX,1.35,front-.36],.053,'#976A45');
-      }
-      return;
-    }
-    if (record.type === 'shelter') { shelter3d(s, lot, record, world); return; }
-    if (record.type === 'workshop') { workshop3d(s, lot, record, world); return; }
-    if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
-    if (record.type === 'house') { home3d(s, lot, record, world.layout ? world.mapSeed : 0); return; }
-    const baseRise=phase==='foundation'?'ground':false;
-    s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
-    for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])
-      s.box(px,.16,pz,.09,.21,.09,DARK,false,baseRise);
-    if (phase==='foundation') {
-      for (let i=0;i<4;i++) s.box(X+.1,.16+i*.08,Z+.14,1.05,.07,.25,WOOD,false,baseRise);
-      return;
-    }
-    if (phase==='frame') {
-      const ratio=Math.max(.25,Math.min(1,record.progress/labor));
-      const top=.88+ratio*.78;
-      for (const px of [X,X+W-.16]) for (const pz of [Z,Z+D-.16])
-        s.box(px,.16,pz,.16,top,.16,DARK,false,true);
-      for (const pz of [Z,Z+D-.16]) {
-        s.box(X,top+.12,pz,W,.15,.16,WOOD,false,true);
-        s.box(X+.02,.26,pz,W-.04,.16,.16,LIGHT,false,true);
-      }
-      for (const px of [X,X+W-.16]) s.box(px,top+.12,Z,.16,.15,D,WOOD,false,true);
-      return;
-    }
-    s.box(X,.16,Z,W,1.41,D,record.type==='granary'?'#696861':'#72513B',false,true);
-    const canopy={box:(x,y,z,w,h,d,color)=>s.box(x,y,z,w,h,d,color,false,true)};
-    cladding(canopy,X,.16,Z,W,1.41,D,record.type==='granary');
-    roof(canopy,X,Z,W,D,1.57,record.integrity<1?'#5F574F':'#976A45');
+    build();
+    for (let i=first;i<boxes.length;i++) if (boxes[i].part) project.parts.set(boxes[i].part,boxes[i]);
   };
   for (const building of world.buildings??[]) add(building);
   for (const site of world.sites??[]) add(site);

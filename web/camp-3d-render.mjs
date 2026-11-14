@@ -256,7 +256,7 @@ function stageMesh(stage) {
 }
 
 // 呼吸感：带 fx 标记的几何不进静态网格，按共享帧号逐帧重建（独立 6fps 时钟，不读 w.t、不消费 rng）。
-function fx3d(data, list, frame) {
+export function fx3d(data, list, frame) {
   if (!list || !list.length) return;
   const t = frame % 4;
   for (const b of list) {
@@ -635,7 +635,7 @@ export function createCampRenderer() {
     bind(buffer);gl.uniform1i(uniform.Texture,Number(textured));gl.drawArrays(gl.TRIANGLES,from,count);
   }
   // 仅保留当前几种场景的缓冲，地图/对照切换时释放长期不用的资源。
-  const lru=[];
+  const lru=[], workMeshes=new WeakMap();
   function stageBuffer(stage, limit) {
     if (stages.has(stage)) {
       const index=lru.indexOf(stage);
@@ -684,7 +684,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, animateParts=true }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -770,7 +770,20 @@ export function createCampRenderer() {
       }
       const moving=[];
       const translucent=[];
-      for (const box of work) modelMesh(covered.has(box.occluder)?translucent:moving,box);
+      for (const box of work) {
+        const fadedModel=covered.has(box.occluder), out=fadedModel?translucent:moving;
+        if (box.fx) {
+          if (!fadedModel) fx3d(out,[box],animateParts?frame:0);
+          continue;
+        }
+        let mesh=!box.transient && workMeshes.get(box);
+        if (!mesh) {
+          mesh=[];
+          modelMesh(mesh,box);
+          if (!box.transient) workMeshes.set(box,mesh);
+        }
+        out.push(...mesh);
+      }
       fx3d(moving,stage.fxs?.filter(b=>!covered.has(b.occluder)),frame);
       fx3d(moving,life?.fxs,frame);
       animalMesh(moving,animals,weather[0]);

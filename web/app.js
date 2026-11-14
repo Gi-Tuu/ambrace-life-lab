@@ -1684,7 +1684,9 @@ function drawInterior(cv, w, site, preview = false) {
 let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
 const campFog=new WeakMap();
-const physicalLighting=!new URLSearchParams(location.search).has('bakedLight');
+const previewFlags=new URLSearchParams(location.search);
+const physicalLighting=!previewFlags.has('bakedLight');
+const animateParts=!previewFlags.has('staticParts');
 const campShadowSources=new WeakMap();
 function campShadows(world,regions) {
   const layers=[world.scene3d.boxes,world.work3d,
@@ -2044,7 +2046,7 @@ function animatedConstruction(world) {
     const factor=b.rise && factors.get(b.occluder);
     if (!factor) return b;
     const base=b.rise==='ground'?0:.16;
-    return {...b,y:base+(b.y-base)*factor,h:b.h*factor};
+    return {...b,transient:true,y:base+(b.y-base)*factor,h:b.h*factor};
   });
 }
 function drawCamp(cv,w) {
@@ -2133,7 +2135,7 @@ function drawCamp(cv,w) {
       for (const {loc,lot:{x,z,w,d}} of world.openLots) {
         if (Math.hypot(x+w/2-playerX,z+d/2-playerZ)>22) continue;
         for (const px of [x+.04,x+w-.16]) for (const pz of [z+.04,z+d-.16])
-          work.push({x:px,z:pz,y:extended?.height(px,pz)??stage.heightAt(px,pz),w:.12,d:.12,h:.26,color:'#C19962',occluder:'lot:'+loc});
+          work.push({x:px,z:pz,y:extended?.height(px,pz)??stage.heightAt(px,pz),w:.12,d:.12,h:.26,color:'#C19962',occluder:'lot:'+loc,transient:true});
       }
     }
   }
@@ -2168,7 +2170,7 @@ function drawCamp(cv,w) {
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
   if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
-    physical:physicalLighting}))return false;
+    physical:physicalLighting,animateParts}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered,
     exterior,extended,people,animals,work,visibility,sight,regionDetails};
