@@ -1997,7 +1997,7 @@ function startCart(prop) {
   const {site}=IPOS;
   if (campCart?.site!==site) campCart={site,prop,x:prop.x,z:prop.z};
   campCart.attached=true;
-  $('campToast').textContent='推车中 · F 松手';
+  toast('推车中 · F 松手');
 }
 function cartAllows(site,cells,pixels,bounds,x,z,nx,nz,crowd) {
   if (campCart?.site!==site) return true;
@@ -2422,6 +2422,14 @@ function pushToasts(pack) {
 
 // ── 生存单世界游玩面板（Phase D，独立于 A/B 对照）─────────────────────────────
 let survFlash = null;
+// 行为提示统一经 toast() 输出，2.6s 后清空；此前直接赋 textContent 会永久停留。
+let toastTimer = null;
+function toast(msg, ms = 2600) {
+  const el = $('campToast'); if (!el) return;
+  el.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.textContent = ''; }, ms);
+}
 const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
@@ -2529,7 +2537,7 @@ function closeRoom(redraw=true) {
 function useRoom() {
   const site=ui.interior;
   if (campPose) { if (campPose.kind==='sit') campPose=null; return; }
-  if (campCart?.attached) { campCart.attached=false; $('campToast').textContent='已停放手推车'; return; }
+  if (campCart?.attached) { campCart.attached=false; toast('已停放手推车'); return; }
   if (atRoomDoor(site)) { closeRoom(); return; }
   const prop=nearbyProp(site);
   if (prop) { inspectRoomProp(prop); return; }
@@ -2695,10 +2703,10 @@ async function performCamp(body,site,done) {
     if (done && $('campPropDialog').open) done();
     const msg=result.ok ? (body.kind==='camp_sleep'?`睡过了 ${result.ticks} 刻`:`${campLabels[body.kind]??ACT_ZH[body.kind]??'操作'}成功`)
       : campCodes[result.code]??SURV_CODE_ZH[result.code]??'动作未完成';
-    $('campToast').textContent=msg;
+    toast(msg);
     return result;
   } catch {
-    $('campToast').textContent='操作未完成，请重试。';
+    toast('操作未完成，请重试。');
     return null;
   } finally { campBusy=false; }
 }
@@ -2731,7 +2739,7 @@ function showContainer(s,options,target,prop,meal=false) {
 async function sleepInBed(prop) {
   if (campBusy || campPose?.kind==='sleep') return;
   campPose={kind:'sleep',prop};
-  $('campToast').textContent='正在睡觉…';
+  toast('正在睡觉…');
   keys.clear();
   await new Promise(resolve=>setTimeout(resolve,720));
   try { await performCamp({kind:'camp_sleep'},ui.interior); }
@@ -2821,13 +2829,13 @@ async function useResident(person) {
   campBusy=true;
   try {
     const result=await api('/act',{mode:'survival',kind:'camp_resident',target,room,from,to,tool});
-    $('campToast').textContent=result.code==='RESIDENT_TALKED' ? `${result.name}：「${result.line}」` :
+    toast(result.code==='RESIDENT_TALKED' ? `${result.name}：「${result.line}」` :
       result.code==='RESIDENT_HURT' ? `${result.name}被${TOOL_ZH[tool]}击中，损失 ${Math.round(result.damage*100)}% 存续值。` :
       result.code==='RESIDENT_NEED_HAND' ? '收起工具后再交谈。' :
-      result.code==='RESIDENT_COOLDOWN' ? '对方还没缓过来。' : '请再靠近一点。';
+      result.code==='RESIDENT_COOLDOWN' ? '对方还没缓过来。' : '请再靠近一点。');
     if (result.code==='RESIDENT_HURT') await refresh();
   } catch {
-    $('campToast').textContent='互动未完成，请重试。';
+    toast('互动未完成，请重试。');
   } finally { campBusy=false; }
 }
 
@@ -2842,7 +2850,7 @@ async function openTalkWith(target,contact){
   campBusy=true;
   try{
     const r=await api('/act',{mode:'survival',kind:'talk_open',target,...contact});
-    if(!r.ok){ $('campToast').textContent=r.why ?? campCodes[r.code] ?? (r.code==='NOT_TOGETHER'?'对方不在这里。':r.code==='CAMP_ENDED'?'这一局已经结束。':'现在没法交谈。'); return; }
+    if(!r.ok){ toast(r.why ?? campCodes[r.code] ?? (r.code==='NOT_TOGETHER'?'对方不在这里。':r.code==='CAMP_ENDED'?'这一局已经结束。':'现在没法交谈。')); return; }
     ui.talk={target,name:r.name,contact};
     renderTalkAccess();
     $('talkTitle').textContent=`和 ${r.name} 交谈`;
@@ -2850,7 +2858,7 @@ async function openTalkWith(target,contact){
     addTalk('npc',r.line);
     const dlg=$('talkDlg'); if(!dlg.open) dlg.showModal();
     $('talkText').value=''; $('talkText').focus(); $('talkSend').disabled=false;
-  }catch{ $('campToast').textContent='交谈失败，请重试。'; }
+  }catch{ toast('交谈失败，请重试。'); }
   finally{ campBusy=false; }
 }
 function renderTalkAccess() {
@@ -2897,7 +2905,7 @@ async function sendTalk(){
     const r=await api('/act',{mode:'survival',kind:'talk_say',target:t.target,text,...currentTalkContact(t)});
     if(r.ok){
       addTalk(r.ignored?'sys':'npc', r.line);
-      if(r.attacked) $('campToast').textContent='你被打了，存续值下降。';
+      if(r.attacked) toast('你被打了，存续值下降。');
       if(r.left) setTimeout(closeTalkDlg,1200);
       refresh();
     } else { addTalk('sys', r.code==='NO_TALK'?'（对话已经结束。）':'（没有回应。）'); if(r.code==='NO_TALK') setTimeout(closeTalkDlg,800); }
@@ -2939,11 +2947,11 @@ async function survInteract() {
       })[0];
     if (entity) { await useOutdoorEntity(entity,[x,z]); return; }
     if (reachable.length) {
-      $('campToast').textContent='视线被挡住了，请换个位置。';
+      toast('视线被挡住了，请换个位置。');
       return;
     }
     if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
-    if (!inCamp(x,z)) $('campToast').textContent='靠近木石采集点，或持锤靠近可施工地块。';
+    if (!inCamp(x,z)) toast('靠近木石采集点，或持锤靠近可施工地块。');
   }
   if (campRenderer && walker && !inCamp(walker.x+.5,walker.y+.5)) return;
   if (!campRenderer) {
@@ -2952,7 +2960,7 @@ async function survInteract() {
   }
   const here=localSurvSite(world,walker);
   if (world.timber && ui.tool==='axe') {
-    $('campToast').textContent='到伐木林靠近成熟的树，再按 F。';
+    toast('到伐木林靠近成熟的树，再按 F。');
     return;
   }
   const ctx=here && contextAction({...s,loc:{...s.loc,p1:here}});
@@ -2962,7 +2970,7 @@ async function survInteract() {
     if (!['gather','forage'].includes(ctx.kind)) return;
     const [x,z]=world.sites[here];
     if (!view.visibility.sees(x+.5,z+.5)) {
-      $('campToast').textContent='视线被挡住了，请换个位置。';
+      toast('视线被挡住了，请换个位置。');
       return;
     }
   }
@@ -2997,10 +3005,10 @@ async function enterRoom(room,force=false) {
         const broken=await api('/act',{...body,kind:'home_break',tool:ui.tool});
         if (broken.ok) {
           result=await api('/act',body);
-          $('campToast').textContent='门已损坏，住户对你的信任下降。';
+          toast('门已损坏，住户对你的信任下降。');
         } else result=broken;
       }
-      if (!result.ok) { $('campToast').textContent=campCodes[result.code]??SURV_CODE_ZH[result.code]??'无法进入'; return; }
+      if (!result.ok) { toast(campCodes[result.code]??SURV_CODE_ZH[result.code]??'无法进入'); return; }
     }
     const walker=WALK[walkKey('cvA','p1')];
     if (walker) {
@@ -3052,8 +3060,9 @@ function updateHotbar() {
     el.setAttribute('aria-pressed', String(ui.tool === t));
     el.classList.toggle('can', can);
     el.classList.toggle('dim', !!s?.loc && !can && !['hand','basket','shears','bucket'].includes(t));
-    if (can || !s?.loc || ['basket','shears','bucket'].includes(t)) delete el.dataset.need;
-    else el.dataset.need = c ? `需${TOOL_ZH[c.tool]}` : '走位';
+    // 工具栏不再出现任何红色角标（含「走位」「需X」）：可用性由 .can 的绿色边框表达，
+    // 同一行重复 5 次的红标既抢眼又与 64 色板冲突。data-need 仅保留给背包/面板按钮。
+    delete el.dataset.need;
   }
   for (const [id,model] of [['btnBag','backpack'],['btnUse','pointer']]) {
     const button=$(id);
@@ -3070,6 +3079,14 @@ function updateHotbar() {
 }
 function openBackpack() { roomRoute=null; keys.clear(); renderBackpack(); const d = $('backpack'); if (!d.open) d.showModal(); }
 function closeBackpack() { const d = $('backpack'); if (d.open) d.close(); }
+function renderItemBar(view) {
+  const el = $('itemBar'); if (!el || !view) return;
+  const bag = view.pinv?.p1 ?? {};
+  el.innerHTML = Object.entries(CAMP_ITEMS).map(([item,label])=>{
+    const n = bag[item] ?? 0;
+    return `<div class="cell${n?'':' empty'}" title="${label}"><img width="32" height="32" alt="" src="${itemIcon(item)}"><b>${n}</b></div>`;
+  }).join('');
+}
 function renderBackpack() {
   const s=S.survivalView, el=$('bpBody');
   if (!s) { el.textContent='当前入口没有加载生存世界。请打开新版生存入口。'; return; }
@@ -3079,8 +3096,10 @@ function renderBackpack() {
     <div class="bp-line"><b>${label}</b><span>个人 <span class="n">${mine}</span></span><span>公仓 <span class="n">${shared}</span></span>
       <button data-bp="deposit:${res}"${!atStore || mine <= 0 ? ` disabled data-need="${!atStore ? '在公仓' : '无货'}"` : ''}>存入公仓</button>
       <button data-bp="withdraw:${res}"${!atStore || shared <= 0 ? ` disabled data-need="${!atStore ? '在公仓' : '无货'}"` : ''}>取出</button></div>`;
-  const slots=Object.entries(CAMP_ITEMS).map(([item,label])=>
-    `<div class="bp-item"><img width="36" height="36" alt="" src="${itemIcon(item)}"><span>${label}</span><b>${bag[item]??0}</b></div>`).join('');
+  const slots=Object.entries(CAMP_ITEMS).map(([item,label])=>{
+    const n=bag[item]??0;
+    return `<div class="bp-item${n?'':' zero'}" title="${label}"><img width="36" height="36" alt="" src="${itemIcon(item)}"><b>${n}</b></div>`;
+  }).join('');
   el.innerHTML=`<div class="bp-grid">${slots}</div>` + row('木料', bag.wood, s.inv.wood, 'wood') + row('石料', bag.stone, s.inv.stone, 'stone') +
     `<div class="bp-line"><b>粮食</b><span>公仓 <span class="n">${s.store}/${s.storeCap}</span></span><span>每日按人口分配</span></div>` +
     (atStore ? '' : '<div class="bp-note">进入公仓才能存取。</div>');
@@ -3217,6 +3236,9 @@ function objectiveHint(s) {
 
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
+  // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
+  if (survFlash && !survFlash.at) survFlash.at = Date.now();
+  if (survFlash && Date.now() - survFlash.at > 3000) survFlash = null;
   // 面板每 900ms 由轮询重建；先记下折叠区状态，重建后原样恢复，否则用户点开会被自动合上。
   if (el.contains(document.activeElement) && document.activeElement.matches('button:focus-visible')) return;
   const openState = [...el.querySelectorAll(':scope > details')].map((d) => d.open);
@@ -3234,15 +3256,12 @@ function renderSurv(s) {
     ${banner}
     ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
     <div class="survrow survtop"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day+1} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
-      <span>粮 ${s.store}/${s.storeCap}</span><span>水 ${s.water}</span><span>土 ${s.soil}</span>
-      <span>木 ${s.inv.wood} 石 ${s.inv.stone}</span>
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad">${[s.stormTomorrow ? '风暴预警' : '', s.coldsnapTomorrow ? '寒潮预警' : '', s.drought ? '干旱' : '', s.disasterToday ? `今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}` : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
       ${flash}</div>
     <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''}${s.player?.timeLeft != null ? ` <span class="dim">本刻行动 ${s.player.timeLeft}/100</span>` : ''}</div>
     <div class="survrow survhere">你在 <b>${esc(location)}</b>${outdoor ? '（户外）' : '（室内）'}
-      <span class="dim">WASD 走路 · F 交互 · E 背包 · 1–8 换工具</span>
       ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
       <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
@@ -3263,6 +3282,7 @@ function renderSurv(s) {
       </div>
     </details>`;
   el.querySelectorAll(':scope > details').forEach((d, i) => { if (openState[i]) d.open = true; });
+  renderItemBar(s);
 }
 
 function table(a, b) {
@@ -3601,7 +3621,7 @@ function showStart() {
   }
   closeRoom(false);
   closeBackpack();
-  $('campToast').textContent='';
+  toast('');
   ui.surveyRoom=null;
   ui.menu=true;
   renderPlayMode(S.survivalView);
@@ -3632,7 +3652,7 @@ async function newSurvival() {
     resettingSurvival=false;
     startError=true;
     $('startStatus').textContent='新地图保存失败，请再试一次。';
-    if (!ui.menu) $('campToast').textContent='新地图保存失败，请再试一次。';
+    if (!ui.menu) toast('新地图保存失败，请再试一次。');
     $('startNew').disabled=$('startSurvival').disabled=$('startCompare').disabled=false;
   }
 }
@@ -3649,10 +3669,10 @@ $('survPanel').addEventListener('click', (e) => {
   if (family) {
     const {family:kind,id:target,accept}=family.dataset;
     api('/act',{mode:'survival',kind,target,accept:accept==='true'}).then(r=>{
-      $('campToast').textContent=FAMILY_RESULT[r.code]??'办理失败';
+      toast(FAMILY_RESULT[r.code]??'办理失败');
       family.blur();
       refresh();
-    }).catch(()=>{ $('campToast').textContent='无法登记，请重试。'; });
+    }).catch(()=>{ toast('无法登记，请重试。'); });
     return;
   }
   const coop=e.target.closest('button[data-coop]');
@@ -3720,7 +3740,7 @@ function walkInside(site,x,z,prop=null,exit=false) {
     return;
   }
   roomRoute=null;
-  $('campToast').textContent='这里走不过去，试试从另一侧靠近。';
+  toast('这里走不过去，试试从另一侧靠近。');
 }
 function roomWaypoint() {
   if (!roomRoute || roomRoute.site!==ui.interior) return null;
@@ -3883,7 +3903,7 @@ async function useOutdoorEntity(e,from) {
     return;
   }
   if (e.kind==='resource') {
-    if (e.tool!==ui.tool) { $('campToast').textContent='需要'+TOOL_ZH[e.tool]+'。'; return; }
+    if (e.tool!==ui.tool) { toast('需要'+TOOL_ZH[e.tool]+'。'); return; }
     await performCamp({kind:'gather',target:e.target,from,tool:e.tool});
     return;
   }
@@ -3921,10 +3941,10 @@ async function useOutdoorEntity(e,from) {
     const wall=S.view.settlementLife && ui.tool==='hand' && S.view.buildings?.find(b=>b.type==='wall' && b.loc===e.room && b.integrity>0);
     if (wall) {
       const result=await api('/act',{mode:'survival',kind:'facility_use',target:facilityId(wall),from});
-      $('campToast').textContent=result.ok?`防护墙完整度 ${Math.round(result.integrity*100)}% · 正在减轻灾害损耗`:'无法检查防护墙。';
+      toast(result.ok?`防护墙完整度 ${Math.round(result.integrity*100)}% · 正在减轻灾害损耗`:'无法检查防护墙。');
       return;
     }
-    if (ui.tool!=='hammer') { $('campToast').textContent='需要锤。';return; }
+    if (ui.tool!=='hammer') { toast('需要锤。');return; }
     const site=S.view.sites?.find(s=>s.loc===e.room && `work:${s.loc}:${s.type}`===e.target);
     const building=S.view.buildings?.find(b=>b.loc===e.room && `work:${b.loc}:${b.type}`===e.target);
     if (site || building?.integrity<1) {
@@ -3937,13 +3957,13 @@ async function useOutdoorEntity(e,from) {
       } else await performCamp({kind:site?'build':'repair',target:e.target,from});
       return;
     }
-    $('campToast').textContent=e.name+' · 当前没有可进行的施工。';
+    toast(e.name+' · 当前没有可进行的施工。');
     return;
   }
   if (e.kind==='wildAnimal') {
-    if (ui.tool!=='basket') { $('campToast').textContent='拿篮子，慢慢靠近并投喂。';return; }
+    if (ui.tool!=='basket') { toast('拿篮子，慢慢靠近并投喂。');return; }
     const result=await performCamp({kind:'animal_feed',target:e.target,tool:'basket',from,to:e.at});
-    if (result?.ok) $('campToast').textContent=`投喂成功 · 信任 ${result.trust}/4`;
+    if (result?.ok) toast(`投喂成功 · 信任 ${result.trust}/4`);
     return;
   }
   if (e.kind==='animal' && ui.tool==='axe') {
@@ -3957,14 +3977,14 @@ async function useOutdoorEntity(e,from) {
       const current=campHerds.get('cvA')?.find(a=>a.id===e.id), walker=WALK[walkKey('cvA','p1')];
       if (current && walker) void performCamp({kind:'animal_slaughter',target:e.id,tool:'axe',
         from:[walker.x+.5,walker.y+.5],to:[current.x,current.z]}).then(r=>{
-        if(r?.ok) $('campToast').textContent=`获得肉 ×${r.meat}`;
+        if(r?.ok) toast(`获得肉 ×${r.meat}`);
       });
     };
     keys.clear();
     if (!dialog.open) dialog.showModal();
     return;
   }
-  if (e.tool!==ui.tool) { $('campToast').textContent=`需要${TOOL_ZH[e.tool]}。`; return; }
+  if (e.tool!==ui.tool) { toast(`需要${TOOL_ZH[e.tool]}。`); return; }
   if (e.kind==='timber') await performCamp({kind:'camp_chop',target:e.target,tool:ui.tool,from});
   else await performCamp({kind:'camp_collect',target:e.target,type:e.item,tool:ui.tool,from,to:e.at});
 }
@@ -3997,15 +4017,15 @@ function advanceOutdoorIntent(view,w,player) {
   });
   const e=outdoorEntities(world,w,residents,
     campHerds.get('cvA')??[]).find(e=>e.id===outdoorIntent.id);
-  if (!e) { outdoorIntent=null; $('campToast').textContent='目标已离开。'; return; }
+  if (!e) { outdoorIntent=null; toast('目标已离开。'); return; }
   if (entityGap(from,e)<=e.reach) {
     outdoorIntent=null;walker.path=[];walker.pi=0;walker.moving=false;
     if (outdoorSight(view,e,from)) void useOutdoorEntity(e,from);
-    else $('campToast').textContent='视线被挡住了，请换个位置。';
+    else toast('视线被挡住了，请换个位置。');
   } else if (walker.pi>=walker.path.length || performance.now()>outdoorIntent.deadline) {
     if (performance.now()>outdoorIntent.deadline || !approachEntity(world,walker,e)) {
       outdoorIntent=null;walker.path=[];walker.pi=0;
-      $('campToast').textContent='无法走到目标附近。';
+      toast('无法走到目标附近。');
     }
   }
 }
@@ -4033,7 +4053,7 @@ function pickRoom(ev, cv) {
     if (hit?.kind==='resident') {
       const from=[(IPOS.x+8)/TILE,(IPOS.y+16)/TILE];
       if (nearResident(from,hit.at)) void useResident({target:hit.target,room:site,from,to:hit.at});
-      else $('campToast').textContent='走近后再交谈。';
+      else toast('走近后再交谈。');
       return;
     }
     const props=roomProps(site);
@@ -4073,7 +4093,7 @@ function pickRoom(ev, cv) {
     if (entityGap(from,hit)<=hit.reach && outdoorSight(cv._cam,hit,from)) void useOutdoorEntity(hit,from);
     else if (approachEntity(world,walker,hit)) {
       outdoorIntent={id:hit.id,deadline:performance.now()+45000};ui.overview=false;ui.camRoom=null;
-    } else $('campToast').textContent='无法走到目标附近。';
+    } else toast('无法走到目标附近。');
     return;
   }
   const entry=!projected&&entrySiteAt(sites,tx,ty);
@@ -4226,7 +4246,7 @@ loadAssets().finally(() => {
         if (dx) IPOS.face=dx>0?1:-1;
         if (routeMove && step>.01 && !IPOS.moving) {
           roomRoute=null;
-          $('campToast').textContent='路上有障碍，换个方向试试。';
+          toast('路上有障碍，换个方向试试。');
         }
         if (!campCart?.attached && atRoomDoor(ui.interior,true)) { closeRoom(); return; }
       } else IPOS.moving = false;

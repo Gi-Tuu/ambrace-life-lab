@@ -433,6 +433,30 @@
     margin:0 16px 8px; padding:6px 10px; justify-content:center;
     border:2px solid var(--line); background:var(--panel); box-shadow:3px 3px 0 0 var(--shadow);
   }
+
+  /* ── 物品栏与背包：固定格子（我的世界风格），为「物品实体化」预留结构 ────────── */
+  #itemBar {
+    display:flex; flex-wrap:wrap; gap:4px; align-items:center;
+    margin:0 16px 8px; padding:6px 10px; border:2px solid var(--line); background:var(--panel);
+  }
+  #itemBar .cell {
+    position:relative; width:44px; height:44px; display:grid; place-items:center;
+    border:2px solid var(--line); background:var(--sunken); box-shadow:inset 2px 2px 0 0 rgba(0,0,0,.25);
+  }
+  #itemBar .cell img { width:32px; height:32px; image-rendering:pixelated; }
+  #itemBar .cell b { position:absolute; right:2px; bottom:0; font-size:12px; color:var(--gold); text-shadow:1px 1px 0 #000; }
+  #itemBar .cell.empty img { opacity:.28; }
+  /* 背包 / 存储界面：一格一格，图标 + 数量角标，不再用文字卡片 */
+  .bp-grid { display:grid; grid-template-columns:repeat(auto-fill,48px); gap:4px; }
+  .bp-item {
+    position:relative; width:48px; height:48px; min-height:0; padding:0; gap:0;
+    display:grid; place-items:center; border:2px solid var(--line); background:var(--sunken);
+  }
+  .bp-item img { width:36px; height:36px; }
+  .bp-item span { display:none; }
+  .bp-item b { position:absolute; right:2px; bottom:0; margin:0; font-size:12px; color:var(--gold); text-shadow:1px 1px 0 #000; }
+  .bp-item.zero img { opacity:.3; }
+  .bp-item.zero b { color:var(--dim); }
 </style>
 </head>
 <body class="menu-mode">
@@ -492,7 +516,7 @@
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>
-  <button id="btnBagTop" type="button" aria-haspopup="dialog">背包（E）</button>
+  <button id="btnBagTop" type="button" aria-haspopup="dialog" hidden>背包（E）</button>
   <button id="btnCompare" type="button" aria-pressed="false">研究对照 A/B</button>
   <details id="keysHelp"><summary>按键</summary>
     <div>WASD/方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板</div>
@@ -516,6 +540,7 @@
   <a id="playPreviewLink" hidden>打开本机新版生存试玩</a>
 </section>
 <div id="hudGauges" class="surv-only" role="status" aria-label="聚落资源仪表"></div>
+<div id="itemBar" class="surv-only" role="group" aria-label="物品栏"></div>
 <main id="worldMain" class="solo" hidden>
   <div class="col">
     <div class="world side-a">
