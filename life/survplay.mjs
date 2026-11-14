@@ -512,8 +512,9 @@ function survActInner(sp, body) {
   if (kind === 'player_sync') {
     // P0-1：客户端行走器持续上报真实位置（表现层），服务端做连续性校验并拥有 playerPos。
     // 不扣行动预算/存续（playerTimeCost 无此项）；伪造瞬移⇒TELEPORT。合法逐格步行由此确立位置。
+    // 返回服务端认可位置，供客户端被拒时把可视位置钳回（要求3）。
     const reach=playerReach(w,body.from);
-    return reach.ok ? {ok:true,code:'OK'} : reach;
+    return reach.ok ? {ok:true,code:'OK',playerPos:w.survival.playerPos} : {...reach,playerPos:w.survival.playerPos??null};
   }
   if (kind==='animal_feed' || kind==='animal_slaughter') {
     const r=animalAction(w,body);
@@ -740,7 +741,7 @@ export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
   return {
-    t: w.t, dayTicks:DAY_TICKS, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
+    t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,

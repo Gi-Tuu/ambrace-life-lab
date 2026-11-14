@@ -1155,6 +1155,35 @@ function detourAroundBodies(world,walker,neighbours) {
   return path?.length ? path.map(cell=>cell.map(v=>(v+.5)/TILE-.5)) : null;
 }
 
+// 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
+// 允许速度＝PLAYER_UNITS_PER_TICK×1000/tickMs（单位/秒），换算每帧 tile 数；村内不限（保留冲刺）。
+function peripheralStepCap(snapshot, dt) {
+  const ups = snapshot?.playerUnitsPerTick ?? 10;
+  const tickMs = S.tickMs ?? 7500;
+  return ups * 1000 / tickMs * dt; // tile/帧（1 tile = 1 世界单位）
+}
+const SYNC_DIST = 2, SYNC_MS = 1200;
+let playerSyncInFlight = false;
+function syncPlayerPos(walker, snapshot) {
+  if (playerSyncInFlight || !snapshot?.districts) return;
+  const px = walker.x + .5, pz = walker.y + .5;
+  const last = walker.lastSync, now = performance.now();
+  const moved = !last || Math.hypot(px - last.x, pz - last.z) > SYNC_DIST;
+  const due = !last || (now - last.t) >= SYNC_MS;
+  if (!moved && !due) return;
+  playerSyncInFlight = true;
+  walker.lastSync = { x: px, z: pz, t: now };
+  api('/act', { mode: 'survival', kind: 'player_sync', from: [px, pz] }).then(r => {
+    playerSyncInFlight = false;
+    if (r?.ok) { walker.lastSync = { x: px, z: pz, t: performance.now() }; return; }
+    if (r?.playerPos) { // 被拒（TELEPORT）：把可视位置钳回服务端认可点，画面与服务端一致
+      walker.x = r.playerPos.x - .5; walker.y = r.playerPos.z - .5;
+      walker.path = []; walker.pi = 0;
+      walker.lastSync = { x: r.playerPos.x, z: r.playerPos.z, t: performance.now() };
+    }
+  }).catch(() => { playerSyncInFlight = false; });
+}
+
 const outingKey=w=>`ambrace:outing:${w?.layoutVersion??0}:${w?.mapSeed??0}`;
 function savedOuting(w,world) {
   try {
@@ -2548,7 +2577,7 @@ function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.textContent = ''; }, ms);
 }
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', TELEPORT: '太远了，得走过去才行（村外按世界时限速）', OUT_OF_REACH: '够不到，走近一点', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
@@ -3503,6 +3532,7 @@ function renderSurv(s) {
       <span class="stat" title="体力">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
       <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
       <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
+      ${outside ? '<span class="bad" title="村外步行按世界时限速，冲刺禁用；与居民同速">村外·限速</span>' : ''}
       ${s.player?.timeLeft != null ? `<span class="stat" title="本刻行动">${STAT_ICON.action}<b>${s.player.timeLeft}/100</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
@@ -4662,12 +4692,19 @@ loadAssets().finally(() => {
         if (!world) continue;
         const trip=snapshot.districtTravel?.[who];
         const rate=trip?Math.max(mstep,(walker.tripSpeed??0)*dt*1000):mstep;
-        stepCampWalker(world,walker,cvId,snapshot,dx,dy,manual?playerStep:rate,manual);
+        let step=manual?playerStep:rate;
+        // 要求2：玩家出村钳到世界时允许速度（禁冲刺）；村内保留冲刺
+        if (player && manual && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
+        stepCampWalker(world,walker,cvId,snapshot,dx,dy,step,manual);
+        if (player && cvId==='cvA') syncPlayerPos(walker, snapshot); // 要求3：节流上报＋被拒钳位
       } else if (manual) {
         const n=Math.hypot(dx,dy);
-        const [x,y]=moveMapFeet(buildWorld(snapshot),walker.x,walker.y,dx/n*playerStep,dy/n*playerStep);
+        let step=playerStep;
+        if (player && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
+        const [x,y]=moveMapFeet(buildWorld(snapshot),walker.x,walker.y,dx/n*step,dy/n*step);
         walker.moving=x!==walker.x || y!==walker.y;
         walker.x=x; walker.y=y;
+        if (player && cvId==='cvA') syncPlayerPos(walker, snapshot);
       } else stepWalker(walker,mstep);
       walker.direction=walkDirection(walker.x-oldX,walker.y-oldZ,walker.direction);
       if (dx) walker.face=dx>0?1:-1;

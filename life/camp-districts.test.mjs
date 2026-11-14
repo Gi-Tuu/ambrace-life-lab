@@ -115,7 +115,7 @@ test('seeded terrain keeps peripheral pads clear and routes through the common b
   const crossing=w.campLayout.crossZ, allows=(x,z)=>terrain.walkable(x,z,crossing);
   assert.deepEqual(campDistricts(13,2),places);
   assert.notDeepEqual(campDistricts(7,2),places);
-  assert.equal(Object.keys(places).length,10);
+  assert.equal(Object.keys(places).length,12); // 改量披露：10 外环 + 2 内环（派单第三阶段要求1，近郊日常木石 ≤35u）
   for (const {at,source,lot} of Object.values(places)) {
     assert.equal(inCamp(...at),false);
     assert.ok(allows(...at));
