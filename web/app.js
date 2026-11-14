@@ -3287,49 +3287,55 @@ function renderHousing(s) {
   const el = $('housingBody'); if (!el || !s) return;
   el.innerHTML = familyPanel(s);
 }
+// 像素叶子：全部 6×6 方块，落在 2px 网格上，不做矢量曲线
 const SEASON_LEAVES = {
-  春: '<circle cx="34" cy="34" r="3.2" fill="#98BD51"/><circle cx="64" cy="24" r="3" fill="#98BD51"/><circle cx="52" cy="47" r="2.6" fill="#C7E08A"/><circle cx="76" cy="34" r="2.4" fill="#98BD51"/>',
-  夏: '<circle cx="30" cy="30" r="6" fill="#008751"/><circle cx="44" cy="22" r="7" fill="#73A747"/><circle cx="60" cy="30" r="7.5" fill="#008751"/><circle cx="74" cy="20" r="6" fill="#73A747"/><circle cx="54" cy="48" r="6.5" fill="#5D8C4F"/><circle cx="72" cy="42" r="5.5" fill="#008751"/>',
-  秋: '<circle cx="32" cy="32" r="5" fill="#FFA300"/><circle cx="48" cy="23" r="6" fill="#FFEC27"/><circle cx="62" cy="31" r="6" fill="#E8864B"/><circle cx="76" cy="22" r="5" fill="#FFA300"/><circle cx="56" cy="49" r="5" fill="#FFEC27"/><circle cx="72" cy="43" r="4.5" fill="#E8864B"/>',
-  冬: '<path d="M30 30h10M56 24h12M70 32h9M48 46h11" stroke="#FFF0CC" stroke-width="2.4" stroke-linecap="round"/><circle cx="42" cy="20" r="2" fill="#FFF0CC"/><circle cx="80" cy="26" r="1.8" fill="#FFF0CC"/>',
+  春: [[30,32],[60,26],[48,50],[72,36]].map(([x,y])=>`<rect x="${x}" y="${y}" width="6" height="6" fill="#98BD51"/>`).join(''),
+  夏: [[28,28],[36,24],[44,20],[54,28],[62,22],[70,30],[32,42],[50,46],[66,42],[76,20]]
+      .map(([x,y],i)=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${i%2?'#008751':'#73A747'}"/>`).join(''),
+  秋: [[30,30],[46,22],[62,30],[76,22],[54,48],[70,44],[38,44],[82,36]]
+      .map(([x,y],i)=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${i%2?'#FFA300':'#FFEC27'}"/>`).join(''),
+  冬: [[30,28],[40,28],[58,20],[68,20],[76,32],[50,44]]
+      .map(([x,y])=>`<rect x="${x}" y="${y}" width="10" height="3" fill="#FFF0CC"/>`).join(''),
 };
 const TIME_ARC = [
   { key:'晨', color:'#FFD37A' }, { key:'昼', color:'#FFF0CC' },
   { key:'暮', color:'#E8864B' }, { key:'夜', color:'#3B4A73' },
 ];
 function seasonWheelSVG(seasonName, phase) {
-  const quarter = (a, b, r, color, w) => {
-    const pt = (deg) => [10 + r * Math.cos(deg * Math.PI / 180), 90 - r * Math.sin(deg * Math.PI / 180)];
-    const [x1,y1]=pt(a), [x2,y2]=pt(b);
-    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 0 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
+  // 圆心移到右上角，整个扇形相对上一版反转 180°
+  const cx=94, cy=10, r=88;
+  const pt=(deg)=>[cx+r*Math.cos(deg*Math.PI/180), cy+r*Math.sin(deg*Math.PI/180)];
+  const arc=(a,b,color,w)=>{
+    const [x1,y1]=pt(a),[x2,y2]=pt(b);
+    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
   };
-  // 外圈：一天四段，当前时段加亮描边
-  let arcs = '';
-  TIME_ARC.forEach((seg, i) => {
-    const a = i * 22.5, b = (i + 1) * 22.5;
-    const active = phase === seg.key;
-    if (active) arcs += quarter(a, b, 90, '#FFF0CC', 9);
-    arcs += quarter(a, b, 90, seg.color, 5);
+  let arcs='';
+  TIME_ARC.forEach((seg,i)=>{
+    const a=180+i*22.5, b2=180+(i+1)*22.5;
+    if(phase===seg.key) arcs+=arc(a,b2,'#FFF0CC',9);
+    arcs+=arc(a,b2,seg.color,5);
   });
-  // 1/4 圆扇形木板（圆心左下）
-  const fan = `<path d="M12 88 L92 88 A80 80 0 0 0 12 8 Z" fill="#3B4A33" stroke="#5B4434" stroke-width="2"/>`;
-  const branch = `<path d="M16 86 Q40 70 52 42 Q59 25 80 14" stroke="#5B4434" stroke-width="3.2" fill="none" stroke-linecap="round"/>
-    <path d="M44 56 Q33 47 27 32 M57 35 Q69 37 78 27 M67 24 Q72 18 82 18" stroke="#5B4434" stroke-width="2.1" fill="none" stroke-linecap="round"/>`;
-  const leaves = SEASON_LEAVES[seasonName] ?? SEASON_LEAVES.春;
-  return `<svg viewBox="0 0 106 106" width="140" height="140" aria-label="${seasonName} · ${phase}">${arcs}${fan}${branch}${leaves}</svg>`;
+  // 右上为圆心的 1/4 圆扇形（朝左下展开）
+  const fan='<path d="M94 10 L94 90 A80 80 0 0 0 14 10 Z" fill="#3B4A33" stroke="#5B4434" stroke-width="2"/>';
+  // 枝干：从左下往右上，与反转后的扇形方向一致
+  const branch='<path d="M18 86 L34 70 L48 52 L62 40 L78 26" stroke="#5B4434" stroke-width="4" fill="none" stroke-linejoin="miter"/>'
+    + '<path d="M34 70 L28 56 M48 52 L42 38 M62 40 L70 30" stroke="#5B4434" stroke-width="3" fill="none"/>';
+  const leaves=SEASON_LEAVES[seasonName]??SEASON_LEAVES.春;
+  return `<svg viewBox="0 0 106 106" aria-label="${seasonName} · ${phase}">${arcs}${fan}${branch}${leaves}</svg>`;
 }
 function renderSeasonHud(view, location, outdoor) {
   const el = $('seasonHud'); if (!el || !view) return;
-  $('seasonWeather').textContent = `${view.season ?? ''} ${view.dayInSeason ?? '?'} · ${view.weather ?? ''}`;
+  $('seasonWeather').innerHTML = `${esc(view.season ?? '')} ${view.dayInSeason ?? '?'}天<br>${esc(view.weather ?? '')}`;
   $('seasonWheel').innerHTML = seasonWheelSVG(view.season, view.phase);
-  $('seasonPlace').textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
-  $('seasonStats').innerHTML = [
-    [`${STAT_ICON.heart}`, view.player?.energy ?? '?'],
-    [`${STAT_ICON.shield}`, view.player?.viab ?? '?'],
-    [`${STAT_ICON.action}`, `${view.player?.timeLeft ?? 0}/100`],
-  ].map(([i,v]) => `<span class="stat">${i}<b>${v}</b></span>`).join('');
+  const ph = $('playerHud');
+  if (ph) ph.innerHTML = [
+    [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
+    [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
+    [`${STAT_ICON.action}`, '本刻行动', `${view.player?.timeLeft ?? 0}/100`],
+  ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
+  const pl = $('placeHud');
+  if (pl) pl.textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
 }
-// ── ②③ 三个弹窗的图标按钮与内容 ────────────────────────────────────────
 function ecoButtons(s, which) {
   if (!s) return '';
   if (which === 'exchange') return Object.keys(s.economy?.exchange ?? {}).map((k) => {
