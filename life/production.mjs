@@ -1,3 +1,4 @@
+import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-produce.mjs';
 // 生产建设层（Phase B）。服务端权威：资源库存、建筑选址/材料/工时/功能/损坏/维修。
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
@@ -164,16 +165,20 @@ export function regrowWildBerries(world, day) {
   const weather = s.disasterToday === 'coldsnap' ? 0 : world.weather === 'cold' ? .3 : 1;
   const water = s.drought ? .12 * s.water : .3 + .7 * s.water;
   for (const [loc, cap] of Object.entries(WILD_BERRIES)) {
-    s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + season * weather * water * .85);
+    const regen = season * weather * water * .85, patches = s.berryPatches?.[loc];
+    if (patches) {
+      for (let i = 0; i < patches.length; i += 1) patches[i] = Math.min(cap / patches.length, patches[i] + regen / patches.length);
+      s.wildBerries[loc] = patches.reduce((total, count) => total + count, 0);
+    } else s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + regen);
   }
 }
 
-export function forageRule(world, id, site = world.loc?.[id]) {
+export function forageRule(world, id, site = world.loc?.[id], target) {
   const s = world.survival;
   if (!s) return { ok: false, code: 'NO_SURVIVAL' };
   if (!(world.outdoor ?? []).includes(site)) return { ok: false, code: 'NOT_OUTDOOR' };
   if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
-  if (s.wildBerries && (s.wildBerries[site] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
+  if (s.wildBerries && berryAmount(s, site, target) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
   if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
   return { ok: true, code: 'OK' };
 }
@@ -202,11 +207,11 @@ export const PRODUCE_LABEL = Object.freeze({ berry: '浆果', fruit: '果', egg:
 export const LIVESTOCK_CAP = 12;
 export const FORAGE_COOLDOWN = 2;
 
-export function doForage(world, id, site = world.loc[id]) {
+export function doForage(world, id, site = world.loc[id], target) {
   const s = world.survival;
-  const gate = forageRule(world,id,site);
+  const gate = forageRule(world,id,site,target);
   if (!gate.ok) return gate;
-  if (s.wildBerries) s.wildBerries[site] -= 1;
+  if (s.wildBerries) takeBerry(s, site, target);
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
   world.observeProduction?.('gross', 'berry', 1);
@@ -223,7 +228,7 @@ export function doExchange(world, id, kind) {
   const cap = effectiveMods(world).storeCap;
   // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
-  s.produce[kind] -= 1;
+  takeProduce(s, kind, 1);
   let gained;
   if (rate.store) {
     const before = s.store;
@@ -254,5 +259,6 @@ export function doExpand(world, id, type) {
     const prefix = type === 'chickens' ? 'ch' : 'or';
     s.ecoPop[type].push({ id: `${prefix}${++s.ecoSeq[prefix]}`, born: world.t, health: 1 }); // P1-5 扩建个体从幼体成长
   }
+  restoreSources(world);
   return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
 }

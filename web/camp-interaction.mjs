@@ -7,6 +7,7 @@ export const CAMP_SITES = Object.freeze({
 });
 export const campSite = (room, layout) => layout?.sites[room] ?? CAMP_SITES[room] ?? residentialSite(room);
 export const ANIMAL_ITEMS = Object.freeze({ chickens:'egg', cows:'milk', sheep:'wool' });
+export const BERRY_PATCHES = Object.freeze({ yard:2, garden:2, watch:1, well:1 });
 export const ANIMAL_LIMITS = Object.freeze({ chickens:4, cows:3, sheep:3 });
 export const CAMP_TOOLS = Object.freeze({ berry:'basket',fruit:'basket',crop:'basket',egg:'basket',wool:'shears',milk:'bucket',water:'bucket' });
 export const REACH = Object.freeze({ resident:1.6, timber:1.55, plant:1.35, animal:1.6, plot:.55 });
@@ -41,19 +42,23 @@ export function campBeds(at, seed=0, version=0) {
 }
 
 // Fixed harvest nodes share their positions and stock sources with the server.
-export function campPlants(layout, orchards=3, seed=0, version=0) {
+export function campPlants(layout, orchards=3, seed=0, version=0, sources) {
   const [gx,gz]=campSite('garden',layout), [yx,yz]=campSite('yard',layout);
   const beds=campBeds([gx,gz],seed,version);
   const first=beds[0];
-  const fruit=Array.from({length:Math.min(12,orchards)},(_,i)=>({
-    id:`fruit:${i}`,item:'fruit',site:'garden',x:first.x+1+i%6*2.95,z:first.z+9.5+Math.floor(i/6)*3,
+  const trees=sources?.fruit ?? Array.from({length:Math.min(12,orchards)},(_,i)=>({id:`fruit:${i}`,slot:i}));
+  const fruit=trees.map(tree=>({
+    ...tree,item:'fruit',site:'garden',x:first.x+1+tree.slot%6*2.95,z:first.z+9.5+Math.floor(tree.slot/6)*3,
   }));
   return fruit.concat([
     {id:'berry:garden:0',item:'berry',site:'garden',x:first.x+.5,z:first.z-1.4},
     {id:'berry:garden:1',item:'berry',site:'garden',x:first.x+5.5,z:first.z-1.4},
     {id:'berry:yard:0',item:'berry',site:'yard',x:yx+2.5,z:yz+2.2},
     {id:'berry:yard:1',item:'berry',site:'yard',x:yx+4.1,z:yz+1.6},
-  ]);
+  ], sources ? ['watch','well'].map(site=>{
+    const [x,z]=campSite(site,layout);
+    return {id:`berry:${site}:0`,item:'berry',site,x:x+2.6,z:z+2.4};
+  }) : []);
 }
 
 export function segmentGap(p,a,b) {

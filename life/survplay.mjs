@@ -13,6 +13,8 @@ import { doBuild, doRepair, effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVE
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
+import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
+import { restoreFarmPlots } from './farmland.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
 import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
@@ -36,7 +38,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -50,11 +52,9 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
   world.layoutVersion = layoutVersion;
-  if (layoutVersion === 1) {
-    world.campLayout = generateCampLayout(mapSeed);
-    const [x,z] = world.campLayout.sites.garden;
-    for (const plot of world.survival.plots) plot.at = [x+plot.id%2,z+Math.floor(plot.id/2)];
-  }
+  if (layoutVersion === 1) world.campLayout = generateCampLayout(mapSeed);
+  if (farmLife) world.survival.farmLife = true;
+  restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
   world.residentChannelMask = residentChannelMask;
   // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
@@ -97,6 +97,7 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   s.droughts = false; // §13 K2 负 ⇒ 默认关、R3 撤回
   s.ecosystem = !!ecosystem; // P1-4/5/6 动态生态（果树＋鸡种群）；host 游戏开启，sweep 默认关⇒基线不变
   if (s.ecosystem) initEcoPop(s);
+  restoreSources(world);
   s.forageStats = { harvest: 0, plant: 0 };
   s.deaths = []; // P0-1：死亡事件史（id/name/t/day/cause），随存档持久化，可查询不删除
   s.farmerId = 'a1'; // §15.7 R1 角色化农夫（网格选定默认开）
@@ -218,12 +219,14 @@ export async function tickSurvPlay(sp) {
     reproduce(w, sp.log); // §15 P2-B 繁衍（日界）；P1-3 人口上限＋出生事件
     // 蓄养/果树日界结算：规则层算增量，写独立产出账，不碰 store/inv。
     w.survival.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
-    let daily;
+    let daily, eligible;
     if (w.survival.ecosystem) {
       // P1-4/5/6：动态生态——果树/鸡种群按健康×季节产果/蛋（鸡先吃植物性产出再吃公仓）；牛/羊仍静态。
       const ecoYield = stepEcosystem(w, sp.log);
       daily = produceYield(seasonOf(dayOf(w.t)), { ...w.survival.livestock, chickens: 0, orchards: 0 });
       daily.egg = ecoYield.egg; daily.fruit = ecoYield.fruit;
+      eligible = ecoYield.eligible;
+      restoreSources(w);
     } else {
       daily = produceYield(seasonOf(dayOf(w.t)), w.survival.livestock ?? DEFAULT_LIVESTOCK);
     }
@@ -237,10 +240,9 @@ export async function tickSurvPlay(sp) {
       }
     }
     for (const [k, v] of Object.entries(daily)) {
-      const before = w.survival.produce[k] ?? 0;
-      w.survival.produce[k] = Math.min(PRODUCE_CAP * 4, before + v);
+      const accepted = addStanding(w, k, v, PRODUCE_CAP * 4, eligible?.[k]);
       w.observeProduction?.('gross', k, v);
-      w.observeProduction?.('stock', k, w.survival.produce[k] - before);
+      w.observeProduction?.('stock', k, accepted);
     }
     sp.log.push({ t: w.t, kind: 'produce', ok: true, code: Object.entries(daily).map(([k, v]) => k + v).join('/') });
     // §15 P2-D 性格-季节慢偏移：冬社交设点降、夏升（人格随季节缓慢变化）
@@ -527,7 +529,8 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     loc: w.loc, occupancy: w.occupancy,
     store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
-    plots: s.plots.map((p) => ({ id: p.id, growth: Number(p.growth.toFixed(2)) })),
+    farmLife: Boolean(s.farmLife),
+    plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
     camp:{containers:s.campContainers??{},mealsEaten:s.mealsEaten??0,timber:campTimberView(w)},
     housing: w.housing,
@@ -545,7 +548,7 @@ export function survView(sp) {
     yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
     log: sp.log.slice(-12),
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? DEFAULT_LIVESTOCK) },
-    wildBerries: s.wildBerries,
+    wildBerries: s.wildBerries, berryPatches: s.berryPatches, ecoSources: sourceView(w),
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
     produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
     economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
@@ -612,6 +615,8 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    restoreFarmPlots(w);
+    restoreSources(w);
     if (w.independentWorld) {
       const s = w.survival;
       if (s.endReason === 'player') { s.playerDead = true; s.failed = false; }

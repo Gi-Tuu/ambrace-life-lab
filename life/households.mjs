@@ -45,7 +45,7 @@ export const isChildStage = (stage) => stage === 'infant' || stage === 'child';
 // 劳动能力：成年与老年可劳动（老年减产）；婴幼儿/儿童不能劳动（P1-1：儿童不具成年劳动能力）。
 export const laborStage = (w, id) => { const s = residentStage(w, id); return s === 'adult' || s === 'elder'; };
 
-const WORK_ACTIONS = new Set(['harvest', 'plant', 'gather', 'house_work', 'forage', 'exchange',
+const WORK_ACTIONS = new Set(['harvest', 'plant', 'till', 'gather', 'house_work', 'forage', 'exchange',
   'expand', 'build', 'plan', 'repair', 'deposit', 'withdraw']);
 export const isLaborAction = kind => WORK_ACTIONS.has(kind);
 export const laborAllowed = (w, id, kind) =>

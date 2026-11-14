@@ -4,6 +4,7 @@ import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './househ
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
+import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
 import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
 
@@ -43,11 +44,15 @@ export function validate(world, agentId, intent) {
     if ((world.coins?.[agentId] ?? 0) < 2) return fail('NO_COINS', '铜币不够');
   }
   // Phase A/B 生存动作：只在 survival 世界合法，且须在菜园、有成熟/空地块。
+  if (kind === 'till') {
+    const gate = tillRule(world, agentId, intent.plot);
+    if (!gate.ok) return fail(gate.code, '当前无法开垦指定地块');
+  }
   if (kind === 'harvest' || kind === 'plant') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这个世界没有菜畦');
     if (here !== 'garden') return fail('NOT_GARDEN', '得到菜园才能耕作');
-    if (kind === 'harvest' && !maturePlots(world.survival).length) return fail('NO_MATURE', '没有成熟的菜畦');
-    if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
+    if (kind === 'harvest' && !maturePlots(world.survival).some(p => intent.plot === undefined || p.id === intent.plot)) return fail('NO_MATURE', '没有成熟的菜畦');
+    if (kind === 'plant' && !world.survival.plots.some(p => p.growth === 0 && (intent.plot === undefined || p.id === intent.plot))) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   // Phase B 建设动作：采集/奠基/施工/维修。
   if (kind === 'forage' && world.survival?.wildBerries) {

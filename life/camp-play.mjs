@@ -1,4 +1,5 @@
-import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campBeds, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
+import { sourceView, takeProduce } from './source-produce.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
@@ -95,18 +96,21 @@ function outdoorSource(world, body) {
     return distanceTo(from,[tree.x,tree.z])<=REACH.timber ? {site:tree.site} : fail('OUT_OF_REACH');
   }
   if (item==='crop' || kind==='camp_plant' || kind==='camp_water') {
-    if (!Number.isInteger(plot) || !s.plots.some(p=>p.id===plot)) return fail('BAD_PLOT');
-    const bed=campBeds(campSite('garden',layout),world.mapSeed,world.layoutVersion).find(b=>b.id===plot);
+    const bed=Number.isInteger(plot) && s.plots.find(p=>p.id===plot)?.bed;
+    if (!bed) return fail('BAD_PLOT');
     return bed && distanceToRect(from,bed)<=REACH.plot ? {site:'garden'} : fail('OUT_OF_REACH');
   }
+  const sources=sourceView(world);
   if (item==='fruit' || item==='berry') {
-    const plant=campPlants(layout,s.livestock?.orchards,world.mapSeed,world.layoutVersion).find(p=>p.id===target && p.item===item);
+    const plant=campPlants(layout,s.livestock?.orchards,world.mapSeed,world.layoutVersion,sources).find(p=>p.id===target && p.item===item);
     if (!plant) return fail('NO_PLANT');
     return distanceTo(from,[plant.x,plant.z])<=REACH.plant ? {site:plant.site} : fail('OUT_OF_REACH');
   }
   const [animal,index,extra]=typeof target==='string'?target.split(':'):[];
-  if (extra!==undefined || !Object.hasOwn(ANIMAL_ITEMS,animal) || ANIMAL_ITEMS[animal]!==item ||
-      !/^[0-9]+$/.test(index??'') || Number(index)>=Math.min(s.livestock?.[animal]??0,ANIMAL_LIMITS[animal])) return fail('NO_ANIMAL');
+  if (extra!==undefined || !Object.hasOwn(ANIMAL_ITEMS,animal) || ANIMAL_ITEMS[animal]!==item) return fail('NO_ANIMAL');
+  const exists = sources ? sources[item]?.some(row => row.id === target)
+    : /^[0-9]+$/.test(index??'') && Number(index)<Math.min(s.livestock?.[animal]??0,ANIMAL_LIMITS[animal]);
+  if (!exists) return fail('NO_ANIMAL');
   const pen=campPen(campSite('yard',layout));
   return pointIn(to,WORLD_TW,WORLD_TH) && distanceToRect(to,pen)===0 && distanceTo(from,to)<=REACH.animal
     ? {site:'yard'} : fail('OUT_OF_REACH');
@@ -117,7 +121,9 @@ export function campAction(world,body) {
   let site=world.loc.p1;
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
   if (kind==='camp_resident') return interactWithResident(world,body);
-  if (['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind) && Object.hasOwn(body,'from')) {
+  const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);
+  if (s.farmLife && kind==='camp_collect' && item!=='water' && !Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');
+  if (positioned && Object.hasOwn(body,'from')) {
     const source=outdoorSource(world,body);
     if (!source.site) return source;
     site=source.site;
@@ -182,11 +188,17 @@ export function campAction(world,body) {
   if (kind==='camp_water') {
     if (site!=='garden') return fail('NOT_GARDEN');
     if (tool!=='bucket') return fail('NEED_TOOL');
-    if (plot!==undefined && !s.plots.some(p=>p.id===plot)) return fail('BAD_PLOT');
+    const field = s.plots.find(p => p.id === plot);
+    if (plot!==undefined && !field) return fail('BAD_PLOT');
     if (!amount(bag,'water')) return fail('EMPTY');
-    if (s.water>=1) return fail('WATER_FULL');
+    if (field && s.farmLife) {
+      if ((field.moisture ?? 0) >= 1) return fail('WATER_FULL');
+      field.moisture = Math.min(1, (field.moisture ?? 0) + .4);
+    } else {
+      if (s.water>=1) return fail('WATER_FULL');
+      s.water=Math.min(1,s.water+.12);
+    }
     bag.water-=1;
-    s.water=Math.min(1,s.water+.12);
     pay(world,0.01);
     return ok();
   }
@@ -205,15 +217,15 @@ export function campAction(world,body) {
     world.observeProduction?.('collected', 'crop', 1);
     cost=SURV_COST.harvest;
   } else if (item==='berry') {
-    const result=doForage(world,'p1',site);
+    const result=doForage(world,'p1',site,target);
     if (!result.ok) return result;
     s.produce.berry-=1;
     world.observeProduction?.('collected', 'berry', 1);
     cost=SURV_COST.forage;
   } else {
     if (site!==(item==='fruit'?'garden':'yard')) return fail('WRONG_SOURCE');
-    if (!amount(s.produce,item)) return fail('NO_PRODUCE');
-    s.produce[item]-=1;
+    if (s.farmLife && !target) return fail('NO_PRODUCE');
+    if (!takeProduce(s,item,1,target)) return fail('NO_PRODUCE');
     world.observeProduction?.('collected', item, 1);
   }
   bag[item]=amount(bag,item)+1;

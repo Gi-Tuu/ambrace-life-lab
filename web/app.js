@@ -169,9 +169,9 @@ function lastLine(w, who) {
 // 沿河与边缘的树林、每个地点一栋屋舍。没有盒子墙、没有门洞、没有房间边界。
 // 地表邻接只用于烘焙：像素材质图不参与寻路、视野或世界状态。
 // 田畦是菜园的户外场景；地面、植物与避让共用同一份几何。
-function farmBeds(sites, seed, version) {
-  return campBeds(sites.garden,seed,version).map(({id,x,z,w,d})=>({
-    id,x:x*TILE,y:z*TILE,w:w*TILE,h:d*TILE,row:Math.floor(id/4),col:id%4,
+function farmBeds(w) {
+  return (w.plots ?? []).filter(p=>p.bed).map(({id,bed,growth,moisture})=>({
+    id,x:bed.x*TILE,y:bed.z*TILE,w:bed.w*TILE,h:bed.d*TILE,growth,moisture,
   }));
 }
 const insideBed=(x,y,b,pad=0)=>x>=b.x-pad&&x<b.x+b.w+pad&&y>=b.y-pad&&y<b.y+b.h+pad;
@@ -392,23 +392,27 @@ function worldWithCollisions(sites, w) {
     worldCache.collisionRevision = collisionEditor.revision;
   }
   const { scene3d, lifeLayers } = worldCache;
+  const beds=farmBeds(w);
   let life3d;
   if (scene3d) {
     const livestock=w.livestock ?? {};
-    const plots=(w.plots ?? []).map(({growth})=>({
+    const plots=beds.map(({growth,...b})=>({...b,
       growth:growth>0 ? Math.max(1,Math.floor(growth*20))/20 : 0,
+      moisture:(b.moisture??0)>0,
     }));
-    const plantStock=['yard','garden'].map(site=>Math.min(3,Math.floor(w.wildBerries?.[site]??3)));
-    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,...plots.map(p=>p.growth),w.season,
-      ...plantStock,Math.min(3,w.produce?.fruit??0)].join(',');
+    const berryPatches=w.berryPatches && Object.fromEntries(Object.entries(w.berryPatches)
+      .map(([site,patches])=>[site,patches.map(Math.floor)]));
+    const plantStock=berryPatches ?? ['yard','garden'].map(site=>Math.min(3,Math.floor(w.wildBerries?.[site]??3)));
+    const key=[livestock.orchards,livestock.chickens,livestock.cows,livestock.sheep,JSON.stringify(plots),w.season,
+      JSON.stringify(plantStock),JSON.stringify(w.ecoSources),Math.min(3,w.produce?.fruit??0)].join(',');
     life3d=lifeLayers.get(key);
     if (!life3d) {
-      life3d=outdoorLife({ ...worldCache, sites, plots, livestock, layout:w.layout, layoutVersion:w.layoutVersion, season:w.season, wildBerries:w.wildBerries, produce:w.produce, housing:w.housing });
+      life3d=outdoorLife({ ...worldCache, sites, beds:plots, livestock, layout:w.layout, layoutVersion:w.layoutVersion, season:w.season, wildBerries:w.wildBerries, berryPatches, ecoSources:w.ecoSources, produce:w.produce, housing:w.housing });
       lifeLayers.set(key,life3d);
       if (lifeLayers.size>8) lifeLayers.delete(lifeLayers.keys().next().value);
     }
   }
-  return { ...worldCache, sites, life3d, timber, blockers:worldCache.visibleBlockers??worldCache.blockers };
+  return { ...worldCache, sites, beds, life3d, timber, blockers:worldCache.visibleBlockers??worldCache.blockers };
 }
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
@@ -423,7 +427,7 @@ function buildWorld(w) {
   const mapSeed=w.mapSeed??0;
   const staticSites=campRenderer?Object.fromEntries(Object.entries(liveSites).filter(([room])=>!residentialSite(room))):liveSites;
   const sites=staticSites;
-  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households)]);
+  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -497,7 +501,10 @@ function buildWorld(w) {
   const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - streamCenter(ty*TILE+8)) < 34;
 
   // 1–3) 邻接材质统一烘焙草/土/水/岸/路；桥保持原来几何。
-  const beds=farmBeds(sites,mapSeed,w.layoutVersion), pen=campRenderer?penLayout(sites):null;
+  const beds=campRenderer?[]:farmBeds(w);
+  const land=campBeds(sites.garden,mapSeed,w.layoutVersion);
+  const pen=campRenderer?penLayout(sites):null;
+  const onFarm=(x,z,pad=0)=>land.some(b=>x>=b.x-pad && x<b.x+b.w+pad && z>=b.z-pad && z<b.z+b.d+pad);
   const inPen=(tx,tz)=>pen && tx+.5>=pen.x-1 && tx+.5<=pen.x+pen.w+1 &&
     tz+.5>=pen.z-1 && tz+.5<=pen.z+pen.d+1;
   const reserved=Object.keys(sites).map(room=>constructionLot(room,w.layout)).filter(Boolean);
@@ -505,7 +512,7 @@ function buildWorld(w) {
   const flatLand=[
     ...reserved,
     ...Object.values(sites).map(([x,z])=>({x:x-4.5,z:z-8,w:9,d:11})),
-    ...beds.map(b=>({x:b.x/TILE,z:b.y/TILE,w:b.w/TILE,d:b.h/TILE})),
+    ...land,
     ...grove.map(({x,z})=>({x:x-1,z:z-1,w:2,d:2})),
     ...(pen?[pen]:[]),
   ];
@@ -523,7 +530,7 @@ function buildWorld(w) {
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     const px = tx * TILE, py = ty * TILE, h = terrainHash(tx, ty, 1);
     if (terrain[(py + 8) * WORLD_W + px + 8] !== GROUND.grass || highGround(tx,ty)) continue;
-    if (campRenderer && h > .91 && !nearLot(tx,ty,0) && !nearGrove(tx,ty)) grass.push([tx+.5,ty+.5]);
+    if (campRenderer && h > .91 && !nearLot(tx,ty,0) && !nearGrove(tx,ty) && !onFarm(tx+.5,ty+.5)) grass.push([tx+.5,ty+.5]);
     if (h > 0.72) { g.fillStyle = '#00E436'; g.fillRect(px + 4, py + 8, 1, 2); g.fillRect(px + 3, py + 7, 1, 1); }
     if (h > 0.97) { g.fillStyle = '#FFEC27'; g.fillRect(px + 10, py + 5, 1, 1); }
     else if (h < 0.02) { g.fillStyle = '#FF77A8'; g.fillRect(px + 7, py + 11, 1, 1); }
@@ -567,13 +574,13 @@ function buildWorld(w) {
     g.fillStyle='#72513B';g.fillRect(b.x,b.y,b.w,b.h);g.fillStyle='#BA8752';g.fillRect(b.x,b.y,b.w,1);
     for(let y=b.y+4;y<b.y+b.h-2;y+=7){
       g.fillStyle='#482D2B';g.fillRect(b.x+2,y+4,b.w-4,2);
-      if (campRenderer) continue;
+      if (!b.growth) continue;
       for(let x=b.x+5;x<b.x+b.w-2;x+=9){
         if(terrainHash(x,y,81)<.1)continue;
         g.fillStyle='#315431';g.fillRect(x-2,y,5,3);g.fillRect(x,y-3,2,5);
-        g.fillStyle=b.col===2?'#D6AE69':'#98BD51';g.fillRect(x-3,y-1,3,1);g.fillRect(x+1,y-2,3,1);
+        g.fillStyle=b.growth>=1?'#D6AE69':'#98BD51';g.fillRect(x-3,y-1,3,1);g.fillRect(x+1,y-2,3,1);
         g.fillStyle='#73A747';g.fillRect(x-1,y-2,2,2);
-        if(b.col===1){g.fillStyle='#D27A4A';g.fillRect(x+1,y+1,2,2);}
+        if(b.growth>=1){g.fillStyle='#D27A4A';g.fillRect(x+1,y+1,2,2);}
       }
     }
     for(const x of [b.x-1,b.x+b.w]){g.fillStyle='#514134';g.fillRect(x,b.y,1,b.h);}
@@ -612,7 +619,7 @@ function buildWorld(w) {
   const cands = [];
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     if (highGround(tx,ty) || onRoad(tx, ty) || onRiver(tx, ty) || inPen(tx,ty) || nearLot(tx,ty) || nearGrove(tx,ty) || blockers.has(tileKey(tx, ty))) continue;
-    if (beds.some((b) => insideBed(tx * TILE + 8, ty * TILE + 8, b, 20))) continue;
+    if (onFarm(tx+.5,ty+.5,1.25)) continue;
     const near = Object.values(sites).some(([sx, sy]) => Math.hypot(tx - sx, ty - sy) < 6);
     if (near) continue;
     const h = terrainHash(tx, ty, 31);
@@ -1591,7 +1598,7 @@ const ACTION_KIND = {
   work:'work',
   build:'build', plan:'build',
   repair:'repair',
-  gather:'gather', harvest:'gather', plant:'gather', forage:'gather', collect:'gather', produce:'gather',
+  till:'build', gather:'gather', harvest:'gather', plant:'gather', forage:'gather', collect:'gather', produce:'gather',
   talk:'talk', hail:'talk', rej:'talk', refuse:'talk', say:'talk',
   eat:'food', take_shared:'food', trade:'food', buy:'food',
   companion:'social',
@@ -2370,6 +2377,7 @@ function inspectRoomProp(prop) {
       case 'pen': {
         const counts=s.livestock;
         detail=`鸡 ${counts.chickens} · 牛 ${counts.cows} · 羊 ${counts.sheep} · 公仓木 ${s.inv.wood} / 石 ${s.inv.stone}`;
+        if (s.ecoSources) detail+='。到室外靠近动物，用对应工具收集。';
         for (const type of ['chickens','cows','sheep']) {
           const cost=s.economy.expand[type];
           propOption(options,`扩建${s.economy.expandLabel[type]}（木 ${cost.wood} · 石 ${cost.stone}）`,
@@ -2377,8 +2385,8 @@ function inspectRoomProp(prop) {
             ()=>{ dialog.close(); runSurvAction({kind:'expand',type}); });
         }
         for (const type of ['egg','milk','wool']) {
-          propOption(options,`用${TOOL_ZH[CAMP_TOOL[type]]}收集${CAMP_ITEMS[type]}`,s.produce[type]<1?'尚无产物':'',
-            ()=>collectCamp(type,'yard',()=>inspectRoomProp(prop)));
+          if (!s.ecoSources) propOption(options,`用${TOOL_ZH[CAMP_TOOL[type]]}收集${CAMP_ITEMS[type]}`,
+            s.produce[type]<1?'尚无产物':'',()=>collectCamp(type,'yard',()=>inspectRoomProp(prop)));
           const label=s.economy.produceLabel[type];
           propOption(options,`兑换${label}（存有 ${s.produce[type]}）`,s.produce[type]<1?'缺收成':'',
             ()=>{ dialog.close(); runSurvAction({kind:'exchange',type}); });
@@ -2464,14 +2472,15 @@ function inspectPlot(bed) {
   action.hidden=true;
   action.onclick=null;
   $('campPropTitle').textContent=`第 ${bed.id+1} 畦`;
-  $('campPropText').textContent=plot.growth>=1?'作物成熟':plot.growth>0?`生长 ${Math.round(plot.growth*100)}%`:'空畦';
+  const crop=plot.growth>=1?'作物成熟':plot.growth>0?`生长 ${Math.round(plot.growth*100)}%`:'空畦';
+  $('campPropText').textContent=crop+(plot.moisture>0?' · 已浇水':'');
   $('campPropDetail').hidden=true;
   if (plot.growth===0) propOption(options,'用锄播种','',()=>{
     ui.tool='hoe';
     performCamp({kind:'camp_plant',tool:'hoe',plot:plot.id,from:from()},'garden',()=>inspectPlot(bed));
   });
   if (plot.growth>=1) propOption(options,'用篮子收菜','',()=>performCamp({kind:'camp_collect',type:'crop',tool:'basket',plot:plot.id,from:from()},'garden',()=>inspectPlot(bed)));
-  if (S.view.pinv?.p1?.water) propOption(options,'用桶浇水',S.view.water>=1?'水分已满':'',()=>{
+  if (S.view.pinv?.p1?.water) propOption(options,'用桶浇水',(S.view.farmLife ? plot.moisture : S.view.water)>=1?'水分已满':'',()=>{
     ui.tool='bucket';
     performCamp({kind:'camp_water',tool:'bucket',plot:plot.id,from:from()},'garden',()=>inspectPlot(bed));
   });
@@ -3364,8 +3373,8 @@ function outdoorEntities(world,w,people,animals) {
   const timber=(world.timber?world.grove:[]).map(tree=>({id:'timber:'+tree.id,kind:'timber',target:tree.id,at:[tree.x,tree.z],
     reach:REACH.timber,tool:'axe',name:world.timber[tree.id]?.stage==='sapling'?'树苗':'伐木林的树'}));
   const plants=(world.life3d?.gatherables??[]).map(p=>({...p,kind:'plant',target:p.id,at:[p.x,p.z],reach:REACH.plant,
-    tool:'basket',name:p.item==='fruit'?'果树':'浆果灌木'}));
-  const fields=world.beds.filter(b=>w.plots?.some(p=>p.id===b.id)).map(b=>{
+    tool:'basket',name:(p.item==='fruit'?(p.mature===false?'果树幼苗':'果树'):'浆果灌木')+` · 可采 ${p.ready}`}));
+  const fields=world.beds.map(b=>{
     const rect={x:b.x/TILE,z:b.y/TILE,w:b.w/TILE,d:b.h/TILE};
     return {id:'plot:'+b.id,kind:'plot',bed:b,rect,at:[rect.x+rect.w/2,rect.z+rect.d/2],reach:REACH.plot,name:`第 ${b.id+1} 畦`};
   });
@@ -3377,7 +3386,7 @@ function outdoorEntities(world,w,people,animals) {
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.wild?'scenery':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
-      tool:CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:ANIMAL_NAMES[a.kind],animal:a}))];
+      tool:CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:ANIMAL_NAMES[a.kind]+(a.ready===undefined?'':` · 可收集 ${a.ready}`),animal:a}))];
 }
 const entityGap=(p,e)=>e.rect?distanceToRect(p,e.rect):distanceTo(p,e.at);
 

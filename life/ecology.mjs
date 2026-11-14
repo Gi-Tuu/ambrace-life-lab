@@ -5,11 +5,12 @@
 // 生态链：水分/季节/干旱→果树健康与结果→鸡吃植物性产出→鸡群健康/繁殖→蛋→居民食物；风暴损果树、墙庇护减损。
 import { dayOf, seasonOf, DAY_TICKS } from './clock.mjs';
 import { survivalRoll } from './rng.mjs';
+import { MATURE_DAYS, takeProduce } from './source-produce.mjs';
 
 export const ECO = Object.freeze({
   orchardCap: 12, chickenCap: 12,
-  orchardMatureDays: 6, orchardLifespan: 90,
-  chickenMatureDays: 4, chickenLifespan: 40,
+  orchardMatureDays: MATURE_DAYS.orchards, orchardLifespan: 90,
+  chickenMatureDays: MATURE_DAYS.chickens, chickenLifespan: 40,
   chickenFeed: 0.5,      // 每鸡每日耗粮（先吃 berry/fruit，再吃公仓）
   reproChance: 0.25,     // 成熟健康个体每日繁殖概率基值（×health）
 });
@@ -70,7 +71,7 @@ export function stepEcosystem(world, log) {
     const have = s.produce?.[k] ?? 0;
     const take = Math.min(have, need - consumed);
     if (take > 0) {
-      s.produce[k] -= take;
+      takeProduce(s, k, take);
       consumed += take;
       world.observeProduction?.('chickenFeed', k, take);
     }
@@ -89,7 +90,7 @@ export function stepEcosystem(world, log) {
   }
   for (let i = chickens.length - 1; i >= 0; i -= 1) if (chickens[i].health <= 0) { chickens.splice(i, 1); deaths += 1; }
   const matureCh = chickens.filter((c) => ageDays(t, c.born) >= ECO.chickenMatureDays && c.health > 0.3);
-  const egg = Math.round(matureCh.length * SEASON_EGG[season]);
+  const egg = Math.round(matureCh.length * SEASON_EGG[season] * (s.farmLife ? fedRatio : 1));
   if (chickens.length < ECO.chickenCap && fedRatio >= 0.99) { // 吃饱才繁殖
     for (const c of matureCh) {
       if (chickens.length >= ECO.chickenCap) break;
@@ -104,5 +105,10 @@ export function stepEcosystem(world, log) {
   s.livestock.chickens = chickens.length; // 同步存栏数（doExpand/survView/produceYield 用）
   s.livestock.orchards = orchards.length;
   if (births || deaths) log?.push({ t, kind: 'eco', ok: true, code: `出生${births}/死亡${deaths} 鸡${chickens.length}果${orchards.length}` });
-  return { egg, fruit, fedRatio };
+  return { egg, fruit, fedRatio, ...(s.farmLife ? {
+    eligible: {
+      egg: new Set(matureCh.map(c => `chickens:${c.id}`)),
+      fruit: new Set(matureOr.map(tr => `fruit:${tr.id}`)),
+    },
+  } : {}) };
 }

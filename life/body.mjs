@@ -1,3 +1,4 @@
+import { till } from './farmland.mjs';
 import { goalCandidates } from './goals.mjs';
 import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './households.mjs';
 // L1 载体：第一个 Body adapter。只翻译世界，不携带任何决策语义（§4）。
@@ -34,6 +35,7 @@ export const BASE_KINDS = {
   // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
   house_work: { impulse: .4, cost: .08, label: '为自己的房子加工木石' },
   harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
+  till: { impulse: 0.3, label: '开垦一块新田' },
   plant: { impulse: 0.25, cost: 0.06, label: '在空菜畦播种' },
   // Phase B 建设动作（仅 survival）。
   gather: { impulse: 0.3, cost: 0.07, label: '采集木石' },
@@ -56,7 +58,7 @@ import { isAlive, livingResidents } from './viability.mjs';
 // P0-2 统一基础行动成本：玩家与 AI 同一动作付同一存续代价（execute 与 survAct/camp 共用此表）。
 // 数值与原 affordancesFor 候选逐字相同 ⇒ AI 轨迹不变；玩家侧从此按同表结算，不再免费劳动。
 export const SURV_COST = Object.freeze({
-  house_work: 0.08, harvest: 0.08, plant: 0.06, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
+  house_work: 0.08, harvest: 0.08, plant: 0.06, till: 0.1, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
   deposit: 0.03, withdraw: 0.03, forage: 0.12, exchange: 0.12, expand: 0.15, move_to: 0.06,
 });
 
@@ -393,6 +395,7 @@ export function affordancesFor(world, agentId) {
     const ordinary = out.find(a => a.id === proposed.id);
     if (ordinary) {
       if ((ordinary.goalValue ?? 0) < proposed.goalValue) {
+        if (proposed.plot !== undefined) ordinary.plot = proposed.plot;
         ordinary.goal = proposed.goal;
         ordinary.goalValue = proposed.goalValue;
       }
@@ -551,15 +554,21 @@ function actuateInner(world, agentId, action) {
       if (!r.ok) return { action, ok: false, code: r.code };
       return { action, ok: true, code: 'OK', observation: `扩建：${r.label}`, evt: evt({ kind: 'expand', valence: 0.3, serves: 'stimulation' }) };
     }
+    case 'till': {
+      const r = till(world, agentId, action.plot);
+      if (!r.ok) return { action, ok: false, code: r.code, observation: '当前无法开垦' };
+      return { action, ok: true, code: r.code, observation: '开出一块空田，等待播种',
+        evt: evt({ kind: 'till', valence: .2, serves: 'energy' }) };
+    }
     case 'harvest': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
-      const r = doHarvest(world, agentId);
+      const r = doHarvest(world, agentId, action.plot);
       if (!r.ok) return { action, ok: false, code: r.code, observation: '没有可收获的菜畦' };
       return { action, ok: true, code: 'OK', observation: `收获 ${r.amount} 份入公共粮仓`, evt: evt({ kind: 'harvest', valence: 0.3, serves: 'energy' }) };
     }
     case 'plant': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这个世界没有菜畦' };
-      const r = doPlant(world, agentId);
+      const r = doPlant(world, agentId, action.plot);
       if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_WATER' ? '水分不足，播不了种' : '没有空菜畦' };
       return { action, ok: true, code: 'OK', observation: '播下种子，等它长大', evt: evt({ kind: 'plant', valence: 0.2, serves: 'energy' }) };
     }

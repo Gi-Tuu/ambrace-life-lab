@@ -1,6 +1,6 @@
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
-import { ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
@@ -206,22 +206,26 @@ function tree(s, x, z, variant) {
     plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx,y,z+dz,w,h,d,shades[i]));
 }
 function flora3d(s, world) {
-  const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion);
+  const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion,world.ecoSources);
   for (const plant of nodes) {
     const {x,z,item,id,site}=plant, v=Math.floor(x*7+z*13)%4, shades=LEAF_RAMPS[v];
-    s.gatherables.push(plant);
+    const ready=item==='fruit'
+      ? plant.ready ?? (world.season==='冬'?0:world.produce?.fruit??0)
+      : Math.floor(world.berryPatches?.[site]?.[Number(id.split(':').at(-1))] ?? world.wildBerries?.[site] ?? 3);
+    s.gatherables.push({...plant,ready});
     s.group(id,()=>{
       if (item==='fruit') {
-        s.box(x-.16,0,z-.16,.32,1.45,.32,DARK);
-        plantBox(s,x+z,.12,false,x-.82,1.28,z-.76,1.64,.96,1.52,shades[1]);
-        plantBox(s,x+z,.12,false,x-.52,2.16,z-.48,1.04,.66,1.0,shades[2]);
-        const count=world.season==='冬'?0:Math.min(3,world.produce?.fruit??0);
+        const scale=plant.mature===false?.46:1;
+        s.box(x-.16*scale,0,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
+        plantBox(s,x+z,.12,false,x-.82*scale,1.28*scale,z-.76*scale,1.64*scale,.96*scale,1.52*scale,shades[1]);
+        plantBox(s,x+z,.12,false,x-.52*scale,2.16*scale,z-.48*scale,1.04*scale,.66*scale,1.0*scale,shades[2]);
+        const count=Math.min(3,ready);
         for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
           plantBox(s,x+z,.12,false,x+dx,y,z+dz,.17,.17,.17,'#CF4E53');
       } else {
         for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
           plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
-        const count=Math.min(3,Math.floor(world.wildBerries?.[site]??3));
+        const count=Math.min(3,ready);
         for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,count))
           plantBox(s,x+z,.08,false,x+dx,y,z+dz,.11,.11,.11,'#CE6274');
       }
@@ -253,17 +257,20 @@ function grass3d(s, sites) {
   }
 }
 function crops3d(s, world) {
-  const plots = world.plots ?? [], beds = world.beds ?? [];
-  for (const b of beds) {
+  for (const b of world.beds ?? []) {
     const bx=b.x/16, bz=b.y/16, bw=b.w/16, bh=b.h/16;
-    const growth = plots[b.row*4+b.col]?.growth ?? 0;
-    if (growth <= 0) continue;
-    for(let r=0;r<2;r+=1) for(let c=0;c<4;c+=1){
-      const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1), hh=.18+growth*.6;
-      s.box(x-.05,.06,z-.05,.1,hh,.1,'#315431');
-      s.box(x-.22,.06+hh*.42,z-.12,.44,.16,.24,growth>=1?'#FFEC27':'#73A747');
-      if(growth>=.65)s.box(x-.12,.06+hh,z-.12,.24,.22,.24,growth>=1?'#FFA300':'#98BD51');
-    }
+    const { growth } = b;
+    s.group('plot:'+b.id, () => {
+      s.box(bx,.012,bz,bw,.04,bh,b.moisture?'#594032':'#8C6648');
+      for (const row of [.15, .65]) s.box(bx+.13,.052,bz+bh*row,bw-.26,.022,.27,b.moisture?'#463024':'#694932');
+      if (growth <= 0) return;
+      for(let r=0;r<2;r+=1) for(let c=0;c<4;c+=1){
+        const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1), hh=.18+growth*.6;
+        s.box(x-.05,.06,z-.05,.1,hh,.1,'#315431');
+        s.box(x-.22,.06+hh*.42,z-.12,.44,.16,.24,growth>=1?'#FFEC27':'#73A747');
+        if(growth>=.65)s.box(x-.12,.06+hh,z-.12,.24,.22,.24,growth>=1?'#FFA300':'#98BD51');
+      }
+    });
   }
 }
 
@@ -293,47 +300,51 @@ function livestock3d(s, world) {
     ['cows',stock.cows??2,ANIMAL_LIMITS.cows,.59,1.16,1.06,1.43],
     ['sheep',stock.sheep??2,ANIMAL_LIMITS.sheep,.52,2.97,4.91,1.29],
   ];
-  for (const [kind,count,limit,r,x,z,spacing] of specs) for (let i=0;i<Math.min(count,limit);i+=1) {
-    const px=pen.x+x+i*spacing, pz=pen.z+z+(i%2)*.11;
-    const boxes=[];
-    s.animals.push({id:`${kind}:${i}`,x:px,z:pz,r,kind,boxes,speed:kind==='chickens'?1.0:.63,
-      habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
-    const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x,y,z,w,h,d,color,fx});
-    if (kind==='chickens') {
-      const feathers=i%2?'#B67554':'#E8D7B3';
-      b(-.16,.14,-.19,.32,.31,.38,feathers);
-      b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
-      b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
-      b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
-      for (const dx of [-.083,.05]) {
-        b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
-        b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
-        b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
+  for (const [kind,count,limit,r,x,z,spacing] of specs) {
+    const herd=world.ecoSources?.[ANIMAL_ITEMS[kind]] ??
+      Array.from({length:Math.min(count,limit)},(_,slot)=>({id:`${kind}:${slot}`,slot,mature:true}));
+    for (const [i, animal] of herd.entries()) {
+      const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(animal.slot/limit)*.34;
+      const boxes=[], size=animal.mature ? 1 : .65;
+      s.animals.push({id:animal.id,ready:animal.ready,x:px,z:pz,r:r*size,kind,boxes,speed:kind==='chickens'?1.0:.63,
+        habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
+      const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x:x*size,y:y*size,z:z*size,w:w*size,h:h*size,d:d*size,color,fx});
+      if (kind==='chickens') {
+        const feathers=i%2?'#B67554':'#E8D7B3';
+        b(-.16,.14,-.19,.32,.31,.38,feathers);
+        b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
+        b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
+        b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
+        for (const dx of [-.083,.05]) {
+          b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
+          b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
+          b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
+        }
+        b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
+        continue;
       }
-      b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
-      continue;
+      const cow=kind==='cows', coat=cow?'#DFD5BC':'#DCD3B7', face=cow?'#A07F73':'#5F5348';
+      const w=cow?.74:.67, d=cow?.81:.69, y=cow?.42:.32;
+      b(-w/2,y,-d/2,w,.49,d,coat);
+      for (const dx of [-w*.39,w*.22]) for (const dz of [-d*.36,d*.18]) {
+        b(dx,0,dz,.13,y+.08,.135,face,'leg');
+        b(dx-.015,0,dz-.012,.16,.105,.17,'#3F3A33','leg');
+      }
+      if (cow) {
+        b(-w/2-.015,y+.13,-.18,.042,.23,.39,'#57514A');
+        b(.02,y+.49,-.28,.28,.012,.36,'#57514A');
+        b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
+        b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
+      } else {
+        b(-.29,y+.45,-.26,.57,.12,.53,'#F0E4C7');
+        b(-.32,y+.44,.105,.29,.11,.26,'#E8DCBE');
+      }
+      b(-.18,y+.22,d*.29,.36,.32,.29,face);
+      b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748');
+      for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722');
+      for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face);
+      b(-.044,y+.36,-d*.63,.08,.1,.16,face);
     }
-    const cow=kind==='cows', coat=cow?'#DFD5BC':'#DCD3B7', face=cow?'#A07F73':'#5F5348';
-    const w=cow?.74:.67, d=cow?.81:.69, y=cow?.42:.32;
-    b(-w/2,y,-d/2,w,.49,d,coat);
-    for (const dx of [-w*.39,w*.22]) for (const dz of [-d*.36,d*.18]) {
-      b(dx,0,dz,.13,y+.08,.135,face,'leg');
-      b(dx-.015,0,dz-.012,.16,.105,.17,'#3F3A33','leg');
-    }
-    if (cow) {
-      b(-w/2-.015,y+.13,-.18,.042,.23,.39,'#57514A');
-      b(.02,y+.49,-.28,.28,.012,.36,'#57514A');
-      b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
-      b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
-    } else {
-      b(-.29,y+.45,-.26,.57,.12,.53,'#F0E4C7');
-      b(-.32,y+.44,.105,.29,.11,.26,'#E8DCBE');
-    }
-    b(-.18,y+.22,d*.29,.36,.32,.29,face);
-    b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748');
-    for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722');
-    for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face);
-    b(-.044,y+.36,-d*.63,.08,.1,.16,face);
   }
 }
 
