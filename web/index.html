@@ -45,37 +45,50 @@
   #worldMain[hidden], #playNotice[hidden], #startMenu[hidden] { display:none; }
   body.menu-mode > :is(header, #mapbar, #playNotice, #hudGauges, #worldMain, footer) { display:none; }
   #startMenu {
-    min-height:calc(100svh - 32px); box-sizing:border-box; display:grid; place-items:center;
-    background:var(--bg);
-    padding:clamp(20px, 6vw, 76px);
+    min-height:100svh; display:grid; place-items:center;
+    padding:clamp(16px, 4vw, 64px);
+    background:linear-gradient(145deg,#263D29,var(--bg) 58%);
   }
-  .start-shell { width:min(100%, 810px); }
-  .start-shell h1 { margin:0; font-size:32px; line-height:40px; color:var(--ink); }
-  .start-shell > p { color:var(--dim); margin:14px 0 34px; }
-  .start-options { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  .start-card {
-    min-width:0; padding:clamp(16px, 3vw, 28px); display:flex; flex-direction:column; align-items:flex-start;
-    border:2px solid var(--line-hi); border-top:4px solid var(--gold);
-    background:var(--sunken); color:var(--ink); box-shadow:4px 4px 0 var(--shadow);
+  .start-shell {
+    width:min(100%,1280px); display:grid; grid-template-columns:minmax(320px,.82fr) minmax(0,1.5fr);
+    align-items:center; gap:clamp(24px,4vw,64px);
   }
+  .start-copy { min-width:0; }
+  .start-copy h1 { margin:0; color:var(--ink); font-size:clamp(26px,3.2vw,48px); line-height:1.25; }
+  .start-copy > p { max-width:32em; color:var(--dim); margin:12px 0 28px; line-height:1.65; }
+  .start-cover {
+    position:relative; margin:0; min-width:0; aspect-ratio:1.23;
+    border:3px solid var(--line-hi); background:var(--sunken);
+    box-shadow:6px 6px 0 var(--shadow);
+  }
+  .start-cover::after { content:""; position:absolute; inset:3px; border:1px solid #EDC78766; pointer-events:none; }
+  #startScene { width:100%; height:100%; margin:0; border:0; box-shadow:none; }
+  .start-card { min-width:0; padding:16px 0; border-top:2px solid var(--line); }
   .start-card[hidden] { display:none; }
-  .start-card.compare { border-top-color:var(--a); background:var(--panel); }
-  .start-card h2 { margin:0; font-size:20px; line-height:28px; }
-  .start-card p { margin:12px 0 20px; line-height:1.55; color:var(--dim); }
-  .start-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; }
-  .start-actions button { min-height:42px; padding:8px 14px; border:2px solid var(--line-hi); background:var(--panel); color:#f7e8c4; cursor:pointer; font:inherit; }
+  .start-card h2 { margin:0 0 10px; font-size:16px; line-height:22px; color:var(--gold); }
+  .start-card.compare h2 { color:var(--a); }
+  .start-card p { margin:0 0 10px; line-height:1.55; color:var(--dim); }
+  .start-actions { display:flex; flex-wrap:wrap; gap:8px; }
+  .start-actions button {
+    min-height:42px; padding:8px 14px; border:2px solid var(--line-hi); background:var(--panel);
+    color:var(--ink); cursor:pointer; font:inherit;
+  }
   .start-actions .primary { background:var(--gold); color:var(--bg); border-color:var(--gold); font-weight:bold; }
-  .start-actions button:hover:not(:disabled) { outline:2px solid var(--ink); outline-offset:2px; }
+  .start-actions button:hover:not(:disabled), .start-actions button:focus-visible, .start-guide summary:focus-visible {
+    outline:2px solid var(--ink); outline-offset:2px;
+  }
   .start-actions button:disabled { opacity:.55; cursor:default; }
-  .start-guide { margin:0 0 16px; font-size:13px; }
-  .start-guide summary { cursor:pointer; color:var(--ink); border:1px solid var(--line); padding:4px 10px; background:var(--bg); }
-  .start-guide div { padding:8px 12px; border:1px solid var(--line); border-top:none; background:var(--bg); }
-  .start-guide p { margin:6px 0; line-height:1.5; color:var(--dim); }
-  #startStatus { min-height:1.2em; margin:12px 0 0; }
+  .start-guide { margin-top:12px; font-size:13px; }
+  .start-guide summary { cursor:pointer; color:var(--ink); width:fit-content; }
+  .start-guide div { margin-top:6px; padding:7px 10px; border-left:2px solid var(--line); }
+  .start-guide p { margin:4px 0; color:var(--dim); line-height:1.5; }
+  #startStatus { min-height:1.2em; margin:7px 0 0; color:var(--dim); }
   .family-panel li { margin-block:5px; }
-  @media (max-width:620px) {
-    .start-options { grid-template-columns:1fr; }
-    .start-shell h1 { font-size:20px; line-height:28px; }
+  @media (max-width:820px) {
+    .start-shell { grid-template-columns:minmax(0,580px); justify-content:center; gap:20px; }
+    .start-cover { grid-row:1; aspect-ratio:2; }
+    .start-copy > p { margin-bottom:16px; }
+    .start-card { padding-block:12px; }
   }
   #playNotice { margin:0 16px 10px; padding:10px 12px; border:2px solid var(--gold); background:var(--panel); }
   #playNotice p { margin:0 0 6px; }
@@ -526,19 +539,6 @@
   #grpSurv .stat-icons { gap:8px; font-size:12px; }
   #grpSurv .survrow { gap:6px; }
 
-  /* ② 四季木板 HUD：右上角，2D 像素风 */
-  #seasonHud { position:absolute; z-index:20; top:74px; right:18px; width:186px; }
-  .season-board {
-    position:relative; padding:8px 9px 10px; border:2px solid #BA8752;
-    background:repeating-linear-gradient(0deg,#72513B 0 6px,#7C5A42 6px 7px,#6B4B37 7px 12px);
-    box-shadow:3px 3px 0 0 rgba(0,0,0,.38); color:var(--ink); font-size:12px;
-  }
-  .season-weather { text-align:center; color:var(--gold); font-weight:700; letter-spacing:1px; margin-bottom:4px; }
-  .season-stats { position:absolute; top:6px; left:8px; display:flex; flex-direction:column; gap:2px; font-size:12px; }
-  .season-stats .stat { display:inline-flex; align-items:center; gap:3px; color:var(--ink); text-shadow:1px 1px 0 #000; }
-  .season-wheel { display:grid; place-items:center; margin:4px auto 2px; }
-  .season-wheel svg { display:block; image-rendering:pixelated; }
-  .season-place { text-align:left; font-size:12px; color:var(--dim); text-shadow:1px 1px 0 #000; margin-top:2px; }
   /* 新弹窗沿用中央面板风格 */
   #exchangeDlg, #buildDlg, #villageDlg {
     width:min(480px,92vw); max-height:78dvh; padding:14px 16px;
@@ -557,20 +557,23 @@
   /* 旧的左上角悬浮 HUD 让位给右上角木板 */
   #grpSurv { display:none; }
 
-  /* 四季木板：横向长方形，左侧天气、右侧反转扇形 */
-  #seasonHud { position:absolute; z-index:20; top:74px; right:18px; width:272px; }
-  .season-board {
-    display:flex; align-items:center; gap:6px; height:108px; padding:6px 8px; box-sizing:border-box;
-    border:2px solid #BA8752; background:repeating-linear-gradient(90deg,#72513B 0 14px,#7C5A42 14px 16px,#6B4B37 16px 26px);
-    box-shadow:3px 3px 0 0 rgba(0,0,0,.38);
+  .game-viewport { position:relative; align-self:center; width:max-content; max-width:100%; margin:16px auto; }
+  .game-viewport > canvas { margin:0; max-width:100%; }
+  #gameHud {
+    position:absolute; inset:2px; z-index:20; pointer-events:none;
+    container-type:inline-size;
   }
-  .season-weather { flex:1 1 auto; min-width:0; text-align:left; color:var(--gold); font-size:14px; font-weight:700;
-    line-height:1.5; text-shadow:1px 1px 0 #000; word-break:break-all; }
-  .season-wheel { flex:0 0 112px; width:112px; height:100px; display:grid; place-items:center; }
-  .season-wheel svg { display:block; width:104px; height:104px; image-rendering:pixelated; }
+  #seasonHud {
+    position:absolute; top:0; right:0; max-width:54%;
+    padding:5px 9px; border:2px solid #BA8752;
+    background:repeating-linear-gradient(90deg,#72513B 0 14px,#7C5A42 14px 16px,#6B4B37 16px 26px);
+    box-shadow:3px 3px 0 0 rgba(0,0,0,.38);
+    color:var(--gold); font-size:14px; font-weight:700; line-height:1.45;
+    text-shadow:1px 1px 0 #000;
+  }
   /* 屏幕左上角：体力 / 存续 / 本刻行动 */
   #playerHud {
-    position:absolute; z-index:20; top:74px; left:18px;
+    position:absolute; top:0; left:0;
     display:flex; flex-direction:column; gap:3px; padding:6px 9px;
     background:rgba(50,48,44,.86); border:2px solid var(--line); box-shadow:3px 3px 0 0 rgba(0,0,0,.3);
   }
@@ -578,43 +581,76 @@
   #playerHud b { color:var(--gold); }
   /* 屏幕左下角：地点名 */
   #placeHud {
-    position:absolute; z-index:20; bottom:82px; left:18px; padding:2px 7px;
+    position:absolute; bottom:0; left:0; padding:2px 7px; max-width:100%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     font-size:12px; color:var(--ink); background:rgba(50,48,44,.8); border:1px solid var(--line);
     text-shadow:1px 1px 0 #000;
   }
+  @container (max-width: 460px) {
+    #seasonHud { max-width:min(54%, calc(100% - 142px)); padding:3px 5px; font-size:12px; }
+    #playerHud { padding:3px 5px; gap:0; }
+    #playerHud .stat { gap:3px; line-height:16px; }
+    #playerHud .stat svg { width:12px; height:12px; flex-shrink:0; }
+  }
+
+  /* ① 对照模式：干掉画布下方被撑出来的大块灰色空隙 */
+  body:not(.surv-mode) main { min-height:0; }
+  body:not(.surv-mode) .occ { margin-top:6px; padding-top:6px; }
+  /* ③④ 两份对比横排、表格与左栏对齐 */
+  .lab-cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(230px,30%); gap:12px; align-items:start; }
+  .lab-left { min-width:0; }
+  .ab-pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .ab-col { min-width:0; padding:6px; border:1px solid var(--line); background:var(--panel); }
+  .ab-col .rows { gap:6px; }
+  #tbl { width:100%; table-layout:fixed; margin-top:10px; }
+  #tbl td, #tbl th { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* ⑤⑥ 事件：右侧独立可滚动窗口，合作施工常驻其顶部 */
+  .lab-right { min-width:0; padding:8px; border:2px solid var(--line); background:var(--panel); }
+  .lab-right h2 { margin:0 0 6px; font-size:12px; }
+  .lab-right .log { height:240px; max-height:38vh; overflow-y:auto; border-top:2px solid var(--line); padding-top:6px; }
+  #labCoop { margin-bottom:8px; padding:4px 6px; font-size:12px; line-height:1.4; background:var(--sunken); border:1px solid var(--line); }
+  #labCoop .survrow { line-height:1.4; }
+  @media (max-width:900px) {
+    .lab-cols { grid-template-columns:1fr; }
+    .ab-pair { grid-template-columns:1fr; }
+  }
+
+  /* ② footer 的 display:flex 会盖过 hidden，显式强制隐藏 */
+  footer[hidden] { display:none !important; }
+  /* ① 对照模式两个世界卡片各自按内容高度，不再被 stretch 拉成等高留白 */
 </style>
 </head>
 <body class="menu-mode">
 <main id="startMenu" aria-labelledby="startTitle">
   <div class="start-shell">
-    <h1 id="startTitle" tabindex="-1">拥爱生命实验室</h1>
-    <p>在荒野维持聚落，或观察居民如何作出选择。</p>
-    <div class="start-options">
-      <section class="start-card">
-        <h2>生存模式</h2>
-        <p>和居民一起采集、耕作、修建住所，看聚落走过四季。</p>
-        <details class="start-guide"><summary>玩法指引</summary>
-          <div>
-            <p><b>目标</b>：在四季中维持聚落。行动消耗存续，记得备粮和进食。</p>
-            <p><b>核心循环</b>：① 采集木石 → ② 奠基并建造住所 → ③ 耕种/采果储备食物 → ④ 请居民协助建设 → ⑤ 应对四季与灾害。</p>
-            <p><b>操作</b>：WASD 走路 · 1–5 选工具（手/斧/镐/锄/锤）· F 用工具交互 · E 背包 · 靠近居民空手 F 交谈。</p>
-            <p><b>居民自主</b>：他们有自己的需求与关系，是否帮你取决于信任、自身处境与天气，不会无条件听从。</p>
-          </div>
-        </details>
+    <div class="start-copy">
+      <h1 id="startTitle" tabindex="-1">拥爱生命实验室</h1>
+      <p>和居民一起采集、耕作、修建住所，看聚落走过四季。</p>
+      <section class="start-card" aria-labelledby="startSurvivalTitle">
+        <h2 id="startSurvivalTitle">生存模式</h2>
         <div class="start-actions">
           <button id="startSurvival" class="primary" type="button" disabled>继续生存</button>
           <button id="startNew" type="button" disabled>新开一局</button>
         </div>
+        <p id="startStatus" role="status">正在连接世界…</p>
       </section>
-      <section class="start-card compare">
-        <h2>A/B 对照模式</h2>
-        <p>并排查看同一初始条件下，内部状态通道开启和切断后的居民行为。</p>
+      <section class="start-card compare" aria-labelledby="startCompareTitle">
+        <h2 id="startCompareTitle">A/B 对照模式</h2>
+        <p>从同一个起点出发，观察内部状态通道开关如何影响居民的选择。</p>
         <div class="start-actions">
-          <button id="startCompare" class="primary" type="button" disabled>进入对照</button>
+          <button id="startCompare" type="button" disabled>进入对照</button>
         </div>
       </section>
+      <details class="start-guide"><summary>玩法指引</summary>
+        <div>
+          <p>采集木石、修建住所、耕作与储粮。居民会根据需求、信任和天气决定是否协助。</p>
+          <p>WASD 移动 · Shift 奔跑 · 1–8 选工具 · F 交互 · E 背包。靠近居民时可空手交谈。</p>
+        </div>
+      </details>
     </div>
-    <p id="startStatus" role="status">正在连接世界…</p>
+    <figure class="start-cover" aria-label="黄昏聚落">
+      <canvas id="startScene" aria-hidden="true" width="640" height="520"></canvas>
+    </figure>
   </div>
 </main>
 
@@ -676,15 +712,17 @@
       </div>
       
       <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
-      <canvas id="cvA" width="384" height="256"></canvas>
-      <div id="seasonHud" class="surv-only" aria-label="季节与时间">
-        <div class="season-board">
-          <div class="season-weather" id="seasonWeather">—</div>
-          <div class="season-wheel" id="seasonWheel"></div>
+      <div id="gameViewport" class="game-viewport">
+        <canvas id="cvA" width="384" height="256"></canvas>
+        <div id="gameHud" class="surv-only">
+          <div id="seasonHud" aria-label="季节与时间">
+            <div id="seasonDate">—</div>
+            <div id="seasonWeather">—</div>
+          </div>
+          <div id="playerHud" aria-label="体力 / 存续 / 本刻行动"></div>
+          <div id="placeHud" aria-label="地点"></div>
         </div>
       </div>
-      <div id="playerHud" class="surv-only" aria-label="体力 / 存续 / 本刻行动"></div>
-      <div id="placeHud" class="surv-only" aria-label="地点"></div>
       <details id="grpSurv" class="grp surv-only" open>
       <summary>生存状态</summary>
       <section id="survPanel"></section>
@@ -723,19 +761,23 @@
 
   </aside>
 </main>
-    <details class="lab grp" id="labPanel">
+    <details class="lab grp" id="labPanel" open>
       <summary>研究面板 · 判据 / 对照 / 日志</summary>
-      <div class="inner">
-        <div class="wstat" id="statA"></div>
-        <div class="rows" id="rowsA"></div>
-        <div class="wstat" id="statB"></div>
-        <div class="rows" id="rowsB"></div>
-        <table id="tbl"></table>
-        <div class="note">世界是一整片 120×80 格的自然地形，视口随屏幕和地点调整；点空地行走，点建筑进入，连廊两侧通向居所与公仓。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
-        <h2>事件</h2>
-        <div class="log" id="log"></div>
-        <h2>合作施工</h2><div id="labCoop"></div>
-        <h2>读图</h2><div class="lab-legend"><span>■ A 侧 · 承重通道开</span><span>■ B 侧 · 承重通道切断</span><span>■ 地点 / 镜头位置</span><span>■ 驳回 / 永久损失</span></div>
+      <div class="inner lab-cols">
+        <div class="lab-left">
+          <div class="ab-pair">
+            <div class="ab-col"><div class="wstat" id="statA"></div><div class="rows" id="rowsA"></div></div>
+            <div class="ab-col"><div class="wstat" id="statB"></div><div class="rows" id="rowsB"></div></div>
+          </div>
+          <table id="tbl"></table>
+          <div class="note">世界是一整片 120×80 格的自然地形，视口随屏幕和地点调整；点空地行走，点建筑进入，连廊两侧通向居所与公仓。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
+          <h2>读图</h2><div class="lab-legend"><span>■ A 侧 · 承重通道开</span><span>■ B 侧 · 承重通道切断</span><span>■ 地点 / 镜头位置</span><span>■ 驳回 / 永久损失</span></div>
+        </div>
+        <div class="lab-right">
+          <div id="labCoop"></div>
+          <h2>事件</h2>
+          <div class="log" id="log"></div>
+        </div>
       </div>
     </details>
 
@@ -785,7 +827,7 @@
   <button id="campPropAction" type="button" hidden></button>
   <div id="campPropOptions"></div>
 </dialog>
-<footer>
+<footer hidden data-removed>
   <span><b>读图</b></span>
   <span><i class="key a"></i>A 侧 · 承重通道开</span>
   <span><i class="key b"></i>B 侧 · 承重通道切断</span>
@@ -795,7 +837,7 @@
 </footer>
 <div id="toasts"></div>
 <div id="fullStage" hidden>
-  <canvas id="cvFull"></canvas>
+  <div id="fullViewport" class="game-viewport"><canvas id="cvFull"></canvas></div>
   <div id="fullHud">
     <span id="fullInfo"></span>
     <span class="fhint">点空地行走 · 点建筑进入 · WASD 移动 · Esc 退出</span>
