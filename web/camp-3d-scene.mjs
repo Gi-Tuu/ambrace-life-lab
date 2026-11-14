@@ -199,12 +199,24 @@ const SHRUBS = [
 function plantBox(s, phase, weight, rooted, ...args) {
   s.box(...args).wind={phase,weight,rooted};
 }
-function tree(s, x, z, variant) {
+function tree(s, x, z, variant, ground=0, scale=1) {
   const shades = LEAF_RAMPS[variant];
-  s.box(x-.2,0,z-.21,.4,1.88,.42,DARK,true);
-  s.box(x-.21,.11,z+.211,.07,1.42,.016,WOOD);
+  s.box(x-.2*scale,ground,z-.21*scale,.4*scale,1.88*scale,.42*scale,DARK,true);
+  s.box(x-.21*scale,ground+.11*scale,z+.211*scale,.07*scale,1.42*scale,.016*scale,WOOD);
   CANOPIES[variant].forEach(([dx,y,dz,w,h,d],i) =>
-    plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx,y,z+dz,w,h,d,shades[i]));
+    plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx*scale,ground+y*scale,z+dz*scale,w*scale,h*scale,d*scale,shades[i]));
+}
+export function wildVegetation(trees, undergrowth) {
+  const s=stage(0,0);
+  for (const {x,y,z,variant,scale} of trees) tree(s,x,z,variant,y,scale);
+  for (const {x,y,z,variant,shrub} of undergrowth) {
+    if (shrub) {
+      for (const [i,[dx,h,dz,w,height,d]] of SHRUBS[variant].entries()) {
+        plantBox(s,x+z,.09,true,x+dx,y+h,z+dz,w,height,d,LEAF_RAMPS[variant][Math.min(i+1,3)]);
+      }
+    } else grass3d(s,[[x,z,y]]);
+  }
+  return s;
 }
 function flora3d(s, world) {
   const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion,world.ecoSources);
@@ -251,10 +263,10 @@ function flora3d(s, world) {
 }
 
 function grass3d(s, sites) {
-  for (const [x,z] of sites ?? []) {
+  for (const [x,z,y=0] of sites ?? []) {
     const phase=x*.89+z*.62;
     for (const [dx,dz,h] of [[-.12,0,.19],[.03,-.1,.3],[.16,.06,.23]])
-      plantBox(s,phase+dx,.085,true,x+dx,0,z+dz,.043,h,.045,'#6B994D');
+      plantBox(s,phase+dx,.085,true,x+dx,y,z+dz,.043,h,.045,'#6B994D');
   }
 }
 function crops3d(s, world) {

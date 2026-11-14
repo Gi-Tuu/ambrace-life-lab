@@ -49,9 +49,9 @@ test('移动沿桥过河，河面、三侧山脊、南崖和树干挡住行走',
   assert.ok(!a.walkable(65,edge+.2));
   const before=moveWildWalker(a,65,edge-8,0,20,z);
   assert.ok(before[1]<edge-1);
-  const trees=wildDetails(a,2,1,z).boxes.filter(b=>b.color==='#584635');
+  const trees=wildDetails(a,2,1,z).boxes.filter(b=>b.solid);
   assert.ok(trees.length>0);
-  for(const b of trees) assert.ok(!a.walkable(b.x+.08,b.z+.08,z));
+  for(const b of trees) assert.ok(!a.walkable(b.x+b.w/2,b.z+b.d/2,z));
 });
 
 test('拼接区块保留村庄地面，跨界往返使用同一脚点与碰撞',()=>{
@@ -74,4 +74,26 @@ test('拼接区块保留村庄地面，跨界往返使用同一脚点与碰撞',
   assert.equal(open.walk[31*32+10],1);
   assert.equal(open.walk[31*32+25],0);
   assert.equal(closed.walk[31*32+10],0);
+});
+
+test('外围共用地表材质和树木模型，种子改变山谷、河宽及森林分布',()=>{
+  const a=wildLandscape(13,2,{joined:true}), b=wildLandscape(42,2,{joined:true});
+  assert.notEqual(a.river(160),b.river(160));
+  assert.notEqual(a.width(160),a.width(220));
+  for (const z of [0,80]) {
+    assert.equal(a.river(z),campTerrain(13,false,2).riverCenter(z*16)/16);
+    assert.ok(a.waterHeight(z-1)>=a.waterHeight(z+1));
+  }
+  const materials=new Set();
+  const density=[];
+  for (const [x,z] of [[1,4],[2,5],[-1,4],[2,-3],[13,0],[1,13]]) {
+    const mesh=wildRegion(a,x,z);
+    for (let i=7;i<mesh.length;i+=11) if(mesh[i]>=0) materials.add(mesh[i]);
+    density.push(wildDetails(a,x,z,24).boxes.filter(box=>box.solid).length);
+  }
+  assert.deepEqual([...materials].sort(),[0,1,2]);
+  assert.ok(Math.max(...density)>Math.min(...density)+5);
+  const trees=wildDetails(a,1,4,24).boxes;
+  assert.ok(trees.some(box=>box.solid));
+  assert.ok(trees.some(box=>box.wind && box.h>.5));
 });

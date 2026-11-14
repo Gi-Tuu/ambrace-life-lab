@@ -262,7 +262,12 @@ const VERTEX = `
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
   varying vec3 vColor;
-  varying vec2 vUV, vWorld;
+  varying vec2 vUV;
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+    varying highp vec2 vWorld;
+  #else
+    varying mediump vec2 vWorld;
+  #endif
   varying float vGlow, vHeight;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
@@ -286,11 +291,20 @@ const FRAGMENT = `
   uniform vec3 uLight;
   uniform float uAlpha;
   varying vec3 vColor;
-  varying vec2 vUV, vWorld;
+  varying vec2 vUV;
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+    varying highp vec2 vWorld;
+  #else
+    varying mediump vec2 vWorld;
+  #endif
   varying float vGlow, vHeight;
-  uniform bool uWild;
+  uniform bool uWild, uRegionTexture;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
+    if (uRegionTexture && vUV.y>=0.) {
+      vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,96.);
+      color=texture2D(uGround,texel).rgb*vColor;
+    }
     float water=uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.;
     bool green=color.g>color.r*1.12 && color.g>color.b*1.10;
     if (green && water<.5) {
@@ -344,7 +358,7 @@ export function createCampRenderer() {
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
@@ -456,7 +470,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -470,6 +484,7 @@ export function createCampRenderer() {
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
       gl.uniform1f(uniform.Season,season);
+      gl.uniform1i(uniform.RegionTexture,0);
       gl.uniform1i(uniform.Wild,Number(Boolean(regions?.length)));
       gl.uniform1i(uniform.HasWater,Number(Boolean(waterMask)));
       if (waterMask && waterMask!==waterImage) {
@@ -504,7 +519,19 @@ export function createCampRenderer() {
       const cacheLimit=regions?.length ? 48 : 12;
       if (regions?.length) {
         gl.uniform1i(uniform.Visibility,0);
-        for (const region of regions) paintStage(stageBuffer(region,cacheLimit),covered,faded);
+        if (regionAtlas) {
+          const texture=terrainTexture(regionAtlas);
+          gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+        }
+        for (const region of regions) {
+          gl.uniform1i(uniform.RegionTexture,Number(Boolean(regionAtlas && region.mesh)));
+          paintStage(stageBuffer(region,cacheLimit),covered,faded);
+        }
+        gl.uniform1i(uniform.RegionTexture,0);
+        if (terrain) {
+          const texture=terrainTexture(terrain);
+          gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+        }
         gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
       }
       paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));

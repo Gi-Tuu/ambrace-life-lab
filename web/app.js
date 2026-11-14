@@ -323,7 +323,23 @@ function paintForestFloor(g, trees, blockers, terrain) {
 
 let worldCache = null;
 const worldCaches = new Map();
-let outskirtsKey, outskirts;
+let outskirtsKey, outskirts, terrainAtlas, terrainAtlasReady;
+function outskirtsAtlas() {
+  if (terrainAtlas && terrainAtlasReady===ASSETS.ready) return terrainAtlas;
+  terrainAtlasReady=ASSETS.ready;
+  terrainAtlas=document.createElement('canvas');
+  terrainAtlas.width=128;terrainAtlas.height=96;
+  const g=terrainAtlas.getContext('2d');
+  g.imageSmoothingEnabled=false;
+  for (const [row,material,fallback] of [[0,'grass','#568D3E'],[1,'dirt','#BA8752'],[2,'stone','#939584']]) {
+    for (let i=0;i<4;i++) {
+      const tile=ASSETS.scenes[`terrain_${material}${i}`];
+      if (tile) g.drawImage(tile,i*32,row*32,32,32);
+      else { g.fillStyle=fallback;g.fillRect(i*32,row*32,32,32); }
+    }
+  }
+  return terrainAtlas;
+}
 function campOutskirts(w) {
   const key=`${w.mapSeed??0}:${w.layoutVersion??0}`;
   if (key!==outskirtsKey) {
@@ -2024,7 +2040,7 @@ function drawCamp(cv,w) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work);
-  if(!campRenderer.render({target:cv,stage,regions,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered,
     exterior,extended,people,animals,work,visibility,sight};
