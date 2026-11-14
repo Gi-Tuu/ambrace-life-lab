@@ -4,19 +4,22 @@
 // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
 
 import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
+import { musicTarget } from './audio-events.mjs';
 
 const STORE_KEY = 'ambrace.audio';
 const SR = 44100;
 const VOICE_LIMIT = 10;          // 同时发声上限：超了直接丢，保护移动端
 const THROTTLE_MS = 55;          // 同名音效最小间隔，避免连点成机枪
 const LOOKAHEAD_S = 0.6;         // BGM 提前排程窗口
+const FADE_IN = 2.5;             // 音乐淡入秒数
+const FADE_OUT = 3.5;            // 音乐淡出秒数：比淡入长，收尾不像被掐断
 
 const state = {
   ctx: null, master: null, ready: false,
   volume: 0.7, muted: false,
   buffers: new Map(),            // 音效名 → AudioBuffer
   beds: new Map(),               // 环境声名 → {source, gain}
-  music: { key: null, bars: [], nextBar: 0, source: null, timer: 0, playing: false },
+  music: { key: null, bar: 0, nextAt: 0, timer: 0, playing: false, want: false }, musicBus: null,
   voices: 0, lastAt: new Map(), menu: false,
 };
 
@@ -49,6 +52,10 @@ export function unlock() {
   const bus = ctx.createDynamicsCompressor();
   bus.threshold.value = -16; bus.knee.value = 24; bus.ratio.value = 3;
   bus.attack.value = 0.004; bus.release.value = 0.22;
+  const musicBus = ctx.createGain();
+  musicBus.gain.value = 0.0001;
+  musicBus.connect(master);
+  state.musicBus = musicBus;
   master.connect(bus); bus.connect(ctx.destination);
   state.ctx = ctx; state.master = master;
   applyGain();
@@ -130,9 +137,6 @@ function musicTheme({ season, settlement }) {
   return themeForSeason(season);
 }
 
-function sceneKey({ season, day, settlement }) {
-  return `${musicTheme({ season, settlement })}:${day ? 'day' : 'night'}`;
-}
 
 // 一小节的缓冲：变体切换时才渲染，单节约 15–25ms，且只在换季/昼夜/聚落状态时发生。
 function barBuffer(key, bar) {
@@ -155,7 +159,7 @@ function scheduleMusic() {
       const g = state.ctx.createGain();
       g.gain.setValueAtTime(0.0001, m.nextAt);
       g.gain.exponentialRampToValueAtTime(0.9, m.nextAt + 0.06);
-      src.connect(g); g.connect(state.master);
+      src.connect(g); g.connect(state.musicBus ?? state.master);
       src.start(m.nextAt);
       src.onended = () => src.disconnect();
     }
@@ -188,6 +192,7 @@ export function menu(on) {
   if (!on) { state.menu = false; return; }
   state.menu = true;
   startMusic('menu:day');
+  fadeMusic(0.9);
 }
 
 // 环境声床：最多三层（天气 / 昼夜 / 危机），换状态时 1.5 秒交叉淡入淡出。
@@ -211,23 +216,49 @@ function setBed(name, want, gain) {
 }
 
 // 世界差分进来就调这里；调用方只在"状态真的变了"时才调，避免每刻重算。
-export function scene({ season = '春', phase = '昼', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false } = {}) {
+export function scene({ season = '春', phase = '昼', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false,
+  window = null, proximity = 0 } = {}) {
   if (!state.ready || state.muted) return;
   const day = phase !== '夜';
   if (dead) {
     // 玩家倒下：曲终，只留危机心跳，世界仍在走但不再属于你。
-    stopMusic();
+    fadeMusic(0);
     setBed('crisis', true, 0.5);
     setBed('weather', false, 0);
     setBed('daynight', false, 0);
     return;
   }
   state.menu = false;
-  startMusic(sceneKey({ season, day, settlement }));
-  const weatherBed = weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : null;
-  setBed('weather', weatherBed, weather === 'rain' ? 0.6 : 0.5);
-  setBed('daynight', day ? 'day' : 'night', day ? 0.4 : 0.7);
-  setBed('crisis', (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0) && settlement !== 'extinct', 0.55);
+  // BGM 由 audio-events.mjs 的窗口规则决定：夜、村外、灭绝、闲日不播，播也有间歇。
+  const win = window ?? { play: true, theme: musicTheme({ season, settlement }), day };
+  setBed('weather', weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : null, 0.5 * (1 - proximity * 0.5));
+  setBed('daynight', day ? 'day' : 'night', (day ? 0.4 : 0.7) * (1 - proximity * 0.7));
+  // 出村后风声接管；危机心跳只在村内听得见（远征时不叠加）。
+  setBed('wind', proximity > 0.15 ? 'wind' : null, 0.25 + proximity * 0.55);
+  setBed('crisis', (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0)
+    && settlement !== 'extinct' && proximity < 0.5, 0.55);
+  if (win.play) startMusic(`${win.theme}:${win.day ? 'day' : 'night'}`);
+  // 单一出口：窗口说停就淡到 0，不留"算对了但没接线"的余地。
+  fadeMusic(musicTarget(win, settlement));
+}
+
+// 音乐淡入淡出：淡入 2.5 秒、淡出 3.5 秒，且淡出期间已排程的小节照常放完 ⇒ 听不到硬切。
+function fadeMusic(level) {
+  if (!state.musicBus) return;
+  const now = state.ctx.currentTime;
+  const bus = state.musicBus.gain;
+  bus.cancelScheduledValues(now);
+  bus.setValueAtTime(bus.value, now);
+  if (level > 0) {
+    state.music.want = true;
+    bus.linearRampToValueAtTime(level, now + FADE_IN);
+    return;
+  }
+  state.music.want = false;
+  bus.linearRampToValueAtTime(0.0001, now + FADE_OUT);
+  // 淡出结束后停排程，省 CPU；下次 play 窗口到来时重新起。
+  clearTimeout(state.music.timer);
+  state.music.timer = setTimeout(() => { if (!state.music.want) { state.music.playing = false; state.music.key = null; } }, FADE_OUT * 1000 + 400);
 }
 
 // 一次性世界事件音（出生/死亡/竣工/灾害…）：由 app.js 的世界差分触发，不在这里读世界。

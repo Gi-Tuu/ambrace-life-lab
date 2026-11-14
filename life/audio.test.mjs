@@ -9,7 +9,7 @@ import {
   renderSfx, sfxNames, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND, themeForSeason,
 } from '../web/audio-data.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
-import { readWorld, diffAudioEvents, sceneSignature } from '../web/audio-events.mjs';
+import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget } from '../web/audio-events.mjs';
 import { analyze } from '../web/audio-synth.mjs';
 
 const SR = 44100;
@@ -208,4 +208,65 @@ test('A-16 场景签名只在真会换音的读数上变化', () => {
   assert.notEqual(sceneSignature(base), sceneSignature({ ...base, player: { dead: true } }));
   // 天数、人口这些不该重排环境声（它们走事件音），签名必须相同。
   assert.equal(sceneSignature(base), sceneSignature({ ...base, day: 9, births: 4 }));
+});
+
+// ───────────────── BGM 播放窗口（不全局连播） ─────────────────
+
+const inVillage = { t: 100, season: '春', phase: '昼', settlement: 'active', playerPos: [60, 40], sites: [], coop: {} };
+const win = (over = {}) => musicWindow({ ...inVillage, ...over }, { now: over.t ?? inVillage.t });
+
+test('A-17 夜、灭绝、玩家倒下、走到村外都不该有 BGM；晨与暮该有', () => {
+  assert.equal(win({ phase: '夜' }).play, false, '夜里不播旋律，只留虫鸣与风');
+  assert.equal(win({ settlement: 'extinct' }).play, false, '村子没了不该有曲子');
+  assert.equal(win({ player: { dead: true } }).play, false, '玩家倒下由场景音负责');
+  assert.equal(win({ playerPos: [190, 60] }).play, false, '远征途中不播村内主题');
+  assert.equal(win({ phase: '晨' }).play, true, '晨是开工曲');
+  assert.equal(win({ phase: '暮' }).play, true, '暮是收工段');
+});
+
+test('A-18 白天只在村子真的在忙时播：有工地或有协作', () => {
+  assert.equal(win({}).play, false, '闲日不该有 BGM 顶着劳动声');
+  assert.equal(win({ sites: [{ loc: 'yard', type: 'shelter', phase: 'frame' }] }).play, true);
+  assert.equal(win({ coop: { task: { workers: ['a1', 'a2'] } } }).play, true);
+  assert.equal(win({ coop: { task: { workers: [] } } }).play, false, '挂名无人不算热闹');
+});
+
+test('A-19 播也有节拍：热闹的一整天里必须出现静默段，且连续播不超过 PLAY_TICKS', () => {
+  const busy = { sites: [{ loc: 'yard', type: 'shelter', phase: 'frame' }] };
+  const day = Array.from({ length: 24 }, (_, h) => win({ ...busy, t: 100 + h }));
+  assert.ok(day.some((w) => w.play), '热闹时总得响几次');
+  assert.ok(day.some((w) => !w.play), '24 小时连播就是背景板，必须歇');
+  let run = 0, longest = 0;
+  for (const w of day) { run = w.play ? run + 1 : 0; longest = Math.max(longest, run); }
+  assert.ok(longest <= PLAY_TICKS, `连续播 ${longest} 刻 > 上限 ${PLAY_TICKS}`);
+});
+
+test('A-20 窗口规则确定性：同一份读数两次调用结果相同，且不靠墙钟', () => {
+  const a = win({ phase: '晨' }), b = win({ phase: '晨' });
+  assert.deepEqual(a, b);
+  assert.equal(windowSignature(a), windowSignature(b));
+  // 只随世界刻走：t 变了才可能换段，same t ⇒ same answer
+  assert.equal(windowSignature(win({ t: 100 })), windowSignature(win({ t: 100 })));
+});
+
+test('A-21 远近程度单调且钳在 0..1：村内 0，村外 1', () => {
+  const near = proximity({ playerPos: [60, 40] });
+  const edge = proximity({ playerPos: [100, 60] });
+  const far = proximity({ playerPos: [190, 60] });
+  assert.equal(near, 0, '村内不该听到旷野风');
+  assert.ok(far > edge && edge >= 0, `远近必须单调：${near} ${edge} ${far}`);
+  assert.ok(far <= 1, 'proximity 必须钳在 0..1');
+  assert.equal(proximity({}), 0, '没有位置读数时算在村内');
+});
+
+test('A-22 窗口说停，目标电平必须是 0（不是"算对了但没接线"）', () => {
+  assert.equal(musicTarget({ play: false, theme: 'spring' }, 'active'), 0, '不播时电平必须归零');
+  assert.equal(musicTarget({ play: true, theme: 'spring' }, 'active'), 0.9);
+  assert.equal(musicTarget({ play: true, theme: 'crisis' }, 'crisis'), 0.7, '危机时给心跳让路');
+  assert.equal(musicTarget(null, 'active'), 0, '没有窗口读数时不响');
+  // 接线侧的同一类错误：布尔当电平用会让"停播"永远不生效。
+  const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
+  assert.equal(/fadeMusic\(\s*(true|false)\s*\)/.test(wired), false,
+    'audio.mjs 里还有 fadeMusic(true/false)：电平必须来自 musicTarget');
+  assert.equal(/fadeMusic\(true[,)]/.test(wired), false, '同上：淡出分支不能写成 true');
 });

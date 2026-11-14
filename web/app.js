@@ -9,7 +9,7 @@ import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs'
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
 import * as audio from './audio.mjs';
-import { readWorld, diffAudioEvents, sceneSignature } from './audio-events.mjs';
+import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
@@ -3657,14 +3657,20 @@ function renderPlayMode(sv, comparison = S.comparison) {
 // 差分规则在 web/audio-events.mjs（纯函数，被 life/audio.test.mjs 的 A-12…A-16 钉住），
 // 这里只负责"读快照 → 播一条"，不回写世界。
 let audioSceneSig = null;
+let audioWindowSig = null;
 let audioPrev = null;
 function syncAudioScene(sv) {
   if (!sv) return;
   const sig = sceneSignature(sv);
-  if (sig !== audioSceneSig) {
+  // 播放窗口每轮都重算（纯函数，成本可忽略）：它比场景签名变得频繁，音乐该淡出时就淡出。
+  const win = musicWindow(sv, { now: sv.t ?? 0 });
+  const wsig = windowSignature(win);
+  if (sig !== audioSceneSig || wsig !== audioWindowSig) {
     audioSceneSig = sig;
+    audioWindowSig = wsig;
     audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement,
-      crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead) });
+      crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead),
+      window: win, proximity: proximity(sv) });
   }
   const next = readWorld(sv);
   const cues = diffAudioEvents(audioPrev, next);
