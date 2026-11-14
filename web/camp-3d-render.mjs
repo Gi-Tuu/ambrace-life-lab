@@ -1,5 +1,6 @@
 import { itemBoxes } from './camp-items.mjs';
 import { WALK_DIRECTIONS } from './walk.mjs';
+import { contactShadowMesh, materialGrain } from './camp-lighting.mjs';
 
 function rotateXZ([x,y,z], angle, px=0, pz=0) {
   const c=Math.cos(angle), s=Math.sin(angle);
@@ -37,6 +38,16 @@ const rgb = (hex, shade = 1) => [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)*sha
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const norm = v => { const len=Math.hypot(...v); return v.map(a=>a/len); };
+export const MODEL_STRIDE=15;
+const WOOD=new Set(['#514134','#72513B','#976A45','#BA8752','#D8A667','#EDC787','#8A633F','#5B4434','#8D593F']);
+const METAL=new Set(['#458996','#939584','#9DA8A8','#6D7165']);
+const finishOf=color=>WOOD.has(color)?1:METAL.has(color)?2:0;
+const faceNormal=(a,b,c)=>{
+  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  const x=uy*vz-uz*vy,y=uz*vx-ux*vz,z=ux*vy-uy*vx;
+  const len=Math.hypot(x,y,z)||1;
+  return [x/len,y/len,z/len];
+};
 
 export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55 }) {
   const back = [Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)];
@@ -167,23 +178,24 @@ export function coveredModels(camera, player, ...lists) {
   return covered;
 }
 
-function quad(data,a,b,c,d,color,uv=[[0,0],[0,0],[0,0],[0,0]],material=()=>[0,0,0]) {
+const QUAD_UV=[[0,0],[0,0],[0,0],[0,0]];
+const noFx=()=>[0,0,0];
+function quad(data,a,b,c,d,color,uv=QUAD_UV,material=noFx,normal=faceNormal(a,c,b),surface=.5) {
   const points=[a,b,c,d];
-  for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]));
+  for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]),...normal,surface);
 }
 
 export function modelMesh(data,b) {
   if (b.shape==='beam') {
     const ring=beamRing(b), add=(p,q)=>p.map((n,i)=>n+q[i]);
+    const color=rgb(b.color), finish=finishOf(b.color), lower=b.unit.map(n=>-n);
     for (let i=0;i<ring.length;i++) {
       const next=(i+1)%ring.length;
       const a=add(b.from,ring[i]), c=add(b.to,ring[i]), d=add(b.to,ring[next]), e=add(b.from,ring[next]);
-      const tint=rgb(b.color,.76+.18*Math.cos(i*2*Math.PI/ring.length));
-      quad(data,a,e,d,c,tint);
-      for (const [points,shade] of [[[b.from,e,a],.68],[[b.to,c,d],1]]) {
-        const color=rgb(b.color,shade);
-        for (const point of points) data.push(...point,...color,0,0,0,0,0);
-      }
+      const normal=norm(ring[i].map((n,j)=>n+ring[next][j]));
+      quad(data,a,e,d,c,color,QUAD_UV,noFx,normal,finish+(.76+.18*Math.cos(i*2*Math.PI/ring.length))*.5);
+      for (const point of [b.from,e,a]) data.push(...point,...color,0,0,0,0,0,...lower,finish+.34);
+      for (const point of [b.to,c,d]) data.push(...point,...color,0,0,0,0,0,...b.unit,finish+.5);
     }
     return;
   }
@@ -196,10 +208,11 @@ function prism(data,b) {
   const [a,bb,c,d0,A,B,C,D]=boxVertices(b);
   const material=point=>[wind ? wind.weight*(wind.rooted ? (point[1]-y)/Math.max(h,.01) : 1) : 0,
     wind?.phase??0,Number(Boolean(glow))];
-  const face=(a,b,c,d,shade=1)=>{
-    quad(data,a,b,c,d,rgb(color,shade),undefined,material);
+  const tint=rgb(color), finish=wind||glow?0:finishOf(color);
+  const face=(a,b,c,d,shade)=>{
+    quad(data,a,b,c,d,tint,QUAD_UV,material,faceNormal(a,b,c),finish+shade*.5);
   };
-  face(a,bb,c,d0);
+  quad(data,a,bb,c,d0,tint,QUAD_UV,material,faceNormal(a,c,bb),finish+.5);
   if (!axis && h===0) return;
   face(a,bb,B,A,.70); face(bb,c,C,B,.78);
   face(c,d0,D,C,.91); face(d0,a,A,D,.65);
@@ -216,7 +229,8 @@ function stageMesh(stage) {
       const points=[[x,y+.006,z],corner.map((v,i)=>i===1?v+.006:v),[x+1,y+ax+az+.006,z+1]];
       const shade=Math.min(1.08,Math.max(.91,1-ax*.16+az*.12));
       if (f.triangle===2) [points[1],points[2]]=[points[2],points[1]];
-      for (const point of points) out.push(...point,shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0);
+      const normal=faceNormal(points[0],points[2],points[1]);
+      for (const point of points) out.push(...point,shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0,...normal,.5);
       terrainCount+=3;
       continue;
     }
@@ -229,12 +243,12 @@ function stageMesh(stage) {
       prism(out,{x:f.x,y:top+.003,z:f.z+i,w:f.w,d:.025,h:0,axis:f.axis==='x'?'x':undefined,end:end+.003,color:'#976A45'});
     }
   }
-  if (out.length/11>terrainCount) ranges.push({id:null,from:terrainCount,count:out.length/11-terrainCount});
+  if (out.length/MODEL_STRIDE>terrainCount) ranges.push({id:null,from:terrainCount,count:out.length/MODEL_STRIDE-terrainCount});
   for (const b of stage.boxes) {
     if (b.fx) continue;
-    const from=out.length/11;
+    const from=out.length/MODEL_STRIDE;
     modelMesh(out,b);
-    const count=out.length/11-from, last=ranges.at(-1);
+    const count=out.length/MODEL_STRIDE-from, last=ranges.at(-1);
     if (last && last.id===b.occluder) last.count+=count;
     else ranges.push({id:b.occluder,from,count});
   }
@@ -368,9 +382,12 @@ const VERTEX = `
   attribute vec3 aColor;
   attribute vec2 aUV;
   attribute vec3 aMaterial;
+  attribute vec4 aNormal;
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
   uniform bool uRegionTexture;
+  uniform vec4 uSunRay;
+  uniform mediump vec3 uLight, uSun;
   varying vec3 vColor;
   varying vec2 vUV;
   #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -379,6 +396,8 @@ const VERTEX = `
     varying mediump vec2 vWorld;
   #endif
   varying float vGlow, vHeight, vRoad, vBank;
+  varying mediump vec3 vPhysical;
+  varying mediump float vFinish;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
@@ -387,19 +406,23 @@ const VERTEX = `
     point.z+=sin(phase*.72+.8)*wind*uWeather.y*.43;
     gl_Position=uProjection*uView*vec4(point,1.);
     vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x; vBank=aMaterial.y;
+    float diffuse=max(0.,dot(aNormal.xyz,uSunRay.xyz));
+    vPhysical=uLight*(.78+.14*max(0.,aNormal.y)+diffuse*uSunRay.w*.55)+vec3(.22,.09,.035)*uSun.z*diffuse;
+    vFinish=aNormal.w;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
 `;
 const FRAGMENT = `
   precision mediump float;
-  uniform sampler2D uGround, uFog, uWater;
+  uniform sampler2D uGround, uFog, uWater, uGrain;
   uniform vec4 uFogBounds;
   uniform bool uTexture, uVisibility, uHasWater;
   uniform vec3 uSight;
   uniform vec4 uHearth;
   uniform mediump vec4 uWeather;
   uniform float uSeason;
-  uniform vec3 uLight, uSun;
+  uniform mediump vec3 uLight, uSun;
+  uniform bool uPhysical, uShadow;
   uniform float uAlpha;
   varying vec3 vColor;
   varying vec2 vUV;
@@ -409,6 +432,8 @@ const FRAGMENT = `
     varying mediump vec2 vWorld;
   #endif
   varying float vGlow, vHeight, vRoad, vBank;
+  varying mediump vec3 vPhysical;
+  varying mediump float vFinish;
   uniform bool uWild, uRegionTexture;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
@@ -470,9 +495,22 @@ const FRAGMENT = `
       bool known=uVisibility && all(greaterThanEqual(local,vec2(0.))) && all(lessThan(local,vec2(1.)));
       shade=(known?texture2D(uFog,local).r:0.)*radial;
     }
-    float facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
+    if (uShadow) {
+      gl_FragColor=vec4(.105,.135,.12,vColor.r*shade);
+      return;
+    }
+    float facing=1.;
+    if (!uPhysical || water>.5) facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
     vec3 sunlight=vec3(.27,.123,.046)*uSun.z*(.7+facing*.6);
-    vec3 lit=color*(uLight+sunlight)*mix(.48,1.,shade);
+    float baked=fract(vFinish)*2.;
+    float finish=floor(vFinish);
+    if (uPhysical && finish>0. && !uTexture && !uRegionTexture) {
+      vec2 grain=vec2(vWorld.x+vWorld.y*.53,vHeight+vWorld.y*.73);
+      float row=finish>1.5?.5:0.;
+      float tone=texture2D(uGrain,vec2(fract(grain.x*.82),fract(grain.y*1.21)*.48+.01+row)).r;
+      color*=mix(.87,1.12,tone);
+    }
+    vec3 lit=color*(uPhysical?vPhysical:(uLight+sunlight)*baked)*mix(.48,1.,shade);
     if (water>.5) lit+=vec3(.20,.105,.037)*uSun.z*facing;
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
@@ -485,6 +523,32 @@ const FRAGMENT = `
     gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),max(0.,vGlow)*uWeather.w),uAlpha);
   }
 `;
+
+function terrainWithNormals(mesh) {
+  const data=new Float32Array(mesh.length/11*MODEL_STRIDE);
+  for (let i=0,j=0;i<mesh.length;i+=33,j+=MODEL_STRIDE*3) {
+    const normal=faceNormal(mesh.subarray(i,i+3),mesh.subarray(i+11,i+14),mesh.subarray(i+22,i+25));
+    if (mesh[i+10]>=-1.5 && normal[1]<0) for(let k=0;k<3;k++) normal[k]*=-1;
+    for(let k=0;k<3;k++){
+      const target=j+k*MODEL_STRIDE, source=i+k*11;
+      data.set(mesh.subarray(source,source+11),target);
+      data.set(normal,target+11);
+      data[target+14]=.5;
+    }
+  }
+  return data;
+}
+
+export function regionOnScreen(bounds,camera,width,height) {
+  if (!bounds) return true;
+  const [x,y,z,X,Y,Z]=bounds;
+  let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
+  for (const px of [x,X]) for (const py of [y,Y]) for (const pz of [z,Z]) {
+    const [u,v]=camera.project(px,py,pz);
+    left=Math.min(left,u);right=Math.max(right,u);top=Math.min(top,v);bottom=Math.max(bottom,v);
+  }
+  return right>=0 && bottom>=0 && left<=width && top<=height;
+}
 
 export function createCampRenderer() {
   const canvas=document.createElement('canvas');
@@ -501,11 +565,12 @@ export function createCampRenderer() {
   gl.deleteShader(vs);gl.deleteShader(fs);
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
+  const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Sun','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Sun','SunRay','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
-  for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
-  const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
+  for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
+  const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
   const createTexture=(unit)=>{
     const t=gl.createTexture();
     gl.activeTexture(unit);gl.bindTexture(gl.TEXTURE_2D,t);
@@ -519,6 +584,10 @@ export function createCampRenderer() {
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.activeTexture(gl.TEXTURE2);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,1,1,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,new Uint8Array(1));
+  createTexture(gl.TEXTURE3);
+  const grain=materialGrain();
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,64,64,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,grain);
+  gl.uniform1i(uniform.Grain,3);
   gl.uniform1i(uniform.Water,2);
   gl.uniform1i(uniform.Ground,0);gl.uniform1i(uniform.Fog,1);
   // 两个采样器始终绑定完整纹理，室内和全景也能正常绘制。
@@ -527,7 +596,7 @@ export function createCampRenderer() {
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
   const terrainTextures=new Map(), maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  let groundSize='', visibilityImage=null, waterImage=null;
+  let groundSize='', visibilityImage=null, waterImage=null, shadowData=null;
   function terrainTexture(source) {
     let texture=terrainTextures.get(source);
     if (texture) {
@@ -556,10 +625,11 @@ export function createCampRenderer() {
   canvas.addEventListener('webglcontextlost',event=>{ event.preventDefault(); lost=true; });
   function bind(buffer) {
     gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-    gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,44,0);
-    gl.vertexAttribPointer(aColor,3,gl.FLOAT,false,44,12);
-    gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,44,24);
-    gl.vertexAttribPointer(aMaterial,3,gl.FLOAT,false,44,32);
+    gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,MODEL_STRIDE*4,0);
+    gl.vertexAttribPointer(aColor,3,gl.FLOAT,false,MODEL_STRIDE*4,12);
+    gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,MODEL_STRIDE*4,24);
+    gl.vertexAttribPointer(aMaterial,3,gl.FLOAT,false,MODEL_STRIDE*4,32);
+    gl.vertexAttribPointer(aNormal,4,gl.FLOAT,false,MODEL_STRIDE*4,44);
   }
   function paint(buffer,count,textured,from=0) {
     bind(buffer);gl.uniform1i(uniform.Texture,Number(textured));gl.drawArrays(gl.TRIANGLES,from,count);
@@ -574,9 +644,9 @@ export function createCampRenderer() {
       return stages.get(stage);
     }
     const b=gl.createBuffer();
-    const {mesh,ranges,terrainCount}=stage.mesh ? {mesh:stage.mesh,ranges:[],terrainCount:0} : stageMesh(stage);
+    const {mesh,ranges,terrainCount}=stage.mesh ? {mesh:terrainWithNormals(stage.mesh),ranges:[],terrainCount:0} : stageMesh(stage);
     bind(b);gl.bufferData(gl.ARRAY_BUFFER,mesh,gl.STATIC_DRAW);
-    const item={ b,count:mesh.length/11,ranges,terrainCount };
+    const item={ b,count:mesh.length/MODEL_STRIDE,ranges,terrainCount };
     stages.set(stage,item);
     lru.push(stage);
     while(lru.length>limit){
@@ -614,7 +684,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -625,6 +695,9 @@ export function createCampRenderer() {
       gl.uniformMatrix4fv(uniform.Projection,false,camera.projection);
       gl.uniform3fv(uniform.Light,light);
       gl.uniform3fv(uniform.Sun,sun?[...sun.direction,sun.strength]:[0,0,0]);
+      gl.uniform4fv(uniform.SunRay,sun?[...sun.sunVector,sun.direct]:[0,1,0,0]);
+      gl.uniform1i(uniform.Physical,Number(physical));
+      gl.uniform1i(uniform.Shadow,0);
       gl.uniform3fv(uniform.Sight,sight);
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
@@ -668,6 +741,7 @@ export function createCampRenderer() {
           gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
         }
         for (const region of regions) {
+          if (!regionOnScreen(region.viewBounds,camera,width,height)) continue;
           gl.uniform1i(uniform.RegionTexture,Number(Boolean(regionAtlas && region.mesh)));
           paintStage(stageBuffer(region,cacheLimit),covered,faded);
         }
@@ -680,6 +754,20 @@ export function createCampRenderer() {
       paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));
       if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded);
       if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
+      if (physical && sun?.phase!=='夜晚' && sun?.direct && shadows) {
+        const data=contactShadowMesh(shadows,sun);
+        if (data.length) {
+          bind(shadowBuffer);
+          if (data!==shadowData) {
+            gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);
+            shadowData=data;
+          }
+          gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+          gl.depthMask(false);gl.uniform1i(uniform.Shadow,1);
+          paint(shadowBuffer,data.length/MODEL_STRIDE,false);
+          gl.uniform1i(uniform.Shadow,0);gl.depthMask(true);gl.disable(gl.BLEND);
+        }
+      }
       const moving=[];
       const translucent=[];
       for (const box of work) modelMesh(covered.has(box.occluder)?translucent:moving,box);
@@ -688,10 +776,10 @@ export function createCampRenderer() {
       animalMesh(moving,animals,weather[0]);
       for(const person of people)actor(moving,person,frame);
       bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(moving),gl.DYNAMIC_DRAW);
-      paint(movingBuffer,moving.length/11,false);
+      paint(movingBuffer,moving.length/MODEL_STRIDE,false);
       if (translucent.length) {
         bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(translucent),gl.DYNAMIC_DRAW);
-        faded.push({b:movingBuffer,from:0,count:translucent.length/11});
+        faded.push({b:movingBuffer,from:0,count:translucent.length/MODEL_STRIDE});
       }
       paintFaded(faded);
       const ctx=target.getContext('2d');
@@ -700,6 +788,6 @@ export function createCampRenderer() {
       ctx.drawImage(canvas,0,0);
       return true;
     },
-    regionStats:()=>({buffers:lru.length,bytes:lru.reduce((sum,stage)=>sum+stages.get(stage).count*44,0)}),
+    regionStats:()=>({buffers:lru.length,bytes:lru.reduce((sum,stage)=>sum+stages.get(stage).count*MODEL_STRIDE*4,0)}),
   };
 }

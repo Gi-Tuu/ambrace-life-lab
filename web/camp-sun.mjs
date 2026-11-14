@@ -17,7 +17,14 @@ export function solarLight(t,dayTicks,season,{storm=false,overcast=false,indoor=
   const warm=blend(blend(sky,[1,.78,.66],dawn*.7),[1,.69,.48],dusk*.79);
   const light=warm.map(v=>v*weather);
   const azimuth=clamp((day-rise)/(set-rise))*Math.PI;
+  const elevation=Math.sin(azimuth);
+  const altitude=.085+elevation*.94;
+  const heading=[Math.cos(azimuth),.34+.18*elevation];
+  const bearing=Math.hypot(...heading);
+  const sunVector=[heading[0]*Math.cos(altitude)/bearing,Math.sin(altitude),heading[1]*Math.cos(altitude)/bearing];
+  const direct=indoor?0:Math.max(daylight*.55,Math.max(dawn,dusk)*.72)*weather;
   return {
+    sunVector,direct,
     phase:dawn>.36?'日出':dusk>.36?'日落':daylight>.6?'白昼':'夜晚',
     light:indoor?blend(light,[.68,.66,.61],.42):light,
     direction:[Math.cos(azimuth),Math.sin(azimuth)*.35],

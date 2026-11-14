@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { beam, boxVertices, collisionFootprint, cyl, modelBounds, modelMesh, rayBox } from '../web/camp-3d-render.mjs';
+import { beam, boxVertices, collisionFootprint, MODEL_STRIDE, cyl, modelBounds, modelMesh, rayBox } from '../web/camp-3d-render.mjs';
 import { fillCollisionRect } from '../web/asset-collision.mjs';
 import { addCampWork } from '../web/camp-3d-scene.mjs';
 import { generateCampLayout } from '../web/camp-layout.mjs';
 
 const box={x:1,y:2,z:3,w:2,h:3,d:4,color:'#72513B'};
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-8, [a,b].join(' vs '));
-const positions=mesh=>Array.from({length:mesh.length/11},(_,i)=>mesh.slice(i*11,i*11+3));
+const positions=mesh=>Array.from({length:mesh.length/MODEL_STRIDE},(_,i)=>mesh.slice(i*MODEL_STRIDE,i*MODEL_STRIDE+3));
 const meshOf=part=>{const out=[];if(part) modelMesh(out,part);return out;};
 
 test('A′-01 three-axis vertices and inverse picking agree with rotation about a nonzero pivot',()=>{

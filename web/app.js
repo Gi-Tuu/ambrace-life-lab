@@ -1684,6 +1684,18 @@ function drawInterior(cv, w, site, preview = false) {
 let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
 const campFog=new WeakMap();
+const physicalLighting=!new URLSearchParams(location.search).has('bakedLight');
+const campShadowSources=new WeakMap();
+function campShadows(world,regions) {
+  const layers=[world.scene3d.boxes,world.work3d,
+    ...regions.flatMap(region=>region.boxes?[region.boxes]:[])].filter(Boolean);
+  const old=campShadowSources.get(world.canvas);
+  if (old?.layers.length===layers.length && layers.every((layer,i)=>old.layers[i]===layer)) return old.source;
+  const source=layers.flatMap(layer=>layer.filter(b=>b.solid && b.w*b.d>.10)
+    .map(b=>b.bounds??modelBounds(b)));
+  campShadowSources.set(world.canvas,{layers,source});
+  return source;
+}
 
 function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   const radius=lightRadius(phase);
@@ -2149,9 +2161,14 @@ function drawCamp(cv,w) {
   if (S.soloSurv && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
+  const shadows=exterior && !overview && player && sun?.direct && sun.phase!=='夜晚' ? {
+    source:campShadows(exterior,regions??[]), x:player.x,z:player.z,
+    height:extended?.height??( (x,z)=>stage.heightAt(x,z) ),
+  } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
+    physical:physicalLighting}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered,
     exterior,extended,people,animals,work,visibility,sight,regionDetails};

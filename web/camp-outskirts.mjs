@@ -1,7 +1,7 @@
 import { pixelPath } from './asset-collision.mjs';
 import { regionEntities, regionReady } from './camp-region-entities.mjs';
 import { regionLife } from './camp-3d-scene.mjs';
-import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview, WILDS } from './wild-landscape.mjs';
+import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview, REGION_SIZE, WILDS } from './wild-landscape.mjs';
 
 export function createCampOutskirts(seed,version,crossing,world) {
   const terrain=wildLandscape(seed,version,{joined:true,flats:world?.flatLand,hills:world?.hills,roadDistance:world?.roadDistance,
@@ -42,12 +42,22 @@ export function createCampOutskirts(seed,version,crossing,world) {
       visible=[];
       for (const entry of entries) {
         let chunk=cache.get(entry.key);
-        if (!chunk) chunk={ground:{mesh:wildRegion(terrain,entry.x,entry.z)}};
+        if (!chunk) {
+          const mesh=wildRegion(terrain,entry.x,entry.z);
+          let low=Infinity,high=-Infinity;
+          for (let i=1;i<mesh.length;i+=11) { low=Math.min(low,mesh[i]); high=Math.max(high,mesh[i]); }
+          const size=REGION_SIZE;
+          chunk={ground:{mesh,viewBounds:[entry.x*size,low,entry.z*size,(entry.x+1)*size,high,(entry.z+1)*size]}};
+        }
         cache.delete(entry.key);
         cache.set(entry.key,chunk);
         visible.push(chunk.ground);
         if (entry.near) {
-          chunk.details??=wildDetails(terrain,entry.x,entry.z,crossing);
+          if (!chunk.details) {
+            chunk.details=wildDetails(terrain,entry.x,entry.z,crossing);
+            const [x,y,z,X,Y,Z]=chunk.ground.viewBounds;
+            chunk.details.viewBounds=[x-3,y-1,z-3,X+3,Y+8,Z+3];
+          }
           visible.push(chunk.details);
         }
       }
