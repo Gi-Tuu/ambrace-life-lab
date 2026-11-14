@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {campSight,sightScene} from '../web/camp-sight.mjs';
+import {campSight,sightScene,terrainHit} from '../web/camp-sight.mjs';
 
 test('3D sight crosses the settlement boundary in both directions',()=>{
   for (const edge of [0,120]) {
@@ -29,4 +29,18 @@ test('terrain and trees block sight while low crops and grass preserve it',()=>{
   assert.equal(campSight(sightScene(()=>0,[[tree]]),128.3,-17,11).sees(128.3,-12),false);
   assert.equal(campSight(sightScene(()=>0,[[crop]]),128.3,-17,11).sees(128.3,-12),true);
   assert.equal(campSight(sightScene(()=>0,[]),128.3,-17,5).sees(128.3,-11),false);
+});
+
+test('ungrouped solid geometry and a grazing ray across a bin corner block sight',()=>{
+  const wall={x:1.93,y:0,z:2.005,w:.068,h:2,d:.45,solid:true};
+  const scene=sightScene(()=>0,[[wall]]);
+  assert.equal(scene.clear([.14,1,.16],[4.14,1,4.21]),false);
+  assert.equal(sightScene(()=>0,[]).clear([.14,1,.16],[4.14,1,4.21]),true);
+});
+
+test('terrain picking returns the foreground hill before the object behind it',()=>{
+  const origin=[0,8,0], ray=[1,-1,0];
+  assert.equal(terrainHit(origin,ray,()=>0,20),8.25);
+  assert.equal(terrainHit(origin,ray,x=>x>=3 && x<=5?6:0,20),3);
+  assert.equal(terrainHit(origin,ray,()=>0,4),Infinity);
 });

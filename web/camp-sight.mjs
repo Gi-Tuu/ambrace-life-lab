@@ -23,8 +23,9 @@ function heightSampler(height) {
 export function sightScene(height, lists) {
   const bins=new Map();
   for (const boxes of lists) for (const b of boxes) {
-    if (!b.occluder || b.fx || b.h<.22 || b.w*b.d<.025) continue;
-    const pad=b.yaw?Math.hypot(b.w,b.d):0;
+    if ((!b.occluder && !b.solid) || b.fx || b.h<.22 || b.w*b.d<.025) continue;
+    // Include adjacent bins a quarter-tile ray step can skip at a corner.
+    const pad=.25+(b.yaw?Math.hypot(b.w,b.d):0);
     for (let z=Math.floor((b.z-pad)/BIN);z<=Math.floor((b.z+b.d+pad)/BIN);z++) {
       for (let x=Math.floor((b.x-pad)/BIN);x<=Math.floor((b.x+b.w+pad)/BIN);x++) {
         const key=x+','+z;
@@ -48,7 +49,7 @@ export function sightScene(height, lists) {
       if (key===lastBin) continue;
       lastBin=key;
       for (const b of bins.get(key)??[]) {
-        if (b.occluder===ownModel) continue;
+        if (ownModel && b.occluder===ownModel) continue;
         const hit=rayBox(from,ray,b);
         if (hit!==null && hit<end) return false;
       }
@@ -73,4 +74,14 @@ export function campSight(scene,x,z,radius) {
       return Math.hypot(px-x,pz-z)<=limit && scene.clear(from,[px,y,pz],ownModel);
     },
   };
+}
+
+// Orthographic picking uses the same terrain surface as the ground mesh.
+export function terrainHit(origin,ray,height,limit) {
+  const step=.25/Math.max(Math.abs(ray[0]),Math.abs(ray[2]),Math.abs(ray[1]));
+  for (let t=0;t<=limit;t+=step) {
+    const x=origin[0]+ray[0]*t,z=origin[2]+ray[2]*t;
+    if (origin[1]+ray[1]*t<height(x,z)) return t;
+  }
+  return Infinity;
 }

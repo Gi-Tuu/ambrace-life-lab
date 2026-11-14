@@ -1,4 +1,4 @@
-import { campSight, sightScene } from './camp-sight.mjs';
+import { campSight, sightScene, terrainHit } from './camp-sight.mjs';
 import { districtPads } from './camp-districts.mjs';
 import { solarLight } from './camp-sun.mjs';
 import { createCampOutskirts, joinedRoute, moveJoinedWalker } from './camp-outskirts.mjs';
@@ -1139,7 +1139,7 @@ function storeOuting(walker,w) {
 }
 addEventListener('pagehide',()=>{
   const walker=WALK['cvA:p1'];
-  if (S.soloSurv && walker && !ui.interior && S.view) storeOuting(walker,S.view);
+  if (S.soloSurv && walker && S.view) storeOuting(walker,S.view);
 });
 function ensureWalker(cvId, who, world, slots) {
   const snapshot=cvId==='cvB'?S.viewB:S.view;
@@ -2906,29 +2906,48 @@ async function survInteract() {
   if (!s?.loc) return;
   const world=buildWorld(s), walker=WALK[walkKey('cvA','p1')];
   const view=$(ui.fullscreen?'cvFull':'cvA')._cam;
+  if (campRenderer && (ui.overview || !view?.exterior || !view.visibility)) return;
   const active=view?.exterior??world;
   if (walker) {
     const x=walker.x+.5,z=walker.y+.5;
     const entities=outdoorEntities(active,s,view?.people??[],view?.animals??[]);
-    const entity=entities.filter(e=>e.kind!=='scenery' && entityGap([x,z],e)<=e.reach && outdoorSight(view,e,[x,z]))
+    const reachable=entities.filter(e=>e.kind!=='scenery' && entityGap([x,z],e)<=e.reach);
+    const visible=reachable.filter(e=>outdoorSight(view,e,[x,z]));
+    const entity=visible
       .sort((a,b)=>{
         const equipped=e=>e.tool===ui.tool || e.kind==='animal' && ui.tool==='axe' ||
           e.kind==='door' && ui.tool==='hoe' && s.homeAccess?.[e.room]?.resident;
         return Number(equipped(b))-Number(equipped(a)) || entityGap([x,z],a)-entityGap([x,z],b);
       })[0];
     if (entity) { await useOutdoorEntity(entity,[x,z]); return; }
+    if (reachable.length) {
+      $('campToast').textContent='视线被挡住了，请换个位置。';
+      return;
+    }
+    if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
     if (!inCamp(x,z)) $('campToast').textContent='靠近木石采集点，或持锤靠近可施工地块。';
   }
   if (campRenderer && walker && !inCamp(walker.x+.5,walker.y+.5)) return;
-  if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
-  const door=survRoomAtFeet();
-  if (door) { enterRoom(door); return; }
+  if (!campRenderer) {
+    const door=survRoomAtFeet();
+    if (door) { enterRoom(door); return; }
+  }
   const here=localSurvSite(world,walker);
   if (world.timber && ui.tool==='axe') {
     $('campToast').textContent='到伐木林靠近成熟的树，再按 F。';
     return;
   }
   const ctx=here && contextAction({...s,loc:{...s.loc,p1:here}});
+  if (ctx && campRenderer) {
+    // In 3D, construction and crop work have actual targets. Only abstract
+    // village gathering actions may use the location fallback.
+    if (!['gather','forage'].includes(ctx.kind)) return;
+    const [x,z]=world.sites[here];
+    if (!view.visibility.sees(x+.5,z+.5)) {
+      $('campToast').textContent='视线被挡住了，请换个位置。';
+      return;
+    }
+  }
   if (ctx) {
     if (ctx.tool===ui.tool && s.loc.p1!==here && !(await api('/act',{mode:'survival',kind:'move',room:here})).ok) return;
     runSurvAction(ctx);
@@ -3532,7 +3551,14 @@ $('btnOverview').onclick=()=>{
 };
 let resettingSurvival=false, startError=false;
 
+function rememberSurvivalPosition() {
+  const walker=WALK['cvA:p1'];
+  if (S.soloSurv && walker && S.view) storeOuting(walker,S.view);
+  outdoorIntent=null;
+  keys.clear();
+}
 function selectWorld(compare) {
+  rememberSurvivalPosition();
   ui.menu=false;
   startError=false;
   if (ui.compare!==compare) {
@@ -3547,6 +3573,7 @@ function selectWorld(compare) {
   refresh();
 }
 function showStart() {
+  rememberSurvivalPosition();
   if (ui.fullscreen) {
     ui.fullscreen=false;
     $('fullStage').hidden=true;
@@ -3736,11 +3763,11 @@ function outdoorEntities(world,w,people,animals) {
 }
 const entityGap=(p,e)=>e.rect?distanceToRect(p,e.rect):distanceTo(p,e.at);
 
-function visibleEntityHit(origin,ray,surfaces) {
-  let best=null,depth=Infinity;
+function visibleEntityHit(origin,ray,surfaces,maxDepth=Infinity) {
+  let best=null,depth=maxDepth;
   for (const [box,entity] of surfaces) {
     const hit=rayBox(origin,ray,box);
-    if (hit!==null && hit<depth) { depth=hit; best=entity; }
+    if (hit!==null && hit<depth) { depth=hit; best=entity && {entity,depth}; }
   }
   return best;
 }
@@ -3749,7 +3776,7 @@ function pointedEntity(cv,ev) {
   const view=cv._cam, camera=view?.project3d;
   if (!camera || ui.surveyRoom || view.mode==='overview') return null;
   const rect=cv.getBoundingClientRect(), u=(ev.clientX-rect.left)/rect.width,v=(ev.clientY-rect.top)/rect.height;
-  const sky=(view.people.find(p=>p.who==='p1')?.y??0)+24;
+  const sky=view.extended ? 54 : 24;
   const [x,z]=camera.ground(u,v,sky), origin=[x,sky,z], ray=camera.back.map(n=>-n);
   const surfaces=[];
   for (const boxes of view.regionDetails??[]) for (const b of boxes) {
@@ -3792,17 +3819,21 @@ function pointedEntity(cv,ev) {
       surfaces.push([b,e??null]);
     }
   }
-  const hit=visibleEntityHit(origin,ray,surfaces);
-  return hit && outdoorSight(view,hit)?hit:null;
+  const ground=view.extended ? terrainHit(origin,ray,view.extended.height,135) : Infinity;
+  const hit=visibleEntityHit(origin,ray,surfaces,ground);
+  if (!hit) return null;
+  const point=origin.map((value,i)=>value+ray[i]*hit.depth);
+  return outdoorSight(view,hit.entity,null,point)?hit.entity:null;
 }
 
-function outdoorSight(view,e,from) {
+function outdoorSight(view,e,from,point) {
   if (!view?.visibility) return true;
   const [x,z]=e.at;
   const model=e.kind==='door' ? e.room.startsWith('facility:') ? 'work:'+e.room.slice(9)
     : view.exterior.homes3d?.entrances[e.room] ? 'work:'+e.room+':house' : 'site:'+e.room
-    : e.target ?? e.id;
-  if (!e.rect || !from) return view.visibility.sees(x,z,e.labelHeight,model);
+    : e.kind==='plant' || e.kind==='work' ? e.target : e.id;
+  if (point) return view.visibility.sees(point[0],point[2],point[1],model);
+  if (!e.rect || !from) return view.visibility.sees(x,z,undefined,model);
   const {x:left,z:top,w,d}=e.rect;
   return view.visibility.sees(Math.max(left,Math.min(left+w,from[0])),Math.max(top,Math.min(top+d,from[1])),undefined,model);
 }
@@ -4021,7 +4052,7 @@ function pickRoom(ev, cv) {
   if (!walker) return;
   if (S.soloSurv && hit && playerCanvas==='cvA' && hit.kind!=='scenery') {
     const from=[walker.x+.5,walker.y+.5];
-    if (entityGap(from,hit)<=hit.reach) void useOutdoorEntity(hit,from);
+    if (entityGap(from,hit)<=hit.reach && outdoorSight(cv._cam,hit,from)) void useOutdoorEntity(hit,from);
     else if (approachEntity(world,walker,hit)) {
       outdoorIntent={id:hit.id,deadline:performance.now()+45000};ui.overview=false;ui.camRoom=null;
     } else $('campToast').textContent='无法走到目标附近。';
