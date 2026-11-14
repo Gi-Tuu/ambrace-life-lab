@@ -284,7 +284,7 @@ const VERTEX = `
 const FRAGMENT = `
   precision mediump float;
   uniform sampler2D uGround, uFog, uWater;
-  uniform vec2 uExtent;
+  uniform vec4 uFogBounds;
   uniform bool uTexture, uVisibility, uHasWater;
   uniform vec3 uSight;
   uniform vec4 uHearth;
@@ -357,9 +357,9 @@ const FRAGMENT = `
     if (uSight.z>0.) {
       float radius=uSight.z;
       float radial=1.-smoothstep(radius-1.6,radius+.45,distance(vWorld,uSight.xy));
-      vec2 local=vWorld/uExtent;
+      vec2 local=(vWorld-uFogBounds.xy)/uFogBounds.zw;
       bool known=uVisibility && all(greaterThanEqual(local,vec2(0.))) && all(lessThan(local,vec2(1.)));
-      shade=(known?texture2D(uFog,local).r:1.)*radial;
+      shade=(known?texture2D(uFog,local).r:0.)*radial;
     }
     float facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
     vec3 sunlight=vec3(.27,.123,.046)*uSun.z*(.7+facing*.6);
@@ -393,7 +393,7 @@ export function createCampRenderer() {
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Sun','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Sun','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
@@ -531,12 +531,12 @@ export function createCampRenderer() {
         waterImage=waterMask;
       }
       gl.uniform1f(uniform.Alpha,1);
-      gl.uniform2f(uniform.Extent,stage.width,stage.depth);
       gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
+      if (visibility) gl.uniform4f(uniform.FogBounds,...visibility.origin,visibility.extent,visibility.extent);
       if (visibility && visibilityImage!==visibility) {
         gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-        gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,stage.width,stage.depth,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,visibility);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,visibility.size,visibility.size,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,visibility.bytes);
         visibilityImage=visibility;
       }
       if(terrain) {

@@ -349,7 +349,8 @@ async function modelTalk({ npc, world, history, text, trust }) {
 async function tickBody(onError = null) {
   // 单拍调用计数：PER_TICK_CAP 默认 0（不设上限），此时这一行与本变量都不影响任何行为。
   S.asksThisTick = 0;
-  if (GAME_MODE !== 'game') for (const key of ['A', 'B']) { // P1-7：game 模式不推进 A/B 研究世界（省算力）
+  const compareActive=GAME_MODE!=='game' || observerActive(S.viewers.compare,Date.now());
+  if (compareActive) for (const key of ['A', 'B']) {
     const p = S.packs[key];
     p.world.t += 1;
     // PLAN §28：天气按 (seed, day) 确定性推进；lab 的 weatherEnabled=false。
