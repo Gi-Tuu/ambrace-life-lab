@@ -3287,6 +3287,78 @@ function renderHousing(s) {
   const el = $('housingBody'); if (!el || !s) return;
   el.innerHTML = familyPanel(s);
 }
+const SEASON_LEAVES = {
+  春: '<circle cx="34" cy="34" r="3.2" fill="#98BD51"/><circle cx="64" cy="24" r="3" fill="#98BD51"/><circle cx="52" cy="47" r="2.6" fill="#C7E08A"/><circle cx="76" cy="34" r="2.4" fill="#98BD51"/>',
+  夏: '<circle cx="30" cy="30" r="6" fill="#008751"/><circle cx="44" cy="22" r="7" fill="#73A747"/><circle cx="60" cy="30" r="7.5" fill="#008751"/><circle cx="74" cy="20" r="6" fill="#73A747"/><circle cx="54" cy="48" r="6.5" fill="#5D8C4F"/><circle cx="72" cy="42" r="5.5" fill="#008751"/>',
+  秋: '<circle cx="32" cy="32" r="5" fill="#FFA300"/><circle cx="48" cy="23" r="6" fill="#FFEC27"/><circle cx="62" cy="31" r="6" fill="#E8864B"/><circle cx="76" cy="22" r="5" fill="#FFA300"/><circle cx="56" cy="49" r="5" fill="#FFEC27"/><circle cx="72" cy="43" r="4.5" fill="#E8864B"/>',
+  冬: '<path d="M30 30h10M56 24h12M70 32h9M48 46h11" stroke="#FFF0CC" stroke-width="2.4" stroke-linecap="round"/><circle cx="42" cy="20" r="2" fill="#FFF0CC"/><circle cx="80" cy="26" r="1.8" fill="#FFF0CC"/>',
+};
+const TIME_ARC = [
+  { key:'晨', color:'#FFD37A' }, { key:'昼', color:'#FFF0CC' },
+  { key:'暮', color:'#E8864B' }, { key:'夜', color:'#3B4A73' },
+];
+function seasonWheelSVG(seasonName, phase) {
+  const quarter = (a, b, r, color, w) => {
+    const pt = (deg) => [10 + r * Math.cos(deg * Math.PI / 180), 90 - r * Math.sin(deg * Math.PI / 180)];
+    const [x1,y1]=pt(a), [x2,y2]=pt(b);
+    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 0 0 ${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
+  };
+  // 外圈：一天四段，当前时段加亮描边
+  let arcs = '';
+  TIME_ARC.forEach((seg, i) => {
+    const a = i * 22.5, b = (i + 1) * 22.5;
+    const active = phase === seg.key;
+    if (active) arcs += quarter(a, b, 90, '#FFF0CC', 9);
+    arcs += quarter(a, b, 90, seg.color, 5);
+  });
+  // 1/4 圆扇形木板（圆心左下）
+  const fan = `<path d="M12 88 L92 88 A80 80 0 0 0 12 8 Z" fill="#3B4A33" stroke="#5B4434" stroke-width="2"/>`;
+  const branch = `<path d="M16 86 Q40 70 52 42 Q59 25 80 14" stroke="#5B4434" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+    <path d="M44 56 Q33 47 27 32 M57 35 Q69 37 78 27 M67 24 Q72 18 82 18" stroke="#5B4434" stroke-width="2.1" fill="none" stroke-linecap="round"/>`;
+  const leaves = SEASON_LEAVES[seasonName] ?? SEASON_LEAVES.春;
+  return `<svg viewBox="0 0 106 106" width="140" height="140" aria-label="${seasonName} · ${phase}">${arcs}${fan}${branch}${leaves}</svg>`;
+}
+function renderSeasonHud(view, location, outdoor) {
+  const el = $('seasonHud'); if (!el || !view) return;
+  $('seasonWeather').textContent = `${view.season ?? ''} ${view.dayInSeason ?? '?'} · ${view.weather ?? ''}`;
+  $('seasonWheel').innerHTML = seasonWheelSVG(view.season, view.phase);
+  $('seasonPlace').textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
+  $('seasonStats').innerHTML = [
+    [`${STAT_ICON.heart}`, view.player?.energy ?? '?'],
+    [`${STAT_ICON.shield}`, view.player?.viab ?? '?'],
+    [`${STAT_ICON.action}`, `${view.player?.timeLeft ?? 0}/100`],
+  ].map(([i,v]) => `<span class="stat">${i}<b>${v}</b></span>`).join('');
+}
+// ── ②③ 三个弹窗的图标按钮与内容 ────────────────────────────────────────
+function ecoButtons(s, which) {
+  if (!s) return '';
+  if (which === 'exchange') return Object.keys(s.economy?.exchange ?? {}).map((k) => {
+    const n = s.produce?.[k] ?? 0, label = s.economy?.produceLabel?.[k] ?? k;
+    return `<button data-sk="exchange" data-type="${k}" title="兑换${label}（现有 ${n}）"${n < 1 ? ' disabled' : ''}><img width="32" height="32" alt="" src="${itemIcon(k)}"><span class="tag">${n}</span></button>`;
+  }).join('');
+  return Object.entries(s.economy?.expand ?? {}).map(([k, c]) => {
+    const label = s.economy?.expandLabel?.[k] ?? k;
+    const ok = (s.inv?.wood ?? 0) >= c.wood && (s.inv?.stone ?? 0) >= c.stone;
+    return `<button data-sk="expand" data-type="${k}" title="建造${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
+  }).join('');
+}
+function renderExchangeDlg(s) { const el=$('exchangeBody'); if(el) el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'exchange')}</div>`; }
+function renderBuildDlg(s) { const el=$('buildBody'); if(el) el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'build')}</div>`; }
+function renderVillageDlg(s) {
+  const el = $('villageBody'); if (!el || !s) return;
+  const rows = Object.entries(s.agents ?? {}).filter(([id]) => id !== 'p1').map(([id,a]) => {
+    const v = Math.max(0, Math.min(1, a.viab ?? 1));
+    const bar = `<span style="display:inline-block;width:70px;height:8px;border:1px solid var(--line);background:var(--sunken)"><span style="display:block;height:100%;width:${Math.round(v*100)}%;background:${v<.3?'#D58274':'#98BD51'}"></span></span>`;
+    return `<div class="vrow"><b>${esc(a.name ?? id)}</b><span>${esc(a.stage ?? '')}</span>${bar}<span class="dim">${esc(s.rooms?.[s.loc?.[id]] ?? s.loc?.[id] ?? '')}</span><span>${esc(a.action ?? '待机')}</span></div>`;
+  }).join('');
+  el.innerHTML = rows || '<p class="dim">暂无居民</p>';
+}
+// ① 研究面板：合作施工统计
+function renderLabCoop(s) {
+  const el = $('labCoop'); if (!el || !s?.coop) return;
+  const t = s.coop.task;
+  el.innerHTML = `<div class="survrow">当前任务 ${t ? `${esc(t.type)}·${esc(t.phase)}·${t.workers.length}人` : '暂无任务'} ｜ 完工 ${s.coop.completions?.length ?? 0} ｜ 拒绝 ${s.coop.refusals ?? 0} ｜ 退出 ${s.coop.exits ?? 0}</div>`;
+}
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
@@ -3320,7 +3392,6 @@ function renderSurv(s) {
       ${flash}
       ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>
-    ${coopPanel(s)}
     <details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
       <div class="eco-icons">
         ${Object.keys(s.economy?.exchange ?? {}).map((k) => {
@@ -3336,6 +3407,8 @@ function renderSurv(s) {
     </details>`;
   el.querySelectorAll(':scope > details').forEach((d, i) => { if (openState[i]) d.open = true; });
   renderItemBar(s);
+  renderSeasonHud(s, location, outdoor);
+  renderLabCoop(s);
 }
 
 function table(a, b) {
@@ -3721,6 +3794,25 @@ const bindCenterDlg=(btnId,dlgId,renderFn)=>{
   const btn=$(btnId); if(btn) btn.onclick=()=>openCenterDlg(dlgId,renderFn);
   const dlg=$(dlgId); if(dlg) dlg.addEventListener('click',(e)=>{ if(e.target===dlg) dlg.close(); });
 };
+bindCenterDlg('btnExchange','exchangeDlg',renderExchangeDlg);
+bindCenterDlg('btnBuild','buildDlg',renderBuildDlg);
+bindCenterDlg('btnVillage','villageDlg',renderVillageDlg);
+for (const id of ['exchangeDlg','buildDlg','villageDlg']) {
+  const dlg=$(id);
+  dlg.addEventListener('click',(e)=>{
+    if (e.target === dlg) { dlg.close(); return; }
+    const c=e.target.closest('button[data-close]'); if(c){ $(c.dataset.close).close(); return; }
+    const b=e.target.closest('button[data-sk]');
+    if(b && !b.disabled){
+      api('/act',{mode:'survival',kind:b.dataset.sk,type:b.dataset.type}).then(r=>{
+        toast(r.ok?'操作成功':(campCodes[r.code]??r.code??'未完成'));
+        refresh();
+        const rr=S.survivalView;
+        renderExchangeDlg(rr); renderBuildDlg(rr); renderVillageDlg(rr);
+      }).catch(()=>toast('操作未完成，请重试。'));
+    }
+  });
+}
 bindCenterDlg('btnManual','manualDlg',renderManual);
 bindCenterDlg('btnHousing','housingDlg',renderHousing);
 if($('manualClose')) $('manualClose').onclick=()=>$('manualDlg').close();

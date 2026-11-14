@@ -512,7 +512,7 @@
   }
   #hotbar .slot.icon.bare i { display:none; }
   #hotbar .slot.icon.bare:hover { background:transparent; border:0; }
-  #btnManual { margin-left:auto; }
+  #btnExchange { margin-left:auto; }
   /* 生存状态 → 游戏画面内悬浮 HUD；侧栏卡片（含标题）整体移除 */
   .world.side-a { position:relative; }
   #grpSurv {
@@ -525,6 +525,37 @@
   #grpSurv #survPanel { gap:5px; }
   #grpSurv .stat-icons { gap:8px; font-size:12px; }
   #grpSurv .survrow { gap:6px; }
+
+  /* ② 四季木板 HUD：右上角，2D 像素风 */
+  #seasonHud { position:absolute; z-index:20; top:74px; right:18px; width:186px; }
+  .season-board {
+    position:relative; padding:8px 9px 10px; border:2px solid #BA8752;
+    background:repeating-linear-gradient(0deg,#72513B 0 6px,#7C5A42 6px 7px,#6B4B37 7px 12px);
+    box-shadow:3px 3px 0 0 rgba(0,0,0,.38); color:var(--ink); font-size:12px;
+  }
+  .season-weather { text-align:center; color:var(--gold); font-weight:700; letter-spacing:1px; margin-bottom:4px; }
+  .season-stats { position:absolute; top:6px; left:8px; display:flex; flex-direction:column; gap:2px; font-size:12px; }
+  .season-stats .stat { display:inline-flex; align-items:center; gap:3px; color:var(--ink); text-shadow:1px 1px 0 #000; }
+  .season-wheel { display:grid; place-items:center; margin:4px auto 2px; }
+  .season-wheel svg { display:block; image-rendering:pixelated; }
+  .season-place { text-align:left; font-size:12px; color:var(--dim); text-shadow:1px 1px 0 #000; margin-top:2px; }
+  /* 新弹窗沿用中央面板风格 */
+  #exchangeDlg, #buildDlg, #villageDlg {
+    width:min(480px,92vw); max-height:78dvh; padding:14px 16px;
+    background:var(--panel); color:var(--ink); border:2px solid var(--line-hi); box-shadow:6px 6px 0 0 var(--shadow); font-size:12px;
+  }
+  #exchangeDlg::backdrop, #buildDlg::backdrop, #villageDlg::backdrop { background:rgba(10,18,12,.72); }
+  #exchangeDlg h2, #buildDlg h2, #villageDlg h2 { margin:0 0 10px; font-size:16px; color:var(--gold); border-bottom:2px solid var(--line); padding-bottom:6px; }
+  #exchangeBody .eco-icons, #buildBody .eco-icons { display:flex; flex-wrap:wrap; gap:6px; }
+  #villageBody .vrow { display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px solid var(--line); }
+  /* ④ 右侧一列：生存模式整体消失；研究面板只在对照模式出现在画面下方 */
+  aside { display:none; }
+  #labPanel { margin:0 16px 16px; }
+  body.surv-mode #labPanel { display:none; }
+  body.menu-mode #labPanel { display:none; }
+  .lab-legend { display:flex; flex-wrap:wrap; gap:10px; color:var(--dim); font-size:12px; }
+  /* 旧的左上角悬浮 HUD 让位给右上角木板 */
+  #grpSurv { display:none; }
 </style>
 </head>
 <body class="menu-mode">
@@ -560,6 +591,7 @@
     <p id="startStatus" role="status">正在连接世界…</p>
   </div>
 </main>
+
 <header>
   <h1>拥爱生命实验室<span id="tagline">无尽生存 · 在荒野与居民共同生活 ｜ 长期经营：维持食物、住所和生态，应对四季与灾害 ｜ 与居民同一套存续规则：不吃饭会死</span></h1>
   <div id="backend" class="backend">后端：读取中…</div>
@@ -610,12 +642,23 @@
         <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
         <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
         <span id="toolHint">手持 · 空手</span>
+  <button class="slot icon bare" id="btnExchange" type="button" title="收成兑换" aria-label="收成兑换"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M4 3h4l1 2 1 5H2l1-5z" fill="#C18F58"/><path d="M4 3h4" stroke="#5B4434" stroke-width=".8"/><path d="M4.4 1.6h3.2l-.5 1.5H4.9z" fill="#D8A667"/><circle cx="6" cy="7.2" r="1.3" fill="#FFEC27"/></svg></button>
+  <button class="slot icon bare" id="btnBuild" type="button" title="建造" aria-label="建造"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M8.5 2.2 10 3.7 8.9 4.8 7.4 3.3z" fill="#9DA8A8"/><path d="M7.6 3.1 2.6 8.1l1.4 1.4 5-5z" fill="#976744"/><path d="M2.2 8.5 4 10.3 2.6 11z" fill="#72513B"/></svg></button>
+  <button class="slot icon bare" id="btnVillage" type="button" title="聚落一览" aria-label="聚落一览"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1 5 3 3l2 2v5H1z" fill="#8D593F"/><path d="M7 5 9 3l2 2v5H7z" fill="#526B54"/><path d="M3.6 3h1v2h-1zM8.6 3h1v2h-1z" fill="#FFEC27"/><circle cx="6" cy="1.6" r="1.1" fill="#EDC787"/></svg></button>
   <button class="slot icon bare" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg></button>
   <button class="slot icon bare" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg></button>
       </div>
       
       <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
       <canvas id="cvA" width="384" height="256"></canvas>
+      <div id="seasonHud" class="surv-only" aria-label="季节与时间">
+        <div class="season-board">
+          <div class="season-weather" id="seasonWeather">—</div>
+          <div class="season-stats" id="seasonStats"></div>
+          <div class="season-wheel" id="seasonWheel"></div>
+          <div class="season-place" id="seasonPlace">—</div>
+        </div>
+      </div>
       <details id="grpSurv" class="grp surv-only" open>
       <summary>生存状态</summary>
       <section id="survPanel"></section>
@@ -651,6 +694,9 @@
       <div id="social" class="social"></div>
       <div id="secrets" class="secrets"></div>
     </details>
+
+  </aside>
+</main>
     <details class="lab grp" id="labPanel">
       <summary>研究面板 · 判据 / 对照 / 日志</summary>
       <div class="inner">
@@ -662,10 +708,10 @@
         <div class="note">世界是一整片 120×80 格的自然地形，视口随屏幕和地点调整；点空地行走，点建筑进入，连廊两侧通向居所与公仓。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
         <h2>事件</h2>
         <div class="log" id="log"></div>
+        <h2>合作施工</h2><div id="labCoop"></div>
+        <h2>读图</h2><div class="lab-legend"><span>■ A 侧 · 承重通道开</span><span>■ B 侧 · 承重通道切断</span><span>■ 地点 / 镜头位置</span><span>■ 驳回 / 永久损失</span></div>
       </div>
     </details>
-  </aside>
-</main>
 
 <p id="saveNotice" role="alert" hidden></p>
 <output id="campToast" role="status"></output>
@@ -679,6 +725,9 @@
   <div id="housingBody"></div>
   <div class="dlg-foot"><button id="housingClose" type="button">关闭（Esc）</button></div>
 </dialog>
+<dialog id="exchangeDlg" aria-labelledby="exchangeTitle"><h2 id="exchangeTitle">收成兑换</h2><div id="exchangeBody"></div><div class="dlg-foot"><button data-close="exchangeDlg">关闭（Esc）</button></div></dialog>
+<dialog id="buildDlg" aria-labelledby="buildTitle"><h2 id="buildTitle">建造</h2><div id="buildBody"></div><div class="dlg-foot"><button data-close="buildDlg">关闭（Esc）</button></div></dialog>
+<dialog id="villageDlg" aria-labelledby="villageTitle"><h2 id="villageTitle">聚落一览</h2><div id="villageBody"></div><div class="dlg-foot"><button data-close="villageDlg">关闭（Esc）</button></div></dialog>
 <dialog id="backpack" aria-labelledby="bpTitle">
   <div class="bp-row">
     <h2 id="bpTitle">背包与公仓</h2>
