@@ -3,7 +3,7 @@
 // 表现层约定：只读世界差分与本地 UI 事件，不写世界、不消费 rng、不进世界 tick。
 // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
 
-import { renderSfx, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
+import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
 
 const STORE_KEY = 'ambrace.audio';
 const SR = 44100;
@@ -17,7 +17,7 @@ const state = {
   buffers: new Map(),            // 音效名 → AudioBuffer
   beds: new Map(),               // 环境声名 → {source, gain}
   music: { key: null, bars: [], nextBar: 0, source: null, timer: 0, playing: false },
-  voices: 0, lastAt: new Map(),
+  voices: 0, lastAt: new Map(), menu: false,
 };
 
 function loadPrefs() {
@@ -122,28 +122,32 @@ export const click = () => sfx('click', { gain: 0.5 });
 
 // ───────────────────────── 世界状态 → 声音 ─────────────────────────
 
-const seasonTheme = (season) => (season === '春' || season === '夏' ? 'warm' : 'cool');
-
-function sceneKey({ season, day, crisis }) {
-  return `${crisis ? 'crisis' : `${seasonTheme(season)}:${day ? 'day' : 'night'}`}`;
+// 聚落状态直接决定主题：危机/恢复/灭绝各有自己的曲子，不是同一首变音量。
+function musicTheme({ season, settlement }) {
+  if (settlement === 'extinct') return 'extinct';
+  if (settlement === 'crisis') return 'crisis';
+  if (settlement === 'recovering') return 'recovering';
+  return themeForSeason(season);
 }
 
-// 一小节的缓冲：变体切换时才渲染，单节约 15–25ms，且只在换季节/昼夜时发生。
+function sceneKey({ season, day, settlement }) {
+  return `${musicTheme({ season, settlement })}:${day ? 'day' : 'night'}`;
+}
+
+// 一小节的缓冲：变体切换时才渲染，单节约 15–25ms，且只在换季/昼夜/聚落状态时发生。
 function barBuffer(key, bar) {
-  const crisis = key === 'crisis';
-  const [theme = 'warm', dayFlag = 'day'] = crisis ? [] : key.split(':');
-  return stereoBuffer(`music:${key}:${bar}`, () => renderMusicBar({
-    theme: crisis ? 'warm' : theme, day: !crisis && dayFlag === 'day', crisis, bar,
-  }));
+  const [theme, dayFlag = 'day'] = key.split(':');
+  return stereoBuffer(`music:${key}:${bar}`, () => renderMusicBar({ theme, day: dayFlag === 'day', bar }));
 }
 
 function scheduleMusic() {
   const m = state.music;
   if (!m.playing || !state.ctx) return;
-  const meta = musicMeta({ theme: m.key === 'crisis' ? 'warm' : m.key.split(':')[0], crisis: m.key === 'crisis' });
+  const [theme, dayFlag = 'day'] = m.key.split(':');
+  const meta = musicMeta({ theme });
   const now = state.ctx.currentTime;
   while (m.nextAt < now + LOOKAHEAD_S) {
-    const buf = barBuffer(m.key, m.bar % m.bars);
+    const buf = barBuffer(m.key, m.bar % meta.bars);
     m.bar++;
     if (buf) {
       const src = state.ctx.createBufferSource();
@@ -163,7 +167,8 @@ function scheduleMusic() {
 function startMusic(key) {
   const m = state.music;
   if (m.key === key && m.playing) return;
-  const meta = musicMeta({ theme: key === 'crisis' ? 'warm' : key.split(':')[0], crisis: key === 'crisis' });
+  const [theme] = key.split(':');
+  const meta = musicMeta({ theme });
   m.key = key; m.bars = meta.bars; m.bar = 0;
   m.nextAt = state.ctx.currentTime + 0.15;
   m.playing = true;
@@ -175,6 +180,14 @@ function stopMusic() {
   state.music.playing = false;
   clearTimeout(state.music.timer);
   state.music.key = null;
+}
+
+// 开始菜单用独立主题：进游戏前不该听到营地四季。
+export function menu(on) {
+  if (!state.ready) return;
+  if (!on) { state.menu = false; return; }
+  state.menu = true;
+  startMusic('menu:day');
 }
 
 // 环境声床：最多三层（天气 / 昼夜 / 危机），换状态时 1.5 秒交叉淡入淡出。
@@ -198,22 +211,27 @@ function setBed(name, want, gain) {
 }
 
 // 世界差分进来就调这里；调用方只在"状态真的变了"时才调，避免每刻重算。
-export function scene({ season = '春', phase = 'day', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false } = {}) {
+export function scene({ season = '春', phase = '昼', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false } = {}) {
   if (!state.ready || state.muted) return;
-  const crisis = settlement === 'crisis' || settlement === 'extinct' || crisisDays > 0 || dead;
+  const day = phase !== '夜';
   if (dead) {
+    // 玩家倒下：曲终，只留危机心跳，世界仍在走但不再属于你。
     stopMusic();
     setBed('crisis', true, 0.5);
     setBed('weather', false, 0);
     setBed('daynight', false, 0);
     return;
   }
-  startMusic(sceneKey({ season, day: phase === 'day', crisis }));
-  const weatherBed = weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : weather === 'storm' ? 'wind' : null;
-  setBed('weather', weatherBed, weather === 'storm' ? 0.9 : 0.6);
-  setBed('daynight', phase === 'night' ? 'night' : 'day', phase === 'night' ? 0.7 : 0.4);
-  setBed('crisis', crisis && settlement !== 'extinct', 0.55);
+  state.menu = false;
+  startMusic(sceneKey({ season, day, settlement }));
+  const weatherBed = weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : null;
+  setBed('weather', weatherBed, weather === 'rain' ? 0.6 : 0.5);
+  setBed('daynight', day ? 'day' : 'night', day ? 0.4 : 0.7);
+  setBed('crisis', (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0) && settlement !== 'extinct', 0.55);
 }
+
+// 一次性世界事件音（出生/死亡/竣工/灾害…）：由 app.js 的世界差分触发，不在这里读世界。
+export const cue = (id, opts) => sfx(id, opts);
 
 export function setVolume(v) {
   state.volume = Math.min(1, Math.max(0, Number(v) || 0));

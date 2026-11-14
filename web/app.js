@@ -9,6 +9,7 @@ import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs'
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
 import * as audio from './audio.mjs';
+import { readWorld, diffAudioEvents, sceneSignature } from './audio-events.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
@@ -3652,16 +3653,34 @@ function renderPlayMode(sv, comparison = S.comparison) {
   $('btnBagFull').disabled=!S.playing;
 }
 
-// 声音跟着世界读数走：签名没变就不重排环境声与 BGM，避免每 900ms 抖动一次。
+// 声音跟着世界读数走：签名变了才重排环境声与 BGM；事件音靠"上一份读数 vs 这一份读数"的差分。
+// 差分规则在 web/audio-events.mjs（纯函数，被 life/audio.test.mjs 的 A-12…A-16 钉住），
+// 这里只负责"读快照 → 播一条"，不回写世界。
 let audioSceneSig = null;
+let audioPrev = null;
 function syncAudioScene(sv) {
   if (!sv) return;
-  const crisisDays = sv.crisisDays ?? 0;
-  const dead = Boolean(sv.player?.dead);
-  const sig = [sv.season, sv.phase, sv.weather, sv.settlement, crisisDays > 0 ? 1 : 0, dead ? 1 : 0].join('|');
-  if (sig === audioSceneSig) return;
-  audioSceneSig = sig;
-  audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement, crisisDays, dead });
+  const sig = sceneSignature(sv);
+  if (sig !== audioSceneSig) {
+    audioSceneSig = sig;
+    audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement,
+      crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead) });
+  }
+  const next = readWorld(sv);
+  const cues = diffAudioEvents(audioPrev, next);
+  audioPrev = next;
+  // 一次轮询最多一条事件音：世界同时发生很多事时，声音要挑最该听见的。
+  if (cues.length) audio.cue(cues[0], { gain: 0.8 });
+}
+
+// 弹窗与背包的开合音：挂在 <dialog> 的 toggle 上，一处覆盖九个界面。
+function bindAudioDialogs() {
+  for (const d of document.querySelectorAll('dialog')) {
+    d.addEventListener('toggle', () => {
+      if (d.id === 'backpack') { audio.cue(d.open ? 'bagOpen' : 'dlgClose', { gain: 0.7 }); return; }
+      audio.cue(d.open ? 'dlgOpen' : 'dlgClose', { gain: 0.6 });
+    });
+  }
 }
 
 async function refresh() {
@@ -3865,7 +3884,7 @@ $('btnCampAngle').onclick=()=>{
   if(ui.fullscreen&&S.view)draw($('cvFull'),S.view);
   else if(S.view){draw($('cvA'),S.view);if(ui.compare&&S.viewB)draw($('cvB'),S.viewB);}
 };
-$('btnOverview').onclick=()=>{
+$('btnOverview').onclick=()=>{ audio.cue('modeSwitch', { gain: 0.6 });
   if (ui.surveyRoom) { returnFromSurvey(); return; }
   if (ui.interior) return;
   ui.overview=!ui.overview;
@@ -3882,6 +3901,7 @@ function rememberSurvivalPosition() {
   keys.clear();
 }
 function selectWorld(compare) {
+  audio.cue('modeSwitch', { gain: 0.7 });
   if (campBusy || enteringRoom || leavingRoom) return;
   if (ui.talk) closeTalkDlg();
   rememberSurvivalPosition();
@@ -3904,6 +3924,7 @@ function selectWorld(compare) {
   refresh();
 }
 function showStart() {
+  audio.menu(true);
   if (campBusy || enteringRoom || leavingRoom) return;
   if (ui.talk) closeTalkDlg();
   rememberSurvivalPosition();
@@ -3977,6 +3998,7 @@ function cycleAudio(){
   if(value>0) audio.click();
 }
 $('btnAudio').onclick=cycleAudio;
+bindAudioDialogs();
 const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); } };
 ['pointerdown','keydown'].forEach(type=>window.addEventListener(type,unlockAudio,{once:true,capture:true}));
 paintAudioButton();
