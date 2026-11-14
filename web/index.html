@@ -457,6 +457,17 @@
   .bp-item b { position:absolute; right:2px; bottom:0; margin:0; font-size:12px; color:var(--gold); text-shadow:1px 1px 0 #000; }
   .bp-item.zero img { opacity:.3; }
   .bp-item.zero b { color:var(--dim); }
+
+  /* 两栏嵌进背景大灰框：框被上下拉长，栏本身尺寸/比例不变 */
+  #hotbar, #itemBar {
+    flex:0 0 auto; width:100%; margin:0; box-sizing:border-box;
+  }
+  #hotbar { margin-bottom:8px; }
+  #itemBar { margin-top:8px; }
+  #worldMain .world.side-a { justify-content:flex-start; }
+
+  /* 单世界 3D 模式下 occ 是旧版「点地点移动」提示，导航已移除，收起后物品栏即大框最后一栏 */
+  main.solo .world.side-a .occ { display:none; }
 </style>
 </head>
 <body class="menu-mode">
@@ -522,31 +533,33 @@
     <div>WASD/方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板</div>
   </details>
 </div>
-<div id="hotbar" class="surv-only" role="toolbar" aria-label="工具栏">
-  <button class="slot on" data-tool="hand" title="空手（1）：公仓存取 / 查看">手<i>1</i></button>
-  <button class="slot" data-tool="axe" title="斧（2）：到伐木林砍木">斧<i>2</i></button>
-  <button class="slot" data-tool="pick" title="镐（3）：采石（瞭台/井台）">镐<i>3</i></button>
-  <button class="slot" data-tool="hoe" title="锄（4）：收获/播种（菜园）">锄<i>4</i></button>
-  <button class="slot" data-tool="hammer" title="锤（5）：奠基/施工/维修">锤<i>5</i></button>
-  <button class="slot" data-tool="basket" title="篮子（6）：采浆果、水果、蔬菜、鸡蛋">篮<i>6</i></button>
-  <button class="slot" data-tool="shears" title="剪刀（7）：剪羊毛">剪<i>7</i></button>
-  <button class="slot" data-tool="bucket" title="桶（8）：取水、挤奶、浇水">桶<i>8</i></button>
-  <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
-  <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
-  <span id="toolHint">手持 · 空手</span>
-</div>
 <section id="playNotice" role="status" aria-live="polite">
   <p id="playNoticeText">正在连接生存世界…</p>
   <a id="playPreviewLink" hidden>打开本机新版生存试玩</a>
 </section>
 <div id="hudGauges" class="surv-only" role="status" aria-label="聚落资源仪表"></div>
-<div id="itemBar" class="surv-only" role="group" aria-label="物品栏"></div>
 <main id="worldMain" class="solo" hidden>
   <div class="col">
     <div class="world side-a">
+      <div id="hotbar" class="surv-only" role="toolbar" aria-label="工具栏">
+        <button class="slot on" data-tool="hand" title="空手（1）：公仓存取 / 查看">手<i>1</i></button>
+        <button class="slot" data-tool="axe" title="斧（2）：到伐木林砍木">斧<i>2</i></button>
+        <button class="slot" data-tool="pick" title="镐（3）：采石（瞭台/井台）">镐<i>3</i></button>
+        <button class="slot" data-tool="hoe" title="锄（4）：收获/播种（菜园）">锄<i>4</i></button>
+        <button class="slot" data-tool="hammer" title="锤（5）：奠基/施工/维修">锤<i>5</i></button>
+        <button class="slot" data-tool="basket" title="篮子（6）：采浆果、水果、蔬菜、鸡蛋">篮<i>6</i></button>
+        <button class="slot" data-tool="shears" title="剪刀（7）：剪羊毛">剪<i>7</i></button>
+        <button class="slot" data-tool="bucket" title="桶（8）：取水、挤奶、浇水">桶<i>8</i></button>
+        <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
+        <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
+        <span id="toolHint">手持 · 空手</span>
+      </div>
+      
       <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
       <canvas id="cvA" width="384" height="256"></canvas>
+      <div id="itemBar" class="surv-only" role="group" aria-label="物品栏"></div>
       <div class="occ" id="occA"></div>
+      
     </div>
   </div>
   <div class="col">
