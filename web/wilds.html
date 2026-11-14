@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>荒野地图试走 · 拥爱生命实验室</title>
+<link rel="stylesheet" href="/web/wilds.css">
+<main>
+  <header>
+    <div><a href="/">返回主菜单</a><h1>荒野地图试走</h1></div>
+    <button id="return" type="button" disabled>返回营地路口</button>
+  </header>
+  <canvas id="wilds" aria-label="可步行探索的荒野地图" tabindex="0"></canvas>
+  <div class="controls" aria-label="移动">
+    <button data-dir="w" aria-label="向北">↑</button>
+    <button data-dir="a" aria-label="向西">←</button>
+    <button data-dir="s" aria-label="向南">↓</button>
+    <button data-dir="d" aria-label="向东">→</button>
+  </div>
+  <footer>
+    <span id="location">正在加载荒野…</span>
+    <span>WASD / 方向键移动 · Shift 奔跑</span>
+  </footer>
+  <details><summary>试走路线</summary>
+    <p>沿河向北可到山泉，向南可到瀑布和悬崖。河流两岸在营地木桥相通。</p>
+  </details>
+</main>
+<script type="module" src="/web/wilds.js"></script>
+</html>

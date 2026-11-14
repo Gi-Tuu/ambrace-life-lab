@@ -1,0 +1,15 @@
+:root{color-scheme:dark;background:#161d19;color:#e8e4cb;font:16px system-ui,sans-serif}
+body{margin:0}
+main{max-width:1440px;margin:auto;padding:clamp(12px,2.5vw,32px)}
+header,footer{display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
+h1{font-size:clamp(1.25rem,3vw,2rem);margin:.35rem 0 .8rem}
+a{color:#e9c689}
+button{color:inherit;background:#2c3930;border:1px solid #768771;border-radius:4px;padding:.5em .75em;font:inherit}
+button:not(:disabled){cursor:pointer}
+:focus-visible{outline:2px solid #f1cc89;outline-offset:2px}
+canvas{display:block;width:100%;height:min(68svh,800px);min-height:230px;background:#222e27;border:1px solid #627563;box-sizing:border-box;touch-action:none}
+footer{padding:.6em 0;color:#bfcbb8;font-size:.9em}
+details{color:#bfcbb8}
+.controls{display:none;gap:.5rem;padding:.55rem 0}
+.controls button{flex:1;touch-action:none}
+@media(pointer:coarse){.controls{display:flex}}

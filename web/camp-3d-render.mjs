@@ -11,10 +11,10 @@ const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const norm = v => { const len=Math.hypot(...v); return v.map(a=>a/len); };
 
-export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65 }) {
+export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55 }) {
   const back = [Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)];
   const right = norm(cross([0,1,0],back)), up = cross(back,right);
-  const aim = [x,.55,z], eye = aim.map((v,i)=>v+80*back[i]);
+  const aim = [x,targetY,z], eye = aim.map((v,i)=>v+80*back[i]);
   const halfX = span/2, halfY = halfX*height/width;
   return {
     back,
@@ -261,14 +261,14 @@ const VERTEX = `
   uniform mediump vec4 uWeather;
   varying vec3 vColor;
   varying vec2 vUV, vWorld;
-  varying float vGlow;
+  varying float vGlow, vHeight;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
     point.x+=sin(phase)*aMaterial.x*uWeather.y;
     point.z+=sin(phase*.72+.8)*aMaterial.x*uWeather.y*.43;
     gl_Position=uProjection*uView*vec4(point,1.);
-    vGlow=aMaterial.z;
+    vGlow=aMaterial.z; vHeight=point.y;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
 `;
@@ -285,7 +285,8 @@ const FRAGMENT = `
   uniform float uAlpha;
   varying vec3 vColor;
   varying vec2 vUV, vWorld;
-  varying float vGlow;
+  varying float vGlow, vHeight;
+  uniform bool uWild;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
     float water=uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.;
@@ -301,6 +302,11 @@ const FRAGMENT = `
       float ripple=smoothstep(.78,1.,flow)*(.55+.45*sin(vWorld.x*17.+vWorld.y*2.));
       color+=vec3(.075,.15,.17)*ripple;
     }
+    if (uWild && vGlow<0.) {
+      float phase=vGlow<-1.5 ? vHeight*.83+uWeather.x*6. : vWorld.y*4.-uWeather.x*3.;
+      float foam=smoothstep(.72,1.,sin(phase+sin(vWorld.x*14.)*.6));
+      color+=foam*vec3(.085,.13,.14);
+    }
     float shade=1.;
     if (uVisibility) {
       float radius=uSight.z;
@@ -311,7 +317,12 @@ const FRAGMENT = `
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
     lit+=vec3(.31,.145,.048)*fire;
-    gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),vGlow*uWeather.w),uAlpha);
+    if (uWild) {
+      float mist=smoothstep(2.,25.,-vHeight);
+      float drift=.92+.08*sin(vWorld.x*.13+vWorld.y*.11+uWeather.x*.2);
+      lit=mix(lit,vec3(.38,.48,.51),mist*drift*.79);
+    }
+    gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),max(0.,vGlow)*uWeather.w),uAlpha);
   }
 `;
 
@@ -331,7 +342,7 @@ export function createCampRenderer() {
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
@@ -402,12 +413,13 @@ export function createCampRenderer() {
       lru.push(stage);
       return stages.get(stage);
     }
-    const b=gl.createBuffer(), {mesh,ranges,terrainCount}=stageMesh(stage);
+    const b=gl.createBuffer();
+    const {mesh,ranges,terrainCount}=stage.mesh ? {mesh:stage.mesh,ranges:[],terrainCount:0} : stageMesh(stage);
     bind(b);gl.bufferData(gl.ARRAY_BUFFER,mesh,gl.STATIC_DRAW);
     const item={ b,count:mesh.length/11,ranges,terrainCount };
     stages.set(stage,item);
     lru.push(stage);
-    if(lru.length>12){
+    if(lru.length>(stage.wild ? 42 : 12)){
       const old=lru.shift();
       gl.deleteBuffer(stages.get(old).b);
       stages.delete(old);
@@ -442,7 +454,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,regions,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -456,6 +468,7 @@ export function createCampRenderer() {
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
       gl.uniform1f(uniform.Season,season);
+      gl.uniform1i(uniform.Wild,Number(Boolean(regions)));
       gl.uniform1i(uniform.HasWater,Number(Boolean(waterMask)));
       if (waterMask && waterMask!==waterImage) {
         gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,water);
@@ -486,7 +499,8 @@ export function createCampRenderer() {
         paint(groundBuffer,6,true);
       }
       const faded=[];
-      paintStage(stageBuffer(stage),covered,faded,Boolean(terrain));
+      if (regions) for (const region of regions) paintStage(stageBuffer(region),covered,faded);
+      else paintStage(stageBuffer(stage),covered,faded,Boolean(terrain));
       if (life) paintStage(stageBuffer(life),covered,faded);
       if (homes) paintStage(stageBuffer(homes),covered,faded);
       const moving=[];
@@ -509,5 +523,6 @@ export function createCampRenderer() {
       ctx.drawImage(canvas,0,0);
       return true;
     },
+    regionStats:()=>({buffers:lru.length,bytes:lru.reduce((sum,stage)=>sum+stages.get(stage).count*44,0)}),
   };
 }
