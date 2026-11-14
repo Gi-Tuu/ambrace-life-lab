@@ -14,8 +14,8 @@ const STORAGE = Object.freeze({
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],
 });
 const TOOLS=CAMP_TOOLS;
-const ITEMS=new Set(['wood','stone','tray',...Object.keys(TOOLS)]);
-const FOOD=new Set(['berry','fruit','crop','egg','milk']);
+const ITEMS=new Set(['wood','stone','tray','meat',...Object.keys(TOOLS)]);
+const FOOD=new Set(['berry','fruit','crop','egg','milk','meat']);
 const ok=()=>({ok:true,code:'OK'});
 const fail=code=>({ok:false,code});
 const amount=(bag,item)=>bag?.[item]??0;
@@ -225,6 +225,7 @@ export function campAction(world,body) {
     world.observeProduction?.('collected', 'berry', 1);
     cost=SURV_COST.forage;
   } else {
+    if (target && (s.frightenedAnimals?.[target]??0)>world.t) return fail('ANIMAL_AFRAID');
     if (site!==(item==='fruit'?'garden':'yard')) return fail('WRONG_SOURCE');
     if (s.farmLife && !target) return fail('NO_PRODUCE');
     if (!takeProduce(s,item,1,target)) return fail('NO_PRODUCE');

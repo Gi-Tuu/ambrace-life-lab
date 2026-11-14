@@ -1,3 +1,4 @@
+import { roadRule } from './home-roads.mjs';
 import { homeEntry } from './home-access.mjs';
 import { discussionAction } from './settlement-social.mjs';
 import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './households.mjs';
@@ -35,6 +36,7 @@ export function validate(world, agentId, intent) {
     const access=homeEntry(world,agentId,intent.to);
     if (!access.ok) return fail(access.code,'住宅没有开放进入');
   }
+  if (kind==='road_lay' || kind==='road_remove') return roadRule(world,agentId,intent);
   if (kind.startsWith('discuss_') && !discussionAction(world,agentId,kind).ok)
     return fail('NO_DISCUSSION','没有可参与的讨论');
   if (kind === 'take_shared') {

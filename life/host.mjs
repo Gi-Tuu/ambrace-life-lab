@@ -1,3 +1,4 @@
+import { CURRENT_LAYOUT } from '../web/camp-layout.mjs';
 import { randomInt } from 'node:crypto';
 // 权威世界宿主：状态在服务器上持续演化，浏览器只是观察与介入的窗口。
 // 三件事是这里的核心，不是装饰：
@@ -938,7 +939,7 @@ export const host = {
           const old = S.surv;
           let seed;
           do { seed = randomInt(1, 0x7fffffff); } while (seed === old?.world.mapSeed);
-          S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: 1 });
+          S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: CURRENT_LAYOUT });
           await save();
           if (S.saveError) {
             S.surv = old;

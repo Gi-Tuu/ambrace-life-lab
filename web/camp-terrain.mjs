@@ -28,13 +28,14 @@ export function campTerrain(seed = 0, raised = true, layoutVersion = 0) {
   const hillZones=layoutVersion
     ? [[11,10],[32,11],[57,10],[83,10],[108,12],[11,65],[26,69],[61,67],[78,70],[108,68]]
     : zones;
+  const extra=layoutVersion>=2?[[8,15],[9,74],[25,9],[55,9],[78,8],[101,10],[69,71],[115,72]]:[];
   const drift=layoutVersion?9:5;
-  const hills = raised ? hillZones.map(([x,z], i) => ({
+  const hills = raised ? [...hillZones,...extra].map(([x,z], i) => ({
     x: x + Math.floor(campHash(seed, `x${i}`)*drift) - Math.floor(drift/2),
     z: z + Math.floor(campHash(seed, `z${i}`)*drift) - Math.floor(drift/2),
     rx: 4 + Math.floor(campHash(seed, `w${i}`)*4),
     rz: 4 + Math.floor(campHash(seed, `d${i}`)*3),
-    h: 1.15 + campHash(seed, `h${i}`)*1.65,
+    h: i>=hillZones.length ? 3.4+campHash(seed,`h${i}`)*3.2 : 1.15+campHash(seed,`h${i}`)*1.65,
   })) : [];
   return { river, riverCenter, riverHalfWidth, hills };
 }

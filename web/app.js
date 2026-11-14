@@ -1,5 +1,5 @@
 import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
-import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
+import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
@@ -428,7 +428,7 @@ function buildWorld(w) {
   const mapSeed=w.mapSeed??0;
   const staticSites=campRenderer?Object.fromEntries(Object.entries(liveSites).filter(([room])=>!residentialSite(room))):liveSites;
   const sites=staticSites;
-  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
+  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),Object.keys(w.homeRoads??{}).filter(k=>!w.homeRoads[k].present).sort(),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -456,8 +456,8 @@ function buildWorld(w) {
 
   // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
   const roads=[],bins=new Map(),binSize=64;
-  const addSegment=(a,b)=>{
-    const r=[...a,...b];roads.push(r);
+  const addSegment=(a,b,hidden)=>{
+    const r=[...a,...b,hidden];roads.push(r);
     for(let y=Math.floor((Math.min(a[1],b[1])-40)/binSize);y<=Math.floor((Math.max(a[1],b[1])+40)/binSize);y++)
       for(let x=Math.floor((Math.min(a[0],b[0])-40)/binSize);x<=Math.floor((Math.max(a[0],b[0])+40)/binSize);x++){
         const key=tileKey(x,y);if(!bins.has(key))bins.set(key,[]);bins.get(key).push(r);
@@ -492,11 +492,11 @@ function buildWorld(w) {
       const steps=Math.max(1,Math.ceil(Math.hypot(p2[0]-p1[0],p2[1]-p1[1])/8));let prev=p1;
       for(let i=1;i<=steps;i++){
         const t=i/steps,pt=[0,1].map(k=>.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*t*t+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*t*t*t));
-        addSegment(prev,pt);prev=pt;
+        addSegment(prev,pt,w.homeRoads?.[v]?.present===false);prev=pt;
       }
     }
   }
-  const roadDist=(px,py)=>(bins.get(tileKey(Math.floor(px/binSize),Math.floor(py/binSize)))??[]).reduce((d,r)=>Math.min(d,distSeg(px,py,...r)),80);
+  const roadDist=(px,py,paint=false)=>(bins.get(tileKey(Math.floor(px/binSize),Math.floor(py/binSize)))??[]).reduce((d,r)=>paint && r[4] ? d : Math.min(d,distSeg(px,py,r[0],r[1],r[2],r[3])),80);
   const onRoad=(tx,ty)=>roadDist(tx*TILE+8,ty*TILE+8)<23;
   const nearSite = (tx, ty, pad = 2) => Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < pad && Math.abs(ty - sy) < pad);
   const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - streamCenter(ty*TILE+8)) < 34;
@@ -526,7 +526,7 @@ function buildWorld(w) {
   const highGround=(x,z)=>hills.some(hill=>reliefAt(hill,x+.5,z+.5)>.055);
   const nearLot=(x,z,pad=.85)=>reserved.some(lot=>overlapsLot({x,z,w:1,d:1},lot,pad));
   const nearGrove=(x,z)=>Boolean(w.camp?.timber) && grove.some(t=>Math.hypot(x+.5-t.x,z+.5-t.z)<1.7);
-  const terrain = paintTerrain(g, roadDist, sites, beds, terrainHash, streamCenter, streamHalfWidth), grass=[];
+  const terrain = paintTerrain(g, (x,z)=>roadDist(x,z,true), sites, beds, terrainHash, streamCenter, streamHalfWidth), grass=[];
   // 草簇与野花只落在草地，避免覆盖路肩和岸线。
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     const px = tx * TILE, py = ty * TILE, h = terrainHash(tx, ty, 1);
@@ -680,20 +680,20 @@ function buildWorld(w) {
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
   const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
-  const habitats=w.layout
-    ? [[sites.yard[0]-5,sites.yard[1]+17,'rabbit'],[sites.garden[0]-9,sites.garden[1]+12,'fox'],
-      [sites.home[0]-5,sites.home[1]-8,'rabbit'],[sites.well[0]+2,sites.well[1]+7,'deer'],
-      [sites.watch[0]+5,sites.watch[1]-4,'fox'],[sites.workshop[0]+8,sites.workshop[1]+6,'deer']]
-    : [[17,23,'rabbit'],[25,46,'fox'],[36,31,'rabbit'],[58,36,'deer'],[73,19,'fox'],[55,17,'deer']];
+  const habitats=wildHabitats(w.layout);
   const wildlife=[];
-  for (const [hx,hz,kind] of habitats) {
+  for (const {id,x:hx,z:hz,kind} of habitats) {
+    if (kind==='bird') {
+      wildlife.push({id,x:hx,z:hz,kind});
+      continue;
+    }
     let best=null, dist=7;
     for (const [x,z] of grass) {
       const tx=Math.floor(x), tz=Math.floor(z), delta=Math.hypot(x-hx,z-hz);
       if (delta>=dist || !walk[tz*WORLD_TW+tx] || inPen(tx,tz) || nearLot(tx,tz) ||
           trees.some(([a,b])=>Math.hypot(a+.5-x,b+.5-z)<1.35) ||
           wildlife.some(a=>Math.hypot(a.x-x,a.z-z)<3)) continue;
-      best={x,z,kind};dist=delta;
+      best={id,x,z,kind};dist=delta;
     }
     if (best) wildlife.push(best);
   }
@@ -992,7 +992,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
     if (!manual) walker.pi+=1;
     return;
   }
-  const neighbours=[...(campHerds.get(cvId)??world.life3d?.animals??[])];
+  const neighbours=(campHerds.get(cvId)??world.life3d?.animals??[]).filter(a=>a.kind!=='bird');
   for (const who of Object.values(snapshot.occupancy??{}).flat()) {
     const other=WALK[walkKey(cvId,who)];
     if (other && other!==walker) neighbours.push({x:other.x+.5,z:other.y+.5,r:CAMP_BODY_RADIUS});
@@ -1767,24 +1767,32 @@ const campWorlds=new Map(), campHerds=new Map();
 function animalGround(world,a,x,z) {
   const h=a.habitat,r=a.r*.87;
   if (x-r<h.x || x+r>h.x+h.w || z-r<h.z || z+r>h.z+h.d) return false;
+  if (a.kind==='bird') return true;
   return [[0,0],[-r,0],[r,0],[0,-r],[0,r]].every(([dx,dz])=>mapAllows(world,x+dx-.5,z+dz-.5));
 }
-function drawHerd(world,id,time,roster) {
+function drawHerd(world,id,time,roster,trust) {
   const previous=campHerds.get(id)??[], blockers=[];
   for (const who of Object.keys(roster)) {
     const person=WALK[walkKey(id,who)];
-    if (person) blockers.push({x:person.x+.5,z:person.y+.5,r:CAMP_BODY_RADIUS});
+    if (person) blockers.push({id:who,x:person.x+.5,z:person.y+.5,r:CAMP_BODY_RADIUS});
   }
   const animals=[], bases=world.life3d?.animals??[];
   for (const [i,base] of bases.entries()) {
-    const old=previous.find(a=>a.id===base.id);
+    const old=previous.find(a=>a.id===base.id && a.habitat.x===base.habitat.x && a.habitat.z===base.habitat.z);
     const a={...base,x:old?.x??base.x,z:old?.z??base.z,next:old?.next??time+hash2(i,11,4)*2,
       target:old?.target,serial:old?.serial??0,direction:old?.direction??0,phase:hash2(i,42,3)*6,
       moving:false,time};
-    const neighbors=[...blockers,...animals,...bases.slice(i+1).map(b=>previous.find(p=>p.id===b.id)??b)];
-    const alert=a.wild && blockers.find(p=>Math.hypot(p.x-a.x,p.z-a.z)<2.7);
+    const neighbors=a.kind==='bird'?[]:[...blockers,...animals,...bases.slice(i+1).map(b=>previous.find(p=>p.id===b.id)??b)].filter(b=>b.kind!=='bird');
+    const alert=a.wild && a.kind!=='bird' && blockers.find(p=>{
+      const bond=p.id==='p1'?trust?.[a.id]?.trust??0:0;
+      const distance=Math.hypot(p.x-a.x,p.z-a.z);
+      return distance<(bond>=4?.7:2.7) && !(p.id==='p1' && id==='cvA' && ui.tool==='basket' && distance>=1.15);
+    });
     const dt=old?Math.min(.12,Math.max(0,time-old.time)):0;
-    if (alert && !old?.alert) { a.target=null; a.next=time; }
+    if (alert && (!old?.alert || a.target && Math.hypot(a.target.x-alert.x,a.target.z-alert.z)<=Math.hypot(a.x-alert.x,a.z-alert.z))) {
+      a.target=null; a.next=time;
+    }
+    if (a.afraid && !old?.afraid) { a.target=null; a.next=time+1; }
     a.alert=Boolean(alert);
     if (time>=a.next && !a.target) {
       const h=a.habitat;
@@ -1792,6 +1800,7 @@ function drawHerd(world,id,time,roster) {
         const n=++a.serial;
         const x=h.x+a.r+hash2(i,n,13)*(h.w-2*a.r), z=h.z+a.r+hash2(i,n,37)*(h.d-2*a.r);
         if (alert && Math.hypot(x-alert.x,z-alert.z)<Math.hypot(a.x-alert.x,a.z-alert.z)+.8) continue;
+        if (a.afraid && Math.hypot(x-a.x,z-a.z)>2.2) continue;
         if (Math.hypot(x-a.x,z-a.z)>.5 && animalGround(world,a,x,z)) { a.target={x,z}; break; }
       }
       if (!a.target) a.next=time+.7;
@@ -1799,7 +1808,7 @@ function drawHerd(world,id,time,roster) {
     if (a.target && dt) {
       const dx=a.target.x-a.x,dz=a.target.z-a.z,len=Math.hypot(dx,dz);
       if (len>.12) {
-        const step=Math.min(len,a.speed*dt*(alert?1.7:1)), x=a.x+dx*step/len, z=a.z+dz*step/len;
+        const step=Math.min(len,a.speed*dt*(alert?1.7:a.afraid?.48:1)), x=a.x+dx*step/len, z=a.z+dz*step/len;
         if (animalGround(world,a,x,z) && separates(a.x,a.z,x,z,neighbors,a.r)) {
           a.x=x;a.z=z;a.moving=true;
           a.direction=Math.abs(dx)>Math.abs(dz)?(dx>0?3:1):(dz>0?0:2);
@@ -1922,7 +1931,7 @@ function drawCamp(cv,w) {
     stage=world.scene3d;life=world.life3d;homes=world.homes3d;terrain=world.canvas;waterMask=world.waterMask;
     const slots=slotsOf(w,world.sites);
     for(const who of Object.keys(slots))ensureWalker(playerId,who,world,slots);
-    animals=drawHerd(world,playerId,ACT.motionTime??0,slots);
+    animals=drawHerd(world,playerId,ACT.motionTime??0,slots,w.wildTrust);
     const pw=WALK[walkKey(playerId,'p1')];
     const pTile=pw?[pw.x,pw.y]:slots.p1;
     if(playerId==='cvA')camFollow=pTile;
@@ -1979,16 +1988,18 @@ function drawCamp(cv,w) {
   if(homes)campSmoke(g,camera,homes.chimneys,ratio,ACT.frame,light);
   if(light[0]<.9)campAmbient(g,camera,span,x,z,ratio,ACT.frame);
   const h=campHover?.cv===cv.id?campHover:null;
-  if (h && performance.now()-h.t>=450) {
+  let hoverLabel;
+  if (h) {
     const hit=pointedEntity(cv,h);
     const now=performance.now();
     if (h.entity!==hit?.id) { h.entity=hit?.id; h.since=now; }
-    if (hit && now-h.t>=500 && now-(h.since??h.t)>=50) {
+    if (hit && now-Math.max(h.t,h.since??h.t)>=200) {
+      hoverLabel=hit.name;
       const [px,pz]=hit.at;
       campBadge(g,camera,[px,hit.labelHeight??stage.heightAt(px,pz)+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,p1:player?[player.x,player.y,player.z]:null};
+  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,p1:player?[player.x,player.y,player.z]:null};
   cv.dataset.renderer='3d';
   return true;
 }
@@ -2203,10 +2214,10 @@ let survFlash = null;
 const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
-const CAMP_ITEMS={wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
-const CAMP_FOOD=['berry','fruit','crop','egg','milk'];
-const campLabels={facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
-const campCodes={HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
+const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
+const CAMP_FOOD=['meat','berry','fruit','crop','egg','milk'];
+const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
+const campCodes={ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
   FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
@@ -2706,7 +2717,11 @@ async function survInteract() {
     const view=$(ui.fullscreen?'cvFull':'cvA')._cam;
     const entities=outdoorEntities(world,s,view?.people??[],view?.animals??[]);
     const entity=entities.filter(e=>e.kind!=='scenery' && entityGap([x,z],e)<=e.reach)
-      .sort((a,b)=>Number(b.tool===ui.tool)-Number(a.tool===ui.tool)||entityGap([x,z],a)-entityGap([x,z],b))[0];
+      .sort((a,b)=>{
+        const equipped=e=>e.tool===ui.tool || e.kind==='animal' && ui.tool==='axe' ||
+          e.kind==='door' && ui.tool==='hoe' && s.homeAccess?.[e.room]?.resident;
+        return Number(equipped(b))-Number(equipped(a)) || entityGap([x,z],a)-entityGap([x,z],b);
+      })[0];
     if (entity) { await useOutdoorEntity(entity,[x,z]); return; }
   }
   if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
@@ -3212,6 +3227,7 @@ async function refresh() {
     fillOcc($('occA'), viewA);
     fillOcc($('occB'), j.B);
     if (!S.soloSurv) pushToasts(j.A);
+    $('exploreWilds').hidden=!S.soloSurv;
     $('btnOverview').classList.toggle('on',ui.overview);
     $('btnOverview').disabled=Boolean(ui.interior);
     $('btnOverview').title=ui.interior?'返回营地后可打开全景':'';
@@ -3477,7 +3493,7 @@ function roomWaypoint() {
 
 const SITE_NAMES={home:'居所',hall:'连廊',store:'公仓',workshop:'工坊',watch:'瞭望台',well:'井台',yard:'院子',garden:'菜园'};
 const BUILDING_NAMES={granary:'储粮设施',workshop:'生产设施',shelter:'住所',wall:'防护设施'};
-const ANIMAL_NAMES={chickens:'鸡',cows:'牛',sheep:'羊',rabbit:'野兔',deer:'鹿',fox:'狐狸'};
+const ANIMAL_NAMES={bird:'林鸟',chickens:'鸡',cows:'牛',sheep:'羊',rabbit:'野兔',deer:'鹿',fox:'狐狸'};
 
 function outdoorEntities(world,w,people,animals) {
   const entrances={...world.scene3d?.entrances,...world.homes3d?.entrances};
@@ -3503,8 +3519,9 @@ function outdoorEntities(world,w,people,animals) {
   return [...doors,...facilities,...timber,...plants,...fields,...works,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
-    ...animals.map(a=>({id:a.id,kind:a.wild?'scenery':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
-      tool:CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:ANIMAL_NAMES[a.kind]+(a.ready===undefined?'':` · 可收集 ${a.ready}`),animal:a}))];
+    ...animals.map(a=>({id:a.id,kind:a.kind==='bird'?'scenery':a.wild?'wildAnimal':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
+      tool:a.wild?'basket':CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:ANIMAL_NAMES[a.kind]+(a.afraid?' · 受惊':a.wild && a.kind!=='bird'?` · 信任 ${w.wildTrust?.[a.id]?.trust??0}/4`:
+        a.ready===undefined?'':` · 可收集 ${a.ready}`),labelHeight:a.kind==='bird'?3.9:undefined,animal:a}))];
 }
 const entityGap=(p,e)=>e.rect?distanceToRect(p,e.rect):distanceTo(p,e.at);
 
@@ -3577,6 +3594,19 @@ async function useOutdoorEntity(e,from) {
       }
     }
     const access=S.view.homeAccess?.[e.room];
+    if (access?.resident && S.view.layout && ui.tool==='hoe') {
+      const kind=S.view.homeRoads?.[e.room]?.present===false?'road_lay':'road_remove';
+      const dialog=$('campPropDialog'), action=$('campPropAction');
+      $('campPropTitle').textContent='住宅小路';
+      $('campPropText').textContent=kind==='road_lay'?'铺设淡黄色小路需要一份石料。':'移除住宅门前的小路。';
+      $('campPropDetail').hidden=true;
+      $('campPropOptions').replaceChildren();
+      action.hidden=false; action.textContent=kind==='road_lay'?'铺路':'移除小路';
+      action.onclick=()=>{dialog.close();void performCamp({kind,room:e.room,from},null);};
+      keys.clear();
+      if (!dialog.open) dialog.showModal();
+      return;
+    }
     if (access?.resident && access.damage && ui.tool==='hammer') {
       await performCamp({kind:'home_fix',room:e.room,tool:ui.tool,from},null);
       return;
@@ -3598,6 +3628,30 @@ async function useOutdoorEntity(e,from) {
       await performCamp({kind:site?'build':'repair',target:e.target,from});return;
     }
     $('campToast').textContent=e.name+' · 当前没有可进行的施工。';
+    return;
+  }
+  if (e.kind==='wildAnimal') {
+    if (ui.tool!=='basket') { $('campToast').textContent='拿篮子，慢慢靠近并投喂。';return; }
+    const result=await performCamp({kind:'animal_feed',target:e.target,tool:'basket',from,to:e.at});
+    if (result?.ok) $('campToast').textContent=`投喂成功 · 信任 ${result.trust}/4`;
+    return;
+  }
+  if (e.kind==='animal' && ui.tool==='axe') {
+    const dialog=$('campPropDialog'), action=$('campPropAction');
+    $('campPropTitle').textContent='屠宰'+ANIMAL_NAMES[e.animal.kind];
+    $('campPropText').textContent='会惊吓同圈动物。受惊动物两天内停产，屠宰所得肉也会减少。';
+    $('campPropOptions').replaceChildren(); $('campPropDetail').hidden=true;
+    action.hidden=false;action.textContent='确认屠宰';
+    action.onclick=()=>{
+      dialog.close();
+      const current=campHerds.get('cvA')?.find(a=>a.id===e.id), walker=WALK[walkKey('cvA','p1')];
+      if (current && walker) void performCamp({kind:'animal_slaughter',target:e.id,tool:'axe',
+        from:[walker.x+.5,walker.y+.5],to:[current.x,current.z]}).then(r=>{
+        if(r?.ok) $('campToast').textContent=`获得肉 ×${r.meat}`;
+      });
+    };
+    keys.clear();
+    if (!dialog.open) dialog.showModal();
     return;
   }
   if (e.tool!==ui.tool) { $('campToast').textContent=`需要${TOOL_ZH[e.tool]}。`; return; }

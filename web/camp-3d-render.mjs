@@ -174,7 +174,9 @@ export function animalBoxes(a,time) {
     const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
     const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
     const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
-    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod};
+    const flight=a.kind==='bird'?2.7+.7*Math.sin(time*1.8+a.phase):0;
+    const flap=b.fx==='wing'?.095*Math.sin(time*15):0;
+    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod+flight+flap};
   });
 }
 function actor(data,p,frame) { actorGeometry(p,frame,box=>prism(data,box)); }

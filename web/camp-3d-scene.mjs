@@ -305,9 +305,9 @@ function livestock3d(s, world) {
     const herd=world.ecoSources?.[ANIMAL_ITEMS[kind]] ??
       Array.from({length:Math.min(count,limit)},(_,slot)=>({id:`${kind}:${slot}`,slot,mature:true}));
     for (const [i, animal] of herd.entries()) {
-      const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(animal.slot/limit)*.34;
+      const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(i/limit)%3*.34;
       const boxes=[], size=animal.mature ? 1 : .65;
-      s.animals.push({id:animal.id,ready:animal.ready,x:px,z:pz,r:r*size,kind,boxes,speed:kind==='chickens'?1.0:.63,
+      s.animals.push({id:animal.id,afraid:animal.afraid,ready:animal.ready,x:px,z:pz,r:r*size,kind,boxes,speed:kind==='chickens'?1.0:.63,
         habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
       const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x:x*size,y:y*size,z:z*size,w:w*size,h:h*size,d:d*size,color,fx});
       if (kind==='chickens') {
@@ -386,8 +386,17 @@ export function outdoorStage(world, bridges, rocks) {
 }
 
 function wildlife3d(s, places) {
-  for (const [i,{x,z,kind}] of (places??[]).entries()) {
+  for (const {id,x,z,kind} of places??[]) {
     const boxes=[], b=(x,y,z,w,h,d,color,fx)=>boxes.push({x,y,z,w,h,d,color,fx});
+    if (kind==='bird') {
+      b(-.09,0,-.21,.18,.17,.41,'#737E84');
+      b(-.085,.08,.1,.17,.15,.19,'#435762');
+      b(-.035,.105,.25,.07,.055,.13,'#C39C5E');
+      b(-.26,.04,-.12,.18,.05,.23,'#536875','wing');
+      b(.08,.04,-.12,.18,.05,.23,'#536875','wing');
+      s.animals.push({id,x,z,r:0,kind,boxes,wild:true,speed:2.4,habitat:{x:x-7,z:z-7,w:14,d:14}});
+      continue;
+    }
     const rabbit=kind==='rabbit', deer=kind==='deer';
     const coat=rabbit?'#8D8273':deer?'#AE835A':'#B2663F';
     const leg=deer?.69:rabbit?.15:.28, length=deer?.85:rabbit?.37:.56;
@@ -407,7 +416,7 @@ function wildlife3d(s, places) {
     b(-.105,leg+.15,-length/2-tail+.025,.21,.16,tail,rabbit?'#E0D4B6':coat);
     if (!rabbit && !deer) b(-.107,leg+.16,-length/2-tail,.215,.155,.13,'#E3CCAA');
     const radius=deer?.63:rabbit?.36:.57;
-    s.animals.push({id:`wild:${i}`,x,z,r:radius,kind,boxes,wild:true,speed:rabbit?1.65:1.2,
+    s.animals.push({id,x,z,r:radius,kind,boxes,wild:true,speed:rabbit?1.65:1.2,
       habitat:{x:x-4,z:z-4,w:8,d:8}});
   }
 }

@@ -28,7 +28,8 @@ test('主河沿用聚落河轴，北谷支流汇入主河且南端生成瀑布',
     const a=wildLandscape(seed,1), old=campTerrain(seed,false,1);
     for(const z of [0,24,79]) assert.equal(a.river(z),old.riverCenter(z*16)/16);
     assert.equal(a.sideStream(a.junction),a.river(a.junction));
-    assert.ok(a.channel(a.sideStream(-45),-45)>0);
+    const branch=(a.branchSource+a.junction)/2;
+    assert.ok(a.channel(a.sideStream(branch),branch)>0);
     assert.ok(a.waterHeight(a.source)>a.waterHeight(a.fall));
     const mesh=wildRegion(a,Math.floor(a.river(a.fall)/REGION_SIZE),Math.floor(a.fall/REGION_SIZE));
     assert.ok(vertices(mesh).some(([,y,,material])=>material===-2 && y<-20));
@@ -40,7 +41,7 @@ test('移动沿桥过河，河面、三侧山脊、南崖和树干挡住行走',
   assert.ok(!a.walkable(close,19));
   const across=moveWildWalker(a,x-5,z,10,0,z);
   assert.ok(across[0]>x+4);
-  assert.ok(!a.walkable(-70,18) && !a.walkable(193,18) && !a.walkable(66,-75));
+  assert.ok(!a.walkable(-236,18) && !a.walkable(355,18) && !a.walkable(66,-218));
   assert.ok(a.southEdge(25)!==a.southEdge(60));
   const edge=a.southEdge(65);
   assert.ok(!a.walkable(65,edge+.2));

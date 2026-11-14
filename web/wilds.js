@@ -1,3 +1,4 @@
+import { generateCampLayout } from './camp-layout.mjs';
 import { campCamera, createCampRenderer } from './camp-3d-render.mjs';
 import { moveWildWalker, regionWindow, wildLandscape, wildRegion, wildDetails, WILDS, REGION_SIZE } from './wild-landscape.mjs';
 import { walkDirection } from './walk.mjs';
@@ -70,7 +71,7 @@ function frame(now) {
   boundedSample(stats.renderMs,performance.now()-start);
   if (stats.frames++%10===0) {
     const where=landscape.land(player.x,player.z)<9?'南缘悬崖':
-      landscape.rim(player.x,player.z)<15?'山脊山麓':player.z<-35?'北侧山谷':Math.abs(player.z-crossing)<4?'营地路口':'荒野河谷';
+      landscape.rim(player.x,player.z)<15?'山脊山麓':player.z<-100?'北侧山谷':Math.abs(player.z-crossing)<4?'营地路口':'荒野河谷';
     status.textContent=where+' · '+Math.floor(player.x)+'，'+Math.floor(player.z)+' · 地图种子 '+landscape.seed;
   }
   requestAnimationFrame(frame);
@@ -101,8 +102,8 @@ async function start() {
   const candidate=Number(params.get('seed'));
   const hasSeed=params.has('seed') && Number.isSafeInteger(candidate);
   const seed=hasSeed?candidate:w?.mapSeed??0;
-  const version=hasSeed?1:w?.layoutVersion??0;
-  crossing=(hasSeed?null:w?.layout?.crossZ)??24;
+  const version=hasSeed?2:w?.layoutVersion??0;
+  crossing=(hasSeed?generateCampLayout(seed,version).crossZ:w?.layout?.crossZ)??24;
   landscape=wildLandscape(seed,version);
   const bridgeX=landscape.river(crossing);
   const spawn=Array.from({length:14},(_,i)=>bridgeX-6-i*.5).find(x=>landscape.walkable(x,crossing,crossing));

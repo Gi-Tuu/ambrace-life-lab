@@ -12,9 +12,10 @@ function sources(w, item) {
     id: item === 'fruit' ? `fruit:${row.id}` : `${group}:${row.id}`, slot: row.slot,
     mature: w.t - row.born >= MATURE_DAYS[group] * DAY_TICKS,
   }));
-  return Array.from({ length: s.livestock?.[group] ?? 0 }, (_, slot) => ({
+  const dead=Object.keys(s.culledAnimals??{}).filter(id=>id.startsWith(group+':')).length;
+  return Array.from({ length: (s.livestock?.[group] ?? 0)+dead }, (_, slot) => ({
     id: `${ANIMAL_ITEMS[group] ? group : item}:${slot}`, slot, mature: true,
-  }));
+  })).filter(row=>!s.culledAnimals?.[row.id]);
 }
 
 export function restoreSources(w) {
@@ -45,7 +46,7 @@ export function sourceView(w) {
   const s = w.survival;
   if (!s.farmLife) return undefined;
   return Object.fromEntries(Object.keys(GROUPS).map(item => [item, sources(w, item).map(row => ({
-    ...row, ready: s.standing[item][row.id] ?? 0,
+    ...row, afraid:(s.frightenedAnimals?.[row.id]??0)>w.t, ready: s.standing[item][row.id] ?? 0,
   }))]));
 }
 
@@ -59,11 +60,14 @@ export function addStanding(w, item, units, cap, eligible) {
   const rows = sources(w, item), live = new Set(rows.map(row => row.id));
   for (const id of Object.keys(ledger)) {
     if (live.has(id)) continue;
-    if (item === 'fruit') s.produce[item] -= ledger[id];
+    if (item === 'fruit' || s.culledAnimals?.[id]) s.produce[item] -= ledger[id];
     delete ledger[id];
   }
-  const producers = rows.filter(row => row.mature && (!eligible || eligible.has(row.id)));
+  const producers = rows.filter(row => row.mature && (s.frightenedAnimals?.[row.id]??0)<=w.t && (!eligible || eligible.has(row.id)));
   if (producers.length === 0) return 0;
+  if (item==='milk' || item==='wool') {
+    units=Math.floor(units*producers.length/Math.max(1,rows.length));
+  }
   let accepted = 0;
   const offset = Math.floor(w.t / DAY_TICKS);
   for (let n = 0; n < units && s.produce[item] < cap; n += 1) {

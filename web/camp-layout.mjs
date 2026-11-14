@@ -43,9 +43,11 @@ export const TIMBER_GROVE=Object.freeze([
   {id:'grove6',x:24.5,z:52.5,site:'garden'},
 ].map(Object.freeze));
 
-export function generateCampLayout(seed) {
+export const CURRENT_LAYOUT=2;
+
+export function generateCampLayout(seed,version=1) {
   const pick = (key,min,max) => min + Math.floor(campHash(seed,key)*(max-min+1));
-  const {river}=campTerrain(seed,false,1);
+  const {river}=campTerrain(seed,false,version);
   const hubZ=pick('hub-z',20,36), crossZ=hubZ+pick('cross-z',7,10);
   const bank=Math.min(...Array.from({length:14},(_,i)=>river(hubZ-8+i)));
   const hubX=Math.min(pick('hub-x',19,31),Math.floor(bank)-21);
@@ -80,6 +82,27 @@ export function generateCampLayout(seed) {
       const id=`house${row*3+col+1}`;
       sites[id]=[suburbX+col*11+pick(`${id}-x`,-1,1),z];
       links.push([lane,id,[]]);
+    }
+  }
+  if (version>=2) {
+    // Nine separated building parcels distributed along a seeded, branching lane.
+    const lanes=Array.from({length:3},(_,row)=>[
+      pick('v2-lane-x'+row,87,91), 18+row*22+pick('v2-lane-z'+row,-2,2),
+    ]);
+    const parcels=lanes.flatMap(([x,z],row)=>Array.from({length:3},(_,col)=>({
+      row,at:[x+col*11+pick('parcel-x'+row+':'+col,-1,1),
+        z+pick('parcel-z'+row+':'+col,-4,4)],
+    })));
+    parcels.sort((a,b)=>campHash(seed,'deed:'+a.at.join(','))-campHash(seed,'deed:'+b.at.join(',')));
+    for (let i=links.length-1;i>=0;i--) if (links[i][0].startsWith('lane') || links[i][1].startsWith('lane')) links.splice(i,1);
+    for (const [row,[x,z]] of lanes.entries()) {
+      nodes['lane'+row]=[x-4,z];
+      links.push([row?'lane'+(row-1):'workshop','lane'+row,[]]);
+    }
+    for (const [i,{row,at}] of parcels.entries()) {
+      const room='house'+(i+1);
+      sites[room]=at;
+      links.push(['lane'+row,room,[]]);
     }
   }
   for (const [room,[dx,dz]] of Object.entries({yard:[6,2],garden:[-7,10],watch:[-8,-3],well:[-3,4]})) {

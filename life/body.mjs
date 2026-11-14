@@ -1,3 +1,4 @@
+import { changeRoad, roadCandidate } from './home-roads.mjs';
 import { homeEntry, householdAccess } from './home-access.mjs';
 import { discussionAction, discussionPaths, discussionSupport } from './settlement-social.mjs';
 import { till } from './farmland.mjs';
@@ -37,6 +38,8 @@ export const BASE_KINDS = {
   // Phase A 生存模式动作（仅 survival 候选会出现，lab/town 不受影响）。
   house_work: { impulse: .4, cost: .08, label: '为自己的房子加工木石' },
   harvest: { impulse: 0.3, cost: 0.08, label: '收获成熟菜畦入仓' },
+  road_lay: { impulse:.25,label:'修住宅小路' },
+  road_remove: { impulse:.23,label:'移除住宅小路' },
   discuss_open: { impulse:.15, label:'发起集体讨论' },
   discuss_join: { impulse:.15, label:'参加讨论' },
   discuss_decline: { impulse:.08, label:'谢绝讨论' },
@@ -65,7 +68,7 @@ import { isAlive, livingResidents } from './viability.mjs';
 // P0-2 统一基础行动成本：玩家与 AI 同一动作付同一存续代价（execute 与 survAct/camp 共用此表）。
 // 数值与原 affordancesFor 候选逐字相同 ⇒ AI 轨迹不变；玩家侧从此按同表结算，不再免费劳动。
 export const SURV_COST = Object.freeze({
-  discuss_open:.05, discuss_join:.04, discuss_share:.035, discuss_decline:.015, discuss_leave:.015,
+  road_lay:.09, road_remove:.07, discuss_open:.05, discuss_join:.04, discuss_share:.035, discuss_decline:.015, discuss_leave:.015,
   house_work: 0.08, harvest: 0.08, plant: 0.06, till: 0.1, gather: 0.07, plan: 0.05, build: 0.1, repair: 0.06,
   deposit: 0.03, withdraw: 0.03, forage: 0.12, exchange: 0.12, expand: 0.15, move_to: 0.06,
 });
@@ -416,6 +419,9 @@ export function affordancesFor(world, agentId) {
       }
     } else out.push(proposed);
   }
+  const road=roadCandidate(world,agentId);
+  if (road) out.push({...road,id:road.kind,label:BASE_KINDS[road.kind].label,
+    cost:SURV_COST[road.kind],impulse:BASE_KINDS[road.kind].impulse,serves:{stimulation:.24},goalValue:road.value});
   for (const {kind,value} of discussionPaths(world,agentId)) out.push({
     id:kind,kind,label:BASE_KINDS[kind].label,impulse:BASE_KINDS[kind].impulse,cost:SURV_COST[kind],
     serves:{social:.3}, goalValue:value,
@@ -505,6 +511,12 @@ function actuateInner(world, agentId, action) {
       if (sheltered) return {action,ok:true,code:'OK',observation:'在住处休息',satiated:'energy',amount:.15,
         evt:evt({kind:'rest',valence:.25,serves:'energy'})};
       return { action, ok: true, code: 'OK', observation: '靠着墙歇了会儿', satiated: 'energy', amount: 0.05, evt: evt({ kind: 'rest', valence: 0.2, serves: 'energy' }) };
+    }
+    case 'road_lay':
+    case 'road_remove': {
+      const r=changeRoad(world,agentId,action);
+      return {...r,action,observation:BASE_KINDS[action.kind].label,
+        ...(r.ok?{evt:evt({kind:action.kind,valence:.18,serves:'stimulation'})}:{})};
     }
     case 'discuss_open':
     case 'discuss_join':

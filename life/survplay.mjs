@@ -1,3 +1,5 @@
+import { animalAction } from './camp-animals.mjs';
+import { changeRoad } from './home-roads.mjs';
 import { facilityGate, facilityOf } from '../web/camp-facility.mjs';
 import { changeHomeAccess, doorWork, homeAccessView, homeEntry, householdAccess } from './home-access.mjs';
 import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
@@ -55,7 +57,7 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
   world.layoutVersion = layoutVersion;
-  if (layoutVersion === 1) world.campLayout = generateCampLayout(mapSeed);
+  if ([1,2].includes(layoutVersion)) world.campLayout = generateCampLayout(mapSeed,layoutVersion);
   if (farmLife) world.survival.farmLife = true;
   if (settlementLife) {
     world.survival.settlementLife = true;
@@ -401,7 +403,7 @@ function reproduce(w, log) {
 export const PLAYER_TIME = Object.freeze({
   move: 25, gather: 75, harvest: 75, plant: 75, plan: 75, build: 75, repair: 75,
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
-  home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
+  animal_feed:25, animal_slaughter:75, road_lay:75, road_remove:50, home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
   camp_store: 25, camp_take: 25, camp_eat: 25, coop_request: 25,
 });
@@ -448,6 +450,16 @@ function survActInner(sp, body) {
     w.campPlayerRoom=null;
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
     return {ok:true};
+  }
+  if (kind==='animal_feed' || kind==='animal_slaughter') {
+    const r=animalAction(w,body);
+    if (r.ok) w.agents.p1.viab.spend(kind==='animal_feed'?.015:.1);
+    return r;
+  }
+  if (kind==='road_lay' || kind==='road_remove') {
+    const r=changeRoad(w,'p1',body);
+    if (r.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
+    return r;
   }
   if (kind==='home_request') {
     const host=w.agents[body.target], room=body.home;
@@ -625,7 +637,7 @@ export function survView(sp) {
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
     camp:{containers:s.campContainers??{},mealsEaten:s.mealsEaten??0,timber:campTimberView(w)},
-    housing: w.housing, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
+    housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
@@ -672,7 +684,7 @@ export function dumpSurv(sp) {
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
     { ...options, eventRulesVersion: raw ? raw.eventRulesVersion ?? LEGACY_EVENT_RULES : options?.eventRulesVersion,
-      mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: raw?.layoutVersion === 1 ? 1 : 0 });
+      mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
     w.t = raw.t;

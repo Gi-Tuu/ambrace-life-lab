@@ -235,7 +235,7 @@ test('宿主生存审议有独立在场闸门，重开保留对照且新地图�
     const second=await host.ctl({action:'survival_reset',confirm:true});
     assert.ok(first.ok && second.ok);
     assert.notEqual(first.mapSeed,second.mapSeed);
-    assert.equal(host.snapshot().survival.layoutVersion,1);
+    assert.equal(host.snapshot().survival.layoutVersion,2);
     assert.equal(host.snapshot().A.t,before.A.t);
     assert.equal(host.snapshot().B.t,before.B.t);
     assert.equal(host.snapshot().survival.t,0);

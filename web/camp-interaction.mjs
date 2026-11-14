@@ -75,3 +75,13 @@ export function nearResident(from,to) {
     Array.isArray(to) && to.length===2 && to.every(Number.isFinite) &&
     Math.hypot(from[0]-to[0],from[1]-to[1])<=RESIDENT_REACH;
 }
+
+export function wildHabitats(layout) {
+  const {yard,garden,home,well,watch,workshop}=layout?.sites??CAMP_SITES;
+  const habitats=layout
+    ? [[yard[0]-5,yard[1]+17,'rabbit'],[garden[0]-9,garden[1]+12,'fox'],[home[0]-5,home[1]-8,'rabbit'],
+      [well[0]+2,well[1]+7,'deer'],[watch[0]+5,watch[1]-4,'fox'],[workshop[0]+8,workshop[1]+6,'deer']]
+    : [[17,23,'rabbit'],[25,46,'fox'],[36,31,'rabbit'],[58,36,'deer'],[73,19,'fox'],[55,17,'deer']];
+  habitats.push([garden[0]-6,garden[1]+6,'bird'],[watch[0]+3,watch[1]+3,'bird']);
+  return habitats.map(([x,z,kind],i)=>({id:`wild:${i}`,x,z,kind}));
+}

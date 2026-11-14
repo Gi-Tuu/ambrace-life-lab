@@ -2,7 +2,7 @@ import { campHash, campTerrain, hash2 } from './camp-terrain.mjs';
 import { TOWN_SIZE } from './camp-layout.mjs';
 
 export const REGION_SIZE=24;
-export const WILDS=Object.freeze({west:-84,east:TOWN_SIZE.width+84,north:-84,south:TOWN_SIZE.depth+100});
+export const WILDS=Object.freeze({west:-240,east:TOWN_SIZE.width+240,north:-220,south:TOWN_SIZE.depth+270});
 const {west,east,north,south}=WILDS;
 const WORLD_FLOOR=-29;
 const smooth=(a,b,v)=>{
@@ -16,14 +16,14 @@ export function wildLandscape(seed,version) {
   const phase=campHash(seed,'wilds')*Math.PI*2;
   const width=z=>riverHalfWidth(z*16)/16;
   const river=z=>riverCenter(z*16)/16;
-  const source=-60, junction=-29, branchSource=source+2;
+  const source=-191, junction=-96, branchSource=source+2;
   const sideWidth=z=>.88*smooth(branchSource,branchSource+5,z);
   const sourceWidth=z=>width(z)*smooth(source,source+5,z);
   const sideStream=z=>river(z)-(.43*(junction-z)+3*Math.sin((junction-z)*.15));
-  const southEdge=x=>138+7*Math.sin(x*.057+phase)+4*Math.sin(x*.16+phase*2);
-  const northEdge=x=>-64+8*Math.sin(x*.062+phase)+4*Math.cos(x*.14);
-  const westEdge=z=>-57+8*Math.sin(z*.063+phase)+3*Math.sin(z*.17);
-  const eastEdge=z=>175+7*Math.sin(z*.058+phase)-4*Math.cos(z*.15);
+  const southEdge=x=>296+17*Math.sin(x*.057+phase)+4*Math.sin(x*.16+phase*2);
+  const northEdge=x=>-199+16*Math.sin(x*.062+phase)+4*Math.cos(x*.14);
+  const westEdge=z=>-214+15*Math.sin(z*.063+phase)+3*Math.sin(z*.17);
+  const eastEdge=z=>336+17*Math.sin(z*.058+phase)-4*Math.cos(z*.15);
   const rim=(x,z)=>Math.min(z-northEdge(x),x-westEdge(z),eastEdge(z)-x);
   const land=(x,z)=>southEdge(x)-z;
   const channel=(x,z)=> {
@@ -32,7 +32,7 @@ export function wildLandscape(seed,version) {
     const branch=z>=branchSource && z<=junction ? sideWidth(z)-Math.abs(x-sideStream(z)) : -Infinity;
     return Math.max(0,main,branch);
   };
-  const waterHeight=z=>.75-(z-source)*.015;
+  const waterHeight=z=>.75-(z-source)*.008;
   const isBridge=(x,z,crossing=24)=> Math.abs(z-crossing)<1.12 &&
     Math.abs(x-river(crossing))<3.65;
   function rawHeight(x,z) {
@@ -72,8 +72,8 @@ export function wildLandscape(seed,version) {
     const tx=Math.round((x-1)/2)*2+1, tz=Math.round((z-1)/2)*2+1;
     return Math.hypot(x-tx,z-tz)>=.37 || treeAt(tx,tz,crossing)===null;
   }
-  let fall=120;
-  while (fall<158 && land(river(fall),fall+1)>0) fall++;
+  let fall=270;
+  while (fall<324 && land(river(fall),fall+1)>0) fall++;
   return {seed,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,waterHeight,
     isBridge,rawHeight,height,walkable,treeAt,fall};
 }
@@ -136,7 +136,7 @@ export function wildRegion(world,cx,cz) {
     face(out,[x-w*2,-20.98,lip+4.6],[x+w*2,-20.98,lip+4.6],
       [x+w*2.6,-20.98,lip+8],[x-w*2.6,-20.98,lip+8],[.45,.58,.59],-1);
   }
-  if (z0+REGION_SIZE>=129 && z0<163) {
+  if (z0+REGION_SIZE>=272 && z0<325) {
     for (let ix=x0;ix<x0+REGION_SIZE;ix+=2) {
       const z=world.southEdge(ix)+6;
       if (z<z0 || z>=z0+REGION_SIZE) continue;

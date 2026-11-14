@@ -89,7 +89,7 @@ export function stepEcosystem(world, log) {
     if (ageDays(t, c.born) > ECO.chickenLifespan) c.health = 0; // 自然衰老
   }
   for (let i = chickens.length - 1; i >= 0; i -= 1) if (chickens[i].health <= 0) { chickens.splice(i, 1); deaths += 1; }
-  const matureCh = chickens.filter((c) => ageDays(t, c.born) >= ECO.chickenMatureDays && c.health > 0.3);
+  const matureCh = chickens.filter((c) => ageDays(t, c.born) >= ECO.chickenMatureDays && c.health > 0.3 && (s.frightenedAnimals?.['chickens:'+c.id]??0)<=t);
   const egg = Math.round(matureCh.length * SEASON_EGG[season] * (s.farmLife ? fedRatio : 1));
   if (chickens.length < ECO.chickenCap && fedRatio >= 0.99) { // 吃饱才繁殖
     for (const c of matureCh) {
