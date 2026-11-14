@@ -3,7 +3,7 @@
 // 只作用于 world.survival.coop.enabled（默认关）；lab/town 无 survival ⇒ 逐位不变，
 // Phase A/B（coop 关）轨迹亦不变。配对闸门用同 seed「独建 vs 协作」比完工时间。
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
-import { BUILDINGS, GATHER_BY_LOC, coopPoolGather, doPlan, doBuild } from './production.mjs';
+import { BUILDINGS, gatherPlace, coopPoolGather, doPlan, doBuild } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 import { laborStage } from './households.mjs';
 // 位置只能经 body.move 改：它同时维护 world.occupancy。直接写 world.loc[id] 会让
@@ -83,8 +83,7 @@ function execTick(world, t) {
       if (s.inv.wood >= cost.wood && s.inv.stone >= cost.stone) t.phase = (s.repairEarly && t.repair) ? 'repair' : 'plan';
       else {
         const res = s.inv.wood < cost.wood ? 'wood' : 'stone';
-        const stock = s.resStock ?? {};
-        const loc = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res && (stock[l] ?? 0) > 0); // P0-3：去有储量的地点
+        const loc = gatherPlace(world,res,world.loc[id]);
         if (loc) {
           relocate(id, loc);
           if (coopPoolGather(world, id).ok) world.onLegacyLabor?.(id, 'gather');
@@ -182,7 +181,7 @@ export function cooperationCandidate(world, id) {
     if (share) {
       act = here === 'store' ? { kind: 'deposit', type: share, id: `deposit:${share}` } : move('store');
     } else {
-      const source = Object.keys(GATHER_BY_LOC).find(loc => GATHER_BY_LOC[loc] === missing && s.resStock[loc] > 0);
+      const source = gatherPlace(world,missing,here);
       if (!source) return null;
       act = here === source ? { kind: 'gather', id: 'gather' } : move(source);
     }

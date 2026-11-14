@@ -14,6 +14,15 @@ export const BUILDINGS = Object.freeze({
   wall: { label: '防护设施', cost: { wood: 3, stone: 6 }, labor: 8, desc: '减轻天气对建筑的损耗' },
 });
 export const GATHER_BY_LOC = Object.freeze({ yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' });
+export const gatherResource = (world,loc) => world.districts?.[loc]?.resource ?? GATHER_BY_LOC[loc];
+export const buildLot = (world,loc) => world.districts?.[loc]?.lot ?? constructionLot(loc,world.campLayout);
+
+export function gatherPlace(world, resource, here) {
+  const available=loc=>gatherResource(world,loc)===resource && (world.survival.resStock?.[loc]??0)>0;
+  if (world.districts && available(here)) return here;
+  return Object.keys(GATHER_BY_LOC).find(available) ?? Object.keys(world.districts??{}).find(available);
+}
+
 export const LABOR_PER_ACTION = 2;
 
 // P0-3 轻量资源储量：每个采集地点一份可耗尽的账，采集扣减、随世界时间再生。
@@ -45,7 +54,7 @@ export function effectiveMods(world) {
 
 export function doGather(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const res = GATHER_BY_LOC[loc];
+  const res = gatherResource(world,loc);
   if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
   const stock = (s.resStock ??= { ...RES_STOCK });
   const have = stock[loc] ?? 0;
@@ -63,6 +72,8 @@ export function regenResources(world) {
   const s = world.survival;
   const stock = (s.resStock ??= { ...RES_STOCK });
   for (const loc of Object.keys(RES_STOCK)) stock[loc] = Math.min(RES_STOCK[loc], (stock[loc] ?? 0) + RES_REGEN);
+  for (const [loc,{capacity}] of Object.entries(world.districts??{}))
+    stock[loc] = Math.min(capacity, (stock[loc] ?? 0) + RES_REGEN);
   // 树木视觉与资源账同源：regrowAt 到期 ⇒ 树成熟并回补 2 木料（与 camp_chop 扣减对称），随后清零。
   const trees = s.campTrees;
   if (trees) {
@@ -81,20 +92,19 @@ export function regenResources(world) {
 export function coopPoolGather(world, agentId) {
   const r = doGather(world, agentId);
   const bag = world.pinv?.[agentId];
-  if (bag) { world.survival.inv[r.res] += bag[r.res]; bag[r.res] = 0; }
+  if (r.ok && bag) { world.survival.inv[r.res] += bag[r.res]; bag[r.res] = 0; }
   return r;
 }
 
-export function doPlan(world, agentId, type) {
+export function doPlan(world, agentId, type, loc = world.loc[agentId]) {
   const s = world.survival;
   const def = BUILDINGS[type];
   if (!def) return { ok: false, code: 'NO_TYPE' };
-  const loc = world.loc[agentId];
   if (!(world.outdoor ?? []).includes(loc)) return { ok: false, code: 'NOT_OUTDOOR' };
-  const lot=constructionLot(loc,world.campLayout);
+  const lot=buildLot(world,loc);
   if (!lot) return {ok:false,code:'NO_LOT'};
   if ([...s.sites,...s.buildings].some(b=>{
-    const occupied=b.lot??constructionLot(b.loc,world.campLayout);
+    const occupied=b.lot??buildLot(world,b.loc);
     return b.loc===loc || occupied && overlapsLot(lot,occupied,.35);
   })) return {ok:false,code:'OCCUPIED'};
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
@@ -103,7 +113,7 @@ export function doPlan(world, agentId, type) {
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
   world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
   world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
-  s.sites.push({ type, loc, at: siteOf(loc,world.campLayout), lot, progress: 0 });
+  s.sites.push({ type, loc, at: world.districts?.[loc]?.at ?? siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
 
@@ -118,7 +128,7 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
-    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1, ...(site.contributors?{contributors:site.contributors}:{}) });
+    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??buildLot(world,site.loc), integrity: 1, ...(site.contributors?{contributors:site.contributors}:{}) });
     return { ok: true, code: 'OK', completed: site.type };
   }
   return { ok: true, code: 'OK', completed: null, progress: site.progress };

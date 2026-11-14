@@ -2,7 +2,7 @@ import { findRegionEntity, regionPoint, regionReady } from '../web/camp-region-e
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
-import { WORLD_TW, WORLD_TH } from './geometry.mjs';
+import { worldSite, WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../web/camp-layout.mjs';
@@ -47,17 +47,20 @@ export function residentContact(world, {target,room,from,to}) {
   if (!nearResident(from,to)) return 'RESIDENT_OUT_OF_REACH';
   const site=world.loc[target];
   if (room!==null) {
-    return room===site && room===world.loc.p1 && pointIn(from,16.01,12.01) && pointIn(to,16.01,12.01)
+    return !world.survival.districtTravel?.[target] && room===site && room===world.loc.p1 && pointIn(from,16.01,12.01) && pointIn(to,16.01,12.01)
       ? null : 'RESIDENT_OUT_OF_REACH';
   }
-  if (!pointIn(from,WORLD_TW,WORLD_TH) || !pointIn(to,WORLD_TW,WORLD_TH) || world.campPlayerRoom) {
+  if (!regionPoint(from) || !regionPoint(to) || world.campPlayerRoom) {
     return 'RESIDENT_OUT_OF_REACH';
   }
-  const at=campSite(site,world.campLayout);
+  const at=worldSite(world,site);
   if (!at) return 'RESIDENT_OUT_OF_REACH';
   const destination=at.map(n=>n+.5);
   if (distanceTo(to,destination)<=2.5) return null; // outdoor slots surround the logical anchor
-  const travel=world.residentTravel?.[target], start=campSite(travel?.from,world.campLayout);
+  const trip=world.survival.districtTravel?.[target];
+  const end=trip && worldSite(world,trip.to);
+  if (end && segmentGap(to,destination,end.map(n=>n+.5))<=14) return null;
+  const travel=world.residentTravel?.[target], start=worldSite(world,travel?.from);
   if (start && travel.to===site && world.t-travel.t<=4 && segmentGap(to,start.map(n=>n+.5),destination)<=6) return null;
   return 'RESIDENT_OUT_OF_REACH';
 }

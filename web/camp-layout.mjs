@@ -30,8 +30,9 @@ export const HOUSING_PLOTS = Object.freeze({
   house7: [83,69], house8: [95,69], house9: [107,69],
 });
 
-export function residentialSite(room) {
-  return Object.hasOwn(HOUSING_PLOTS,room)?HOUSING_PLOTS[room]:null;
+export function residentialSite(room, peripheralHomes) {
+  if (Object.hasOwn(HOUSING_PLOTS,room)) return HOUSING_PLOTS[room];
+  return peripheralHomes && Object.hasOwn(peripheralHomes,room) ? peripheralHomes[room] : null;
 }
 
 export const TIMBER_GROVE=Object.freeze([

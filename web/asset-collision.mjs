@@ -42,13 +42,14 @@ export function stampMask(walk, width, height, { mask, x, y, w, h }) {
 }
 
 // 大网格用堆取最优节点，避免对数万像素反复线性扫描候选队列。
-export function pixelPath({walk, tw, th}, [sx, sy], [gx, gy]) {
+export function pixelPath({walk, tw, th, cellAllows, edgeAllows}, [sx, sy], [gx, gy]) {
   if (sx < 0 || sy < 0 || sx >= tw || sy >= th || gx < 0 || gy < 0 || gx >= tw || gy >= th) return null;
   const start = sy * tw + sx, goal = gy * tw + gx;
-  if (!walk[goal]) return null;
+  const allows=cellAllows??(i=>walk[i]);
+  if (!allows(goal)) return null;
   if (start === goal) return [];
-  const distance = new Int32Array(walk.length);
-  const parent = new Int32Array(walk.length);
+  const distance = new Int32Array(tw*th);
+  const parent = new Int32Array(tw*th);
   const heuristic = i => Math.abs(i % tw - gx) + Math.abs(Math.floor(i / tw) - gy);
   const heap = [];
   const better = (a, b) => a.f < b.f || (a.f === b.f && a.g > b.g);
@@ -94,7 +95,8 @@ export function pixelPath({walk, tw, th}, [sx, sy], [gx, gy]) {
     }
     const x = index % tw;
     for (const next of [x > 0 ? index - 1 : -1, x < tw - 1 ? index + 1 : -1, index - tw, index + tw]) {
-      if (!walk[next] || (distance[next] && distance[next] <= g + 1)) continue;
+      if (next<0 || next>=tw*th || (distance[next] && distance[next] <= g + 1) ||
+          !allows(next) || edgeAllows && !edgeAllows(index,next)) continue;
       distance[next] = g + 1;
       parent[next] = index;
       push({ index: next, g: g + 1, f: g + 1 + heuristic(next) });

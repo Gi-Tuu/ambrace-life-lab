@@ -18,9 +18,9 @@ function activeGrant(w,room,g) {
 }
 
 export function homeEntry(w,id,room) {
-  if (!w.survival?.settlementLife || !residentialSite(room)) return ok;
+  if (!w.survival?.settlementLife || !residentialSite(room,w.peripheralHomes)) return ok;
   const deed=w.survival.households?.deeds[room];
-  if (!deed) return fail('NO_HOME');
+  if (!deed) return w.survival.households?.projects[room]?.owner===id && !w.agents[id]?.isPlayer ? ok : fail('NO_HOME');
   if (householdAccess(w,id,room)) return ok;
   if (!deed.owner && deed.listed) return ok;
   if ((w.survival.homeAccess?.[room] ?? []).some(g=>g.to===id && activeGrant(w,room,g))) return ok;
@@ -29,7 +29,7 @@ export function homeEntry(w,id,room) {
 }
 
 export function changeHomeAccess(w,id,{room,target,type,kind}) {
-  if (!w.survival.settlementLife || !residentialSite(room) || !w.survival.households?.deeds[room]) return fail('NO_HOME');
+  if (!w.survival.settlementLife || !residentialSite(room,w.peripheralHomes) || !w.survival.households?.deeds[room]) return fail('NO_HOME');
   if (!['key','invite','permission'].includes(type)) return fail('BAD_ACCESS');
   if (!Object.hasOwn(w.agents,target) || !isAlive(w.agents[target]) || target===id) return fail('NO_RESIDENT');
   const owner=ownerOf(w,room), revoke=kind==='home_revoke';
@@ -46,7 +46,7 @@ export function changeHomeAccess(w,id,{room,target,type,kind}) {
 
 export function doorWork(w,id,room,kind,tool) {
   const s=w.survival;
-  if (!s.settlementLife || !residentialSite(room) || !s.households?.deeds[room]) return fail('NO_HOME');
+  if (!s.settlementLife || !residentialSite(room,w.peripheralHomes) || !s.households?.deeds[room]) return fail('NO_HOME');
   if (tool!=='hammer') return fail('NEED_TOOL');
   const doors=s.brokenDoors??={}, damage=doors[room]??0;
   if (kind==='home_fix') {

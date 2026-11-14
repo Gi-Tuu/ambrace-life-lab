@@ -1,7 +1,8 @@
+import { districtPads } from './camp-districts.mjs';
 import { solarLight } from './camp-sun.mjs';
-import { createCampOutskirts, moveJoinedWalker } from './camp-outskirts.mjs';
+import { createCampOutskirts, joinedRoute, moveJoinedWalker } from './camp-outskirts.mjs';
 import { forestDensity, inCamp, WILDS } from './wild-landscape.mjs';
-import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
+import { facilityGate, FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
 import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, campPlants, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
@@ -14,7 +15,7 @@ import {
   overrideWalk, pathFromWalker, roomAllows,
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
-import { addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
+import { districtResources, addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
 import { actorBoxes, animalBoxes, campCamera, coveredModels, createCampRenderer, rayBox } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
@@ -148,7 +149,7 @@ const riverX = (ty) => 40 + Math.sin(ty * 0.085) * 4 + Math.sin(ty * 0.031) * 2;
 function sitesOf(w) {
   const keys = Object.keys(w.rooms ?? LOCS);
   const out = {};
-  keys.forEach((r, i) => { out[r] = w.layout?.sites[r] ?? SITES[r] ?? residentialSite(r) ?? SITE_FALLBACK[i % SITE_FALLBACK.length]; });
+  keys.forEach((r, i) => { out[r] = w.districts?.[r]?.at ?? w.layout?.sites[r] ?? SITES[r] ?? residentialSite(r,w.peripheralHomes) ?? SITE_FALLBACK[i % SITE_FALLBACK.length]; });
   return out;
 }
 function slotsOf(w, sites) {
@@ -366,6 +367,7 @@ function worldWithCollisions(sites, w) {
     if (scene3d) {
       const boxes=[], previous=worldCache.workProjects;
       const projects=addCampWork(boxes,w,appearance);
+      worldCache.outsideSolids=boxes.filter(b=>b.solid && !inCamp(b.x+b.w/2,b.z+b.d/2));
       for (const project of projects) {
         const old=previous?.find(p=>p.id===project.id);
         project.since=previous && old?.phase!==project.phase ? performance.now() : old?.since??-1000;
@@ -423,6 +425,11 @@ function worldWithCollisions(sites, w) {
     worldCache.collisionRevision = collisionEditor.revision;
   }
   const { scene3d, lifeLayers } = worldCache;
+  const occupied=new Set([...(w.buildings??[]),...(w.sites??[])].map(b=>b.loc));
+  const openLots=(w.outdoor??[]).flatMap(loc=>{
+    const lot=w.districts?.[loc]?.lot??constructionLot(loc,w.layout);
+    return !lot || occupied.has(loc)?[]:[{loc,lot}];
+  });
   const beds=farmBeds(w);
   let life3d;
   if (scene3d) {
@@ -443,7 +450,8 @@ function worldWithCollisions(sites, w) {
       if (lifeLayers.size>8) lifeLayers.delete(lifeLayers.keys().next().value);
     }
   }
-  return { ...worldCache, sites, beds, life3d, timber, blockers:worldCache.visibleBlockers??worldCache.blockers };
+  worldCache.districtResources??=districtResources(w.districts);
+  return { ...worldCache, sites, beds, life3d, timber, openLots, blockers:worldCache.visibleBlockers??worldCache.blockers };
 }
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
@@ -456,9 +464,12 @@ function stampSceneCollision(walk, width, height, scene) {
 function buildWorld(w) {
   const liveSites = sitesOf(w);
   const mapSeed=w.mapSeed??0;
-  const staticSites=campRenderer?Object.fromEntries(Object.entries(liveSites).filter(([room])=>!residentialSite(room))):liveSites;
+  const staticSites=Object.fromEntries(Object.entries(liveSites).filter(([room])=>
+    !w.districts?.[room] && (!campRenderer || !residentialSite(room,w.peripheralHomes))));
+  const pads=districtPads(w.districts);
   const sites=staticSites;
-  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),Object.keys(w.homeRoads??{}).filter(k=>!w.homeRoads[k].present).sort(),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
+  const sig=JSON.stringify([w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
+    .map(([k])=>k).sort(),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -514,6 +525,14 @@ function buildWorld(w) {
     }
     if(!sites.well&&sites.store&&sites.watch){routeSites.crossing=[Math.round(river(34))-4,34];links.push(['store','crossing',[[38,28]]],['crossing','watch',[[49,34],[61,32],[71,23],[72,17],[70,14]]]);}
   }
+  for (const [loc,district] of Object.entries(w.districts??{})) {
+    const home='house-'+loc;
+    if (!district.home || !w.households?.deeds[home] || !w.homeRoads?.[home]?.present) continue;
+    const [x,z]=district.home;
+    const [sx,sz]=district.at;
+    addSegment([(x+.5)*TILE,(z-1.1)*TILE],[(x+.5)*TILE,(sz+2.6)*TILE]);
+    addSegment([(x+.5)*TILE,(sz+2.6)*TILE],[(sx+.5)*TILE,(sz+2.6)*TILE]);
+  }
   for(const [u,v,mids] of links){
     if(!routeSites[u]||!routeSites[v])continue;
     const points=[routeSites[u],...mids,routeSites[v]].map(p=>p.map(n=>n*TILE+8));
@@ -541,7 +560,7 @@ function buildWorld(w) {
   const reserved=Object.keys(sites).map(room=>constructionLot(room,w.layout)).filter(Boolean);
   if (w.households) for (const [x,z] of Object.keys(HOUSING_PLOTS).map(room=>w.layout?.sites[room]??HOUSING_PLOTS[room])) reserved.push({x:x-3.15,z:z-6.5,w:6.3,d:6.8});
   const flatLand=[
-    ...reserved,
+    ...reserved,...pads,
     ...Object.values(sites).map(([x,z])=>({x:x-4.5,z:z-8,w:9,d:11})),
     ...land,
     ...grove.map(({x,z})=>({x:x-1,z:z-1,w:2,d:2})),
@@ -567,7 +586,7 @@ function buildWorld(w) {
   const harvestNodes=w.camp ? campPlants(w.layout,12,mapSeed,w.layoutVersion,w.ecoSources ?
     {...w.ecoSources,fruit:Array.from({length:12},(_,slot)=>({id:`fruit:${slot}`,slot}))} : undefined) : [];
   const landscape=campRenderer && w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
-    {flatLand,hills,roadDistance,plantClearance,harvestNodes}) : null;
+    {flatLand,hills,roadDistance,plantClearance,harvestNodes,districtPads:pads}) : null;
   const terrain = paintTerrain(g, (x,z)=>roadDist(x,z,true), sites, beds, terrainHash, streamCenter, streamHalfWidth), grass=[];
   // 草簇与野花只落在草地，避免覆盖路肩和岸线。
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
@@ -995,7 +1014,19 @@ let roomRoute=null;
 function campBodyWorld(world,openEdge=false) {
   return { ...world, collisionGrid:bodyGrid(world.collisionGrid,TILE,openEdge) };
 }
-function routeForWalker(world, walker, goal) {
+function exteriorAllows(world,x,z) {
+  return world.landscape?.walkable(x,z) &&
+    !(world.outsideSolids??[]).some(b=>rectGap(x,z,b.x,b.z,b.w,b.d)<CAMP_BODY_RADIUS);
+}
+function routeForWalker(world, walker, goal, bodies=[]) {
+  const from=[walker.x+.5,walker.y+.5], to=goal.map(v=>v+.5);
+  if (world.landscape && (!inCamp(...from) || !inCamp(...to))) {
+    const map=campBodyWorld(world,true);
+    const allows=(x,z)=>(inCamp(x,z)?mapAllows(map,x-.5,z-.5):exteriorAllows(world,x,z)) &&
+      bodies.every(b=>Math.hypot(x-b.x,z-b.z)>=b.r+CAMP_BODY_RADIUS+.05);
+    return joinedRoute(from,to,allows)
+      ?.map(p=>p.map(v=>v-.5))??null;
+  }
   const path = pathFromWalker(world, walker, goal);
   if (!world.scene3d) return path;
   world=campBodyWorld(world);
@@ -1043,7 +1074,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   }
   const fits=(x,z,nx,nz)=>separates(x+.5,z+.5,nx+.5,nz+.5,neighbours);
   const step=manual?speed:Math.min(speed,distance);
-  const connected=S.soloSurv && cvId==='cvA' && walker===WALK['cvA:p1'];
+  const connected=S.soloSurv && cvId==='cvA';
   const map=campBodyWorld(world,connected);
   const dxStep=dx/distance*step, dzStep=dz/distance*step;
   const x0=walker.x+.5,z0=walker.y+.5;
@@ -1052,7 +1083,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   const [x,z]=joined
     ? moveJoinedWalker(x0,z0,dxStep,dzStep,
       (x,z,px,pz)=>mapAllows(map,x-.5,z-.5) && fits(px-.5,pz-.5,x-.5,z-.5),
-      campOutskirts(snapshot,world).walkable).map(v=>v-.5)
+      (x,z,px,pz)=>exteriorAllows(world,x,z) && fits(px-.5,pz-.5,x-.5,z-.5)).map(v=>v-.5)
     : moveMapFeet(map,walker.x,walker.y,dxStep,dzStep,fits);
   walker.moving=Math.hypot(x-walker.x,z-walker.y)>.00001;
   walker.x=x; walker.y=z;
@@ -1064,9 +1095,11 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
     walker.stuckSince??=now;
     if (now-walker.stuckSince>620) {
       walker.stuckSince=now;
-      const path=detourAroundBodies(map,walker,neighbours);
-      if (path) { walker.path=path; walker.pi=0; }
-      else if (joined) { walker.path=[];walker.pi=0; }
+      const goal=walker.path.at(-1);
+      const crossRegion=connected && (!inCamp(x0,z0) || !inCamp(goal[0]+.5,goal[1]+.5));
+      const nearby=neighbours.filter(o=>Math.hypot(o.x-x0,o.z-z0)<5);
+      const path=crossRegion ? routeForWalker(world,walker,goal,nearby) : detourAroundBodies(map,walker,neighbours);
+      if (path?.length) { walker.path=path; walker.pi=0; }
     }
   }
 }
@@ -1108,14 +1141,37 @@ addEventListener('pagehide',()=>{
   if (S.soloSurv && walker && !ui.interior && S.view) storeOuting(walker,S.view);
 });
 function ensureWalker(cvId, who, world, slots) {
-  const auth = slots[who];
+  const snapshot=cvId==='cvB'?S.viewB:S.view;
+  const travel=who!=='p1' && snapshot?.districtTravel?.[who];
+  const destination=travel && world.sites[travel.to];
+  const auth = destination ? [destination[0]-1,destination[1]] : slots[who];
+  const route=s=>{
+    s.path=routeForWalker(world,s,auth)??[];
+    if (!s.path.length && destination) {
+      const gate=world.homes3d?.entrances[travel.to]??world.scene3d?.entrances[travel.to];
+      if (gate) s.path=routeForWalker(world,s,[gate.x+gate.w/2-.5,gate.z+gate.d*.7-.5])??[];
+    }
+    s.pi=0;
+    if (!travel) { delete s.tripSpeed; return; }
+    let prior=[s.x,s.y], length=0;
+    for (const p of s.path) {
+      length+=distanceTo(p,prior);
+      prior=p;
+    }
+    s.tripSpeed=length/Math.max(1,travel.arrive-snapshot.t)/(S.tickMs??7500)/.8;
+  };
   if (!auth) return null;
   const k = walkKey(cvId, who);
   let s = WALK[k];
   if (!s) {
     const point=campRenderer && S.soloSurv && k==='cvA:p1' ? savedOuting(S.view,world) : null;
-    const [x,y]=point??auth;
+    const room=who==='p1' && snapshot?.campPlayerRoom;
+    const facility=room && facilityOf(snapshot,room);
+    const gate=room && (facility ? facilityGate(facility,snapshot.layout) : world.homes3d?.entrances[room]);
+    const door=gate && !inCamp(gate.x,gate.z) ? [gate.x+gate.w/2-.5,gate.z+gate.d*.8-.5] : null;
+    const [x,y]=door??point??slots[who]??auth;
     s=WALK[k]={x,y,path:[],pi:0,moving:false,face:1,auth:[...auth]};
+    if (destination) route(s);
     return s;
   }
   if (s.auth[0] !== auth[0] || s.auth[1] !== auth[1]) {
@@ -1126,8 +1182,7 @@ function ensureWalker(cvId, who, world, slots) {
     }   // 引擎把人挪了 ⇒ 走回认定地点
     s.auth = [auth[0], auth[1]];
     if (S.soloSurv && k==='cvA:p1' && !inCamp(s.x+.5,s.y+.5) && !S.view.player?.dead) return s;
-    s.path = routeForWalker(world, s, auth) || [];
-    s.pi = 0;
+    route(s);
   }
   return s;
 }
@@ -1494,8 +1549,9 @@ const roomMasks = new Map(), campRooms = new Map(), campRoomBounds = new Map();
 function campRoom(site) {
   if (!campRooms.has(site)) {
     const facility=facilityOf(S.view??{},site);
+    const spec=INTERIORS[site]??(S.view?.peripheralHomes?.[site] && personalInterior);
     const props = FACILITY_PROPS[facility?.type] ?? (['garden','well','yard'].includes(site) ? yardProps(site)
-      : (INTERIORS[site]?.props ?? []).map(([kind,x,y])=>[kind,x*TILE,y*TILE]));
+      : (spec?.props ?? []).map(([kind,x,y])=>[kind,x*TILE,y*TILE]));
     campRooms.set(site,roomStage(site,props,hallFront,ROOM_GRID.width/TILE,ROOM_GRID.height/TILE));
   }
   return campRooms.get(site);
@@ -2048,12 +2104,20 @@ function drawCamp(cv,w) {
     for(const [who,[sx,sy]] of Object.entries(slots)){
       const walker=WALK[walkKey(playerId,who)];
       const px=walker?.x??sx, pz=walker?.y??sy;
-      const visible=visibility?.[Math.round(pz)*world.tw+Math.round(px)];
-      if(visibility && who!=='p1' && (!visible || Math.hypot(px-pTile[0],pz-pTile[1])>sight[2]+.45))continue;
+      const tx=Math.floor(px+.5),tz=Math.floor(pz+.5);
+      const hidden=visibility && inCamp(tx,tz) && !visibility[tz*world.tw+tx];
+      if(sight && who!=='p1' && (hidden || Math.hypot(px-pTile[0],pz-pTile[1])>sight[2]+.45))continue;
       people.push({who,x:px+.5,z:pz+.5,moving:walker?.moving,direction:walker?.direction,act:campAct(w,who)});
     }
     if (extended) for (const animal of animals) animal.groundY=extended.height(animal.x,animal.z);
-    work=animatedConstruction(world);
+    work=[...animatedConstruction(world),...world.districtResources];
+    if (S.soloSurv && ui.tool==='hammer' && !overview) {
+      for (const {loc,lot:{x,z,w,d}} of world.openLots) {
+        if (Math.hypot(x+w/2-playerX,z+d/2-playerZ)>22) continue;
+        for (const px of [x+.04,x+w-.16]) for (const pz of [z+.04,z+d-.16])
+          work.push({x:px,z:pz,y:extended?.height(px,pz)??stage.heightAt(px,pz),w:.12,d:.12,h:.26,color:'#C19962',occluder:'lot:'+loc});
+      }
+    }
   }
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
   const climate=campClimate(w);
@@ -2295,7 +2359,7 @@ function hailRow(el, pack) {
 // 聚焦镜头 HUD：小地图（点房间切镜头）、当前房间角色卡（头像+台词）、事件 toast。
 function fillMinimap(pack) {
   const el = $('minimap');
-  const rooms = Object.keys(pack.rooms ?? LOCS);
+  const rooms = Object.keys(pack.rooms ?? LOCS).filter(r=>campRenderer || !pack.districts?.[r]);
   el.innerHTML = rooms.map((r) => {
     const n = (pack.occupancy[r] ?? []).length;
     return `<button data-room="${esc(r)}" class="${(ui.interior ? ui.interior === r : r === ui.room) ? 'on' : ''}">${esc((pack.rooms ?? LOCS)[r] ?? r)}<span class="n">${n}</span></button>`;
@@ -2480,7 +2544,7 @@ function inspectRoomProp(prop) {
     if (['shelf','crate','barrel','cart'].includes(prop.kind)) bindAction('打开背包',openBackpack);
   }
   if (S.soloSurv && S.campReady) {
-    const privateVisitor=residentialSite(ui.interior) && !(s.homeAccess?.[ui.interior]?.resident ?? (s.housing?.p1===ui.interior));
+    const privateVisitor=residentialSite(ui.interior,s.peripheralHomes) && !(s.homeAccess?.[ui.interior]?.resident ?? (s.housing?.p1===ui.interior));
     const facility=facilityOf(s,ui.interior);
     if (facility) {
       const use=(type,tool)=>performCamp({kind:'facility_use',target:ui.interior,type,tool},ui.interior,()=>inspectRoomProp(prop));
@@ -2845,6 +2909,7 @@ async function survInteract() {
         return Number(equipped(b))-Number(equipped(a)) || entityGap([x,z],a)-entityGap([x,z],b);
       })[0];
     if (entity) { await useOutdoorEntity(entity,[x,z]); return; }
+    if (!inCamp(x,z)) $('campToast').textContent='靠近木石采集点，或持锤靠近可施工地块。';
   }
   if (campRenderer && walker && !inCamp(walker.x+.5,walker.y+.5)) return;
   if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
@@ -2868,7 +2933,7 @@ async function enterRoom(room,force=false) {
   try {
     if (S.soloSurv || S.view?.loc?.p1!==room) {
       const walker=WALK[walkKey('cvA','p1')];
-      const body=S.soloSurv?{mode:'survival',kind:'move',room,entrance:Boolean(campRenderer)||Boolean(S.view?.settlementLife && residentialSite(room)),
+      const body=S.soloSurv?{mode:'survival',kind:'move',room,entrance:Boolean(campRenderer)||Boolean(S.view?.settlementLife && residentialSite(room,S.view.peripheralHomes)),
         from:walker?[walker.x+.5,walker.y+.5]:null}:{kind:'move',room};
       let result=await api('/act',body);
       if (S.soloSurv && ui.tool==='hammer' && result.code==='HOME_LOCKED') {
@@ -3043,7 +3108,7 @@ function familyPanel(s) {
   const btn=(kind,id,text,accept=false)=>
     `<button type="button" data-family="${kind}" data-id="${esc(id)}" data-accept="${accept}">${text}</button>`;
   const spouse=h.spouses.p1;
-  const present=Object.values(s.agents).filter(a=>!a.isPlayer && a.stage==='adult' && a.viab>0 && a.loc===s.loc.p1);
+  const present=Object.values(s.agents).filter(a=>!a.isPlayer && a.stage==='adult' && a.viab>0 && !s.districtTravel?.[a.id] && a.loc===s.loc.p1);
   const available=present.filter(a=>!h.spouses[a.id] && !h.residents[a.id]?.parents.includes('p1'));
   const offers=h.offers.filter(o=>o.to==='p1');
   const vacant=Object.entries(h.deeds).filter(([room,d])=>d.owner==='p1' && !Object.values(s.housing).includes(room));
@@ -3113,6 +3178,10 @@ function renderSurv(s) {
   const b = s.buildingsDef || {};
   const bl = (t) => esc(b[t]?.label ?? t);
   const here = s.loc?.p1;
+  const feet=WALK['cvA:p1'];
+  const outside=!ui.interior && feet && !inCamp(feet.x+.5,feet.y+.5);
+  const nearby=outside && Object.entries(s.districts??{}).find(([,d])=>distanceToRect([feet.x+.5,feet.y+.5],d.pad)<1.15);
+  const location=outside ? nearby?.[1].label??'外围野地' : (s.rooms??{})[here]??here;
   const outdoor = !ui.interior;
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(campCodes[survFlash.code] ?? SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
   const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
@@ -3127,7 +3196,7 @@ function renderSurv(s) {
         : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
       ${flash}</div>
     <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''}${s.player?.timeLeft != null ? ` <span class="dim">本刻行动 ${s.player.timeLeft}/100</span>` : ''}</div>
-    <div class="survrow survhere">你在 <b>${esc((s.rooms ?? {})[here] ?? here)}</b>${outdoor ? '（户外）' : '（室内）'}
+    <div class="survrow survhere">你在 <b>${esc(location)}</b>${outdoor ? '（户外）' : '（室内）'}
       <span class="dim">WASD 走路 · F 交互 · E 背包 · 1–8 换工具</span>
       ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
     <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
@@ -3282,7 +3351,7 @@ async function refresh() {
     if (j.mode==='game' && ui.compare) { selectWorld(false); return; }
     if (ui.menu) return;
     if (S.soloSurv && j.survival?.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom &&
-        (ui.interior?.startsWith('facility:') || residentialSite(ui.interior) || j.survival.campPlayerRoom)) {
+        (ui.interior?.startsWith('facility:') || residentialSite(ui.interior,j.survival.peripheralHomes) || j.survival.campPlayerRoom)) {
       const room=j.survival.campPlayerRoom;
       if (ui.interior!==room) {
         ui.interior=room;
@@ -3567,7 +3636,7 @@ function walkToEntrance(room) {
   const world=buildWorld(S.view), site=room==='grove'?world.groveEntrance:world.sites[room], e=world.homes3d?.entrances[room]??world.scene3d?.entrances[room];
   const walker=ensureWalker('cvA','p1',world,slotsOf(S.view,world.sites));
   if (!walker || !site) return;
-  const goal=e ? [e.x+e.w/2-.5,e.z+e.d*.73-.5] : site;
+  const goal=e ? [e.x+e.w/2-.5,e.z+e.d*.73-.5] : S.view.districts?.[room] ? [site[0]-1,site[1]] : site;
   const path=routeForWalker(world,walker,goal);
   if (!path) return;
   walker.path=path; walker.pi=0;
@@ -3640,11 +3709,20 @@ function outdoorEntities(world,w,people,animals) {
     return {id:'door:'+room,kind:'door',room,rect,reach:.1,at:[rect.x+rect.w/2,rect.z+rect.d*.82],
       name:FACILITY_NAMES[p.record.type]};
   }) : [];
+  const lots=ui.tool==='hammer' ? world.openLots.map(({loc,lot:rect})=>({
+    id:'lot:'+loc,kind:'lot',target:loc,rect,at:[rect.x+rect.w/2,rect.z+rect.d/2],
+    reach:1.15,tool:'hammer',name:'可施工地块',
+  })) : [];
+  const resources=Object.entries(w.districts??{}).map(([loc,{source:[x,z],resource}])=>({
+    id:'resource:'+loc,kind:'resource',target:loc,rect:{x:x-.42,z:z-.42,w:.84,d:.84},at:[x,z],
+    reach:1.15,tool:resource==='wood'?'axe':'pick',
+    name:(resource==='wood'?'木料':'石料')+' · '+(w.resStock?.[loc]??0),
+  }));
   const works=(world.workProjects??[]).filter(p=>p.record.type!=='house').map(p=>({
     id:p.id,kind:'work',target:p.id,room:p.record.loc,rect:p.lot,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
     reach:1.15,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
   }));
-  return [...doors,...facilities,...timber,...plants,...fields,...works,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
+  return [...doors,...facilities,...timber,...plants,...fields,...works,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.kind==='bird'?'scenery':a.wild?'wildAnimal':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
@@ -3692,9 +3770,9 @@ function pointedEntity(cv,ev) {
     for (const e of entries) {
       if (e.person) push(actorBoxes(e.person,ACT.frame),e);
       if (e.animal) push(animalBoxes(e.animal,ACT.motionTime??0),e);
-      if (e.kind==='plot' || e.kind==='door') {
+      if (e.kind==='plot' || e.kind==='door' || e.kind==='lot') {
         const {x,z,w,d}=e.rect;
-        push([{x,z,w,d,y:view.stage.heightAt(...e.at)+.025,h:.008}],e);
+        push([{x,z,w,d,y:(e.kind==='lot' && view.extended ? view.extended.height(...e.at) : view.stage.heightAt(...e.at))+.025,h:.008}],e);
       }
     }
     for (const b of [...view.stage.boxes,...(world.life3d?.boxes??[]),...(world.homes3d?.boxes??[]),...(world.regional?.boxes??[]),...view.work]) {
@@ -3719,7 +3797,37 @@ function pointedEntity(cv,ev) {
   return hit;
 }
 
+function inspectWorkSite(title,options) {
+  const dialog=$('campPropDialog'), action=$('campPropAction');
+  $('campPropTitle').textContent=title;
+  $('campPropText').textContent='';
+  $('campPropDetail').hidden=true;
+  const container=$('campPropOptions');
+  container.replaceChildren();
+  action.hidden=true;
+  for (const [label,reason,run] of options) propOption(container,label,reason,()=>{
+    dialog.close();
+    void run();
+  });
+  keys.clear();
+  if (!dialog.open) dialog.showModal();
+}
+
 async function useOutdoorEntity(e,from) {
+  if (e.kind==='lot') {
+    const s=S.view, bag=s.pinv.p1;
+    inspectWorkSite(s.rooms?.[e.target]??'施工地块',Object.entries(s.buildingsDef??{}).map(([type,{label,cost}])=>[
+      label+' · '+cost.wood+' 木 / '+cost.stone+' 石',
+      bag.wood+s.inv.wood<cost.wood || bag.stone+s.inv.stone<cost.stone?'材料不足':'',
+      ()=>performCamp({kind:'plan',type,target:e.target,from,tool:'hammer'}),
+    ]));
+    return;
+  }
+  if (e.kind==='resource') {
+    if (e.tool!==ui.tool) { $('campToast').textContent='需要'+TOOL_ZH[e.tool]+'。'; return; }
+    await performCamp({kind:'gather',target:e.target,from,tool:e.tool});
+    return;
+  }
   if (e.kind==='resident') { await useResident({target:e.target,room:null,from,to:e.at}); return; }
   if (e.kind==='door') {
     if (e.room.startsWith('facility:') && ui.tool==='hammer') {
@@ -3761,7 +3869,14 @@ async function useOutdoorEntity(e,from) {
     const site=S.view.sites?.find(s=>s.loc===e.room && `work:${s.loc}:${s.type}`===e.target);
     const building=S.view.buildings?.find(b=>b.loc===e.room && `work:${b.loc}:${b.type}`===e.target);
     if (site || building?.integrity<1) {
-      await performCamp({kind:site?'build':'repair',target:e.target,from});return;
+      if (site && S.view.coop?.enabled) {
+        inspectWorkSite(e.name,[
+          ['施工','',()=>performCamp({kind:'build',target:e.target,from})],
+          ...Object.values(S.view.agents??{}).filter(a=>!a.isPlayer && !a.dead && a.stage!=='child')
+            .map(a=>['请'+a.name+'协助','',()=>performCamp({kind:'coop_request',target:a.id,site:e.target,from})]),
+        ]);
+      } else await performCamp({kind:site?'build':'repair',target:e.target,from});
+      return;
     }
     $('campToast').textContent=e.name+' · 当前没有可进行的施工。';
     return;
@@ -3802,12 +3917,12 @@ function approachEntity(world,walker,e) {
     return [e.at[0]+Math.cos(a)*(e.rect?e.rect.w/2+.25:r),e.at[1]+Math.sin(a)*(e.rect?e.rect.d/2+.25:r)];
   });
   candidates.sort((a,b)=>distanceTo(a,from)-distanceTo(b,from));
-  const map=campBodyWorld(world);
+  const map=campBodyWorld(world,true);
   for (const p of candidates) {
     const goal=p.map(v=>v-.5);
     const outside=!inCamp(...p);
-    if (entityGap(p,e)>e.reach || !(outside?world.landscape?.walkable(...p):mapAllows(map,...goal))) continue;
-    const path=outside || !inCamp(...from)?[goal]:routeForWalker(world,walker,goal);
+    if (entityGap(p,e)>e.reach || !(outside?exteriorAllows(world,...p):mapAllows(map,...goal))) continue;
+    const path=routeForWalker(world,walker,goal);
     if (path) { walker.path=path;walker.pi=0;return true; }
   }
   return false;
@@ -3903,9 +4018,7 @@ function pickRoom(ev, cv) {
   const entry=!projected&&entrySiteAt(sites,tx,ty);
   if (entry && playerCanvas==='cvA') { walkToEntrance(entry[0]);return; }
   const goal=[tx-.5,ty-.5];
-  const crossBoundary=projected && S.soloSurv && playerCanvas==='cvA' &&
-    (!inCamp(tx,ty) || !inCamp(walker.x+.5,walker.y+.5));
-  const path=crossBoundary ? [[...goal]] : routeForWalker(world,walker,goal);
+  const path=routeForWalker(world,walker,goal);
   if (!path) return;
   walker.path=path; walker.pi=0;
   ui.overview=false; ui.camRoom=null;
@@ -4071,7 +4184,9 @@ loadAssets().finally(() => {
       if (campRenderer) {
         const world=campWorlds.get(cvId);
         if (!world) continue;
-        stepCampWalker(world,walker,cvId,snapshot,dx,dy,manual?playerStep:mstep,manual);
+        const trip=snapshot.districtTravel?.[who];
+        const rate=trip?Math.max(mstep,(walker.tripSpeed??0)*dt*1000):mstep;
+        stepCampWalker(world,walker,cvId,snapshot,dx,dy,manual?playerStep:rate,manual);
       } else if (manual) {
         const n=Math.hypot(dx,dy);
         const [x,y]=moveMapFeet(buildWorld(snapshot),walker.x,walker.y,dx/n*playerStep,dy/n*playerStep);

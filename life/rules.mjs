@@ -9,12 +9,11 @@ import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
+import { BUILDINGS, gatherResource, forageRule } from './production.mjs';
 
-export function validate(world, agentId, intent) {
-  const here = world.loc[agentId];
+export function validate(world, agentId, intent, here = world.loc[agentId]) {
   const locs = world.locs ?? LOCS;
-  const others = (world.occupancy[here] ?? []).filter((x) => x !== agentId);
+  const others = (world.occupancy[here] ?? []).filter(x=>x!==agentId && !world.survival?.districtTravel?.[x]);
   const kind = intent?.kind;
   const fail = (code, why) => ({ ok: false, code, why });
 
@@ -71,7 +70,7 @@ export function validate(world, agentId, intent) {
   }
   if (kind === 'gather') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
-    if (!GATHER_BY_LOC[here]) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
+    if (!gatherResource(world,here)) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
     if ((world.survival.resStock?.[here] ?? 0) <= 0) return fail('NO_RESOURCE', '这里的资源采空了，等它恢复'); // P0-3：储量门控
   }
   if (kind === 'plan') {

@@ -25,7 +25,7 @@ export function forestDensity(seed,x,z) {
   return mix(.026,.41,smooth(.31,.76,forest));
 }
 
-export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], roadDistance, plantClearance, harvestNodes=[]}={}) {
+export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], roadDistance, plantClearance, harvestNodes=[], clearing=[]}={}) {
   const {riverCenter,riverHalfWidth}=campTerrain(seed,false,version);
   const phase=campHash(seed,'wilds')*Math.PI*2;
   const beyond=z=>smooth(0,44,Math.max(0,-z,z-TOWN_SIZE.depth));
@@ -96,10 +96,11 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
     return channel(x,z)<=0 &&
       Math.max(Math.abs(height(x+.42,z)-height(x-.42,z)),Math.abs(height(x,z+.42)-height(x,z-.42)))<.8;
   }
+  const cleared=(x,z)=>clearing.some(p=>x>=p.x && x<=p.x+p.w && z>=p.z && z<=p.z+p.d);
   function plantAt(tx,tz) {
     const x=tx+.23+hash2(tx,tz,seed+94)*.54;
     const z=tz+.23+hash2(tx,tz,seed+95)*.54;
-    if (plantClearance?.(x,z)===false || harvestNodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) return null;
+    if (cleared(x,z) || plantClearance?.(x,z)===false || harvestNodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) return null;
     const bank=bankGap(x,z);
     if (bank<.34 || !walkable(x,z)) return null;
     const patch=noise(seed+96,x,z,10);
@@ -111,7 +112,7 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
   function treeAt(x,z,crossing) {
     const r=hash2(x,z,seed+26);
     const density=forestDensity(seed,x,z);
-    return (!joined || !inCamp(x,z)) && r<=density && Math.abs(z-crossing)>=2 && land(x,z)>=5 && groundAllows(x,z,crossing) ? r : null;
+    return (!joined || !inCamp(x,z)) && r<=density && !cleared(x,z) && Math.abs(z-crossing)>=2 && land(x,z)>=5 && groundAllows(x,z,crossing) ? r : null;
   }
   const treeScale=(x,z)=>.72+hash2(x,z,seed+66)*.53;
   function walkable(x,z,crossing=24) {
@@ -122,7 +123,7 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
   let fall=270;
   while (fall<324 && land(river(fall),fall+1)>0) fall++;
   return {seed,joined,roadDistance,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,bankGap,waterHeight,
-    isBridge,rawHeight,height,walkable,plantAt,treeAt,treeScale,fall};
+    isBridge,rawHeight,height,groundAllows,cleared,walkable,plantAt,treeAt,treeScale,fall};
 }
 
 export function moveWildWalker(landscape,x,z,dx,dz,crossing) {

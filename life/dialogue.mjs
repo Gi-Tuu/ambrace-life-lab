@@ -4,7 +4,7 @@ import { isAlive } from './viability.mjs';
 // 门槛在服务端按关系、能量、性格、忙碌状态裁决，模型只负责把已定的态度说成人话。
 // 这样模型宕机/预算耗尽时，居民仍然是有边界的人，而不是一个永远微笑的问答机。
 import { speechLine, classifySay } from './speech.mjs';
-import { move } from './body.mjs';
+import { startMove } from './body.mjs';
 import { residentContact } from './camp-play.mjs';
 
 const BUSY = new Set(['work', 'build', 'gather', 'harvest', 'plant', 'repair', 'camp_chop', 'camp_collect']);
@@ -69,7 +69,7 @@ function walkAway(w, npc) {
   const to = home && Object.hasOwn(w.locs, home) && home !== here
     ? home
     : ['home', 'hall', 'watch', 'yard'].find((l) => l !== here && Object.hasOwn(w.locs, l));
-  if (to) move(w, npc.id, to);
+  if (to) startMove(w, npc.id, to);
 }
 
 function attack(w, npc) {

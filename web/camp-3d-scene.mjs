@@ -1060,12 +1060,12 @@ function home3d(s, lot, record, seed) {
 const HOME_LABOR = 3;
 
 function homeLot(world, room) {
-  const at = world.layout?.sites[room] ?? residentialSite(room);
+  const at = world.layout?.sites[room] ?? residentialSite(room,world.peripheralHomes);
   return at && { x: at[0] - 2.3, z: at[1] - 6.05, w: 4.6, d: 3.7 };
 }
 
 export function homeAppearance(world, sites = world.rooms ?? {}) {
-  const rooms = Object.keys(world.households?.deeds ?? sites).filter(room => residentialSite(room)).sort();
+  const rooms = Object.keys(world.households?.deeds ?? sites).filter(room => residentialSite(room,world.peripheralHomes)).sort();
   const occupied = new Set();
   for (const [id, room] of Object.entries(world.housing ?? {})) {
     const agent = world.agents?.[id];
@@ -1079,7 +1079,7 @@ export function outdoorHomes(world, appearance) {
   for (const [room, occupied, damage] of appearance) {
     const lot = homeLot(world, room);
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
-    s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room));
+    s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room,world.peripheralHomes),world.peripheralHomes);
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
         s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);
@@ -1096,6 +1096,17 @@ export function outdoorHomes(world, appearance) {
     });
   }
   return s;
+}
+
+export function districtResources(districts) {
+  const boxes=[];
+  for (const [loc,{source:[x,z],resource}] of Object.entries(districts??{})) {
+    const s={box(x,y,z,w,h,d,color) {
+      boxes.push({x,y,z,w,h,d,color,occluder:'resource:'+loc});
+    }};
+    worldItem(s,resource,x-.32,z-.24,.88,.015);
+  }
+  return boxes;
 }
 
 export function buildingDamage(record) {

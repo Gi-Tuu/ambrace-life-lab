@@ -1,17 +1,18 @@
 import { dayOf } from './clock.mjs';
-import { campEntrance, campSite, distanceToRect, pointIn } from '../web/camp-interaction.mjs';
+import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { residentialSite } from '../web/camp-layout.mjs';
-import { WORLD_TW, WORLD_TH } from './geometry.mjs';
+import { worldSite } from './geometry.mjs';
+import { regionPoint } from '../web/camp-region-entities.mjs';
 import { isAlive } from './viability.mjs';
 
 const fail=code=>({ok:false,code});
 export function roadRule(w,id,action) {
   const {room,kind,from}=action, s=w.survival, a=w.agents[id];
-  if (!s?.settlementLife || !w.campLayout || !residentialSite(room) ||
+  if (!s?.settlementLife || (!w.campLayout && !w.peripheralHomes?.[room]) || !residentialSite(room,w.peripheralHomes) ||
       !s.households?.deeds[room]) return fail('NO_ROAD_SITE');
   if (!isAlive(a) || (s.households.deeds[room].owner!==id && w.housing[id]!==room)) return fail('NO_AUTHORITY');
-  const gate=campEntrance(room,campSite(room,w.campLayout));
-  if (a.isPlayer ? w.campPlayerRoom || !pointIn(from,WORLD_TW,WORLD_TH) || distanceToRect(from,gate)>1.6
+  const gate=campEntrance(room,worldSite(w,room),w.peripheralHomes);
+  if (a.isPlayer ? w.campPlayerRoom || !regionPoint(from) || distanceToRect(from,gate)>1.6
     : w.loc[id]!==room) return fail('OUT_OF_REACH');
   const add=kind==='road_lay';
   if ((s.homeRoads?.[room]?.present??true)===add) return fail('ROAD_UNCHANGED');
@@ -35,7 +36,7 @@ export function changeRoad(w,id,action) {
 
 export function roadCandidate(w,id) {
   const s=w.survival, a=w.agents[id], room=w.loc[id];
-  if (!s?.settlementLife || !w.campLayout || a.isPlayer || !residentialSite(room) ||
+  if (!s?.settlementLife || (!w.campLayout && !w.peripheralHomes?.[room]) || a.isPlayer || !residentialSite(room,w.peripheralHomes) ||
       s.households?.deeds[room]?.owner!==id || a.drives.v.energy<.42) return null;
   const privateLife=a.traits.comfortAlone>=.76 && a.drives.v.social>=a.drives.setpoint.social;
   const hasRoad=s.homeRoads?.[room]?.present??true;

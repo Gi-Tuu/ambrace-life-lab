@@ -5,7 +5,7 @@ import { laborStage, strictLifecycle } from './households.mjs';
 // （含前置移动/采集）。planGoal 每次调用重评⇒资源/环境变化或失败后自动重规划。
 // 复用既有 affordances/validate/actuate，不另造决策器；基础动作仍由规则层裁决、世界计算结果。
 // 示范目标用于验证组合能力（派单允许少量示范）；自主层默认决策环不受影响。
-import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
+import { BUILDINGS, gatherPlace, forageRule } from './production.mjs';
 import { validate, actionId } from './rules.mjs';
 import { actuate, BASE_KINDS, SURV_COST, livingResidents } from './body.mjs';
 
@@ -20,8 +20,7 @@ const freeOutdoor = (w, exclude) => (w.outdoor ?? []).find((l) => l !== exclude
 
 // 采集前置：不在资源地点先移动，到了再采；无储量则等待再生（返回 null）。
 function gatherAction(w, id, res) {
-  const stock = w.survival.resStock ?? {};
-  const loc = Object.keys(GATHER_BY_LOC).find((l) => GATHER_BY_LOC[l] === res && (stock[l] ?? 0) > 0);
+  const loc = gatherPlace(w,res,w.loc[id]);
   if (!loc) return null;
   return w.loc[id] === loc ? { kind: 'gather' } : { kind: 'move_to', to: loc };
 }

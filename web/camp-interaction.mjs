@@ -16,10 +16,10 @@ export const pointIn = (p,w,d) => Array.isArray(p) && p.length===2 && p.every(Nu
 export const distanceToRect = ([x,z], b) => Math.hypot(Math.max(b.x-x,0,x-b.x-b.w),Math.max(b.z-z,0,z-b.z-b.d));
 export const distanceTo = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1]);
 
-export function campEntrance(room, at) {
+export function campEntrance(room, at, peripheralHomes) {
   if (!at) return null;
   const [sx,sz]=at, x=sx+.5,z=sz+.5;
-  if (residentialSite(room)) return {x:sx-1.15,z:sz-2.55,w:2.3,d:1.6};
+  if (residentialSite(room,peripheralHomes)) return {x:sx-1.15,z:sz-2.55,w:2.3,d:1.6};
   if (room==='hall') return {x:x-1,z:z-1.35,w:2,d:2.25};
   if (room==='watch') return {x:x-.95,z:z-3.71,w:1.9,d:1.35};
   if (room==='well') return {x:x+.4,z:z-1.3,w:2.2,d:1.5};
