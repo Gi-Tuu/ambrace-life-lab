@@ -113,11 +113,11 @@ async function onSignal() {
   if (shuttingDown) return;
   shuttingDown = true;
   S.running = false;
-  await queueWorldWrite(save);
+  await queueWorldWrite(async () => { await save(); if (S.comparison) await saveComparison(); });
   process.exit(0);
 }
 
-const S = { packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0 }, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -346,6 +346,150 @@ async function modelTalk({ npc, world, history, text, trust }) {
 }
 
 // 一拍真正的工作。**不再自带 running 守卫**：什么时候允许推进由下面的调度器决定。
+// 游戏内 A/B 分支永远走同一生存规则。正式存档和旧研究预设各有自己的推进路径。
+const COMPARE_SIDES = ['A', 'B'];
+
+function compareMasks() {
+  return {
+    A: Object.fromEntries(Object.entries(S.comparisonMasks).filter(([, on]) => on).map(([key]) => [key, 1])),
+    B: {m3: 0, coupling: 0},
+  };
+}
+
+function makeComparison(origin, revision = 0, saved) {
+  const masks = compareMasks();
+  const branches = Object.fromEntries(COMPARE_SIDES.map((key) => {
+    const record = saved?.branches?.[key];
+    const play = loadSurv(structuredClone(record?.world ?? origin), CFG.seed, {
+      ...survivalOptions(),
+      residentCondition: key === 'A' ? 'C2' : 'C2-neg',
+      residentChannelMask: masks[key],
+      deliberator: null,
+    });
+    return [key, {play, series: record?.series?.slice(-SERIES_CAP) ?? [], log: record?.log?.slice(-80) ?? [],
+      stat: record?.stat ?? {决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0}, last: record?.last ?? {}}];
+  }));
+  const pair = {origin, branches, revision};
+  for (const branch of Object.values(branches)) {
+    survView(branch.play);
+    if (!branch.series.length) recordComparisonSeries(branch);
+  }
+  return pair;
+}
+
+function comparisonFromSave(saved) {
+  if (!saved) return makeComparison(structuredClone(dumpSurv(S.surv)));
+  try {
+    const {origin, branches, revision} = saved;
+    const valid = (world) => Number.isSafeInteger(world?.t) && world.t >= 0 && world.survival;
+    if (!valid(origin) || !valid(branches?.A?.world) || !valid(branches?.B?.world) ||
+        branches.A.world.t !== branches.B.world.t ||
+        [branches.A.world, branches.B.world].some(w => w.seed !== origin.seed || w.mapSeed !== origin.mapSeed) ||
+        !Number.isSafeInteger(revision) || revision < 0) throw new Error('对照存档结构无效');
+    const formerMasks = S.comparisonMasks;
+    S.comparisonMasks = {m3: saved.masks?.m3 === true, coupling: saved.masks?.coupling === true};
+    try { return makeComparison(origin, revision, saved); }
+    catch (error) { S.comparisonMasks = formerMasks; throw error; }
+  } catch {
+    // 生存档可独立恢复；对照记录异常时从生存快照开一轮。
+    S.compareSaveError = '对照档状态无效，已从生存快照另起一轮';
+    return makeComparison(structuredClone(dumpSurv(S.surv)));
+  }
+}
+
+function recordComparisonSeries(branch) {
+  const w = branch.play.world;
+  const residents = Object.values(w.agents).filter(a => !a.isPlayer);
+  branch.series.push({t: w.t,
+    v: Object.fromEntries(residents.map(a => [a.id, Number(a.viab.v.toFixed(3))])),
+    lost: Object.fromEntries(residents.map(a => [a.id, a.viab.ledger.length])),
+  });
+  if (branch.series.length > SERIES_CAP) branch.series.shift();
+}
+
+function recordComparisonAction(branch, a, trace) {
+  const w = branch.play.world;
+  for (const row of trace) {
+    if (row.layer === 'rejected') branch.stat.驳回 += 1;
+    if (row.layer === 'discovery') branch.stat.发现 += 1;
+    if (!row.action || typeof row.ok !== 'boolean' || row.layer === 'refused') continue;
+    branch.stat.决策 += 1;
+    if (row.kind === 'look_out' || row.kind === 'take_shared') branch.stat.高冲动 += 1;
+    if (row.kind === 'take_shared' && row.ok) branch.stat.越轨 += 1;
+    branch.last[a.id] = {action: row.action};
+    const line = row.kind === 'talk' && row.ok ? speechLine(a, {world: w, kind: row.kind, actionId: row.action, t: row.t}) : null;
+    branch.log.push({t: row.t, who: a.name, kind: line ? 'act' : row.ok ? 'decision' : 'rej', text: line ?? row.obs ?? row.action});
+  }
+  if (branch.log.length > 80) branch.log.splice(0, branch.log.length - 80);
+}
+
+async function tickComparison(now = Date.now()) {
+  for (const key of COMPARE_SIDES) {
+    const branch = S.comparison.branches[key];
+    await tickSurvPlay(branch.play, {now, onResidentAction: (agent, rows) => recordComparisonAction(branch, agent, rows)});
+    recordComparisonSeries(branch);
+  }
+}
+
+function makeComparisonView() {
+  if (!S.comparison) return null;
+  const view = (branch) => {
+    const s = survView(branch.play), w = branch.play.world;
+    const residents = Object.values(w.agents).filter(a => !a.isPlayer);
+    const sum = k => residents.reduce((total,a) => total+(a.counters[k]??0),0);
+    return {...s, compareSide: w.residentCondition === 'C2' ? 'A' : 'B',
+      stat: branch.stat, series: branch.series, viabCrit: PARAMS.viab.crit,
+      researchLog: branch.log, model: {enabled: false, configured: false},
+      cost: {事件: sum('triggered'), 被问: sum('asked'), 跳过: sum('skipped'), 驳回重问: sum('askedRetry')},
+      agents: {...s.agents, ...Object.fromEntries(residents.map(a => [a.id, {...s.agents[a.id],
+        archetype: a.traits.archetype, m: a.bank.snapshot(), baseline: a.traits.baseline, summary: a.bank.summary(),
+        researchViab: {v: a.viab.v, lost: a.viab.ledger.map(l => l.organ)}, last: branch.last[a.id],
+        layers: {m3: a.ch.m3, coupling: a.ch.coupling}, m3: a.ch.m3 ? a.m3Last : null,
+        coupling: a.ch.coupling ? a.coupling.dump() : null,
+      }]))},
+    };
+  };
+  const {branches, origin, revision} = S.comparison;
+  return {A: view(branches.A), B: view(branches.B), startTick: origin.t, mapSeed: origin.mapSeed, revision, masks: S.comparisonMasks};
+}
+
+function publishComparison() {
+  S.compareView = structuredClone(makeComparisonView());
+}
+
+async function saveComparison() {
+  const {origin, revision, branches} = S.comparison;
+  const record = {origin, revision, masks: S.comparisonMasks,
+    branches: Object.fromEntries(COMPARE_SIDES.map(key => {
+      const {play, ...observations} = branches[key];
+      return [key, {...observations, world: dumpSurv(play)}];
+    })),
+  };
+  const dest = join(S.dir, 'comparison.json'), tmp = dest + '.tmp';
+  try {
+    await mkdir(S.dir, {recursive:true});
+    await writeFile(tmp, JSON.stringify(record), 'utf8');
+    await rename(tmp, dest);
+    S.compareSaveError = null;
+    return true;
+  } catch (error) {
+    S.compareSaveError = String(error.message ?? error).slice(0, 80);
+    return false;
+  } finally {
+    await rm(tmp, {force:true}).catch(()=>{});
+  }
+}
+
+async function advanceWorlds(onError = null, auto = false) {
+  if (!auto || S.running) await tickBody(onError);
+  if (!auto) return;
+  if (S.compareRunning && observerActive(S.viewers.comparison, Date.now())) {
+    await tickComparison();
+    publishComparison();
+    if (S.compareView.A.t % SAVE_EVERY === 0) await saveComparison();
+  }
+}
+
 async function tickBody(onError = null) {
   // 单拍调用计数：PER_TICK_CAP 默认 0（不设上限），此时这一行与本变量都不影响任何行为。
   S.asksThisTick = 0;
@@ -439,8 +583,46 @@ function queueWorldWrite(operation) {
   return run;
 }
 
-async function sleepSurvival() {
-  const sp=S.surv;
+async function actInSurvival(sp, body, ask, now) {
+  let result;
+  if (body.kind === 'talk_open') result = openTalk(sp, body, now);
+  else if (body.kind === 'talk_say') result = await sayTo(sp, body, ask, now);
+  else if (body.kind === 'talk_close') result = closeTalk(sp);
+  else result = survAct(sp, body);
+  const settled = settleSurvival(sp);
+  return settled ? {...result, settled: true} : result;
+}
+
+async function actInComparison(body) {
+  const pair = S.comparison;
+  if (!pair || body.revision !== pair.revision) return {ok: false, code: 'COMPARE_STALE'};
+  const now = Date.now();
+  const results = {};
+  if (body.kind === 'camp_sleep') {
+    for (const key of COMPARE_SIDES) results[key] = campSleepTicks(pair.branches[key].play.world);
+    const ticks = Math.max(...Object.values(results).map(r => r.ticks ?? 0));
+    // Both clocks advance when either player can sleep. The other side lives through the same interval.
+    if (ticks) for (let i = 0; i < ticks; i++) await tickComparison(now);
+  } else {
+    for (const key of COMPARE_SIDES) {
+      const command = key==='B' && body.otherContact ? {
+        ...body, from: body.otherContact.from,
+        ...(Object.hasOwn(body,'to') && {to: body.otherContact.to}),
+      } : body;
+      results[key] = await actInSurvival(pair.branches[key].play, command, null, now);
+    }
+  }
+  for (const key of COMPARE_SIDES) {
+    const branch = pair.branches[key], r = results[key];
+    branch.log.push({t: branch.play.world.t, who: '玩家', kind: r.ok ? 'player' : 'rej',
+      text: [body.kind, r.line ?? r.code ?? r.error].filter(Boolean).join(' · ')});
+    if (branch.log.length > 80) branch.log.shift();
+  }
+  publishComparison();
+  return {...results.A, sides: results, persisted: await saveComparison()};
+}
+
+async function sleepSurvival(sp) {
   const result=campSleepTicks(sp.world);
   if (!result.ok) return result;
   const start=sp.world.t;
@@ -457,7 +639,7 @@ async function sleepSurvival() {
   return {ok:true,code:'OK',ticks,persisted:await save()};
 }
 
-function enqueueTick() {
+function enqueueTick(auto = false) {
   return queueWorldWrite(async () => {
     // D2：整拍模型等待预算。慢端点/多角色串行时，到点即退回本地替身，世界与玩家动作不被拖死。
     S.modelDeadline = MODEL_TICK_BUDGET_MS > 0 ? Date.now() + MODEL_TICK_BUDGET_MS : 0;
@@ -465,7 +647,7 @@ function enqueueTick() {
     // 在 tick 末尾无条件清空，本拍内的异常就会被自己抹掉。用一个局部标记区分。
     let failed = false;
     try {
-      await tickBody((msg) => { failed = true; S.tickError = msg; });
+      await advanceWorlds((msg) => { failed = true; S.tickError = msg; }, auto);
       if (!failed) S.tickError = null;
     } catch (e) {
       S.tickError = String(e?.message ?? e).slice(0, 120);
@@ -476,10 +658,10 @@ function enqueueTick() {
 }
 
 function autoTick() {
-  if (!S.running) return;
+  if (!S.running && !(S.compareRunning && observerActive(S.viewers.comparison,Date.now()))) return;
   if (autoPending) return; // 上一拍还没跑完/还在排队：跳过这一拍
   autoPending = true;
-  enqueueTick().finally(() => { autoPending = false; });
+  enqueueTick(true).finally(() => { autoPending = false; });
 }
 
 async function manualTick() {
@@ -701,6 +883,7 @@ export const host = {
     S.lastVisitor = Date.now();
     if (!mode || mode === 'survival') S.viewers.survival = S.lastVisitor;
     if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
+    if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
   },
   async start() {
     // H-12 / H-31：S 是模块单例，stop→start 之间会带上一次会话的状态。
@@ -710,10 +893,13 @@ export const host = {
     if (S.timer) { clearInterval(S.timer); S.timer = null; }
     S.running = true;
     S.missed = { minutes: 0, applied: 0, capped: false };
+    S.compareSaveError = null;
+    S.compareRunning = true;
+    S.comparisonMasks = {m3: false, coupling: false};
     S.masks = { m3: false, coupling: false }; // 演示开关按设计不落盘，重启即回到默认关
     S.tickError = null;
     S.saveError = null;
-    S.lastVisitor = S.viewers.survival = S.viewers.compare = 0;
+    S.lastVisitor = S.viewers.survival = S.viewers.compare = S.viewers.comparison = 0;
     // BUG-5：装载必须在**副本**上做，全部成功才提交。上一版直接对活 pack 调 applyInto，
     // 任一字段抛错（例如越界的 m3.remaining）就留在半载入状态；catch 又把它当成"没有存档"，
     // 于是下一次 save() 用混合态覆盖掉唯一的历史档 —— 免费创空间没有持久卷，这是唯一的数据丢失路径。
@@ -726,6 +912,7 @@ export const host = {
     const seedFile = process.env.SEED_FILE ?? resolve('seed/world.json');
     let note = '没有存档，新建世界';
     let loaded = null;
+    let savedComparison;
     let primaryError = null;
     for (const [path, label] of [[worldFile, '存档'], [`${worldFile}.bak`, '备份存档'], [seedFile, '内置种子存档']]) {
       try {
@@ -760,6 +947,10 @@ export const host = {
       S.surv = loadSurv(undefined, CFG.seed, survivalOptions());
       S.startRaw = structuredClone(serialize());
     }
+    try { savedComparison = JSON.parse(await readFile(join(S.dir, 'comparison.json'), 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') S.compareSaveError = '对照档无法读取，已从生存快照另起一轮'; }
+    S.comparison = comparisonFromSave(savedComparison);
+    publishComparison();
     S.savedAt = Date.now();
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
@@ -794,7 +985,7 @@ export const host = {
     }
   },
   status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
-  snapshot() {
+  snapshot(mode) {
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p, layered) => ({
       t: p.world.t,
@@ -832,22 +1023,18 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body) {
     return queueWorldWrite(async () => {
       if (!S.packs) return { ok: false, error: 'NO_WORLD' };
       // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
-      if (body?.mode === 'survival') {
+      if (body?.mode === 'survival' || body?.mode === 'compare') {
+        if (body.mode === 'compare') return actInComparison(body);
         if (!S.surv) return {ok:false,error:'NO_SURV'};
-        if (body.kind==='camp_sleep') return sleepSurvival();
-        let result;
-        if (body.kind==='talk_open') result = openTalk(S.surv,body);
-        else if (body.kind==='talk_say') result = await sayTo(S.surv,body,modelTalk);
-        else if (body.kind==='talk_close') result = closeTalk(S.surv);
-        else result = survAct(S.surv,body);
-        const settled = settleSurvival(S.surv);
-        if (result.ok || settled) return { ...result, persisted: await save() };
+        if (body.kind === 'camp_sleep') return sleepSurvival(S.surv);
+        const result = await actInSurvival(S.surv, body, modelTalk);
+        if (result.ok || result.settled) return {...result, persisted: await save()};
         return result;
       }
       const kind = String(body?.kind ?? '');
@@ -919,11 +1106,18 @@ export const host = {
     });
   },
   ctl(body) {
+    if (body.action === 'step' && body.mode === 'compare') return queueWorldWrite(async () => {
+      await tickComparison();
+      publishComparison();
+      return {...this.status(), ok: true, persisted: await saveComparison()};
+    });
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
       const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask'];
-      if (body.action === 'pause') S.running = false;
-      if (body.action === 'resume') S.running = true;
+      if (body.action === 'pause' || body.action === 'resume') {
+        const key = body.mode === 'compare' ? 'compareRunning' : 'running';
+        S[key] = body.action === 'resume';
+      }
       if (body.action === 'brain') {
         // H-02b：旧版这里调 buildPacks()，等于**静默把世界打回起点**（实测 t 5→0、stat.决策 15→0、
         // log 15→0），而日志里一个字都不写。用户点一下"内心：真实模型"就丢掉整段可见历史。
@@ -950,6 +1144,14 @@ export const host = {
       }
       if (body.action === 'compare_reset' && body.confirm !== true) {
         return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
+      }
+      if (body.action === 'compare_reset' && body.mode === 'compare') {
+        const previous = S.comparison;
+        const origin = body.fromSurvival === true ? structuredClone(dumpSurv(S.surv)) : previous.origin;
+        S.comparison = makeComparison(origin, previous.revision + 1);
+        if (await saveComparison()) { publishComparison(); return {...this.status(), ok: true}; }
+        S.comparison = previous;
+        return {...this.status(), ok: false, error: 'SAVE_FAILED'};
       }
       if (body.action === 'reset' || body.action === 'compare_reset') {
         // 重置是从零刻新建世界，不是回到种子：这次会话的起点必须跟着改写，
@@ -979,8 +1181,17 @@ export const host = {
         // 随后 S.masks 被写进一个不该存在的键。这里同样只认自有属性。
         if (!Object.hasOwn(S.masks, key)) return { ...this.status(), ok: false, error: 'UNKNOWN_MASK' };
         const next = Boolean(body.on);
-        if (next === S.masks[key]) return this.status();
-        S.masks[key] = next;
+        const masks = body.mode === 'compare' ? S.comparisonMasks : S.masks;
+        if (next === masks[key]) return {...this.status(), ok: true};
+        masks[key] = next;
+        if (body.mode === 'compare') {
+          const previous = S.comparison;
+          S.comparison = makeComparison(previous.origin, previous.revision + 1);
+          if (await saveComparison()) { publishComparison(); return {...this.status(), ok: true}; }
+          S.comparison = previous;
+          masks[key] = !next;
+          return {...this.status(), ok: false, error: 'SAVE_FAILED'};
+        }
         buildPacks();
         const label = key === 'm3' ? 'M3 目标承诺层' : 'M4 耦合调制权';
         const t = S.packs.A.world.t;

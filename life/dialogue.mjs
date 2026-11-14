@@ -35,7 +35,7 @@ export function talkInRange(world, talk) {
       world.loc.p1 === world.loc[talk.target]);
 }
 
-export function openTalk(sp, body) {
+export function openTalk(sp, body, now = Date.now()) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   const npc = w.agents[target];
@@ -51,7 +51,7 @@ export function openTalk(sp, body) {
   }
   const engage = engagementOf(w, npc);
   // 不耐烦按服务器墙钟计（世界 tick 可能很慢：1 tick≈12s 时“10 刻”不是人能感知的耐心）。
-  s.talk = { target, ...(contact&&{contact}), openTick: w.t, openAt: Date.now(), count: 0, engage, history: [], patienceMs: engage === 'open' ? 20000 : 12000 };
+  s.talk = { target, ...(contact&&{contact}), openTick: w.t, openAt: now, count: 0, engage, history: [], patienceMs: engage === 'open' ? 20000 : 12000 };
   const line = engage === 'refuse'
     ? `（${npc.name}没有抬头，手上的活没停。）`
     : speechLine(npc, { world: w, kind: 'talk', actionId: 'talk:p1', t: w.t });
@@ -92,7 +92,7 @@ export function leaveTalk(sp) {
 }
 
 // ask(prompt 上下文) 由 host 注入真实模型；没有模型时返回 null，走模板台词。
-export async function sayTo(sp, body, ask = null) {
+export async function sayTo(sp, body, ask = null, now = Date.now()) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   const text = String(body?.text ?? '').trim().slice(0, 240);
   const talk = s.talk;
@@ -105,7 +105,7 @@ export async function sayTo(sp, body, ask = null) {
   }
   const npc = w.agents[target];
   if (!text) return { ok: false, code: 'EMPTY_TEXT' };
-  if (Date.now() - talk.openAt > talk.patienceMs) {
+  if (now - talk.openAt > talk.patienceMs) {
     return { ok: true, left: true, ...leaveTalk(sp) };
   }
   talk.count += 1;

@@ -275,7 +275,9 @@
   #survPanel .survbtns { gap:6px; }
   #survPanel .survbtns button { background:var(--bg); color:var(--ink); border:2px solid var(--line); padding:3px 8px; cursor:pointer; font:inherit; flex:0 0 auto; white-space:nowrap; min-width:max-content; }
   #survPanel .survbtns button:hover { background:var(--a); color:var(--bg); }
-  body.surv-mode .town-only { display:none; }
+  body:not(.compare-mode) .compare-only, body.compare-mode .solo-only { display:none; }
+  body.compare-mode #cvB { cursor:default; }
+  body.compare-mode .compare-status { margin:0 16px; color:var(--dim); }
   #survPanel .survbtns button[disabled] { opacity:.45; cursor:not-allowed; }
   #survPanel .survbtns button[disabled]:hover { background:var(--bg); color:var(--ink); }
   #survPanel .surveco summary { cursor:pointer; color:var(--gold); padding:2px 0; font-size:12px; }
@@ -340,14 +342,14 @@
   aside::-webkit-scrollbar-track, .log::-webkit-scrollbar-track, #bpBody::-webkit-scrollbar-track, #mapbar::-webkit-scrollbar-track { background:var(--sunken); }
   aside::-webkit-scrollbar-thumb, .log::-webkit-scrollbar-thumb, #bpBody::-webkit-scrollbar-thumb, #mapbar::-webkit-scrollbar-thumb { background:var(--line); border:2px solid var(--sunken); }
   aside::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover, #bpBody::-webkit-scrollbar-thumb:hover, #mapbar::-webkit-scrollbar-thumb:hover { background:var(--gold); }
-  body.surv-mode { padding-bottom:76px; }
+  body.play-mode { padding-bottom:76px; }
   details.grp { border:2px solid var(--line); background:var(--panel); }
   details.grp > summary { cursor:pointer; padding:6px 10px; font-weight:bold; color:var(--gold); background:var(--sunken); list-style:none; }
   details.grp > summary::before { content:'▸ '; }
   details.grp[open] > summary::before { content:'▾ '; }
   details.grp > summary::-webkit-details-marker { display:none; }
   details.grp > *:not(summary) { margin:8px; }
-  body:not(.surv-mode) .surv-only { display:none !important; }
+  body:not(.play-mode) .surv-only { display:none !important; }
   #survPanel { margin:0 !important; border:0 !important; padding:0 !important; background:transparent !important; }
   #hotbar { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:6px;
     padding:8px 10px; background:var(--panel); border:2px solid var(--line-hi); box-shadow:4px 4px 0 var(--shadow); z-index:60; width:max-content; max-width:calc(100vw - 16px); justify-content:center; flex-wrap:wrap; }
@@ -563,6 +565,21 @@
     position:absolute; inset:2px; z-index:20; pointer-events:none;
     container-type:inline-size;
   }
+  #residentSpeech {
+    position:absolute; width:max-content; max-width:min(14em, calc(100cqw - 12px));
+    padding:4px 8px; line-height:1.4; font-size:14px;
+    border:1px solid var(--line-hi); background:rgba(24,37,30,.75);
+    color:var(--ink); text-shadow:1px 1px #000;
+    transform:translateY(-100%);
+  }
+  #residentSpeech::after {
+    content:""; position:absolute; top:100%; left:var(--speech-anchor, 50%);
+    border:4px solid transparent; border-top-color:var(--line-hi); transform:translateX(-50%);
+  }
+  #residentSpeechText {
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2;
+    overflow:hidden; overflow-wrap:anywhere;
+  }
   #seasonHud {
     position:absolute; top:0; right:0; max-width:54%;
     padding:5px 9px; border:2px solid #BA8752;
@@ -682,11 +699,12 @@
   <span id="ctlCluster">
     <button id="btnRun" class="on">▶ 运行</button>
     <button id="btnStep">单步</button>
-    <button id="btnSleep" title="假装容器休眠 45 分钟">休眠 45 分钟</button>
-    <button id="btnReset">重置世界</button>
-    <button id="btnBrain" class="town-only" title="切换内心来源">内心：本地替身</button>
-    <button id="btnM3" class="town-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>
-    <button id="btnM4" class="town-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
+    <button id="btnSleep" class="solo-only" title="假装容器休眠 45 分钟">休眠 45 分钟</button>
+    <button id="btnReset" class="compare-only">重跑对照</button>
+    <button id="btnCompareSnapshot" class="compare-only">用当前生存快照</button>
+    <button id="btnBrain" class="solo-only" title="切换内心来源">内心：本地替身</button>
+    <button id="btnM3" class="compare-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>
+    <button id="btnM4" class="compare-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>
   </span>
   <span class="spacer"></span>
   <button id="btnCampAngle" type="button" hidden>转视角</button>
@@ -737,6 +755,7 @@
           </div>
           <div id="playerHud" aria-label="体力 / 存续 / 本刻行动"></div>
           <div id="placeHud" aria-label="地点"></div>
+          <div id="residentSpeech" hidden><span id="residentSpeechText"></span></div>
         </div>
       </div>
       <details id="grpSurv" class="grp surv-only" open>
@@ -761,24 +780,13 @@
       <summary>聚落一览</summary>
       <div id="villagePanel"></div>
     </details>
-    <details id="grpYou" class="grp town-only">
-      <summary>你（玩家）</summary>
-      <div class="say">
-        <input id="sayText" placeholder="对他们说一句话，两个世界收到同一句" />
-        <button id="btnSay">说</button>
-      </div>
-      <div class="hailrow" id="hail"></div>
-    </details>
-    <details id="grpSocial" class="grp town-only">
-      <summary>关系与规范</summary>
-      <div id="social" class="social"></div>
-      <div id="secrets" class="secrets"></div>
-    </details>
 
   </aside>
 </main>
     <details class="lab grp" id="labPanel" open>
       <summary>研究面板 · 判据 / 对照 / 日志</summary>
+      <p class="compare-status" id="compareOrigin"></p>
+      <output class="compare-status" id="compareAction"></output>
       <div class="inner lab-cols">
         <div class="lab-left">
           <div class="ab-pair">
@@ -786,7 +794,7 @@
             <div class="ab-col"><div class="wstat" id="statB"></div><div class="rows" id="rowsB"></div></div>
           </div>
           <table id="tbl"></table>
-          <div class="note">世界是一整片 120×80 格的自然地形，视口随屏幕和地点调整；点空地行走，点建筑进入，连廊两侧通向居所与公仓。两个世界收到同一个动作。M3/M4 默认关，切上只叠 A 侧并回起点重放。</div>
+          <div class="note">在 A 侧操作，动作交给两侧分别裁决。M3 与 M4 只作用于 A 侧，切换时从本轮起点重跑。</div>
           <h2>读图</h2><div class="lab-legend"><span>■ A 侧 · 承重通道开</span><span>■ B 侧 · 承重通道切断</span><span>■ 地点 / 镜头位置</span><span>■ 驳回 / 永久损失</span><span>▮ 读条：亮格=当前值 · 描边格=基线（醒/近/抑/静）</span><span>── 存续曲线：虚线=临界点，红竖线=一次不可逆损失</span></div>
         </div>
         <div class="lab-right">

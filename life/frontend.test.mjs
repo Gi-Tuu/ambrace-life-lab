@@ -43,7 +43,7 @@ test('F4 服务端字符串进 innerHTML 前必须过 esc（抽查所有插值�
 });
 
 test('F5 页面结构：A/B 双世界栏与关键面板都在', () => {
-  for (const id of ['cvA', 'cvB', 'rowsA', 'rowsB', 'statA', 'statB', 'secrets', 'hail', 'social', 'tbl', 'log', 'backend']) {
+  for (const id of ['cvA', 'cvB', 'rowsA', 'rowsB', 'statA', 'statB', 'compareOrigin', 'compareAction', 'tbl', 'log', 'backend']) {
     assert.ok(HTML.includes(`id="${id}"`), `index.html 缺 #${id}`);
   }
 });
@@ -116,7 +116,7 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
     }));
     assert.ok(dom.includes('通道开'), '渲染结果里没有 A 侧标题 ⇒ 页面没起来');
     assert.ok(dom.includes('通道切断'), '渲染结果里没有 B 侧标题');
-    assert.match(dom, /id="backend"[^>]*>后端：本地替身/, '后端 chip 仍是读取中 ⇒ refresh 没跑（模块抛错/TDZ）');
+    assert.match(dom, /id="backend"[^>]*>研究对照：两侧使用本地替身/, '后端 chip 仍是读取中 ⇒ refresh 没跑（模块抛错/TDZ）');
     assert.ok(!/undefined|NaN/.test(dom), '页面里漏出了 undefined/NaN');
     assert.ok(dom.length > 2000, `DOM 太小（${dom.length}）⇒ 可能只渲染了骨架`);
   } finally {

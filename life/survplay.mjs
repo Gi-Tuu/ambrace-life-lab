@@ -13,6 +13,7 @@ import { validate } from './rules.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
+import { speechLine } from './speech.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -45,7 +46,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -74,10 +75,11 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
   world.residentChannelMask = residentChannelMask;
+  world.residentCondition = residentCondition;
   // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
   world.sex = { a1: 'M', a2: 'F', a3: sexOf(seed, 'a3'), p1: sexOf(seed, 'p1') };
   for (const [id, name, archetype] of ROSTER) {
-    const a = new Organism({ id, name, archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator, channelMask: residentChannelMask });
+    const a = new Organism({ id, name, archetype, seed: hashSeed(seed, `${id}:surv`), condition: residentCondition, deliberator, channelMask: residentChannelMask });
     world.agents[id] = a;
     spawn(world, id, 'home');
   }
@@ -249,7 +251,7 @@ function restoreDistricts(world) {
   }
 }
 
-export async function tickSurvPlay(sp) {
+export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   const w = sp.world;
   w.t += 1;
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
@@ -318,7 +320,9 @@ export async function tickSurvPlay(sp) {
       try { a.drives.tick(1, false); a.viab.tick(1); } catch { /* 对话优先 */ }
       continue;
     }
+    const traceStart = onResidentAction ? a.trace.length : 0;
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    if (onResidentAction) onResidentAction(a, a.trace.slice(traceStart));
     if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
     if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
     // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
@@ -331,13 +335,13 @@ export async function tickSurvPlay(sp) {
       if (mult > 1) a.drives.tick(mult - 1, false);
     }
     // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
-    a.ch.m3 = w.survival.commitChain === true ? 1 : 0;
+    a.ch.m3 = w.residentChannelMask?.m3 ?? Number(w.survival.commitChain === true);
   }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
   const talk = w.survival.talk;
-  if (talk && Date.now() - talk.openAt > talk.patienceMs) {
+  if (talk && (now ?? Date.now()) - talk.openAt > talk.patienceMs) {
     const gone = leaveTalk(sp);
     if (gone) sp.log.push({ t: w.t, kind: 'talk_left', ok: true, code: gone.line });
   }
@@ -365,7 +369,7 @@ function newChild(w, id, parents = null) {
     ? [pa.traits.archetype, pb.traits.archetype][hashSeed(seed, `arch:${id}`) % 2]
     : ARCHETYPES[hashSeed(seed, `arch:${id}`) % 3];
   return new Organism({ id, name: CHILD_NAMES[index % CHILD_NAMES.length],
-    archetype, seed: hashSeed(seed, `${id}:surv`), condition: 'C2', deliberator: w.survivalDeliberator, channelMask: w.residentChannelMask });
+    archetype, seed: hashSeed(seed, `${id}:surv`), condition: w.residentCondition, deliberator: w.survivalDeliberator, channelMask: w.residentChannelMask });
 }
 function reproduce(w, log) {
   const s = w.survival;
@@ -448,7 +452,10 @@ function budgetLeft(w) {
   if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
   return s.p1BudgetLeft;
 }
-export function playerTimeLeft(w) { budgetLeft(w); return w.survival.p1BudgetLeft; }
+export function playerTimeLeft(w) {
+  const s = w.survival;
+  return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
+}
 function spendTime(w, cost) {
   budgetLeft(w);
   if (w.survival.p1BudgetLeft + 1e-9 < cost) return false;
@@ -672,6 +679,22 @@ function crisisGoals(w) {
   return goals.slice(0, 4);
 }
 
+// 台词只取本刻已经成功执行的自主交谈。读快照不推进世界，也不调用模型。
+function currentSpeech(w) {
+  const speech = {};
+  for (const a of livingResidents(w)) {
+    const trace = a.trace ?? [];
+    let act;
+    for (let i = trace.length - 1; i >= 0 && trace[i].t === w.t; i--) {
+      if (trace[i].ok && trace[i].kind === 'talk') { act = trace[i]; break; }
+    }
+    if (act && isAlive(w.agents[act.target]) && w.loc[a.id] === w.loc[act.target]) {
+      speech[a.id] = speechLine(a, { world: w, kind: act.kind, actionId: act.action, t: act.t });
+    }
+  }
+  return speech;
+}
+
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
@@ -691,6 +714,7 @@ export function survView(sp) {
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans },
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
+    speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
       ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
@@ -728,7 +752,7 @@ export function dumpSurv(sp) {
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  return { t: w.t, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
@@ -753,6 +777,7 @@ export function loadSurv(raw,seed=7,options) {
     w.weather = weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.pending = structuredClone(raw.pending ?? []);
+    if (raw.residentTravel) w.residentTravel = structuredClone(raw.residentTravel);
     if (raw.locs) sp.world.locs = { ...sp.world.locs, ...raw.locs };
     if (raw.outdoor) sp.world.outdoor = raw.outdoor.slice();
     if (raw.stash) sp.world.stash = { ...sp.world.stash, ...raw.stash };

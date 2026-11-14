@@ -1,7 +1,7 @@
 // 对话层闸门：居民有权不理、走开、发火甚至动手；模型只负责措辞，不负责态度。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSurvPlay } from './survplay.mjs';
+import { createSurvPlay, dumpSurv, survView, tickSurvPlay } from './survplay.mjs';
 import { move } from './body.mjs';
 import { openTalk, sayTo, closeTalk } from './dialogue.mjs';
 
@@ -65,4 +65,27 @@ test('正常回应走模型；没有模型时退模板，关系仍按关键词�
   const r2 = await sayTo(sp, { target: 'a1', text: '今天天气不错' }, null);
   assert.ok(r2.line && !r2.line.includes('模型'), '无模型时应退模板');
   assert.equal(closeTalk(sp).ok, true);
+});
+
+test('生存气泡只读取本刻成功的居民交谈，轮询不会改变存档状态', async () => {
+  const sp = createSurvPlay(13);
+  assert.deepEqual(survView(sp).speech, {});
+  await tickSurvPlay(sp);
+  const w = sp.world;
+  const talk = w.agents.a1.trace.find((act) => act.t === w.t && act.ok && act.kind === 'talk');
+  assert.equal(talk?.target, 'a2');
+  const before = structuredClone(dumpSurv(sp));
+  const speech = survView(sp).speech;
+  assert.match(speech.a1, /绛/);
+  assert.deepEqual(survView(sp).speech, speech);
+  assert.deepEqual(dumpSurv(sp), before);
+
+  talk.ok = false;
+  assert.equal(survView(sp).speech.a1, undefined);
+  talk.ok = true;
+  move(w, 'a2', 'hall');
+  assert.equal(survView(sp).speech.a1, undefined);
+  move(w, 'a2', w.loc.a1);
+  w.t += 1;
+  assert.equal(survView(sp).speech.a1, undefined);
 });
