@@ -17,7 +17,7 @@ import {
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
 import { districtResources, addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
-import { actorBoxes, animalBoxes, campCamera, coveredModels, createCampRenderer, rayBox } from './camp-3d-render.mjs';
+import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer, modelBounds, rayBox } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 import { createCollisionEditor } from './collision-editor.mjs';
@@ -368,7 +368,6 @@ function worldWithCollisions(sites, w) {
     if (scene3d) {
       const boxes=[], previous=worldCache.workProjects;
       const projects=addCampWork(boxes,w,appearance);
-      worldCache.outsideSolids=boxes.filter(b=>b.solid && !inCamp(b.x+b.w/2,b.z+b.d/2));
       for (const project of projects) {
         const old=previous?.find(p=>p.id===project.id);
         project.since=previous && old?.phase!==project.phase ? performance.now() : old?.since??-1000;
@@ -376,7 +375,8 @@ function worldWithCollisions(sites, w) {
       worldCache.workProjects=projects;
       boxes.push(...timberStage(timber,worldCache.grove).boxes);
       worldCache.work3d=boxes;
-      const solids=boxes.filter(b=>b.solid);
+      const solids=boxes.filter(b=>b.solid).map(b=>({...b,...(b.bounds??modelBounds(b))}));
+      worldCache.outsideSolids=solids.filter(b=>!inCamp(b.x+b.w/2,b.z+b.d/2));
       const collisionSignature=JSON.stringify(solids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
       if (worldCache.solidSignature!==collisionSignature) {
         worldCache.solidSignature=collisionSignature;
@@ -457,8 +457,7 @@ function worldWithCollisions(sites, w) {
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
     if (!b.solid) continue;
-    const x = Math.floor(b.x*TILE), z = Math.floor(b.z*TILE);
-    fillCollisionRect(walk,width,height,x,z,Math.ceil((b.x+b.w)*TILE)-x,Math.ceil((b.z+b.d)*TILE)-z,0);
+    fillCollisionRect(walk,width,height,...collisionFootprint(b,TILE),0);
   }
 }
 

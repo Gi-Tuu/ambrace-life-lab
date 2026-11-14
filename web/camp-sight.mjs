@@ -1,4 +1,4 @@
-import { rayBox } from './camp-3d-render.mjs';
+import { modelBounds, rayBox } from './camp-3d-render.mjs';
 
 const CELL=.5, BIN=2;
 
@@ -23,12 +23,14 @@ function heightSampler(height) {
 export function sightScene(height, lists) {
   const bins=new Map();
   for (const boxes of lists) for (const b of boxes) {
-    if ((!b.occluder && !b.solid) || b.fx || b.h<.22 || b.w*b.d<.025) continue;
+    if ((!b.occluder && !b.solid) || b.fx) continue;
+    const {x,z,w,h,d}=b.bounds??modelBounds(b);
+    if (h<.22 || w*d<.025) continue;
     // Include adjacent bins a quarter-tile ray step can skip at a corner.
-    const pad=.25+(b.yaw?Math.hypot(b.w,b.d):0);
-    for (let z=Math.floor((b.z-pad)/BIN);z<=Math.floor((b.z+b.d+pad)/BIN);z++) {
-      for (let x=Math.floor((b.x-pad)/BIN);x<=Math.floor((b.x+b.w+pad)/BIN);x++) {
-        const key=x+','+z;
+    const pad=.25;
+    for (let j=Math.floor((z-pad)/BIN);j<=Math.floor((z+d+pad)/BIN);j++) {
+      for (let i=Math.floor((x-pad)/BIN);i<=Math.floor((x+w+pad)/BIN);i++) {
+        const key=i+','+j;
         if (!bins.has(key)) bins.set(key,[]);
         bins.get(key).push(b);
       }

@@ -6,6 +6,33 @@ function rotateXZ([x,y,z], angle, px=0, pz=0) {
   return [px+(x-px)*c-(z-pz)*s,y,pz+(x-px)*s+(z-pz)*c];
 }
 
+// Euler order X → Y → Z. The legacy yaw uses its original sign convention.
+function rotate(point, angles, pivot=[0,0,0], inverse=false) {
+  const v=point.map((n,i)=>n-pivot[i]);
+  for (const axis of inverse?[2,1,0]:[0,1,2]) {
+    const a=(axis+1)%3,b=(axis+2)%3, angle=angles[axis]*(inverse?-1:1);
+    const c=Math.cos(angle),s=Math.sin(angle), left=v[a],right=v[b];
+    v[a]=left*c-right*s;
+    v[b]=left*s+right*c;
+  }
+  return v.map((n,i)=>n+pivot[i]);
+}
+
+function transformBox(point,b) {
+  if (b.rot) return rotate(point,b.rot,b.pivot);
+  return b.yaw?rotateXZ(point,b.yaw,b.pivotX,b.pivotZ):point;
+}
+
+export function boxVertices(b) {
+  const {x,y,z,w,h,d,axis,end}=b;
+  const top=(u,v)=>axis==='x'?y+(end-y)*u:axis==='z'?y+(end-y)*v:y+h;
+  const bottom=axis?Math.min(y,end)-.11:y;
+  const x1=x+w,z1=z+d;
+  const points=[[x,top(0,0),z],[x1,top(1,0),z],[x1,top(1,1),z1],[x,top(0,1),z1],
+    [x,bottom,z],[x1,bottom,z],[x1,bottom,z1],[x,bottom,z1]];
+  return b.rot || b.yaw ? points.map(p=>transformBox(p,b)) : points;
+}
+
 const rgb = (hex, shade = 1) => [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)*shade/255);
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -36,11 +63,19 @@ export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55
 
 // 射线用同一相机方向判定点击深度和实际遮挡。
 export function rayBox(origin, direction, b) {
-  if (b.yaw) {
+  if (b.shape==='beam') return rayBeam(origin,direction,b);
+  if (b.rot) {
+    origin=rotate(origin,b.rot,b.pivot,true);
+    direction=rotate(direction,b.rot,undefined,true);
+  } else if (b.yaw) {
     origin=rotateXZ(origin,-b.yaw,b.pivotX,b.pivotZ);
     direction=rotateXZ(direction,-b.yaw);
   }
   const lower=[b.x,b.y,b.z], upper=[b.x+b.w,b.y+b.h,b.z+b.d];
+  return rayBounds(origin,direction,lower,upper);
+}
+
+function rayBounds(origin,direction,lower,upper) {
   let near=0, far=Infinity;
   for (let i=0;i<3;i+=1) {
     const o=origin[i], d=direction[i];
@@ -56,14 +91,74 @@ export function rayBox(origin, direction, b) {
   return near;
 }
 
+export function beam(from,to,r,color,segments=6) {
+  const axis=to.map((n,i)=>n-from[i]), length=Math.hypot(...axis);
+  if (!(length>1e-8 && r>0)) return null;
+  const unit=axis.map(n=>n/length);
+  const u=norm(cross(Math.abs(unit[1])>.95?[1,0,0]:[0,1,0],unit));
+  const v=cross(unit,u);
+  const count=Number.isFinite(segments)?Math.max(6,Math.min(64,Math.floor(segments))):6;
+  return {shape:'beam',from,to,r,color,segments:count,unit,u,v,length};
+}
+
+export function cyl(x,y,z,r,h,color,segments=8,axis='y') {
+  if (!['x','y','z'].includes(axis) || !(h>0)) return null;
+  const from=[x,y,z], to=from.slice();
+  to['xyz'.indexOf(axis)]+=h;
+  return beam(from,to,r,color,segments);
+}
+
+function beamRing(b) {
+  return Array.from({length:b.segments},(_,i)=>{
+    const angle=i*2*Math.PI/b.segments,c=Math.cos(angle)*b.r,s=Math.sin(angle)*b.r;
+    return b.u.map((n,j)=>n*c+b.v[j]*s);
+  });
+}
+
+function rayBeam(origin,direction,b) {
+  // Clip against the two caps and the actual polygon faces, not the enclosing box.
+  const relative=origin.map((n,i)=>n-b.from[i]);
+  let near=0,far=Infinity;
+  const normals=[[b.unit,b.length],[b.unit.map(n=>-n),0]];
+  for (let i=0;i<b.segments;i++) {
+    const angle=(i+.5)*2*Math.PI/b.segments;
+    const normal=b.u.map((n,j)=>n*Math.cos(angle)+b.v[j]*Math.sin(angle));
+    normals.push([normal,b.r*Math.cos(Math.PI/b.segments)]);
+  }
+  for (const [normal,bound] of normals) {
+    const left=bound-dot(relative,normal), speed=dot(direction,normal);
+    if (Math.abs(speed)<1e-8) { if (left<0) return null; }
+    else if (speed>0) far=Math.min(far,left/speed);
+    else near=Math.max(near,left/speed);
+    if (near>far) return null;
+  }
+  return near;
+}
+
+export function modelBounds(b) {
+  if (!b.shape && !b.rot && !b.yaw) return b;
+  const points=b.shape==='beam'?beamRing(b).flatMap(offset=>[b.from,b.to].map(p=>p.map((n,i)=>n+offset[i]))):boxVertices(b);
+  const low=[0,1,2].map(i=>Math.min(...points.map(p=>p[i])));
+  const high=[0,1,2].map(i=>Math.max(...points.map(p=>p[i])));
+  return {x:low[0],y:low[1],z:low[2],w:high[0]-low[0],h:high[1]-low[1],d:high[2]-low[2]};
+}
+
+export function collisionFootprint(b,scale) {
+  const {x,z,w,d}=b.bounds??modelBounds(b);
+  const left=Math.floor(x*scale), top=Math.floor(z*scale);
+  return [left,top,Math.ceil((x+w)*scale)-left,Math.ceil((z+d)*scale)-top];
+}
+
 export function coveredModels(camera, player, ...lists) {
   const covered=new Set();
   if (!player || camera.back[1]>.995) return covered;
   const {x,y,z}=player;
   const samples=[[x,y+.12,z],[x,y+.59,z],[x,y+1.11,z]];
   for (const boxes of lists) for (const b of boxes) {
-    if (!b.occluder || covered.has(b.occluder) || b.fx || b.y+b.h<=y+.12 ||
-        b.x>x+9 || b.x+b.w<x-9 || b.z>z+9 || b.z+b.d<z-9) continue;
+    if (!b.occluder || covered.has(b.occluder) || b.fx) continue;
+    const bounds=b.bounds??modelBounds(b);
+    if (bounds.y+bounds.h<=y+.12 || bounds.x>x+9 || bounds.x+bounds.w<x-9 ||
+        bounds.z>z+9 || bounds.z+bounds.d<z-9) continue;
     if (samples.some(origin => {
       const distance=rayBox(origin,camera.back,b);
       return distance!==null && distance>.025;
@@ -77,22 +172,36 @@ function quad(data,a,b,c,d,color,uv=[[0,0],[0,0],[0,0],[0,0]],material=()=>[0,0,
   for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]));
 }
 
-function prism(data,{ x,y,z,w,h,d,color,axis,end,glow,wind,yaw,pivotX,pivotZ }) {
+export function modelMesh(data,b) {
+  if (b.shape==='beam') {
+    const ring=beamRing(b), add=(p,q)=>p.map((n,i)=>n+q[i]);
+    for (let i=0;i<ring.length;i++) {
+      const next=(i+1)%ring.length;
+      const a=add(b.from,ring[i]), c=add(b.to,ring[i]), d=add(b.to,ring[next]), e=add(b.from,ring[next]);
+      const tint=rgb(b.color,.76+.18*Math.cos(i*2*Math.PI/ring.length));
+      quad(data,a,e,d,c,tint);
+      for (const [points,shade] of [[[b.from,e,a],.68],[[b.to,c,d],1]]) {
+        const color=rgb(b.color,shade);
+        for (const point of points) data.push(...point,...color,0,0,0,0,0);
+      }
+    }
+    return;
+  }
+  prism(data,b);
+}
+
+function prism(data,b) {
+  const { x,y,z,w,h,d,color,axis,glow,wind }=b;
   if (w <= 0 || d <= 0 || h < 0) return;
-  const x1=x+w,z1=z+d;
-  const height=(u,v)=>axis==='x' ? y+(end-y)*u : axis==='z' ? y+(end-y)*v : y+h;
-  const bottom=axis ? Math.min(y,end)-.11 : y;
-  const a=[x,height(0,0),z],b=[x1,height(1,0),z],c=[x1,height(1,1),z1],d0=[x,height(0,1),z1];
-  const A=[x,bottom,z],B=[x1,bottom,z],C=[x1,bottom,z1],D=[x,bottom,z1];
+  const [a,bb,c,d0,A,B,C,D]=boxVertices(b);
   const material=point=>[wind ? wind.weight*(wind.rooted ? (point[1]-y)/Math.max(h,.01) : 1) : 0,
     wind?.phase??0,Number(Boolean(glow))];
   const face=(a,b,c,d,shade=1)=>{
-    const points=yaw?[a,b,c,d].map(p=>rotateXZ(p,yaw,pivotX,pivotZ)):[a,b,c,d];
-    quad(data,...points,rgb(color,shade),undefined,material);
+    quad(data,a,b,c,d,rgb(color,shade),undefined,material);
   };
-  face(a,b,c,d0);
+  face(a,bb,c,d0);
   if (!axis && h===0) return;
-  face(a,b,B,A,.70); face(b,c,C,B,.78);
+  face(a,bb,B,A,.70); face(bb,c,C,B,.78);
   face(c,d0,D,C,.91); face(d0,a,A,D,.65);
 }
 
@@ -124,7 +233,7 @@ function stageMesh(stage) {
   for (const b of stage.boxes) {
     if (b.fx) continue;
     const from=out.length/11;
-    prism(out,b);
+    modelMesh(out,b);
     const count=out.length/11-from, last=ranges.at(-1);
     if (last && last.id===b.occluder) last.count+=count;
     else ranges.push({id:b.occluder,from,count});
@@ -573,7 +682,7 @@ export function createCampRenderer() {
       if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
       const moving=[];
       const translucent=[];
-      for (const box of work) prism(covered.has(box.occluder)?translucent:moving,box);
+      for (const box of work) modelMesh(covered.has(box.occluder)?translucent:moving,box);
       fx3d(moving,stage.fxs?.filter(b=>!covered.has(b.occluder)),frame);
       fx3d(moving,life?.fxs,frame);
       animalMesh(moving,animals,weather[0]);

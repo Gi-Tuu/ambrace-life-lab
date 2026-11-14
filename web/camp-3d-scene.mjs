@@ -1,3 +1,4 @@
+import { beam, cyl, modelBounds } from './camp-3d-render.mjs';
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
 import { facilityGate } from './camp-facility.mjs';
@@ -5,6 +6,14 @@ import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from '
 import { itemBoxes } from './camp-items.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
+
+function addModel(boxes,model,occluder) {
+  if (!model) return null;
+  const entry={...model,occluder};
+  if (entry.rot || entry.shape) entry.bounds=modelBounds(entry);
+  boxes.push(entry);
+  return entry;
+}
 
 function stage(width, depth) {
   const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [];
@@ -18,11 +27,13 @@ function stage(width, depth) {
       occluder=previous;
     },
     // fxKind 非空 ⇒ 这块几何不进静态网格，改由渲染器按动画帧逐帧生成（呼吸感）。
-    box(x, y, z, w, h, d, color, solid = false, glow = false, fxKind = null) {
-      const item = { x,y,z,w,h,d,color,solid,glow,occluder };
+    box(x, y, z, w, h, d, color, solid = false, glow = false, fxKind = null, transform) {
+      const item=addModel(boxes,{x,y,z,w,h,d,color,solid,glow,...transform},occluder);
       if (fxKind) { item.fx = fxKind; fxs.push(item); }
-      boxes.push(item);
       return item;
+    },
+    beam(...args) { return addModel(boxes,beam(...args),occluder); },
+    cyl(...args) { return addModel(boxes,cyl(...args),occluder);
     },
     floor(x, z, w, d, y, color, axis, end = y) { floors.push({ x,z,w,d,y,color,axis,end }); },
     heightAt(x, z) {
@@ -937,6 +948,11 @@ function shelter3d(s, lot, record, world) {
   s.box(X + W / 2 - .4, .24, front + .05, .8, 1.3, .04, '#AB5236');
   s.box(X - .2, 2.06, front + .2, W + .4, .12, .9, DARK);           // 门廊挑檐
   grGable(s, X - .1, 2.06, Z - .1, W + .2, D + .2, damaged ? '#5F574F' : '#8D593F', damaged ? 2 : 0);
+  const drainX=X+.42, drainZ=front+1.11;
+  s.beam([drainX,2.08,drainZ],[X+W+.17,2.14,drainZ],.076,'#458996',8);
+  s.beam([drainX,2.08,drainZ],[drainX,1.91,front+.53],.052,'#458996');
+  s.cyl(drainX,.35,front+.53,.054,1.56,'#458996');
+  s.beam([drainX,.35,front+.53],[drainX,.25,front+.87],.055,'#458996');
   if (!damaged) {
     s.box(X + W - .75, 2.4, Z + .5, .38, .9, .38, '#5F574F');         // 烟囱
     s.box(X + W - .8, 3.3, Z + .45, .48, .12, .48, '#939584');
@@ -981,6 +997,14 @@ function workshop3d(s, lot, record, world) {
   worldItem(s, 'crate', X + W - 1.9, front - 1.35, .72, .16);
   worldItem(s, 'sack', X + W - 1.25, front - 1.35, .68, .16);
   if (!damaged) s.box(X + W - 1.5, .16, front - .62, .42, .34, .42, '#FFA300', false, 'fire');
+  // The exhaust joins the forge to the roof, with a rain cap on three supports.
+  const px=X+W-1.29,pz=front-.41;
+  s.cyl(px,.52,pz,.16,2.86,'#5F574F',8);
+  s.cyl(px,3.29,pz,.23,.14,'#939584',8);
+  for (const [dx,dz] of [[-.13,0],[.13,0],[0,.13]]) s.cyl(px+dx,3.43,pz+dz,.026,.17,'#939584',6);
+  s.cyl(px,3.60,pz,.25,.085,'#6D7165',8);
+  s.beam([X+.12,1.86,front-.1],[X+.78,2.43,front-.1],.066,'#72513B');
+  s.beam([X+W-.12,1.86,front-.1],[X+W-.78,2.43,front-.1],.066,'#72513B');
 }
 
 // 防护设施：沿地块长边的线性木墙，不是实心盒子；石基 + 木桩 + 横板 + 斜撑。
@@ -1018,7 +1042,9 @@ function wall3d(s, lot, record, world) {
     for (let i = 0; i < 3; i++) {
       const px = x + .7 + i * (w - 1.5) / 2;
       const fallen = damage >= 2 && i === 1;        // 重损：中间斜撑倒地
-      s.box(px, fallen ? .2 : .4, Z - (fallen ? .75 : .38), fallen ? .55 : .16, fallen ? .16 : .95, fallen ? .16 : .16, DARK);
+      const heel=[px,.46,Z-.59];
+      const head=fallen?[px+.55,.22,Z-.75]:[px,1.52,Z+.09];
+      s.beam(heel,head,.093,'#514134');
       s.box(px, .34, Z - .6, .5, .14, .3, GR_STONE[1]);
     }
   }
@@ -1055,6 +1081,15 @@ function home3d(s, lot, record, seed) {
   // 烟囱是房屋的一部分。烟、暖窗和柴堆由住户状态决定。
   s.box(X + W - .62, 2.35, Z + .45, .34, .92, .34, '#5F574F');
   s.box(X + W - .66, 3.27, Z + .41, .42, .11, .42, '#939584');
+  // A rain hood protects the threshold and is fixed back into the façade.
+  const pivot=[doorX,1.82,front+.16];
+  s.box(doorX-.72,1.78,front+.06,1.44,.09,.67,'#976A45',false,false,
+    {rot:[.25,0,0],pivot});
+  for (const side of [-1,1]) {
+    const px=doorX+side*.55;
+    s.beam([px,1.49,front+.08],[px,1.72,front+.51],.044,'#514134');
+  }
+  s.cyl(doorX+.26,.93,front+.088,.052,.08,'#D8A667',8,'z');
 }
 
 const HOME_LABOR = 3;
@@ -1150,11 +1185,24 @@ export function addCampWork(boxes, world, appearance = homeAppearance(world)) {
     const id=`work:${record.loc}:${record.type}`, labor=record.type === 'house' ? HOME_LABOR : world.buildingsDef?.[record.type]?.labor??6;
     const phase=constructionStage(record);
     projects.push({id,phase,record,lot,labor,gate:facilityGate(record,world.layout)});
-    const s={box(x,y,z,w,h,d,color,solid=false,rise=false) {
-      boxes.push({x,y,z,w,h,d,color,solid,occluder:id,rise});
-    }};
+    const s={
+      box(x,y,z,w,h,d,color,solid=false,rise=false,transform) {
+        addModel(boxes,{x,y,z,w,h,d,color,solid,rise,...transform},id);
+      },
+      beam(...args) { return addModel(boxes,beam(...args),id); },
+      cyl(...args) { return addModel(boxes,cyl(...args),id); },
+    };
     // 第一阶段：四种建筑各走专属轮廓，保留已验收的 granary3d 不动。
-    if (record.type === 'granary') { granary3d(s, lot, record, world); return; }
+    if (record.type === 'granary') {
+      granary3d(s,lot,record,world);
+      if (phase==='complete') {
+        // Loading handrail sits beside the existing stairs.
+        const railX=x+w/2-.72, front=z+d-.17;
+        for (const [y,pz] of [[.22,front+.47],[.8,front-.36]]) s.cyl(railX,y,pz,.042,.55,'#514134',6);
+        s.beam([railX,.77,front+.47],[railX,1.35,front-.36],.053,'#976A45');
+      }
+      return;
+    }
     if (record.type === 'shelter') { shelter3d(s, lot, record, world); return; }
     if (record.type === 'workshop') { workshop3d(s, lot, record, world); return; }
     if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
