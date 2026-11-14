@@ -3664,7 +3664,7 @@ async function refresh() {
         : `世界 ${WORLD_TW}×${WORLD_TH} 格 · 视口 ${VIEW_TW}×${VIEW_TH} 格 · 视野 ${lightRadius(viewA.phase)} 格（${viewA.phase ?? ''}）· WASD/方向键 移动 · 走近入口按 F 进入 · E 背包 · Shift 奔跑`;
     $('titA').textContent = S.soloSurv ? '生存 · 单世界' : 'A · 通道开';
     $('tagline').textContent = S.soloSurv ? '无尽生存 · 在荒野与居民共同生活。维持食物、住所和生态，应对四季与灾害。' : '同一颗种子、两个世界：左边内部状态参与决策，右边切断。';
-    $('tbl').innerHTML = table(j.A, j.B);
+    $('tbl').innerHTML = '<colgroup><col style="width:25%"><col style="width:50%"><col style="width:25%"></colgroup><tbody>' + table(j.A, j.B) + '</tbody>';
     updateHotbar();
     renderGauges(sv);
     renderVillage(sv);

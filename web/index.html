@@ -603,9 +603,10 @@
   .ab-col { min-width:0; padding:6px; border:1px solid var(--line); background:var(--panel); overflow:hidden; }
   .ab-col .rows { gap:6px; }
   #tbl { width:100%; table-layout:fixed; margin-top:10px; border-collapse:collapse; }
-  #tbl td:nth-child(1) { width:22%; }
-  #tbl td:nth-child(2) { width:28%; text-align:left; }
-  #tbl td:nth-child(3) { width:50%; text-align:left; }
+  #tbl td { padding:3px 0; border-bottom:1px solid var(--line); }
+  #tbl td:nth-child(1) { width:25%; text-align:left; }
+  #tbl td:nth-child(2) { width:50%; text-align:left; }
+  #tbl td:nth-child(3) { width:25%; text-align:left; }
   #tbl td, #tbl th { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* ⑤⑥ 事件：右侧独立可滚动窗口，合作施工常驻其顶部 */
   .lab-right { min-width:0; padding:8px; border:2px solid var(--line); background:var(--panel);
