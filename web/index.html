@@ -597,7 +597,7 @@
   body:not(.surv-mode) main { min-height:0; }
   body:not(.surv-mode) .occ { margin-top:6px; padding-top:6px; }
   /* ③④ 两份对比横排、表格与左栏对齐 */
-  .lab-cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(230px,30%); gap:12px; align-items:start; }
+  .lab-cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(230px,30%); gap:12px; align-items:stretch; }
   .lab-left { min-width:0; }
   .ab-pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .ab-col { min-width:0; padding:6px; border:1px solid var(--line); background:var(--panel); }
@@ -605,9 +605,11 @@
   #tbl { width:100%; table-layout:fixed; margin-top:10px; }
   #tbl td, #tbl th { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* ⑤⑥ 事件：右侧独立可滚动窗口，合作施工常驻其顶部 */
-  .lab-right { min-width:0; padding:8px; border:2px solid var(--line); background:var(--panel); }
+  .lab-right { min-width:0; padding:8px; border:2px solid var(--line); background:var(--panel);
+    display:flex; flex-direction:column; }
   .lab-right h2 { margin:0 0 6px; font-size:12px; }
-  .lab-right .log { height:240px; max-height:38vh; overflow-y:auto; border-top:2px solid var(--line); padding-top:6px; }
+  .lab-right .log { flex:1 1 0; min-height:120px; max-height:none; height:auto; overflow-y:auto;
+    border-top:2px solid var(--line); padding-top:6px; }
   #labCoop { margin-bottom:8px; padding:4px 6px; font-size:12px; line-height:1.4; background:var(--sunken); border:1px solid var(--line); }
   #labCoop .survrow { line-height:1.4; }
   @media (max-width:900px) {
