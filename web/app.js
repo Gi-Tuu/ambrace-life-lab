@@ -1,5 +1,5 @@
 import { createCampOutskirts, moveJoinedWalker } from './camp-outskirts.mjs';
-import { inCamp, WILDS } from './wild-landscape.mjs';
+import { forestDensity, inCamp, WILDS } from './wild-landscape.mjs';
 import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
 import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
@@ -323,7 +323,8 @@ function paintForestFloor(g, trees, blockers, terrain) {
 
 let worldCache = null;
 const worldCaches = new Map();
-let outskirtsKey, outskirts, terrainAtlas, terrainAtlasReady;
+const outskirtsCache=new WeakMap();
+let terrainAtlas, terrainAtlasReady;
 function outskirtsAtlas() {
   if (terrainAtlas && terrainAtlasReady===ASSETS.ready) return terrainAtlas;
   terrainAtlasReady=ASSETS.ready;
@@ -340,13 +341,14 @@ function outskirtsAtlas() {
   }
   return terrainAtlas;
 }
-function campOutskirts(w) {
-  const key=`${w.mapSeed??0}:${w.layoutVersion??0}`;
-  if (key!==outskirtsKey) {
-    outskirts=createCampOutskirts(w.mapSeed??0,w.layoutVersion??0,w.layout?.crossZ??34);
-    outskirtsKey=key;
+function campOutskirts(w, world) {
+  const key=world.canvas;
+  let terrain=outskirtsCache.get(key);
+  if (!terrain) {
+    terrain=world.landscape??createCampOutskirts(w.mapSeed??0,w.layoutVersion??0,w.layout?.crossZ??34,world);
+    outskirtsCache.set(key,terrain);
   }
-  return outskirts;
+  return terrain;
 }
 function terrainPixels() {
   if (worldCache.terrainWalk3d) return worldCache.terrainWalk3d;
@@ -550,6 +552,9 @@ function buildWorld(w) {
     return !flatLand.some(lot=>overlapsLot(footprint,lot)) &&
       Array.from({length:2*rz+1},(_,i)=>z-rz+i).every(y=>Math.abs(x-river(y))>rx+3.5);
   });
+  const roadDistance=(x,z)=>roadDist(x*TILE,z*TILE,true)/TILE;
+  const landscape=campRenderer && w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
+    {flatLand,hills,roadDistance}) : null;
   const highGround=(x,z)=>hills.some(hill=>reliefAt(hill,x+.5,z+.5)>.055);
   const nearLot=(x,z,pad=.85)=>reserved.some(lot=>overlapsLot({x,z,w:1,d:1},lot,pad));
   const nearGrove=(x,z)=>Boolean(w.camp?.timber) && grove.some(t=>Math.hypot(x+.5-t.x,z+.5-t.z)<1.7);
@@ -633,7 +638,8 @@ function buildWorld(w) {
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     if (highGround(tx,ty) || onRoad(tx, ty) || onRiver(tx, ty) || byBridge(tx,ty) || inPen(tx,ty) || nearLot(tx,ty) || nearGrove(tx,ty) || blockers.has(tileKey(tx, ty))) continue;
     const edge = Math.min(tx, WORLD_TW - 1 - tx, ty, WORLD_TH - 1 - ty);
-    const density = edge < 6 ? 0.20 : edge < 14 ? 0.10 : 0.038;
+    const density = landscape ? forestDensity(mapSeed,tx+.5,ty+.5)*.76 :
+      edge < 6 ? 0.20 : edge < 14 ? 0.10 : 0.038;
     if(trees.some(([x,y])=>Math.hypot(x-tx,(y-ty)*1.25)<2.8)||beds.some(b=>insideBed(tx*TILE+8,ty*TILE+8,b,28)))continue;
     if (terrainHash(tx, ty, 4) > density || nearSite(tx, ty, 4) || Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
     const mask = campRenderer ? null : placement(treeAsset(tx, ty), tx * TILE - 24, ty * TILE - 64, 64, 80);
@@ -706,7 +712,7 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
+  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -731,7 +737,7 @@ function buildWorld(w) {
   const waterMask=scene3d ? {width:WORLD_W,height:WORLD_H,bytes:terrain.map(k=>k===GROUND.water?255:0)} : null;
   const terrainWalk3d=scene3d ? terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE))))) : null;
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -1035,7 +1041,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   const [x,z]=joined
     ? moveJoinedWalker(x0,z0,dxStep,dzStep,
       (x,z,px,pz)=>mapAllows(map,x-.5,z-.5) && fits(px-.5,pz-.5,x-.5,z-.5),
-      campOutskirts(snapshot).walkable).map(v=>v-.5)
+      campOutskirts(snapshot,world).walkable).map(v=>v-.5)
     : moveMapFeet(map,walker.x,walker.y,dxStep,dzStep,fits);
   walker.moving=Math.hypot(x-walker.x,z-walker.y)>.00001;
   walker.x=x; walker.y=z;
@@ -1070,11 +1076,11 @@ function detourAroundBodies(world,walker,neighbours) {
 }
 
 const outingKey=w=>`ambrace:outing:${w?.layoutVersion??0}:${w?.mapSeed??0}`;
-function savedOuting(w) {
+function savedOuting(w,world) {
   try {
     const point=JSON.parse(sessionStorage.getItem(outingKey(w)));
     if (Array.isArray(point) && point.length===2 && point.every(Number.isFinite) &&
-        !inCamp(...point) && campOutskirts(w).walkable(...point)) return point.map(v=>v-.5);
+        !inCamp(...point) && campOutskirts(w,world).walkable(...point)) return point.map(v=>v-.5);
   } catch { /* storage can be unavailable */ }
   return null;
 }
@@ -1096,7 +1102,7 @@ function ensureWalker(cvId, who, world, slots) {
   const k = walkKey(cvId, who);
   let s = WALK[k];
   if (!s) {
-    const point=campRenderer && S.soloSurv && k==='cvA:p1' ? savedOuting(S.view) : null;
+    const point=campRenderer && S.soloSurv && k==='cvA:p1' ? savedOuting(S.view,world) : null;
     const [x,y]=point??auth;
     s=WALK[k]={x,y,path:[],pi:0,moving:false,face:1,auth:[...auth]};
     return s;
@@ -1766,8 +1772,8 @@ function campPick(g,camera,x,z,ratio) {
   }
 }
 // 全景：把正交投影留出的边带画成"地图桌"边框，而不是一大圈空白。
-function campMapFrame(g,camera,stage,ratio) {
-  const a=camera.project(0,0,0), b=camera.project(stage.width,0,stage.depth);
+function campMapFrame(g,camera,stage,ratio,bounds={west:0,north:0,east:stage.width,south:stage.depth}) {
+  const a=camera.project(bounds.west,0,bounds.north), b=camera.project(bounds.east,0,bounds.south);
   const x0=Math.min(a[0],b[0]),y0=Math.min(a[1],b[1]),x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]);
   const t=Math.max(1,Math.round(ratio));
   g.fillStyle='#72513B';
@@ -1779,7 +1785,7 @@ function campMapFrame(g,camera,stage,ratio) {
     g.fillRect(cx-(cx===x0?0:k),cy-(cy===y0?0:k),k,t);g.fillRect(cx-(cx===x0?0:k),cy-(cy===y0?0:k),t,k);
   }
   g.font=labelPx(12,ratio)+'px fusion-pixel,monospace';
-  g.fillStyle='#D9D6B8';g.fillText(`世界全景 · ${stage.width}×${stage.depth} 格`,Math.max(16*ratio,x0),Math.max(16*ratio,y0-8*ratio));
+  g.fillStyle='#D9D6B8';g.fillText(`世界全景 · ${bounds.east-bounds.west}×${bounds.south-bounds.north} 格`,Math.max(16*ratio,x0),Math.max(16*ratio,y0-8*ratio));
 }
 let campHover=null, outdoorIntent=null;
 
@@ -2006,13 +2012,22 @@ function drawCamp(cv,w) {
     span=overview?Math.max(world.tw+5,(world.th+4)*width/height):Math.min(29,Math.max(18,width/28));
     const connected=S.soloSurv && playerId==='cvA';
     const playerX=p[0]+.5, playerZ=p[1]+.5;
-    if (connected && !overview) {
-      extended=campOutskirts(w);
-      regions=extended.regions(playerX,playerZ);
-      if (!inCamp(playerX,playerZ)) targetY=extended.height(playerX,playerZ)+.55;
+    if (connected) {
+      extended=campOutskirts(w,world);
+      terrain=null; waterMask=null;
+      if (overview) {
+        x=(WILDS.west+WILDS.east)/2;
+        z=(WILDS.north+WILDS.south)/2;
+        span=Math.max(WILDS.east-WILDS.west+12,(WILDS.south-WILDS.north+12)*width/height);
+        regions=extended.overview();
+      } else {
+        regions=extended.regions(playerX,playerZ);
+        targetY=(inCamp(playerX,playerZ)?Math.max(stage.heightAt(playerX,playerZ),extended.height(playerX,playerZ)):
+          extended.height(playerX,playerZ))+.55;
+      }
     }
     visibility=overview || !pTile || !inCamp(playerX,playerZ)?null:campVisibility(world,playerId,pTile,w.phase);
-    if (visibility) sight=[pTile[0]+.5,pTile[1]+.5,lightRadius(w.phase)];
+    if (!overview && pTile) sight=[pTile[0]+.5,pTile[1]+.5,lightRadius(w.phase)];
     for(const [who,[sx,sy]] of Object.entries(slots)){
       const walker=WALK[walkKey(playerId,who)];
       const px=walker?.x??sx, pz=walker?.y??sy;
@@ -2020,6 +2035,7 @@ function drawCamp(cv,w) {
       if(visibility && who!=='p1' && (!visible || Math.hypot(px-pTile[0],pz-pTile[1])>sight[2]+.45))continue;
       people.push({who,x:px+.5,z:pz+.5,moving:walker?.moving,direction:walker?.direction,act:campAct(w,who)});
     }
+    if (extended) for (const animal of animals) animal.groundY=extended.height(animal.x,animal.z);
     work=animatedConstruction(world);
   }
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
@@ -2029,7 +2045,9 @@ function drawCamp(cv,w) {
   const weather=[time,open?(climate.storm?2.7:climate.rain?1.15:.55):0,Number(open&&climate.drought),
     w.phase==='夜'?.96:w.phase==='暮'?.48:0];
   for(const person of people){
-    person.y=person.poseY??(extended && !inCamp(person.x,person.z)?extended.height(person.x,person.z):stage.heightAt(person.x,person.z));
+        const surface=stage.heightAt(person.x,person.z);
+    const ground=extended?.height(person.x,person.z);
+    person.y=person.poseY??(ground===undefined ? surface : inCamp(person.x,person.z)?Math.max(surface,ground):ground);
     person.sex=w.agents?.[person.who]?.sex;
     person.stage=w.agents?.[person.who]?.stage;
     if (S.soloSurv && person.who==='p1') person.tool=ui.tool;
@@ -2046,7 +2064,7 @@ function drawCamp(cv,w) {
     exterior,extended,people,animals,work,visibility,sight};
   if (exterior && playerId==='cvA' && S.soloSurv) advanceOutdoorIntent(exterior,w,player);
   if (open && !overview) paintWeather(g,climate,time,ratio);
-  if(overview)campMapFrame(g,camera,stage,ratio);
+  if(overview)campMapFrame(g,camera,stage,ratio,extended?WILDS:undefined);
   // 贴地光圈：p1 黄、AI 绿抖动环；常驻，不穿屋顶。
   for(const p of people)campRing(g,camera,p,ratio,p.who==='p1'?'#FFEC27':'#C2C3C7',ACT.frame);
   if (residentHint) {
@@ -2071,7 +2089,7 @@ function drawCamp(cv,w) {
       campBadge(g,camera,[px,hit.labelHeight??stage.heightAt(px,pz)+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,p1:player?[player.x,player.y,player.z]:null};
+  cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended && !terrain),p1:player?[player.x,player.y,player.z]:null};
   cv.dataset.renderer='3d';
   return true;
 }
@@ -2095,10 +2113,10 @@ function campPoint(cv, ev) {
   }
   if (extended) {
     // First terrain intersection on the camera ray, including low ground outside the village.
-    for (let y=38;y>=-30;y-=.5) {
+    for (let y=42;y>=-30;y-=.5) {
       const x=base[0]+dx*y,z=base[1]+dz*y;
-      if (y<=nearest && inCamp(x,z)) break;
-      if (!inCamp(x,z) && y<=extended.height(x,z)) return [x,z];
+      if (y<=nearest && nearest>0) break;
+      if (y<=extended.height(x,z)) return [x,z];
     }
   }
   return point;
@@ -3311,7 +3329,7 @@ async function refresh() {
     $('btnOverview').classList.toggle('on',ui.overview);
     $('btnOverview').disabled=Boolean(ui.interior);
     $('btnOverview').title=ui.interior?'返回营地后可打开全景':'';
-    $('btnOverview').textContent = ui.surveyRoom ? '返回瞭望台' : ui.overview ? '返回角色视角' : S.soloSurv?'聚落全景':'世界全景';
+    $('btnOverview').textContent = ui.surveyRoom ? '返回瞭望台' : ui.overview ? '返回角色视角' : '世界全景';
     const fi = $('fullInfo');
     if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${viewA.t} 刻 · ${viewA.phase ?? ''} · 视野 ${lightRadius(viewA.phase)} 格`;
     const vi = $('visionInfo');
@@ -3616,7 +3634,7 @@ function visibleEntityHit(origin,ray,surfaces) {
 
 function pointedEntity(cv,ev) {
   const view=cv._cam, camera=view?.project3d;
-  if (!camera || ui.surveyRoom) return null;
+  if (!camera || ui.surveyRoom || view.mode==='overview') return null;
   const rect=cv.getBoundingClientRect(), u=(ev.clientX-rect.left)/rect.width,v=(ev.clientY-rect.top)/rect.height;
   const [x,z]=camera.ground(u,v,12), origin=[x,12,z], ray=camera.back.map(n=>-n);
   const surfaces=[];
@@ -3654,7 +3672,7 @@ function pointedEntity(cv,ev) {
     }
   }
   const hit=visibleEntityHit(origin,ray,surfaces);
-  if (hit && view.sight) {
+  if (hit && view.sight && view.visibility) {
     const [hx,hz]=hit.at, {tw,th}=view.exterior;
     const ix=Math.floor(hx), iz=Math.floor(hz);
     if (ix<0 || ix>=tw || iz<0 || iz>=th || !view.visibility?.[iz*tw+ix] ||

@@ -176,7 +176,7 @@ export function animalBoxes(a,time) {
     const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
     const flight=a.kind==='bird'?2.7+.7*Math.sin(time*1.8+a.phase):0;
     const flap=b.fx==='wing'?.095*Math.sin(time*15):0;
-    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod+flight+flap};
+    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+(a.groundY??0)+Math.max(0,stride*.4)+nod+flight+flap};
   });
 }
 function actor(data,p,frame) { actorGeometry(p,frame,box=>prism(data,box)); }
@@ -261,6 +261,7 @@ const VERTEX = `
   attribute vec3 aMaterial;
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
+  uniform bool uRegionTexture;
   varying vec3 vColor;
   varying vec2 vUV;
   #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -268,14 +269,15 @@ const VERTEX = `
   #else
     varying mediump vec2 vWorld;
   #endif
-  varying float vGlow, vHeight;
+  varying float vGlow, vHeight, vRoad;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
-    point.x+=sin(phase)*aMaterial.x*uWeather.y;
-    point.z+=sin(phase*.72+.8)*aMaterial.x*uWeather.y*.43;
+    float wind=uRegionTexture?0.:aMaterial.x;
+    point.x+=sin(phase)*wind*uWeather.y;
+    point.z+=sin(phase*.72+.8)*wind*uWeather.y*.43;
     gl_Position=uProjection*uView*vec4(point,1.);
-    vGlow=aMaterial.z; vHeight=point.y;
+    vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
 `;
@@ -297,20 +299,24 @@ const FRAGMENT = `
   #else
     varying mediump vec2 vWorld;
   #endif
-  varying float vGlow, vHeight;
+  varying float vGlow, vHeight, vRoad;
   uniform bool uWild, uRegionTexture;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
     if (uRegionTexture && vUV.y>=0.) {
       vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,96.);
       color=texture2D(uGround,texel).rgb*vColor;
+      if (vUV.y<.5 && vRoad>1.52+fract(vWorld.x*11.+vWorld.y*19.)*.23) {
+        vec2 dirt=texel+vec2(0.,32./96.);
+        color=mix(texture2D(uGround,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
+      }
     }
     float water=uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.;
     bool green=color.g>color.r*1.12 && color.g>color.b*1.10;
     if (green && water<.5) {
       if (uSeason==1.) color*=vec3(1.08,1.03,.93);
       if (uSeason==2.) color=mix(color,vec3(.64,.38,.15)*(.6+color.g*.7),.61);
-      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),uTexture?.68:.37);
+      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),(uTexture || uRegionTexture)?.68:.37);
       if (uWeather.z>.5) color=mix(color,vec3(.55,.39,.20),.45);
     }
     if (water>.5) {
@@ -324,10 +330,12 @@ const FRAGMENT = `
       color+=foam*vec3(.085,.13,.14);
     }
     float shade=1.;
-    if (uVisibility) {
+    if (uSight.z>0.) {
       float radius=uSight.z;
       float radial=1.-smoothstep(radius-1.6,radius+.45,distance(vWorld,uSight.xy));
-      shade=texture2D(uFog,vWorld/uExtent).r*radial;
+      vec2 local=vWorld/uExtent;
+      bool known=uVisibility && all(greaterThanEqual(local,vec2(0.))) && all(lessThan(local,vec2(1.)));
+      shade=(known?texture2D(uFog,local).r:1.)*radial;
     }
     vec3 lit=color*uLight*mix(.48,1.,shade);
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
@@ -518,7 +526,6 @@ export function createCampRenderer() {
       const faded=[];
       const cacheLimit=regions?.length ? 48 : 12;
       if (regions?.length) {
-        gl.uniform1i(uniform.Visibility,0);
         if (regionAtlas) {
           const texture=terrainTexture(regionAtlas);
           gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
@@ -532,7 +539,6 @@ export function createCampRenderer() {
           const texture=terrainTexture(terrain);
           gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
         }
-        gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
       }
       paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));
       if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded);

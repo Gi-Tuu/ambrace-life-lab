@@ -1,17 +1,16 @@
-import { inCamp, regionWindow, REGION_SIZE, wildDetails, wildLandscape, wildRegion } from './wild-landscape.mjs';
-import { TOWN_SIZE } from './camp-layout.mjs';
+import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview } from './wild-landscape.mjs';
 
-export function createCampOutskirts(seed,version,crossing) {
-  const terrain=wildLandscape(seed,version,{joined:true});
+export function createCampOutskirts(seed,version,crossing,world) {
+  const terrain=wildLandscape(seed,version,{joined:true,flats:world?.flatLand,hills:world?.hills,roadDistance:world?.roadDistance});
   const cache=new Map();
-  let signature, visible=[];
+  let signature, visible=[], overview;
   return {
     terrain,
+    overview:()=>overview??=[{mesh:worldOverview(terrain)}],
     height:(x,z)=>terrain.height(x,z),
     walkable:(x,z)=>terrain.walkable(x,z,crossing),
     regions(x,z) {
-      const entries=regionWindow(x,z).filter(b=>b.x<0 || b.z<0 ||
-        (b.x+1)*REGION_SIZE>TOWN_SIZE.width || (b.z+1)*REGION_SIZE>TOWN_SIZE.depth);
+      const entries=regionWindow(x,z);
       const key=entries.map(b=>b.key+(b.near?'*':'')).join(',');
       if (key===signature) return visible;
       signature=key;

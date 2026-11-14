@@ -384,15 +384,17 @@ export function outdoorStage(world, bridges, rocks) {
     s.entrances[id]=campEntrance(id,[sx,sy]);
   }
   for (const [tx,tz] of world.trees) {
-    s.group(`tree:${tx}:${tz}`,() => tree(s,tx+.5,tz+.5,(tx*3+tz*7)%4));
+    const x=tx+.5,z=tz+.5;
+    s.group(`tree:${tx}:${tz}`,() => tree(s,x,z,(tx*3+tz*7)%4,world.height?.(x,z)??0));
   }
   for (const [tx,tz] of rocks) {
     s.group(`rock:${tx}:${tz}`,() => {
-      s.box(tx+.12,0,tz+.12,.76,.48,.71,'#6D7165',true);
-      s.box(tx+.24,.48,tz+.22,.52,.16,.47,'#939584');
+      const y=world.height?.(tx+.5,tz+.5)??0;
+      s.box(tx+.12,y,tz+.12,.76,.48,.71,'#6D7165',true);
+      s.box(tx+.24,y+.48,tz+.22,.52,.16,.47,'#939584');
     });
   }
-  grass3d(s,world.grass);
+  grass3d(s,world.height?world.grass.map(([x,z])=>[x,z,world.height(x,z)]):world.grass);
   livestockPen(s, world.sites);
   return s;
 }

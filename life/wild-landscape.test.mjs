@@ -54,12 +54,19 @@ test('移动沿桥过河，河面、三侧山脊、南崖和树干挡住行走',
   for(const b of trees) assert.ok(!a.walkable(b.x+b.w/2,b.z+b.d/2,z));
 });
 
-test('拼接区块保留村庄地面，跨界往返使用同一脚点与碰撞',()=>{
-  const out=createCampOutskirts(13,2,34), w=out.terrain;
-  for (const [x,z] of [[0,24],[120,32],[22,0],[70,80]]) assert.ok(Math.abs(w.height(x,z))<1e-10);
-  assert.equal(wildRegion(w,1,1).length,0);
+test('同一地表覆盖村内和村外，建筑地块平整，玩家碰撞能跨区往返',()=>{
+  const out=createCampOutskirts(13,2,34,{flatLand:[{x:11,z:12,w:8,d:8}],roadDistance:()=>0}), w=out.terrain;
+  assert.equal(w.height(14,15),0);
+  assert.ok(wildRegion(w,1,1).length>0);
   const mesh=wildRegion(w,1,3);
-  assert.ok(vertices(mesh).every(([, ,z])=>z>=80));
+  assert.ok(vertices(mesh).some(([, ,z])=>z<80));
+  assert.ok(vertices(mesh).some(([, ,z])=>z>80));
+  assert.ok(mesh.some((v,i)=>i%11===8 && v>1));
+  for (const [x,z] of [[0,24],[120,32],[22,0],[70,80]]) {
+    assert.ok(Math.abs(w.height(x-.05,z)-w.height(x+.05,z))<.1);
+    assert.ok(Math.abs(w.height(x,z-.05)-w.height(x,z+.05))<.1);
+  }
+  assert.ok(out.overview()[0].mesh.length>mesh.length);
   const inside=(x,z)=>x>=0 && x<120 && z>=0 && z<80 && z!==20;
   const x=12,z=79.5;
   const [wx,wz]=moveJoinedWalker(x,z,0,2,inside,out.walkable);
