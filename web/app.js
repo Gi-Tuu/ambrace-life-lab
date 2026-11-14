@@ -1849,15 +1849,16 @@ function animalGround(world,a,x,z) {
   const h=a.habitat,r=a.r*.87;
   if (x-r<h.x || x+r>h.x+h.w || z-r<h.z || z+r>h.z+h.d) return false;
   if (a.kind==='bird') return true;
+  if (!inCamp(x,z)) return Boolean(world.landscape?.walkable(x,z));
   return [[0,0],[-r,0],[r,0],[0,-r],[0,r]].every(([dx,dz])=>mapAllows(world,x+dx-.5,z+dz-.5));
 }
-function drawHerd(world,id,time,roster,trust) {
+function drawHerd(world,id,time,roster,trust,regional=[]) {
   const previous=campHerds.get(id)??[], blockers=[];
   for (const who of Object.keys(roster)) {
     const person=WALK[walkKey(id,who)];
     if (person) blockers.push({id:who,x:person.x+.5,z:person.y+.5,r:CAMP_BODY_RADIUS});
   }
-  const animals=[], bases=world.life3d?.animals??[];
+  const animals=[], bases=[...(world.life3d?.animals??[]),...regional];
   for (const [i,base] of bases.entries()) {
     const old=previous.find(a=>a.id===base.id && a.habitat.x===base.habitat.x && a.habitat.z===base.habitat.z);
     const a={...base,x:old?.x??base.x,z:old?.z??base.z,next:old?.next??time+hash2(i,11,4)*2,
@@ -2012,7 +2013,6 @@ function drawCamp(cv,w) {
     stage=world.scene3d;life=world.life3d;homes=world.homes3d;terrain=world.canvas;waterMask=world.waterMask;
     const slots=slotsOf(w,world.sites);
     for(const who of Object.keys(slots))ensureWalker(playerId,who,world,slots);
-    animals=drawHerd(world,playerId,ACT.motionTime??0,slots,w.wildTrust);
     const pw=WALK[walkKey(playerId,'p1')];
     const pTile=pw?[pw.x,pw.y]:slots.p1;
     if(playerId==='cvA')camFollow=pTile;
@@ -2032,10 +2032,16 @@ function drawCamp(cv,w) {
         regions=extended.overview();
       } else {
         regions=extended.regions(playerX,playerZ);
+        const regional=w.settlementLife ? extended.life(playerX,playerZ,w) : null;
+        if (regional) {
+          regions=[...regions,regional];
+          exterior={...world,regional};
+        }
         targetY=(inCamp(playerX,playerZ)?Math.max(stage.heightAt(playerX,playerZ),extended.height(playerX,playerZ)):
           extended.height(playerX,playerZ))+.55;
       }
     }
+    animals=drawHerd(world,playerId,ACT.motionTime??0,slots,w.wildTrust,exterior.regional?.animals);
     visibility=overview || !pTile || !inCamp(playerX,playerZ)?null:campVisibility(world,playerId,pTile,w.phase);
     if (!overview && pTile) sight=[pTile[0]+.5,pTile[1]+.5,lightRadius(w.phase)];
     for(const [who,[sx,sy]] of Object.entries(slots)){
@@ -2821,11 +2827,11 @@ async function survInteract() {
   }
   if (!s?.loc) return;
   const world=buildWorld(s), walker=WALK[walkKey('cvA','p1')];
-  if (campRenderer && walker && !inCamp(walker.x+.5,walker.y+.5)) return;
+  const view=$(ui.fullscreen?'cvFull':'cvA')._cam;
+  const active=view?.exterior??world;
   if (walker) {
     const x=walker.x+.5,z=walker.y+.5;
-    const view=$(ui.fullscreen?'cvFull':'cvA')._cam;
-    const entities=outdoorEntities(world,s,view?.people??[],view?.animals??[]);
+    const entities=outdoorEntities(active,s,view?.people??[],view?.animals??[]);
     const entity=entities.filter(e=>e.kind!=='scenery' && entityGap([x,z],e)<=e.reach)
       .sort((a,b)=>{
         const equipped=e=>e.tool===ui.tool || e.kind==='animal' && ui.tool==='axe' ||
@@ -2834,6 +2840,7 @@ async function survInteract() {
       })[0];
     if (entity) { await useOutdoorEntity(entity,[x,z]); return; }
   }
+  if (campRenderer && walker && !inCamp(walker.x+.5,walker.y+.5)) return;
   if (atPen(world,walker)) { inspectRoomProp({kind:'pen'}); return; }
   const door=survRoomAtFeet();
   if (door) { enterRoom(door); return; }
@@ -3610,7 +3617,7 @@ function outdoorEntities(world,w,people,animals) {
     at:[rect.x+rect.w/2,rect.z+rect.d*.72],name:SITE_NAMES[room]??w.rooms?.[room]??room}));
   const timber=(world.timber?world.grove:[]).map(tree=>({id:'timber:'+tree.id,kind:'timber',target:tree.id,at:[tree.x,tree.z],
     reach:REACH.timber,tool:'axe',name:world.timber[tree.id]?.stage==='sapling'?'树苗':'伐木林的树'}));
-  const plants=(world.life3d?.gatherables??[]).map(p=>({...p,kind:'plant',target:p.id,at:[p.x,p.z],reach:REACH.plant,
+  const plants=[...(world.life3d?.gatherables??[]),...(world.regional?.gatherables??[])].map(p=>({...p,kind:'plant',target:p.id,at:[p.x,p.z],reach:REACH.plant,
     tool:'basket',name:(p.item==='fruit'?(p.mature===false?'果树幼苗':'果树'):'浆果灌木')+` · 可采 ${p.ready}`}));
   const fields=world.beds.map(b=>{
     const rect={x:b.x/TILE,z:b.y/TILE,w:b.w/TILE,d:b.h/TILE};
@@ -3678,7 +3685,7 @@ function pointedEntity(cv,ev) {
         push([{x,z,w,d,y:view.stage.heightAt(...e.at)+.025,h:.008}],e);
       }
     }
-    for (const b of [...view.stage.boxes,...(world.life3d?.boxes??[]),...(world.homes3d?.boxes??[]),...view.work]) {
+    for (const b of [...view.stage.boxes,...(world.life3d?.boxes??[]),...(world.homes3d?.boxes??[]),...(world.regional?.boxes??[]),...view.work]) {
       if (view.covered.has(b.occluder)) continue;
       const [tag,id,type]=b.occluder?.split(':')??[];
       const e=ids.get(b.occluder)??(tag==='site'||tag==='roof'||tag==='work'&&type==='house'?
@@ -3786,8 +3793,9 @@ function approachEntity(world,walker,e) {
   const map=campBodyWorld(world);
   for (const p of candidates) {
     const goal=p.map(v=>v-.5);
-    if (entityGap(p,e)>e.reach || !mapAllows(map,...goal)) continue;
-    const path=routeForWalker(world,walker,goal);
+    const outside=!inCamp(...p);
+    if (entityGap(p,e)>e.reach || !(outside?world.landscape?.walkable(...p):mapAllows(map,...goal))) continue;
+    const path=outside || !inCamp(...from)?[goal]:routeForWalker(world,walker,goal);
     if (path) { walker.path=path;walker.pi=0;return true; }
   }
   return false;

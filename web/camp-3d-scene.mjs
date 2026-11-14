@@ -233,35 +233,44 @@ export function wildVegetation(trees, undergrowth) {
 }
 function flora3d(s, world) {
   const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion,world.ecoSources);
-  for (const plant of nodes) {
-    const {x,z,item,id,site}=plant, v=Math.floor(x*7+z*13)%4, shades=LEAF_RAMPS[v];
-    const ready=item==='fruit'
-      ? plant.ready ?? (world.season==='冬'?0:world.produce?.fruit??0)
-      : Math.floor(world.berryPatches?.[site]?.[Number(id.split(':').at(-1))] ?? world.wildBerries?.[site] ?? 3);
-    s.gatherables.push({...plant,ready});
-    s.group(id,()=>{
-      if (item==='fruit') {
-        const scale=plant.mature===false?.46:1;
-        s.box(x-.16*scale,0,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
-        plantBox(s,x+z,.12,false,x-.82*scale,1.28*scale,z-.76*scale,1.64*scale,.96*scale,1.52*scale,shades[1]);
-        plantBox(s,x+z,.12,false,x-.52*scale,2.16*scale,z-.48*scale,1.04*scale,.66*scale,1.0*scale,shades[2]);
-        const count=Math.min(3,ready);
-        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
-          plantBox(s,x+z,.12,false,x+dx,y,z+dz,.17,.17,.17,'#CF4E53');
-      } else {
-        for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
-          plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
-        const count=Math.min(3,ready);
-        for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,count))
-          plantBox(s,x+z,.08,false,x+dx,y,z+dz,.11,.11,.11,'#CE6274');
-      }
-    });
-  }
+  producePlants(s,nodes,world);
   for (const [tx,tz,seed] of world.flora??[]) {
     const x=tx+.5,z=tz+.5,v=(tx*7+tz*13)%4;
     if (nodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) continue;
     meadowPlant(s,x,world.landscape?.height(x,z)??0,z,v,seed<.052?'shrub':'flower');
   }
+}
+function producePlants(s,nodes,world) {
+  for (const plant of nodes) {
+    const {x,z,item,id,site}=plant, v=((Math.floor(x*7+z*13)%4)+4)%4, shades=LEAF_RAMPS[v];
+    const ready=plant.ready ?? (item==='fruit' ? world.season==='冬'?0:world.produce?.fruit??0
+      : Math.floor(world.berryPatches?.[site]?.[Number(id.split(':').at(-1))] ?? world.wildBerries?.[site] ?? 3));
+    const ground=plant.y??0;
+    s.gatherables.push({...plant,ready});
+    s.group(id,()=>{
+      if (item==='fruit') {
+        const scale=plant.mature===false?.46:1;
+        s.box(x-.16*scale,ground,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
+        plantBox(s,x+z,.12,false,x-.82*scale,ground+1.28*scale,z-.76*scale,1.64*scale,.96*scale,1.52*scale,shades[1]);
+        plantBox(s,x+z,.12,false,x-.52*scale,ground+2.16*scale,z-.48*scale,1.04*scale,.66*scale,1.0*scale,shades[2]);
+        const count=Math.min(3,ready);
+        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
+          plantBox(s,x+z,.12,false,x+dx,ground+y,z+dz,.17,.17,.17,'#CF4E53');
+      } else {
+        for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
+          plantBox(s,x+z,.09,true,x+dx,ground+y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
+        const count=Math.min(3,ready);
+        for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,count))
+          plantBox(s,x+z,.08,false,x+dx,ground+y,z+dz,.11,.11,.11,'#CE6274');
+      }
+    });
+  }
+}
+export function regionLife(plants,animals) {
+  const s=stage(0,0);
+  producePlants(s,plants,{});
+  wildlife3d(s,animals);
+  return s;
 }
 
 function grass3d(s, sites) {

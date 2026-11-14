@@ -1,3 +1,4 @@
+import { findRegionEntity, regionPoint } from '../web/camp-region-entities.mjs';
 import { ANIMAL_ITEMS, campPen, campSite, distanceTo, distanceToRect, pointIn, wildHabitats } from '../web/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
@@ -8,12 +9,14 @@ const fail=code=>({ok:false,code});
 export function animalAction(w,body) {
   const {kind,target,from,to,tool}=body, s=w.survival, bag=w.pinv.p1;
   if (!s.settlementLife || !s.farmLife || typeof target!=='string') return fail('NO_ANIMAL');
-  if (w.campPlayerRoom || !pointIn(from,WORLD_TW,WORLD_TH) || !pointIn(to,WORLD_TW,WORLD_TH) ||
+  if (w.campPlayerRoom || !regionPoint(from) || !regionPoint(to) ||
       distanceTo(from,to)>1.65) return fail('OUT_OF_REACH');
   if (kind==='animal_feed') {
     if (tool!=='basket') return fail('NEED_TOOL');
-    const anchor=wildHabitats(w.campLayout).find(a=>a.id===target);
+    const regional=findRegionEntity(w,target,'animals');
+    const anchor=regional??wildHabitats(w.campLayout).find(a=>a.id===target);
     if (!anchor || anchor.kind==='bird' || distanceTo(to,[anchor.x,anchor.z])>12) return fail('NO_ANIMAL');
+    if (!regional && (!pointIn(from,WORLD_TW,WORLD_TH) || !pointIn(to,WORLD_TW,WORLD_TH))) return fail('OUT_OF_REACH');
     const food=['berry','fruit','crop'].find(item=>bag[item]>=1);
     if (!food) return fail('ANIMAL_NEEDS_FOOD');
     const trust=s.wildTrust??={}, old=trust[target]??{trust:0,last:-Infinity};
@@ -25,7 +28,7 @@ export function animalAction(w,body) {
   }
   if (tool!=='axe') return fail('NEED_TOOL');
   const pen=campPen(campSite('yard',w.campLayout));
-  if (distanceToRect(to,pen)>0) return fail('OUT_OF_REACH');
+  if (!pointIn(from,WORLD_TW,WORLD_TH) || !pointIn(to,WORLD_TW,WORLD_TH) || distanceToRect(to,pen)>0) return fail('OUT_OF_REACH');
   const group=target.split(':')[0], item=ANIMAL_ITEMS[group];
   if (!item) return fail('NO_ANIMAL');
   const animals=sourceView(w), victim=animals[item].find(row=>row.id===target);

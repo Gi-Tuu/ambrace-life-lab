@@ -1,3 +1,4 @@
+import { findRegionEntity, regionPoint, regionReady } from '../web/camp-region-entities.mjs';
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
@@ -90,7 +91,13 @@ function interactWithResident(world,body) {
 function outdoorSource(world, body) {
   const { kind,type:item,target,plot,from,to }=body;
   const s=world.survival, layout=world.campLayout;
-  if (world.campPlayerRoom || !pointIn(from,WORLD_TW,WORLD_TH)) return fail('OUT_OF_REACH');
+  if (world.campPlayerRoom || !regionPoint(from)) return fail('OUT_OF_REACH');
+  if (kind==='camp_collect' && typeof target==='string' && target.startsWith('region:')) {
+    const node=findRegionEntity(world,target,'plants');
+    if (!node || node.item!==item) return fail('NO_PLANT');
+    return distanceTo(from,[node.x,node.z])<=REACH.plant ? {node} : fail('OUT_OF_REACH');
+  }
+  if (!pointIn(from,WORLD_TW,WORLD_TH)) return fail('OUT_OF_REACH');
   if (kind==='camp_chop') {
     const tree=(layout?.grove??TIMBER_GROVE).find(t=>t.id===target);
     if (!tree) return fail('NO_TREE');
@@ -119,15 +126,16 @@ function outdoorSource(world, body) {
 
 export function campAction(world,body) {
   const {kind,type:item,target,tool,plot}=body, s=world.survival;
-  let site=world.loc.p1;
+  let site=world.loc.p1, node;
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
   if (kind==='camp_resident') return interactWithResident(world,body);
   const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);
   if (s.farmLife && kind==='camp_collect' && item!=='water' && !Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');
   if (positioned && Object.hasOwn(body,'from')) {
     const source=outdoorSource(world,body);
-    if (!source.site) return source;
+    if (!source.site && !source.node) return source;
     site=source.site;
+    node=source.node;
   }
   const bag=world.pinv.p1;
   if (kind==='camp_store' || kind==='camp_take') {
@@ -208,7 +216,13 @@ export function campAction(world,body) {
   if (!Object.hasOwn(TOOLS,item)) return fail('BAD_ITEM');
   if (tool!==TOOLS[item]) return fail('NEED_TOOL');
   let cost=0.02; // P0-2：与 AI 基础动作同表；crop/berry 分别对齐 harvest/forage，其余营地采集保留小成本
-  if (item==='water') {
+  if (node) {
+    const picked=s.regionHarvest??={};
+    if (!regionReady(node,world.t,picked[node.id],DAY_TICKS)) return fail('NO_PRODUCE');
+    picked[node.id]=world.t;
+    world.observeProduction?.('collected',item,1);
+    cost=item==='berry'?SURV_COST.forage:SURV_COST.harvest;
+  } else if (item==='water') {
     if (site!=='well') return fail('NOT_WELL');
     if (amount(bag,'water')>=3) return fail('BUCKET_FULL');
   } else if (item==='crop') {

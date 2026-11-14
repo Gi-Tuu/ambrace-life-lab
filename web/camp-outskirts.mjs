@@ -1,15 +1,38 @@
+import { regionEntities, regionReady } from './camp-region-entities.mjs';
+import { regionLife } from './camp-3d-scene.mjs';
 import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview } from './wild-landscape.mjs';
 
 export function createCampOutskirts(seed,version,crossing,world) {
   const terrain=wildLandscape(seed,version,{joined:true,flats:world?.flatLand,hills:world?.hills,roadDistance:world?.roadDistance,
     plantClearance:world?.plantClearance,harvestNodes:world?.harvestNodes});
   const cache=new Map();
-  let signature, visible=[], overview;
+  let signature, visible=[], overview, lifeKey, living;
+  const entitiesTerrain=wildLandscape(seed,version,{joined:true});
   return {
     terrain,
     overview:()=>overview??=[{mesh:worldOverview(terrain)}],
     height:(x,z)=>terrain.height(x,z),
     walkable:(x,z)=>terrain.walkable(x,z,crossing),
+    life(x,z,snapshot) {
+      const chunks=regionWindow(x,z).filter(b=>b.near);
+      const plants=[],animals=[];
+      for (const b of chunks) {
+        const chunk=cache.get(b.key);
+        if (!chunk) continue;
+        chunk.entities??=regionEntities(entitiesTerrain,b.x,b.z);
+        for (const node of chunk.entities.plants) {
+          plants.push({...node,y:terrain.height(node.x,node.z),ready:regionReady(node,snapshot.t,
+            snapshot.regionHarvest?.[node.id],snapshot.dayTicks??24)});
+        }
+        animals.push(...chunk.entities.animals);
+      }
+      const key=plants.map(p=>p.id+':'+p.ready).concat(animals.map(a=>a.id)).join(',');
+      if (key!==lifeKey || !living) {
+        lifeKey=key;
+        living=regionLife(plants,animals);
+      }
+      return living;
+    },
     regions(x,z) {
       const entries=regionWindow(x,z);
       const key=entries.map(b=>b.key+(b.near?'*':'')).join(',');

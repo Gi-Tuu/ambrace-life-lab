@@ -627,7 +627,7 @@ export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
   return {
-    t: w.t, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
+    t: w.t, dayTicks:DAY_TICKS, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
