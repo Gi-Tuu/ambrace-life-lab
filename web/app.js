@@ -1224,7 +1224,7 @@ function drawFogTerrain(g, world, cam, visible, night, tx0, ty0) {
 
 function drawViewport(cv, w) {
   // 按容器选择完整的原生像素格，桌面横向取景；窄屏缩小取景范围而非压缩精灵。
-  VIEW_TW = Math.max(20, Math.min(28, Math.floor(((cv.parentElement?.clientWidth || 916) - 20) / (TILE * ART))));
+  VIEW_TW = Math.max(20, Math.min(28, Math.floor(((canvasHostWidth(cv) || 916) - 20) / (TILE * ART))));
   const gardenView=(ui.camRoom??w.loc?.p1)==='garden';
   VIEW_TH = gardenView?Math.min(20,Math.max(12,Math.round(VIEW_TW*.72))):Math.min(14,Math.max(10,Math.round(VIEW_TW*.6)));
   VIEW_W = VIEW_TW * TILE; VIEW_H = VIEW_TH * TILE;
@@ -1234,12 +1234,12 @@ function drawViewport(cv, w) {
   const pw = WALK[walkKey(cv.id, 'p1')];
   const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
   if (cv.id === 'cvA') camFollow = pTile;   // A 侧玩家位置驱动镜头；B 共用同一镜头，保持对照同框
-  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth, cv.id === 'cvA' ? pTile : camFollow);
+  const cam = cameraOf(w, world.sites, slots, canvasHostWidth(cv), cv.id === 'cvA' ? pTile : camFollow);
   lastCam = { ...cam, mode: 'view' };
   cv._cam = lastCam;
   const CW = VIEW_W * cam.zoom, CH = VIEW_H * cam.zoom;
   if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; }
-  const fitW = Math.min(CW, cv.parentElement?.clientWidth || CW);   // 窄屏缩到容器宽，避免溢出或过度放大
+  const fitW = Math.min(CW, canvasHostWidth(cv) || CW);   // 窄屏缩到容器宽，避免溢出或过度放大
   cv.style.width = `${fitW}px`; cv.style.height = `${Math.round(CH * fitW / CW)}px`;
   const g = cv.getContext('2d');
   g.setTransform(cam.zoom, 0, 0, cam.zoom, 0, 0);
@@ -1411,10 +1411,10 @@ function drawOverview(cv, w) {
   const pw = WALK[walkKey(cv.id, 'p1')];
   const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
   if (cv.id === 'cvA') camFollow = pTile;
-  const cam = cameraOf(w, world.sites, slots, cv.parentElement?.clientWidth, cv.id === 'cvA' ? pTile : camFollow);
+  const cam = cameraOf(w, world.sites, slots, canvasHostWidth(cv), cv.id === 'cvA' ? pTile : camFollow);
   lastCam = { ...cam, mode: 'overview' };
   cv._cam = lastCam;
-  const zoom = ui.fullscreen ? fullZoom(OV_W, OV_H) : Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || OV_W * ZOOM + 20) - 20) / OV_W)));
+  const zoom = ui.fullscreen ? fullZoom(OV_W, OV_H) : Math.max(1, Math.min(ZOOM, Math.floor(((canvasHostWidth(cv) || OV_W * ZOOM + 20) - 20) / OV_W)));
   const CW = OV_W * zoom, CH = OV_H * zoom;
   if (cv.width !== CW || cv.height !== CH) {
     cv.width = CW; cv.height = CH;
@@ -1609,7 +1609,7 @@ function roomNavigation(g,w,site){
 function drawInterior(cv, w, site, preview = false) {
   const { width: VIEW_W, height: VIEW_H } = ROOM_GRID;
   const spec = INTERIORS[site] ?? INTERIORS.hall, outdoor=['garden','well','yard'].includes(site);
-  const zoom = preview ? 1 : ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(ZOOM, Math.floor(((cv.parentElement?.clientWidth || VIEW_W * ZOOM + 20) - 20) / VIEW_W)));
+  const zoom = preview ? 1 : ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(ZOOM, Math.floor(((canvasHostWidth(cv) || VIEW_W * ZOOM + 20) - 20) / VIEW_W)));
   const CW = VIEW_W * zoom, CH = VIEW_H * zoom;
   if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; cv.style.width = `${CW}px`; cv.style.height = `${CH}px`; }
   const g = cv.getContext('2d');
@@ -1721,9 +1721,13 @@ function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   return mask;
 }
 
+function canvasHostWidth(cv) {
+  return (cv.closest('.world')??cv.parentElement)?.clientWidth;
+}
+
 function campViewport(cv, aspect) {
   const full=cv.id==='cvFull', room=Boolean(ui.interior);
-  const available=full ? innerWidth-12 : cv.parentElement.clientWidth-20;
+  const available=full ? innerWidth-12 : canvasHostWidth(cv)-20;
   const display=Math.max(180,Math.min(full?innerWidth-12:1120,available));
   const height=Math.min(full?innerHeight-80:520,Math.round(display/aspect));
   const ratio=Math.min(devicePixelRatio||1,1.5);
@@ -1845,6 +1849,63 @@ function campAmbient(g,camera,span,cx,cz,ratio,frame) {
     g.fillStyle=(i+t)%2?'#FFEC27':'#00E436';
     g.fillRect(Math.round(sx),Math.round(sy),unit,unit);
   }
+}
+
+// The title shot uses a fixed village layout and its own presentation clock.
+const titleVillage={
+  rooms:SITES, camp:{}, mapSeed:0, layoutVersion:0, season:'春',
+  plots:campBeds(SITES.garden).map(({id,...bed})=>({id,bed,growth:.75})),
+  livestock:{orchards:3},
+};
+const titleSun=solarLight(17.45,24,0);
+const titleWindows=['home','store','workshop'].flatMap(room=>{
+  const [x,z]=SITES[room];
+  return [-2.45,1.57].map(dx=>({
+    x:x+.5+dx+.09,y:1.45,z:z+.5-1.7+.14,w:.71,h:.65,d:.025,
+    color:'#EDC787',glow:true,
+  }));
+});
+let titleWorld, titleFrame=-Infinity, titleTime=0;
+function drawTitleScene(now,reduced) {
+  const canvas=$('startScene'), frame=canvas.parentElement;
+  const scale=Math.min(1,800/frame.clientWidth);
+  const width=Math.round(frame.clientWidth*scale), height=Math.round(frame.clientHeight*scale);
+  if (width<1 || height<1) return;
+  const resized=canvas.width!==width || canvas.height!==height;
+  if (!resized && (reduced ? titleFrame!==-Infinity : now-titleFrame<1000/15)) return;
+  if (!reduced && Number.isFinite(titleFrame)) titleTime+=Math.min(.1,(now-titleFrame)/1000);
+  titleFrame=now;
+  if (resized) { canvas.width=width; canvas.height=height; }
+  titleWorld??=buildWorld(titleVillage);
+  const g=canvas.getContext('2d'), time=reduced?0:titleTime;
+  if (campRenderer && titleWorld.scene3d) {
+    const landscape=titleWorld.landscape, x=29,z=28, span=height/width<.62?47:50;
+    const camera=campCamera({x,z,width,height,span,yaw:.30,pitch:.69,targetY:.9});
+    const regions=landscape.regions(x,z);
+    const weather=[time,.65,0,Math.max(.57,titleSun.glow)];
+    const frame=Math.floor(time*5)%4;
+    if (campRenderer.render({target:canvas,stage:titleWorld.scene3d,regions,regionAtlas:outskirtsAtlas(),
+      life:titleWorld.life3d,work:titleWindows,camera,people:[],frame,
+      sun:titleSun,light:titleSun.light,weather,season:0,physical:physicalLighting})) {
+      campSmoke(g,camera,titleWorld.scene3d.chimneys,.75,frame,titleSun.light);
+      campAmbient(g,camera,span,x,z,.75,frame);
+      canvas.dataset.renderer='3d';
+      return;
+    }
+  }
+  const span=42*TILE, depth=span*height/width;
+  const cam={x:29*TILE-span/2,y:31*TILE-depth/2};
+  g.imageSmoothingEnabled=false;
+  g.setTransform(width/span,0,0,height/depth,0,0);
+  g.drawImage(titleWorld.canvas,cam.x*ART,cam.y*ART,span*ART,depth*ART,0,0,span,depth);
+  for (const object of titleWorld.objects) {
+    if (object.kind==='tree') drawTreeObj(g,object,cam);
+    else if (object.kind==='house') drawHouseObj(g,object,cam);
+  }
+  g.fillStyle='rgba(30,61,75,.33)';
+  g.fillRect(0,0,span,depth);
+  g.resetTransform();
+  canvas.dataset.renderer='2d';
 }
 
 // 拾取点：4 个角括号，不画整圈，避免和贴地光圈抢视觉。
@@ -2255,6 +2316,7 @@ function draw(cv, w) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const MOD_ZH = { arousal: '醒', approach: '近', inhibit: '抑', quiescence: '静' };
 function bars(a) {
   // 分段像素格：10 格，亮格=当前值，描边格=基线位置（不再用连续渐变条）
   return Object.entries(a.m).map(([d, v]) => {
@@ -2264,7 +2326,7 @@ function bars(a) {
       const base = Math.round(b * 10) === i + 1;
       return `<b class="${on ? 'on' : ''}${base ? ' base' : ''}"></b>`;
     }).join('');
-    return `<div class="bar" title="${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）">${cells}</div>`;
+    return `<span class="bwrap" title="${MOD_ZH[d] ?? d} · ${d} ${v.toFixed(2)}（基线 ${b.toFixed(2)}）"><i class="bl">${MOD_ZH[d] ?? d.slice(0, 1)}</i><span class="bar">${cells}</span></span>`;
   }).join('');
 }
 
@@ -2293,7 +2355,7 @@ function spark(pack, id, hue) {
   const first = s[0].v?.[id] ?? 1;
   const last = s[s.length - 1].v?.[id] ?? 0;
   const crit = Number.isFinite(pack.viabCrit) ? pack.viabCrit : 0.6;
-  return `<svg class="spark" width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" style="color:var(--${hue})" role="img"
+  return `<svg class="spark" width="100%" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" style="color:var(--${hue})" role="img"
     aria-label="存续从 ${(first * 100).toFixed(0)}% 到 ${(last * 100).toFixed(0)}%，不可逆损失 ${marks.length} 次">
     <polygon points="0,${SPARK_H} ${pts} ${SPARK_W},${SPARK_H}" fill="#1D2B53" />
     <line x1="0" y1="${yOf(crit)}" x2="${SPARK_W}" y2="${yOf(crit)}" stroke="var(--dim)" stroke-dasharray="2 2" stroke-width="1" />
@@ -3287,46 +3349,15 @@ function renderHousing(s) {
   const el = $('housingBody'); if (!el || !s) return;
   el.innerHTML = familyPanel(s);
 }
-// 像素叶子：全部 6×6 方块，落在 2px 网格上，不做矢量曲线
-const SEASON_LEAVES = {
-  春: [[30,32],[60,26],[48,50],[72,36]].map(([x,y])=>`<rect x="${x}" y="${y}" width="6" height="6" fill="#98BD51"/>`).join(''),
-  夏: [[28,28],[36,24],[44,20],[54,28],[62,22],[70,30],[32,42],[50,46],[66,42],[76,20]]
-      .map(([x,y],i)=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${i%2?'#008751':'#73A747'}"/>`).join(''),
-  秋: [[30,30],[46,22],[62,30],[76,22],[54,48],[70,44],[38,44],[82,36]]
-      .map(([x,y],i)=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${i%2?'#FFA300':'#FFEC27'}"/>`).join(''),
-  冬: [[30,28],[40,28],[58,20],[68,20],[76,32],[50,44]]
-      .map(([x,y])=>`<rect x="${x}" y="${y}" width="10" height="3" fill="#FFF0CC"/>`).join(''),
-};
-const TIME_ARC = [
-  { key:'晨', color:'#FFD37A' }, { key:'昼', color:'#FFF0CC' },
-  { key:'暮', color:'#E8864B' }, { key:'夜', color:'#3B4A73' },
-];
-function seasonWheelSVG(seasonName, phase) {
-  // 圆心移到右上角，整个扇形相对上一版反转 180°
-  const cx=94, cy=10, r=88;
-  const pt=(deg)=>[cx+r*Math.cos(deg*Math.PI/180), cy+r*Math.sin(deg*Math.PI/180)];
-  const arc=(a,b,color,w)=>{
-    const [x1,y1]=pt(a),[x2,y2]=pt(b);
-    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
-  };
-  let arcs='';
-  TIME_ARC.forEach((seg,i)=>{
-    const a=180+i*22.5, b2=180+(i+1)*22.5;
-    if(phase===seg.key) arcs+=arc(a,b2,'#FFF0CC',9);
-    arcs+=arc(a,b2,seg.color,5);
-  });
-  // 右上为圆心的 1/4 圆扇形（朝左下展开）
-  const fan='<path d="M94 10 L94 90 A80 80 0 0 0 14 10 Z" fill="#3B4A33" stroke="#5B4434" stroke-width="2"/>';
-  // 枝干：从左下往右上，与反转后的扇形方向一致
-  const branch='<path d="M18 86 L34 70 L48 52 L62 40 L78 26" stroke="#5B4434" stroke-width="4" fill="none" stroke-linejoin="miter"/>'
-    + '<path d="M34 70 L28 56 M48 52 L42 38 M62 40 L70 30" stroke="#5B4434" stroke-width="3" fill="none"/>';
-  const leaves=SEASON_LEAVES[seasonName]??SEASON_LEAVES.春;
-  return `<svg viewBox="0 0 106 106" aria-label="${seasonName} · ${phase}">${arcs}${fan}${branch}${leaves}</svg>`;
-}
 function renderSeasonHud(view, location, outdoor) {
-  const el = $('seasonHud'); if (!el || !view) return;
-  $('seasonWeather').innerHTML = `${esc(view.season ?? '')} ${view.dayInSeason ?? '?'}天<br>${esc(view.weather ?? '')}`;
-  $('seasonWheel').innerHTML = seasonWheelSVG(view.season, view.phase);
+  const dayTicks=view.dayTicks??24;
+  const minute=Math.floor((view.t%dayTicks)*1440/dayTicks);
+  const clock=[Math.floor(minute/60),minute%60].map(n=>String(n).padStart(2,'0')).join(':');
+  const climate=campClimate(view);
+  const weather=climate.storm?'风暴':view.disasterToday==='coldsnap'?'寒潮':climate.snow?'下雪':
+    climate.rain?'下雨':view.weather==='cold'?'寒冷':climate.drought?'干旱':view.weather==='clear'?'晴朗':'天气待更新';
+  $('seasonDate').textContent=(view.season??'—')+'季 第'+(view.dayInSeason??'?')+'天';
+  $('seasonWeather').textContent=clock+' '+weather;
   const ph = $('playerHud');
   if (ph) ph.innerHTML = [
     [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
@@ -3745,11 +3776,7 @@ function selectWorld(compare) {
 function showStart() {
   rememberSurvivalPosition();
   if (ui.fullscreen) {
-    ui.fullscreen=false;
-    $('fullStage').hidden=true;
-    document.body.classList.remove('full-on');
-    $('btnFull').classList.remove('on');
-    $('btnFull').textContent='⛶ 全屏';
+    setFull(false,false);
   }
   closeRoom(false);
   closeBackpack();
@@ -3856,13 +3883,20 @@ $('survPanel').addEventListener('click', (e) => {
   api('/act', { mode: 'survival', kind: btn.dataset.sk, type: btn.dataset.type }).then((r) => { survFlash = { kind: btn.dataset.sk, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 });
 // 全屏全景：整张地图铺满屏幕，只画 A 世界；退出回退出前的视角。纯表现层，不动世界与读数。
-function setFull(on) {
+function setFull(on, redraw=true) {
   ui.fullscreen = on;   // 保持当前视角（聚焦/室内/全景）原样放大，不切换视图
+  $(on?'fullViewport':'gameViewport').append($('gameHud'));
   $('fullStage').hidden = !on;
   document.body.classList.toggle('full-on', on);
   $('btnFull').classList.toggle('on', on);
   $('btnFull').textContent = on ? '⛶ 退出全屏' : '⛶ 全屏';
-  refresh();
+  if (redraw) {
+    if (!ui.menu && S.view) {
+      draw($(on?'cvFull':'cvA'),S.view);
+      if (!on && ui.compare && S.viewB) draw($('cvB'),S.viewB);
+    }
+    refresh();
+  }
 }
 $('btnFull').onclick = () => setFull(!ui.fullscreen);
 $('btnFullExit').onclick = () => setFull(false);
@@ -4379,6 +4413,12 @@ loadAssets().finally(() => {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function animate(now) {
     requestAnimationFrame(animate);
+    if (ui.menu && !ui.fullscreen && !document.hidden) {
+      drawTitleScene(now,reduced.matches);
+      lastPaint=null;
+      return;
+    }
+    if (titleFrame!==-Infinity) titleFrame=-Infinity;
     if (document.hidden || $('worldMain').hidden || collisionDialog.open || !S.view || !S.viewB) { lastPaint = null; return; }
     const dt = lastPaint === null ? 0 : Math.min(0.05, (now - lastPaint) / 1000); lastPaint = now; elapsed += dt; ACT.seconds=elapsed;
     ACT.frame = reduced.matches ? 0 : Math.floor(elapsed * ACT.fps) % 4;
