@@ -329,10 +329,10 @@ function outskirtsAtlas() {
   if (terrainAtlas && terrainAtlasReady===ASSETS.ready) return terrainAtlas;
   terrainAtlasReady=ASSETS.ready;
   terrainAtlas=document.createElement('canvas');
-  terrainAtlas.width=128;terrainAtlas.height=96;
+  terrainAtlas.width=128;terrainAtlas.height=128;
   const g=terrainAtlas.getContext('2d');
   g.imageSmoothingEnabled=false;
-  for (const [row,material,fallback] of [[0,'grass','#568D3E'],[1,'dirt','#BA8752'],[2,'stone','#939584']]) {
+  for (const [row,material,fallback] of [[0,'grass','#568D3E'],[1,'dirt','#BA8752'],[2,'stone','#939584'],[3,'water','#1E3D4B']]) {
     for (let i=0;i<4;i++) {
       const tile=ASSETS.scenes[`terrain_${material}${i}`];
       if (tile) g.drawImage(tile,i*32,row*32,32,32);
@@ -655,11 +655,12 @@ function buildWorld(w) {
     if (highGround(tx,ty) || onRoad(tx, ty) || onRiver(tx, ty) || inPen(tx,ty) || nearLot(tx,ty) || nearGrove(tx,ty) || blockers.has(tileKey(tx, ty))) continue;
     if (onFarm(tx+.5,ty+.5,1.25)) continue;
     const near = Object.values(sites).some(([sx, sy]) => Math.hypot(tx - sx, ty - sy) < 6);
-    if (near) continue;
+    if (near && (!landscape || nearSite(tx,ty,2.5))) continue;
     const h = terrainHash(tx, ty, 31);
     // 果树候选放宽到村落外环（6–14 格），让默认首屏边缘就能看到；其余植被仍在林子里。
     const ring = Object.values(sites).some(([sx, sy]) => { const d = Math.hypot(tx - sx, ty - sy); return d >= 6 && d <= 14; });
-    if (h < (ring ? .045 : .073)) cands.push([tx, ty, h, ring ? 0 : 1]);
+    const limit=landscape ? (near?.09:ring?.13:.19) : ring?.045:.073;
+    if (h < limit) cands.push([tx, ty, h, ring ? 0 : 1]);
   }
   cands.sort((a, b) => a[3] - b[3] || a[2] - b[2]);
   const flora=cands.map(([tx,ty,h])=>[tx,ty,h]);

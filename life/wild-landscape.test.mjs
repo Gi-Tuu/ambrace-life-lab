@@ -104,3 +104,22 @@ test('外围共用地表材质和树木模型，种子改变山谷、河宽及�
   assert.ok(trees.some(box=>box.solid));
   assert.ok(trees.some(box=>box.wind && box.h>.5));
 });
+
+test('同一河面保留深浅水值，湿岸有连续距离，花草和灌木带风动',()=>{
+  const w=wildLandscape(13,2,{joined:true}), z=46, x=w.river(z), width=w.sourceWidth(z);
+  const mesh=wildRegion(w,Math.floor(x/REGION_SIZE),Math.floor(z/REGION_SIZE));
+  const depth=new Set(), bank=[];
+  for (let i=0;i<mesh.length;i+=11) {
+    if (mesh[i+10]===-1) depth.add(mesh[i+9]);
+    if (mesh[i+10]===0) bank.push(mesh[i+9]);
+  }
+  assert.deepEqual([...depth].sort(),[0,1]);
+  assert.ok(bank.some(d=>d>0 && d<.25));
+  assert.ok(bank.some(d=>d>.25 && d<.5));
+  assert.ok(Math.abs(w.bankGap(x+width+.15,z)-.15)<1e-9);
+  const flowerColors=new Set(['#FFEC27','#FF77A8','#FFF0CC','#68ADD4']);
+  const detail=wildDetails(w,1,4,24).boxes;
+  assert.ok(detail.some(b=>flowerColors.has(b.color) && b.wind && !b.wind.rooted));
+  assert.ok(detail.some(b=>b.color==='#6B994D' && b.wind.rooted));
+  assert.ok(detail.some(b=>b.h>.3 && b.wind?.rooted));
+});

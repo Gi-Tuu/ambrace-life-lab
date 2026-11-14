@@ -206,16 +206,27 @@ function tree(s, x, z, variant, ground=0, scale=1) {
   CANOPIES[variant].forEach(([dx,y,dz,w,h,d],i) =>
     plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx*scale,ground+y*scale,z+dz*scale,w*scale,h*scale,d*scale,shades[i]));
 }
+function meadowPlant(s,x,y,z,variant,kind) {
+  if (kind==='grass') {
+    grass3d(s,[[x,z,y]]);
+  } else if (kind==='shrub') {
+    for (const [i,[dx,h,dz,w,height,d]] of SHRUBS[variant].entries()) {
+      plantBox(s,x+z,.09,true,x+dx,y+h+.02,z+dz,w,height,d,LEAF_RAMPS[variant][Math.min(i+1,3)]);
+    }
+  } else {
+    const color=['#FFEC27','#FF77A8','#FFF0CC','#68ADD4'][variant];
+    for (const [dx,h,dz] of [[-.16,.25,.08],[.07,.39,-.11],[.26,.19,.13]]) {
+      const phase=x+z+dx;
+      plantBox(s,phase,.08,true,x+dx-.025,y,z+dz-.025,.05,h,.05,'#315431');
+      plantBox(s,phase,.08,false,x+dx-.082,y+h-.03,z+dz-.079,.164,.078,.158,color);
+      plantBox(s,phase,.08,false,x+dx-.025,y+h+.048,z+dz-.025,.05,.026,.05,'#FFA300');
+    }
+  }
+}
 export function wildVegetation(trees, undergrowth) {
   const s=stage(0,0);
   for (const {x,y,z,variant,scale} of trees) tree(s,x,z,variant,y,scale);
-  for (const {x,y,z,variant,shrub} of undergrowth) {
-    if (shrub) {
-      for (const [i,[dx,h,dz,w,height,d]] of SHRUBS[variant].entries()) {
-        plantBox(s,x+z,.09,true,x+dx,y+h,z+dz,w,height,d,LEAF_RAMPS[variant][Math.min(i+1,3)]);
-      }
-    } else grass3d(s,[[x,z,y]]);
-  }
+  for (const {x,y,z,variant,kind} of undergrowth) meadowPlant(s,x,y,z,variant,kind);
   return s;
 }
 function flora3d(s, world) {
@@ -247,18 +258,7 @@ function flora3d(s, world) {
   for (const [tx,tz,seed] of world.flora??[]) {
     const x=tx+.5,z=tz+.5,v=(tx*7+tz*13)%4;
     if (nodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) continue;
-    if (seed<.052) {
-      for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
-        plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,LEAF_RAMPS[v][Math.min(i+1,3)]);
-    } else {
-      const color=['#FFEC27','#FF77A8','#FFF0CC','#68ADD4'][v];
-      for (const [dx,h,dz] of [[-.16,.25,.08],[.07,.39,-.11],[.26,.19,.13]]) {
-        const phase=x+z+dx;
-        plantBox(s,phase,.08,true,x+dx-.025,0,z+dz-.025,.05,h,.05,'#315431');
-        plantBox(s,phase,.08,false,x+dx-.082,h-.03,z+dz-.079,.164,.078,.158,color);
-        plantBox(s,phase,.08,false,x+dx-.025,h+.048,z+dz-.025,.05,.026,.05,'#FFA300');
-      }
-    }
+    meadowPlant(s,x,world.landscape?.height(x,z)??0,z,v,seed<.052?'shrub':'flower');
   }
 }
 

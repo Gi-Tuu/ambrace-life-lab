@@ -269,7 +269,7 @@ const VERTEX = `
   #else
     varying mediump vec2 vWorld;
   #endif
-  varying float vGlow, vHeight, vRoad;
+  varying float vGlow, vHeight, vRoad, vBank;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
@@ -277,7 +277,7 @@ const VERTEX = `
     point.x+=sin(phase)*wind*uWeather.y;
     point.z+=sin(phase*.72+.8)*wind*uWeather.y*.43;
     gl_Position=uProjection*uView*vec4(point,1.);
-    vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x;
+    vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x; vBank=aMaterial.y;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
 `;
@@ -299,19 +299,43 @@ const FRAGMENT = `
   #else
     varying mediump vec2 vWorld;
   #endif
-  varying float vGlow, vHeight, vRoad;
+  varying float vGlow, vHeight, vRoad, vBank;
   uniform bool uWild, uRegionTexture;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
     if (uRegionTexture && vUV.y>=0.) {
-      vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,96.);
+      vec2 pixel=floor(vWorld*32.);
+      float fleck=fract(sin(dot(mod(pixel,257.),vec2(.93,1.71)))*105.7);
+      vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,128.);
       color=texture2D(uGround,texel).rgb*vColor;
-      if (vUV.y<.5 && vRoad>1.52+fract(vWorld.x*11.+vWorld.y*19.)*.23) {
-        vec2 dirt=texel+vec2(0.,32./96.);
-        color=mix(texture2D(uGround,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
+      if (vUV.y<1.5) {
+        vec2 dirt=vec2(texel.x,texel.y+(1.-vUV.y)*.25);
+        vec2 grass=vec2(texel.x,texel.y-vUV.y*.25);
+        color=texture2D(uGround,grass).rgb*vColor;
+        if (vRoad>1.52+fleck*.23) {
+          color=mix(texture2D(uGround,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
+        }
+        float shore=.30+fleck*.20;
+        if (vBank<shore) {
+          vec3 sand=mix(vec3(.73,.72,.63),vec3(.93,.78,.53),step(.30,fleck));
+          vec3 damp=mix(vec3(.33,.23,.17),vec3(.49,.36,.24),fleck);
+          color=mix(damp,sand,smoothstep(.03,.33,vBank))*vColor;
+        } else if (vBank<shore+.13 && fleck<.38) {
+          color=mix(color,vec3(.73,.72,.63)*vColor,.62);
+        }
       }
     }
-    float water=uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.;
+    bool river=uRegionTexture && vGlow<-.5 && vGlow>-1.5 && vUV.y<0.;
+    float water=river?1.:(uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.);
+    if (river) {
+      vec2 pixel=floor(vWorld*32.);
+      vec2 sampleAt=(mod(pixel+vec2(0.,-floor(uWeather.x*5.)),32.)+.5)/128.;
+      vec3 deep=texture2D(uGround,sampleAt+vec2(0.,.75)).rgb;
+      float shore=1.-smoothstep(.03,.41,vBank);
+      float fleck=fract(sin(dot(mod(pixel,257.),vec2(1.7,2.9)))*87.3);
+      vec3 shallow=mix(vec3(.27,.54,.59),vec3(.52,.70,.70),step(.79,fleck));
+      color=mix(deep,shallow,shore*.84);
+    }
     bool green=color.g>color.r*1.12 && color.g>color.b*1.10;
     if (green && water<.5) {
       if (uSeason==1.) color*=vec3(1.08,1.03,.93);
@@ -324,8 +348,8 @@ const FRAGMENT = `
       float ripple=smoothstep(.78,1.,flow)*(.55+.45*sin(vWorld.x*17.+vWorld.y*2.));
       color+=vec3(.075,.15,.17)*ripple;
     }
-    if (uWild && vGlow<0.) {
-      float phase=vGlow<-1.5 ? vHeight*.83+uWeather.x*6. : vWorld.y*4.-uWeather.x*3.;
+    if (uWild && vGlow<-1.5) {
+      float phase=vHeight*.83+uWeather.x*6.;
       float foam=smoothstep(.72,1.,sin(phase+sin(vWorld.x*14.)*.6));
       color+=foam*vec3(.085,.13,.14);
     }
