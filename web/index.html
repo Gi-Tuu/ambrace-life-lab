@@ -137,6 +137,12 @@
   #minimap button .n { color:var(--dim); margin-left:5px; font-size:12px; }
   #minimap button.on .n { color:var(--bg); }
   #btnOverview { margin-left:auto; }
+  /* 声音按钮只放图标：顶栏在窄视口本来就溢出，别再给它加宽度。 */
+  #btnAudio { display:inline-flex; align-items:center; justify-content:center; padding:4px 6px; margin-left:6px; }
+  #btnAudio svg { width:22px; height:22px; }
+  #btnAudio .mute { display:none; }
+  #btnAudio.off .wave { display:none; }
+  #btnAudio.off .mute { display:inline; }
   #btnCampAngle { font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line); padding:4px 10px; cursor:pointer; white-space:nowrap; }
   #btnCampAngle:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
 
@@ -712,6 +718,7 @@
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>
+  <button id="btnAudio" type="button" aria-pressed="true" title="声音：点击在 高 / 中 / 低 / 关 之间循环" aria-label="声音档位"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M2.4 4.6h1.7L6.7 2.4v7.2L4.1 7.4H2.4z" fill="#D8A667"/><path class="wave" d="M8 4.3q1.2 1.7 0 3.4M9.4 3.2q2 2.8 0 5.6" stroke="#9DA8A8" fill="none" stroke-width=".8"/><path class="mute" d="M8.2 4.4l2.2 2.4M10.4 4.4L8.2 6.8" stroke="#C0504D" stroke-width=".9"/></svg></button>
   <button id="btnBagTop" type="button" aria-haspopup="dialog" hidden>背包（E）</button>
   <button id="btnCompare" type="button" aria-pressed="false">研究对照 A/B</button>
   <details id="keysHelp" hidden><summary>按键</summary>

@@ -8,6 +8,7 @@ import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CA
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
+import * as audio from './audio.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
@@ -106,6 +107,7 @@ function playAct(body) {
     ? {...body, ...(other && {otherContact:other}), mode: 'compare', revision: S.compareRevision}
     : {...body, mode: 'survival'}).then(result => {
     if (result.code==='COMPARE_STALE') { toast('对照已重开，正在刷新场景。'); void refresh(); }
+    audio.result(body, result);
     if (compare && ui.compare && result.sides) {
       const label = r => r.ok ? '成功' : campCodes[r.code] ?? SURV_CODE_ZH[r.code] ?? r.code ?? '未完成';
       $('compareAction').textContent = `A ${label(result.sides.A)} · B ${label(result.sides.B)}`;
@@ -3650,6 +3652,18 @@ function renderPlayMode(sv, comparison = S.comparison) {
   $('btnBagFull').disabled=!S.playing;
 }
 
+// 声音跟着世界读数走：签名没变就不重排环境声与 BGM，避免每 900ms 抖动一次。
+let audioSceneSig = null;
+function syncAudioScene(sv) {
+  if (!sv) return;
+  const crisisDays = sv.crisisDays ?? 0;
+  const dead = Boolean(sv.player?.dead);
+  const sig = [sv.season, sv.phase, sv.weather, sv.settlement, crisisDays > 0 ? 1 : 0, dead ? 1 : 0].join('|');
+  if (sig === audioSceneSig) return;
+  audioSceneSig = sig;
+  audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement, crisisDays, dead });
+}
+
 async function refresh() {
   try {
     const requestedMode=ui.menu?'menu':ui.compare?'compare':'survival';
@@ -3741,6 +3755,7 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    syncAudioScene(viewA);
     $('btnCollision').disabled = !canEditCollisions;
     if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
@@ -3939,6 +3954,32 @@ $('startNew').onclick=newSurvival;
 $('btnMenu').onclick=$('btnMenuFull').onclick=showStart;
 $('btnSurv').onclick=()=>selectWorld(false);
 $('btnCompare').onclick=()=>selectWorld(!ui.compare);
+// 声音：浏览器只在首次用户手势后才允许发声，所以解锁挂在第一次点击/按键上；
+// 档位单按钮循环（高/中/低/关），避免在 HUD 里再塞一条滑杆。
+const AUDIO_LEVELS=[['高',1],['中',0.6],['低',0.3],['关',0]];
+function paintAudioButton(){
+  const btn=$('btnAudio'); if(!btn) return;
+  const st=audio.status();
+  const label=st.muted?'关':st.volume>=0.9?'高':st.volume>=0.5?'中':'低';
+  btn.classList.toggle('off',st.muted);
+  btn.setAttribute('aria-pressed',String(!st.muted));
+  btn.title=`声音：${label}（点击在 高 / 中 / 低 / 关 之间循环）`;
+}
+function cycleAudio(){
+  audio.unlock();
+  const st=audio.status();
+  const idx=st.muted?3:st.volume>=0.9?0:st.volume>=0.5?1:2;
+  const [label,value]=AUDIO_LEVELS[(idx+1)%AUDIO_LEVELS.length];
+  if(value===0){ if(!st.muted) audio.toggleMute(); } else { audio.setVolume(value); }
+  audioSceneSig=null;   // 静音期间世界照走，恢复时按当前状态重新铺环境声与 BGM
+  paintAudioButton();
+  toast(`声音：${label}`);
+  if(value>0) audio.click();
+}
+$('btnAudio').onclick=cycleAudio;
+const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); } };
+['pointerdown','keydown'].forEach(type=>window.addEventListener(type,unlockAudio,{once:true,capture:true}));
+paintAudioButton();
 // 说明书 / 家庭与住房：局内屏幕中央新 UI
 const bindCenterDlg=(btnId,dlgId,renderFn)=>{
   const btn=$(btnId); if(btn) btn.onclick=()=>openCenterDlg(dlgId,renderFn);
