@@ -64,7 +64,6 @@
   .start-card p { margin:12px 0 20px; line-height:1.55; color:var(--dim); }
   .start-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; }
   .start-actions button { min-height:42px; padding:8px 14px; border:2px solid var(--line-hi); background:var(--panel); color:#f7e8c4; cursor:pointer; font:inherit; }
-  .start-actions a { display:inline-flex; align-items:center; min-height:42px; padding:0 12px; color:#f7e8c4; }
   .start-actions .primary { background:var(--gold); color:var(--bg); border-color:var(--gold); font-weight:bold; }
   .start-actions button:hover:not(:disabled) { outline:2px solid var(--ink); outline-offset:2px; }
   .start-actions button:disabled { opacity:.55; cursor:default; }
@@ -456,7 +455,6 @@
         <div class="start-actions">
           <button id="startSurvival" class="primary" type="button" disabled>继续生存</button>
           <button id="startNew" type="button" disabled>新开一局</button>
-          <a href="/web/wilds.html">荒野地图试走</a>
         </div>
       </section>
       <section class="start-card compare">
@@ -490,7 +488,6 @@
   </span>
   <span class="spacer"></span>
   <button id="btnCampAngle" type="button" hidden>转视角</button>
-  <a id="exploreWilds" href="/web/wilds.html">探索荒野</a>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>

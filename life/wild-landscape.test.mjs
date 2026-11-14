@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createCampOutskirts, moveJoinedWalker } from '../web/camp-outskirts.mjs';
+import { bodyGrid } from '../web/camp-3d-physics.mjs';
 import { campTerrain } from '../web/camp-terrain.mjs';
 import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, REGION_SIZE } from '../web/wild-landscape.mjs';
 
@@ -50,4 +52,26 @@ test('移动沿桥过河，河面、三侧山脊、南崖和树干挡住行走',
   const trees=wildDetails(a,2,1,z).boxes.filter(b=>b.color==='#584635');
   assert.ok(trees.length>0);
   for(const b of trees) assert.ok(!a.walkable(b.x+.08,b.z+.08,z));
+});
+
+test('拼接区块保留村庄地面，跨界往返使用同一脚点与碰撞',()=>{
+  const out=createCampOutskirts(13,2,34), w=out.terrain;
+  for (const [x,z] of [[0,24],[120,32],[22,0],[70,80]]) assert.ok(Math.abs(w.height(x,z))<1e-10);
+  assert.equal(wildRegion(w,1,1).length,0);
+  const mesh=wildRegion(w,1,3);
+  assert.ok(vertices(mesh).every(([, ,z])=>z>=80));
+  const inside=(x,z)=>x>=0 && x<120 && z>=0 && z<80 && z!==20;
+  const x=12,z=79.5;
+  const [wx,wz]=moveJoinedWalker(x,z,0,2,inside,out.walkable);
+  assert.ok(wz>81);
+  const [cx,cz]=moveJoinedWalker(wx,wz,0,-2,inside,out.walkable);
+  assert.ok(cz<80 && cx===x);
+  assert.ok(out.regions(10,82).length>0);
+  assert.strictEqual(out.regions(10,82),out.regions(10,82));
+  const grid={tw:32,th:32,walk:new Uint8Array(32*32).fill(1)};
+  grid.walk[31*32+25]=0;
+  const open=bodyGrid(grid,16,true), closed=bodyGrid(grid,16);
+  assert.equal(open.walk[31*32+10],1);
+  assert.equal(open.walk[31*32+25],0);
+  assert.equal(closed.walk[31*32+10],0);
 });

@@ -5,13 +5,16 @@ export const REGION_SIZE=24;
 export const WILDS=Object.freeze({west:-240,east:TOWN_SIZE.width+240,north:-220,south:TOWN_SIZE.depth+270});
 const {west,east,north,south}=WILDS;
 const WORLD_FLOOR=-29;
+export const inCamp=(x,z)=>x>=0 && x<TOWN_SIZE.width && z>=0 && z<TOWN_SIZE.depth;
+const seamDistance=(x,z)=>Math.hypot(Math.max(0,-x,x-TOWN_SIZE.width),Math.max(0,-z,z-TOWN_SIZE.depth));
+
 const smooth=(a,b,v)=>{
   const t=Math.max(0,Math.min(1,(v-a)/(b-a)));
   return t*t*(3-2*t);
 };
 const mix=(a,b,t)=>a+(b-a)*t;
 
-export function wildLandscape(seed,version) {
+export function wildLandscape(seed,version,{joined=false}={}) {
   const {riverCenter,riverHalfWidth}=campTerrain(seed,false,version);
   const phase=campHash(seed,'wilds')*Math.PI*2;
   const width=z=>riverHalfWidth(z*16)/16;
@@ -32,7 +35,10 @@ export function wildLandscape(seed,version) {
     const branch=z>=branchSource && z<=junction ? sideWidth(z)-Math.abs(x-sideStream(z)) : -Infinity;
     return Math.max(0,main,branch);
   };
-  const waterHeight=z=>.75-(z-source)*.008;
+  const waterHeight=z=>{
+    const height=.75-(z-source)*.008;
+    return joined ? mix(.012,height,smooth(0,22,seamDistance(river(z),z))) : height;
+  };
   const isBridge=(x,z,crossing=24)=> Math.abs(z-crossing)<1.12 &&
     Math.abs(x-river(crossing))<3.65;
   function rawHeight(x,z) {
@@ -48,7 +54,8 @@ export function wildLandscape(seed,version) {
     const riverCut=(1-smooth(sourceWidth(z)-.35,sourceWidth(z)+1.55,Math.abs(x-river(z))))*smooth(source-2,source+2,z);
     const sideCut=(1-smooth(sideWidth(z)-.35,sideWidth(z)+1.55,Math.abs(x-sideStream(z))))*
       smooth(branchSource-2,branchSource+2,z)*(1-smooth(junction,junction+2,z));
-    return mix(ground,waterHeight(z)-.35,Math.max(riverCut,sideCut));
+    const height=mix(ground,waterHeight(z)-.35,Math.max(riverCut,sideCut));
+    return joined ? height*smooth(0,12,seamDistance(x,z)) : height;
   }
   function height(x,z) {
     const ix=Math.floor(x), iz=Math.floor(z), u=x-ix, v=z-iz;
@@ -65,7 +72,7 @@ export function wildLandscape(seed,version) {
   }
   function treeAt(x,z,crossing) {
     const r=hash2(x,z,seed+26), density=.5+.5*Math.sin(x*.09+z*.12);
-    return r<=.065+density*.09 && Math.abs(z-crossing)>=2 && land(x,z)>=5 && groundAllows(x,z,crossing) ? r : null;
+    return (!joined || seamDistance(x,z)>=2) && r<=.065+density*.09 && Math.abs(z-crossing)>=2 && land(x,z)>=5 && groundAllows(x,z,crossing) ? r : null;
   }
   function walkable(x,z,crossing=24) {
     if (!groundAllows(x,z,crossing)) return false;
@@ -74,7 +81,7 @@ export function wildLandscape(seed,version) {
   }
   let fall=270;
   while (fall<324 && land(river(fall),fall+1)>0) fall++;
-  return {seed,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,waterHeight,
+  return {seed,joined,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,waterHeight,
     isBridge,rawHeight,height,walkable,treeAt,fall};
 }
 
@@ -106,7 +113,7 @@ function face(out,a,b,c,d,color,water=0) {
 }
 function streamRibbon(out,world,x0,z0,length,center,width,end,start=world.source) {
   for(let z=z0;z<z0+length;z++) {
-    if (z<start || z>=end) continue;
+    if (z<start || z>=end || world.joined && inCamp(center(z),z)) continue;
     const a=center(z), b=center(z+1);
     if (a<x0 || a>=x0+REGION_SIZE) continue;
     const wa=width(z), wb=width(z+1), y=world.waterHeight(z), ny=world.waterHeight(z+1);
@@ -116,6 +123,7 @@ function streamRibbon(out,world,x0,z0,length,center,width,end,start=world.source
 export function wildRegion(world,cx,cz) {
   const x0=cx*REGION_SIZE,z0=cz*REGION_SIZE,out=[];
   for (let z=z0;z<z0+REGION_SIZE;z++) for (let x=x0;x<x0+REGION_SIZE;x++) {
+    if (world.joined && inCamp(x,z)) continue;
     const a=world.rawHeight(x,z), b=world.rawHeight(x+1,z), c=world.rawHeight(x+1,z+1), d=world.rawHeight(x,z+1);
     const color=terrainColor(world,x,z,a).map(v=>v*Math.min(1.13,Math.max(.69,1+(a-b)*.08+(d-a)*.05)));
     face(out,[x,a,z],[x+1,b,z],[x+1,c,z+1],[x,d,z+1],color);
@@ -161,7 +169,7 @@ export function wildDetails(world,cx,cz,crossing) {
     }
   }
   const x=world.river(crossing);
-  if (Math.floor(x/REGION_SIZE)===cx && Math.floor(crossing/REGION_SIZE)===cz) {
+  if (!world.joined && Math.floor(x/REGION_SIZE)===cx && Math.floor(crossing/REGION_SIZE)===cz) {
     for(let i=0;i<19;i++) box(x-3.65+i*.39,world.waterHeight(crossing)+.46,crossing-1.12,.385,.12,2.24,
       i%2?'#A9865F':'#8E6849');
   }

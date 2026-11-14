@@ -408,7 +408,7 @@ export function createCampRenderer() {
   }
   // 仅保留当前几种场景的缓冲，地图/对照切换时释放长期不用的资源。
   const lru=[];
-  function stageBuffer(stage) {
+  function stageBuffer(stage, limit) {
     if (stages.has(stage)) {
       const index=lru.indexOf(stage);
       lru.splice(index,1);
@@ -421,7 +421,7 @@ export function createCampRenderer() {
     const item={ b,count:mesh.length/11,ranges,terrainCount };
     stages.set(stage,item);
     lru.push(stage);
-    if(lru.length>(stage.wild ? 42 : 12)){
+    while(lru.length>limit){
       const old=lru.shift();
       gl.deleteBuffer(stages.get(old).b);
       stages.delete(old);
@@ -470,7 +470,7 @@ export function createCampRenderer() {
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
       gl.uniform1f(uniform.Season,season);
-      gl.uniform1i(uniform.Wild,Number(Boolean(regions)));
+      gl.uniform1i(uniform.Wild,Number(Boolean(regions?.length)));
       gl.uniform1i(uniform.HasWater,Number(Boolean(waterMask)));
       if (waterMask && waterMask!==waterImage) {
         gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,water);
@@ -501,10 +501,15 @@ export function createCampRenderer() {
         paint(groundBuffer,6,true);
       }
       const faded=[];
-      if (regions) for (const region of regions) paintStage(stageBuffer(region),covered,faded);
-      else paintStage(stageBuffer(stage),covered,faded,Boolean(terrain));
-      if (life) paintStage(stageBuffer(life),covered,faded);
-      if (homes) paintStage(stageBuffer(homes),covered,faded);
+      const cacheLimit=regions?.length ? 48 : 12;
+      if (regions?.length) {
+        gl.uniform1i(uniform.Visibility,0);
+        for (const region of regions) paintStage(stageBuffer(region,cacheLimit),covered,faded);
+        gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
+      }
+      paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));
+      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
       const moving=[];
       const translucent=[];
       for (const box of work) prism(covered.has(box.occluder)?translucent:moving,box);
