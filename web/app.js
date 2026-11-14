@@ -3176,7 +3176,7 @@ function familyPanel(s) {
   const available=present.filter(a=>!h.spouses[a.id] && !h.residents[a.id]?.parents.includes('p1'));
   const offers=h.offers.filter(o=>o.to==='p1');
   const vacant=Object.entries(h.deeds).filter(([room,d])=>d.owner==='p1' && !Object.values(s.housing).includes(room));
-  return `<details class="survdetail family-panel"><summary>家庭与住房</summary>
+  return `<div class="housing-body">
     <p>你的住处 · ${title(s.housing.p1)}${spouse?` · 配偶 ${name(spouse)}`:''}</p>
     <p>子女 ${h.adultDays} 个游戏日成年。成年后会根据床位、家人意愿和个人物资选择住处。</p>
     <ul>${Object.entries(s.agents).filter(([id])=>id!=='p1').map(([id,a])=>{
@@ -3195,7 +3195,7 @@ function familyPanel(s) {
       s.loc[spouse]===s.loc.p1 && s.housing[spouse]!==s.housing.p1
         ? btn('family_move',spouse,'提议搬到配偶家') : ''}
     ${vacant.map(([room,d])=>btn('family_list',room,d.listed?`撤下${title(room)}`:`出售${title(room)}`,!d.listed)).join('')}
-  </details>`;
+  </div>`;
 }
 
 function coopPanel(s) {
@@ -3234,6 +3234,60 @@ function objectiveHint(s) {
   return '';   // 玩法概括已并入左上角 tagline，不在面板重复
 }
 
+const STAT_ICON = {
+  calendar: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><rect x="1" y="2" width="10" height="9" fill="#D8A667"/><rect x="1" y="2" width="10" height="2" fill="#AB5236"/><path d="M3 6h2v2H3zM7 6h2v2H7z" fill="#72513B"/></svg>',
+  weather: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><circle cx="6" cy="6" r="3" fill="#FFEC27"/><path d="M6 0v2M6 10v2M0 6h2M10 6h2" stroke="#FFA300" stroke-width="1"/></svg>',
+  heart: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 10 1.5 5.5A2.5 2.5 0 0 1 6 3a2.5 2.5 0 0 1 4.5 2.5z" fill="#D58274"/></svg>',
+  shield: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 1 1 3v4c0 3 2.2 4.4 5 5 2.8-.6 5-2 5-5V3z" fill="#5B574C"/><path d="M6 2 2 3.5V7c0 2.3 1.6 3.4 4 4 2.4-.6 4-1.7 4-4V3.5z" fill="#98BD51"/></svg>',
+  place: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 1a3.5 3.5 0 0 0-3.5 3.5C2.5 7 6 11 6 11s3.5-4 3.5-6.5A3.5 3.5 0 0 0 6 1z" fill="#458996"/><circle cx="6" cy="4.5" r="1.2" fill="#FFF0CC"/></svg>',
+  action: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M7 0 2 7h3l-1 5 6-7H7z" fill="#FFA300"/></svg>',
+  forecast: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2 8h8v2H2z" fill="#5B574C"/><path d="M3 5a3 3 0 0 1 6 0" stroke="#83769C" stroke-width="1.2" fill="none"/></svg>',
+};
+function openCenterDlg(id, renderFn) {
+  const d = $(id); if (!d) return;
+  renderFn(S.survivalView);
+  if (!d.open) d.showModal();
+}
+function renderManual(s) {
+  const el = $('manualBody'); if (!el) return;
+  const line = (t) => `<li>${esc(t)}</li>`;
+  const h = (t) => `<h3>${esc(t)}</h3>`;
+  const v = (t) => `<p>${esc(t)}</p>`;
+  el.innerHTML = [
+    h('当前目标'), v(objectiveHint(s) || '自由经营：维持食物、住所与生态，应对四季与灾害。'),
+    h('新手步骤'), '<ul>' + [
+      '① 采集木石：院子/树林持斧采木，瞭台/井台持镐采石（住所要 4 木 2 石）。',
+      '② 奠基住所：到户外空地持锤奠基，再施工建成（降低饥饿压力）。',
+      '③ 施工：站在工地持锤施工；在「合作施工」请居民协助可加快进度。',
+      '④ 储备食物：菜园持锄收获/播种，或采浆果到公仓兑换；公仓养活聚落。',
+      '⑤ 建储粮设施提高粮仓上限；居民信任越高越愿意协助。',
+      '⑥ 长期经营：维持食物、住所和生态，应对四季与灾害。',
+    ].map(line).join('') + '</ul>',
+    h('操作'), '<ul>' + [
+      'WASD / 方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · F 交互 · Esc 关闭面板',
+      '点家具走近使用，到门口进入；靠近居民空手按 F 交谈（重工具会击伤）。',
+      '工具：手/斧/镐/锄/锤/篮/剪/桶；工具栏右侧显示当前手持与可用动作。',
+    ].map(line).join('') + '</ul>',
+    h('家庭与住房'), v('子女 12 个游戏日成年。成年后会根据床位、家人意愿和个人物资选择住处。'),
+    v('房屋可自主建造、施工、居住、继承、空置与再次使用；产权归住户，房主去世后按规则处理。'),
+    h('合作施工'), v('站在工地上可向居民请求协助；居民按自身需求、对你的信任、天气与任务价值决定是否参与，也可能中途退出。'),
+    h('世界'), v(`世界 ${s.tw ?? 120}×${s.th ?? 80} 格完整运行，视口随屏幕调整；树与屋舍挡视线，昼夜影响环境明暗。`),
+    v('生态自行出生/进食/繁殖/衰老，受水分与灾害影响；野果、野生动物按季节变化。'),
+    h('细账 · 当前数值'),
+    v(`背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv?.wood ?? 0} 石 ${s.inv?.stone ?? 0}`),
+    v(`粮 ${s.store ?? 0}/${s.storeCap ?? 24} ｜ 水 ${s.water ?? 0} ｜ 土 ${s.soil ?? 0}`),
+    v(`菜畦 ${(s.plots ?? []).map((q) => `[${q.id}:${q.growth >= 1 ? '熟' : q.growth}]`).join(' ') || '无'}`),
+    v(`收成 浆果 ${s.produce?.berry ?? 0} · 果 ${s.produce?.fruit ?? 0} · 蛋 ${s.produce?.egg ?? 0} · 奶 ${s.produce?.milk ?? 0} · 毛 ${s.produce?.wool ?? 0}`),
+    v(`存栏 鸡 ${s.livestock?.chickens ?? 0} 牛 ${s.livestock?.cows ?? 0} 羊 ${s.livestock?.sheep ?? 0} 果树 ${s.livestock?.orchards ?? 0}`),
+    v(`建筑 ${(s.buildings ?? []).length} 座 ｜ 工地 ${(s.sites ?? []).length} 处 ｜ 完工 ${s.coop?.completions?.length ?? 0} ｜ 拒绝 ${s.coop?.refusals ?? 0}`),
+    h('最近日志'), v((s.log ?? []).slice(-8).map((l) => `t${l.t} ${l.kind} ${l.ok ? '✓' : l.code}`).join(' ｜ ') || '暂无'),
+    h('关于规则'), v('居民与玩家使用同一套存续规则：不吃饭会死；婚姻、住房产权、衰老与死亡都由世界规则决定。'),
+  ].join('');
+}
+function renderHousing(s) {
+  const el = $('housingBody'); if (!el || !s) return;
+  el.innerHTML = familyPanel(s);
+}
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
@@ -3254,31 +3308,31 @@ function renderSurv(s) {
   const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
   el.innerHTML = `
     ${banner}
-    ${objectiveHint(s) ? `<div class="survrow survhint">${esc(objectiveHint(s))}</div>` : ''}
-    <div class="survrow survtop"><b>${esc(s.season ?? '')} 第${s.dayInSeason ?? '?'}天 · 总第 ${s.day+1} 天 · ${esc(s.phase)} ${esc(s.weather ?? '')}</b>
+    <div class="survrow stat-icons">
+      <span class="stat" title="季节与日期">${STAT_ICON.calendar}<b>${esc(s.season ?? '')} ${s.dayInSeason ?? '?'} / ${s.day+1}</b></span>
+      <span class="stat" title="时段与天气">${STAT_ICON.weather}<b>${esc(s.phase)} ${esc(s.weather ?? '')}</b></span>
+      <span class="stat" title="体力">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
+      <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
+      <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
+      ${s.player?.timeLeft != null ? `<span class="stat" title="本刻行动">${STAT_ICON.action}<b>${s.player.timeLeft}/100</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
-        ? `<span class="bad">${[s.stormTomorrow ? '风暴预警' : '', s.coldsnapTomorrow ? '寒潮预警' : '', s.drought ? '干旱' : '', s.disasterToday ? `今日${s.disasterToday === 'storm' ? '风暴' : '寒潮'}` : ''].filter(Boolean).join(' · ')}</span>`
-        : `<span class="dim">明日 ${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</span>`}
-      ${flash}</div>
-    <div class="survrow">你 · 体力 <b>${s.player?.energy ?? '?'}</b> · 存续 <b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b>${(s.player?.viab ?? 1) < 0.3 ? ' <span class="bad">饿了/濒危</span>' : ''}${s.player?.timeLeft != null ? ` <span class="dim">本刻行动 ${s.player.timeLeft}/100</span>` : ''}</div>
-    <div class="survrow survhere">你在 <b>${esc(location)}</b>${outdoor ? '（户外）' : '（室内）'}
-      ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}</div>
-    <details class="survdetail"><summary>细账 · 背包 / 菜畦 / 收成 / 建筑 / 合作 / 日志</summary>
-      <div class="survrow">背包 木 ${s.pinv?.p1?.wood ?? 0} 石 ${s.pinv?.p1?.stone ?? 0} ｜ 公仓 木 ${s.inv.wood} 石 ${s.inv.stone}</div>
-      <div class="survrow">菜畦 ${s.plots.map((p) => `[${p.id}:${p.growth >= 1 ? '熟' : p.growth}]`).join(' ')}</div>
-      <div class="survrow">收成 浆果 ${s.produce?.berry ?? 0} · 果 ${s.produce?.fruit ?? 0} · 蛋 ${s.produce?.egg ?? 0} · 奶 ${s.produce?.milk ?? 0} · 毛 ${s.produce?.wool ?? 0}
-        ｜ 存栏 鸡 ${s.livestock?.chickens ?? 3} 牛 ${s.livestock?.cows ?? 2} 羊 ${s.livestock?.sheep ?? 2} 果树 ${s.livestock?.orchards ?? 3}</div>
-      ${s.eco ? `<div class="survrow dim">生态 鸡群 ${s.eco.chickens}/${s.eco.chickenCap} · 果树 ${s.eco.orchards}/${s.eco.orchardCap}（自行出生/进食/繁殖/衰老，受水分与灾害影响）</div>` : ''}
-      <div class="survrow">建筑 ${s.buildings.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}${x.integrity < 1 ? '(损)' : ''}`).join('、') || '无'} ｜ 工地 ${s.sites.map((x) => `${bl(x.type)}@${esc((s.rooms ?? {})[x.loc] ?? x.loc)}`).join('、') || '无'}</div>
-      <div class="survrow">合作 ${s.coop.enabled ? '开' : '关'} ｜ 任务 ${s.coop.task ? `${bl(s.coop.task.type)}·${esc(s.coop.task.phase)}·${s.coop.task.workers.length}人` : '无'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 重规划 ${s.coop.replans}</div>
-      <div class="survrow survlog">${s.log.slice(-6).map((l) => `t${l.t} ${esc(l.kind)} ${l.ok ? '✓' : esc(SURV_CODE_ZH[l.code] ?? l.code)}`).join(' ｜ ')}</div>
-    </details>
-    ${familyPanel(s)}
+        ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
+        : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}
+      ${flash}
+      ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
+    </div>
     ${coopPanel(s)}
-    <details class="surveco"><summary>收成兑换 / 蓄养扩建（玩家与 AI 同权）</summary>
-      <div class="survrow survbtns">
-        ${Object.keys(s.economy?.exchange ?? {}).map((k) => `<button data-sk="exchange" data-type="${k}"${(s.produce?.[k] ?? 0) < 1 ? ' disabled data-need="缺收成"' : ''}>兑${(s.economy?.produceLabel ?? {})[k] ?? k}</button>`).join('')}
-        ${Object.entries(s.economy?.expand ?? {}).map(([k, c]) => `<button data-sk="expand" data-type="${k}"${(s.inv?.wood ?? 0) < c.wood || (s.inv?.stone ?? 0) < c.stone ? ' disabled data-need="缺木石"' : ''}>扩${(s.economy?.expandLabel ?? {})[k] ?? k} 木${c.wood}石${c.stone}</button>`).join('')}
+    <details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
+      <div class="eco-icons">
+        ${Object.keys(s.economy?.exchange ?? {}).map((k) => {
+          const n = s.produce?.[k] ?? 0, label = s.economy?.produceLabel?.[k] ?? k;
+          return `<button data-sk="exchange" data-type="${k}" title="兑换${label}（现有 ${n}）"${n < 1 ? ' disabled' : ''}><img width="32" height="32" alt="" src="${itemIcon(k)}"><span class="tag">${n}</span></button>`;
+        }).join('')}
+        ${Object.entries(s.economy?.expand ?? {}).map(([k, c]) => {
+          const label = s.economy?.expandLabel?.[k] ?? k;
+          const ok = (s.inv?.wood ?? 0) >= c.wood && (s.inv?.stone ?? 0) >= c.stone;
+          return `<button data-sk="expand" data-type="${k}" title="扩建${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
+        }).join('')}
       </div>
     </details>`;
   el.querySelectorAll(':scope > details').forEach((d, i) => { if (openState[i]) d.open = true; });
@@ -3663,6 +3717,24 @@ $('startNew').onclick=newSurvival;
 $('btnMenu').onclick=$('btnMenuFull').onclick=showStart;
 $('btnSurv').onclick=()=>selectWorld(false);
 $('btnCompare').onclick=()=>selectWorld(!ui.compare);
+// 说明书 / 家庭与住房：局内屏幕中央新 UI
+const bindCenterDlg=(btnId,dlgId,renderFn)=>{
+  const btn=$(btnId); if(btn) btn.onclick=()=>openCenterDlg(dlgId,renderFn);
+  const dlg=$(dlgId); if(dlg) dlg.addEventListener('click',(e)=>{ if(e.target===dlg) dlg.close(); });
+};
+bindCenterDlg('btnManual','manualDlg',renderManual);
+bindCenterDlg('btnHousing','housingDlg',renderHousing);
+if($('manualClose')) $('manualClose').onclick=()=>$('manualDlg').close();
+if($('housingClose')) $('housingClose').onclick=()=>$('housingDlg').close();
+$('housingDlg').addEventListener('click',(e)=>{
+  const family=e.target.closest('button[data-family]'); if(!family) return;
+  const {family:kind,id:target,accept}=family.dataset;
+  api('/act',{mode:'survival',kind,target,accept:accept==='true'}).then(r=>{
+    toast(FAMILY_RESULT[r.code]??'办理失败');
+    family.blur(); refresh();
+    setTimeout(()=>renderHousing(S.survivalView),350);
+  }).catch(()=>{ toast('无法登记，请重试。'); });
+});
 $('survPanel').addEventListener('click', (e) => {
   if (e.target.closest('#btnSurvReset')) { newSurvival(); return; }
   const family=e.target.closest('button[data-family]');

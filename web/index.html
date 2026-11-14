@@ -468,6 +468,43 @@
 
   /* 单世界 3D 模式下 occ 是旧版「点地点移动」提示，导航已移除，收起后物品栏即大框最后一栏 */
   main.solo .world.side-a .occ { display:none; }
+
+  /* 工具栏左对齐；说明书 / 房子 图标按钮 */
+  #hotbar { justify-content:flex-start; }
+  #hotbar .slot.icon { display:grid; place-items:center; }
+  #hotbar .slot.icon svg { display:block; }
+  #hotbar .slot.icon.on { background:var(--gold); border-color:var(--line-hi); }
+  /* 局内屏幕中央面板 */
+  #manualDlg, #housingDlg {
+    width:min(620px,92vw); max-height:82dvh; padding:16px 18px;
+    background:var(--panel); color:var(--ink); border:2px solid var(--line-hi);
+    box-shadow:6px 6px 0 0 var(--shadow); font-size:12px; line-height:1.6;
+  }
+  #manualDlg::backdrop, #housingDlg::backdrop { background:rgba(10,18,12,.72); }
+  #manualDlg h2, #housingDlg h2 { margin:0 0 10px; font-size:16px; color:var(--gold); border-bottom:2px solid var(--line); padding-bottom:6px; }
+  #manualBody, #housingBody { max-height:64dvh; overflow-y:auto; }
+  #manualBody h3, #housingBody h3 { margin:12px 0 4px; font-size:12px; color:var(--gold); }
+  #manualBody p, #housingBody p { margin:3px 0; }
+  #manualBody ul { margin:4px 0 8px; padding-left:18px; }
+  #manualBody .dim, #housingBody .dim { color:var(--dim); }
+  .dlg-foot { margin-top:12px; text-align:right; }
+  .dlg-foot button { background:var(--sunken); color:var(--ink); border:2px solid var(--line); padding:4px 12px; font:inherit; cursor:pointer; }
+  .dlg-foot button:hover { border-color:var(--gold); }
+  #housingBody button[data-family] { background:var(--sunken); color:var(--ink); border:2px solid var(--line); padding:2px 8px; margin:2px; font:inherit; cursor:pointer; }
+  #housingBody button[data-family]:hover { border-color:var(--gold); }
+  /* 状态行图标化 */
+  .stat-icons { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .stat-icons .stat { display:inline-flex; align-items:center; gap:3px; }
+  .stat-icons svg { flex-shrink:0; }
+  .stat-icons b { color:var(--ink); font-weight:700; }
+  /* 兑换/扩建：图标按钮 */
+  .eco-icons { display:flex; flex-wrap:wrap; gap:5px; }
+  .eco-icons button { position:relative; width:48px; height:48px; padding:0; display:grid; place-items:center;
+    background:var(--sunken); border:2px solid var(--line); cursor:pointer; }
+  .eco-icons button:hover:not(:disabled) { border-color:var(--gold); }
+  .eco-icons button:disabled { opacity:.42; cursor:not-allowed; }
+  .eco-icons img { width:32px; height:32px; image-rendering:pixelated; }
+  .eco-icons .tag { position:absolute; bottom:0; right:1px; font-size:12px; color:var(--gold); text-shadow:1px 1px 0 #000; }
 </style>
 </head>
 <body class="menu-mode">
@@ -523,7 +560,7 @@
   </span>
   <span class="spacer"></span>
   <button id="btnCampAngle" type="button" hidden>转视角</button>
-  <span id="campSunPhase" class="surv-only" aria-label="光照时段"></span>
+  <span id="campSunPhase" class="surv-only" aria-label="光照时段" hidden></span>
   <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>
   <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>
   <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>
@@ -553,6 +590,8 @@
         <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>
         <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>
         <span id="toolHint">手持 · 空手</span>
+  <button class="slot icon" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="22" height="22" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg><i>M</i></button>
+  <button class="slot icon" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="22" height="22" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg><i>H</i></button>
       </div>
       
       <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>
@@ -609,6 +648,16 @@
 
 <p id="saveNotice" role="alert" hidden></p>
 <output id="campToast" role="status"></output>
+<dialog id="manualDlg" aria-labelledby="manualTitle">
+  <h2 id="manualTitle">说明书</h2>
+  <div id="manualBody"></div>
+  <div class="dlg-foot"><button id="manualClose" type="button">关闭（Esc）</button></div>
+</dialog>
+<dialog id="housingDlg" aria-labelledby="housingTitle">
+  <h2 id="housingTitle">家庭与住房</h2>
+  <div id="housingBody"></div>
+  <div class="dlg-foot"><button id="housingClose" type="button">关闭（Esc）</button></div>
+</dialog>
 <dialog id="backpack" aria-labelledby="bpTitle">
   <div class="bp-row">
     <h2 id="bpTitle">背包与公仓</h2>
