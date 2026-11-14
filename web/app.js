@@ -1,7 +1,7 @@
 import { createCampOutskirts, moveJoinedWalker } from './camp-outskirts.mjs';
 import { forestDensity, inCamp, WILDS } from './wild-landscape.mjs';
 import { FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
-import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
+import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, campPlants, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
@@ -553,11 +553,20 @@ function buildWorld(w) {
       Array.from({length:2*rz+1},(_,i)=>z-rz+i).every(y=>Math.abs(x-river(y))>rx+3.5);
   });
   const roadDistance=(x,z)=>roadDist(x*TILE,z*TILE,true)/TILE;
-  const landscape=campRenderer && w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
-    {flatLand,hills,roadDistance}) : null;
   const highGround=(x,z)=>hills.some(hill=>reliefAt(hill,x+.5,z+.5)>.055);
   const nearLot=(x,z,pad=.85)=>reserved.some(lot=>overlapsLot({x,z,w:1,d:1},lot,pad));
   const nearGrove=(x,z)=>Boolean(w.camp?.timber) && grove.some(t=>Math.hypot(x+.5-t.x,z+.5-t.z)<1.7);
+  const plantClearance=(x,z)=>{
+    const tx=Math.floor(x),tz=Math.floor(z);
+    return !inPen(tx,tz) && !nearLot(tx,tz,0) && !nearGrove(tx,tz) && !onFarm(x,z,.8) &&
+      !nearSite(x,z,2.5) && roadDistance(x,z)>1.3 &&
+      !blockers.has(tileKey(tx,tz)) && !flatLand.some(lot=>
+        x>=lot.x && x<lot.x+lot.w && z>=lot.z && z<lot.z+lot.d);
+  };
+  const harvestNodes=w.camp ? campPlants(w.layout,12,mapSeed,w.layoutVersion,w.ecoSources ?
+    {...w.ecoSources,fruit:Array.from({length:12},(_,slot)=>({id:`fruit:${slot}`,slot}))} : undefined) : [];
+  const landscape=campRenderer && w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
+    {flatLand,hills,roadDistance,plantClearance,harvestNodes}) : null;
   const terrain = paintTerrain(g, (x,z)=>roadDist(x,z,true), sites, beds, terrainHash, streamCenter, streamHalfWidth), grass=[];
   // 草簇与野花只落在草地，避免覆盖路肩和岸线。
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
@@ -651,15 +660,15 @@ function buildWorld(w) {
 
   // 世界植被：果树棵数与服务器 livestock.orchards 同源绑定（改量#12 遗项⑤），其余植被确定性哈希。
   const cands = [];
-  for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
+  for (let ty = 0; !landscape && ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     if (highGround(tx,ty) || onRoad(tx, ty) || onRiver(tx, ty) || inPen(tx,ty) || nearLot(tx,ty) || nearGrove(tx,ty) || blockers.has(tileKey(tx, ty))) continue;
     if (onFarm(tx+.5,ty+.5,1.25)) continue;
     const near = Object.values(sites).some(([sx, sy]) => Math.hypot(tx - sx, ty - sy) < 6);
-    if (near && (!landscape || nearSite(tx,ty,2.5))) continue;
+    if (near) continue;
     const h = terrainHash(tx, ty, 31);
     // 果树候选放宽到村落外环（6–14 格），让默认首屏边缘就能看到；其余植被仍在林子里。
     const ring = Object.values(sites).some(([sx, sy]) => { const d = Math.hypot(tx - sx, ty - sy); return d >= 6 && d <= 14; });
-    const limit=landscape ? (near?.09:ring?.13:.19) : ring?.045:.073;
+    const limit=ring?.045:.073;
     if (h < limit) cands.push([tx, ty, h, ring ? 0 : 1]);
   }
   cands.sort((a, b) => a[3] - b[3] || a[2] - b[2]);
@@ -713,7 +722,7 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
+  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass:landscape?[]:grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -738,7 +747,7 @@ function buildWorld(w) {
   const waterMask=scene3d ? {width:WORLD_W,height:WORLD_H,bytes:terrain.map(k=>k===GROUND.water?255:0)} : null;
   const terrainWalk3d=scene3d ? terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE))))) : null;
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -2058,11 +2067,12 @@ function drawCamp(cv,w) {
   if (S.soloSurv && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
-  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work);
+  const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
+  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
   if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,visibility,sight,waterMask,season:open?climate.season:-1,weather}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site:ui.interior,covered,
-    exterior,extended,people,animals,work,visibility,sight};
+    exterior,extended,people,animals,work,visibility,sight,regionDetails};
   if (exterior && playerId==='cvA' && S.soloSurv) advanceOutdoorIntent(exterior,w,player);
   if (open && !overview) paintWeather(g,climate,time,ratio);
   if(overview)campMapFrame(g,camera,stage,ratio,extended?WILDS:undefined);
@@ -2070,7 +2080,7 @@ function drawCamp(cv,w) {
   for(const p of people)campRing(g,camera,p,ratio,p.who==='p1'?'#FFEC27':'#C2C3C7',ACT.frame);
   if (residentHint) {
     const [nx,nz]=residentHint.to, npc=w.agents[residentHint.target];
-    const ny=stage.heightAt(nx,nz)+(npc.stage==='child'?1.12:1.58);
+    const ny=Math.max(stage.heightAt(nx,nz),extended?.height(nx,nz)??0)+(npc.stage==='child'?1.12:1.58);
     const heavy=HEAVY_CAMP_TOOLS.includes(ui.tool);
     const hint=ui.tool==='hand'?'F 交谈':heavy?'F 会击伤':'收起工具';
     campBadge(g,camera,[nx,ny,nz],`${npc.name} · ${hint}`,heavy?'build':'talk',16,ratio);
@@ -2087,7 +2097,7 @@ function drawCamp(cv,w) {
     if (hit && now-Math.max(h.t,h.since??h.t)>=200) {
       hoverLabel=hit.name;
       const [px,pz]=hit.at;
-      campBadge(g,camera,[px,hit.labelHeight??stage.heightAt(px,pz)+1.15,pz],hit.name,'',16,ratio);
+      campBadge(g,camera,[px,hit.labelHeight??Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??0)+1.15,pz],hit.name,'',16,ratio);
     }
   }
   cv._debug={pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended && !terrain),p1:player?[player.x,player.y,player.z]:null};
@@ -3639,6 +3649,13 @@ function pointedEntity(cv,ev) {
   const rect=cv.getBoundingClientRect(), u=(ev.clientX-rect.left)/rect.width,v=(ev.clientY-rect.top)/rect.height;
   const [x,z]=camera.ground(u,v,12), origin=[x,12,z], ray=camera.back.map(n=>-n);
   const surfaces=[];
+  for (const boxes of view.regionDetails??[]) for (const b of boxes) {
+    const id=b.occluder;
+    if (id?.startsWith('wildtree:') && !view.covered.has(id)) {
+      const [,x,z]=id.split(':');
+      surfaces.push([b,{id,kind:'scenery',name:'树',at:[Number(x),Number(z)],labelHeight:b.y+b.h+.1}]);
+    }
+  }
   const push=(boxes,e)=>{for (const box of boxes) surfaces.push([box,e]);};
   if (view.site) {
     const [dx,dz,dw,dd]=roomDoor(view.site);
@@ -3673,10 +3690,11 @@ function pointedEntity(cv,ev) {
     }
   }
   const hit=visibleEntityHit(origin,ray,surfaces);
-  if (hit && view.sight && view.visibility) {
+  if (hit && view.sight) {
     const [hx,hz]=hit.at, {tw,th}=view.exterior;
     const ix=Math.floor(hx), iz=Math.floor(hz);
-    if (ix<0 || ix>=tw || iz<0 || iz>=th || !view.visibility?.[iz*tw+ix] ||
+    const isVillage=ix>=0 && ix<tw && iz>=0 && iz<th;
+    if (view.visibility && isVillage && !view.visibility[iz*tw+ix] ||
         distanceTo(hit.at,view.sight.slice(0,2))>view.sight[2]+.45) return null;
   }
   return hit;

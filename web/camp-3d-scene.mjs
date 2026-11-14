@@ -225,7 +225,9 @@ function meadowPlant(s,x,y,z,variant,kind) {
 }
 export function wildVegetation(trees, undergrowth) {
   const s=stage(0,0);
-  for (const {x,y,z,variant,scale} of trees) tree(s,x,z,variant,y,scale);
+  for (const {x,y,z,variant,scale} of trees) {
+    s.group(`wildtree:${x}:${z}`,()=>tree(s,x,z,variant,y,scale));
+  }
   for (const {x,y,z,variant,kind} of undergrowth) meadowPlant(s,x,y,z,variant,kind);
   return s;
 }

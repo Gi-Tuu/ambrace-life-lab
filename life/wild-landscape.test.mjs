@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCampOutskirts, moveJoinedWalker } from '../web/camp-outskirts.mjs';
+import { campCamera, coveredModels } from '../web/camp-3d-render.mjs';
 import { bodyGrid } from '../web/camp-3d-physics.mjs';
 import { campTerrain } from '../web/camp-terrain.mjs';
 import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, REGION_SIZE } from '../web/wild-landscape.mjs';
@@ -122,4 +123,19 @@ test('同一河面保留深浅水值，湿岸有连续距离，花草和灌木�
   assert.ok(detail.some(b=>flowerColors.has(b.color) && b.wind && !b.wind.rooted));
   assert.ok(detail.some(b=>b.color==='#6B994D' && b.wind.rooted));
   assert.ok(detail.some(b=>b.h>.3 && b.wind?.rooted));
+});
+
+test('聚落与外围由同一规则生成花草，避让用地，外围树冠参与玩家遮挡',()=>{
+  const world=wildLandscape(13,2,{joined:true,plantClearance:x=>x>12});
+  assert.equal(world.plantAt(4,30),null);
+  const flowers=boxes=>boxes.filter(b=>b.color==='#FF77A8' || b.color==='#FFEC27');
+  assert.ok(flowers(wildDetails(world,1,1,24).boxes).length>0);
+  const outside=wildDetails(world,1,4,24).boxes;
+  assert.ok(flowers(outside).length>0);
+  const trunk=outside.find(b=>b.solid);
+  assert.ok(trunk?.occluder.startsWith('wildtree:'));
+  const x=trunk.x+trunk.w/2, z=trunk.z+trunk.d/2, y=trunk.y;
+  const camera=campCamera({x,z,width:800,height:450,span:22,yaw:0,pitch:.55});
+  const player={x,y,z:z-.6};
+  assert.ok(coveredModels(camera,player,outside).has(trunk.occluder));
 });

@@ -25,7 +25,7 @@ export function forestDensity(seed,x,z) {
   return mix(.026,.41,smooth(.31,.76,forest));
 }
 
-export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], roadDistance}={}) {
+export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], roadDistance, plantClearance, harvestNodes=[]}={}) {
   const {riverCenter,riverHalfWidth}=campTerrain(seed,false,version);
   const phase=campHash(seed,'wilds')*Math.PI*2;
   const beyond=z=>smooth(0,44,Math.max(0,-z,z-TOWN_SIZE.depth));
@@ -96,6 +96,18 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
     return channel(x,z)<=0 &&
       Math.max(Math.abs(height(x+.42,z)-height(x-.42,z)),Math.abs(height(x,z+.42)-height(x,z-.42)))<.8;
   }
+  function plantAt(tx,tz) {
+    const x=tx+.23+hash2(tx,tz,seed+94)*.54;
+    const z=tz+.23+hash2(tx,tz,seed+95)*.54;
+    if (plantClearance?.(x,z)===false || harvestNodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) return null;
+    const bank=bankGap(x,z);
+    if (bank<.34 || !walkable(x,z)) return null;
+    const patch=noise(seed+96,x,z,10);
+    const density=.13+patch*.16+(bank<3?.085:0);
+    if (hash2(tx,tz,seed+91)>=density) return null;
+    const species=hash2(tx,tz,seed+93), variant=Math.floor(hash2(tx,tz,seed+92)*4);
+    return {x,z,y:height(x,z),variant,kind:species<.29?'flower':species>.83?'shrub':'grass'};
+  }
   function treeAt(x,z,crossing) {
     const r=hash2(x,z,seed+26);
     const density=forestDensity(seed,x,z);
@@ -110,7 +122,7 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
   let fall=270;
   while (fall<324 && land(river(fall),fall+1)>0) fall++;
   return {seed,joined,roadDistance,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,bankGap,waterHeight,
-    isBridge,rawHeight,height,walkable,treeAt,treeScale,fall};
+    isBridge,rawHeight,height,walkable,plantAt,treeAt,treeScale,fall};
 }
 
 export function moveWildWalker(landscape,x,z,dx,dz,crossing) {
@@ -225,20 +237,10 @@ export function wildDetails(world,cx,cz,crossing) {
   for(let z=z0+1;z<z0+REGION_SIZE;z+=2) for(let x=x0+1;x<x0+REGION_SIZE;x+=2) {
     const r=world.treeAt(x,z,crossing), variant=Math.floor(hash2(x,z,world.seed+92)*4);
     if (r!==null) trees.push({x,z,y:world.height(x,z),variant,scale:world.treeScale(x,z)});
-
   }
   for (let tz=z0;tz<z0+REGION_SIZE;tz++) for (let tx=x0;tx<x0+REGION_SIZE;tx++) {
-    if (world.joined && inCamp(tx,tz)) continue;
-    const x=tx+.23+hash2(tx,tz,world.seed+94)*.54;
-    const z=tz+.23+hash2(tx,tz,world.seed+95)*.54;
-    const scatter=hash2(tx,tz,world.seed+91);
-    const patch=noise(world.seed+96,x,z,10);
-    const bank=world.bankGap(x,z), riverside=bank>.4 && bank<3;
-    const density=.095+patch*.14+(riverside?.08:0);
-    if (scatter>=density || bank<.34 || !world.walkable(x,z,crossing)) continue;
-    const species=hash2(tx,tz,world.seed+93), variant=Math.floor(hash2(tx,tz,world.seed+92)*4);
-    const kind=species<.19?'flower':species>.86?'shrub':'grass';
-    plants.push({x,z,y:world.height(x,z),variant,kind});
+    const plant=world.plantAt(tx,tz);
+    if (plant) plants.push(plant);
   }
   const detail=wildVegetation(trees,plants);
   const x=world.river(crossing);

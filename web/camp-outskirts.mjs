@@ -1,7 +1,8 @@
 import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview } from './wild-landscape.mjs';
 
 export function createCampOutskirts(seed,version,crossing,world) {
-  const terrain=wildLandscape(seed,version,{joined:true,flats:world?.flatLand,hills:world?.hills,roadDistance:world?.roadDistance});
+  const terrain=wildLandscape(seed,version,{joined:true,flats:world?.flatLand,hills:world?.hills,roadDistance:world?.roadDistance,
+    plantClearance:world?.plantClearance,harvestNodes:world?.harvestNodes});
   const cache=new Map();
   let signature, visible=[], overview;
   return {
