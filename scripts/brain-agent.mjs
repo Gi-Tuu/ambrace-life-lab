@@ -16,10 +16,11 @@ const CLAIM_TIMEOUT_MS = Number(process.env.CLAIM_TIMEOUT_MS ?? 8000) || 8000;
 const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 20000) || 20000;
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
-// 私有创空间对匿名请求直接 403（魔搭网关拦的，进不到我们的路由），所以要带上 ?studio_token=…；
-// 那是会话令牌、会过期，翻公开之后这一项就该留空。
+// 私有创空间的网关会先把匿名请求打成 403，所以要带 ?studio_token=…；那是会话令牌、会过期，翻公开后可以去掉。
+// 鉴权同样以查询参数为主：实测魔搭网关会把自定义鉴权头吃掉（Authorization / x-brain-token 都到不了容器）。
+// 代价是这个令牌会出现在平台访问日志里——它与 studio_token 同级、可轮换，翻公开后建议换成密文变量并只回头验证。
 const QS = String(process.env.RELAY_QUERY ?? '').replace(/^[?&]+/, '');
-const api = (path) => RELAY + path + (QS ? `${path.includes('?') ? '&' : '?'}${QS}` : '');
+const api = (path) => `${RELAY}${path}?relay_token=${encodeURIComponent(TOKEN)}${QS ? `&${QS}` : ''}`;
 if (!RELAY || !TOKEN) {
   console.error('缺 RELAY_URL / RELAY_TOKEN：中继端点默认关闭，不给令牌就不该起来。');
   process.exit(2);

@@ -125,6 +125,12 @@ const engineAuthorized = (req) => {
 };
 
 function relayPresented(req) {
+  // 魔搭网关会改写/丢弃自定义鉴权头（实测 Authorization 与 x-brain-token 都到不了容器），
+  // 但查询参数能过（studio_token 就是它带进来的），所以这里三处都认，取第一个非空。
+  try {
+    const q = new URL(req.url, 'http://relay.local').searchParams.get('relay_token');
+    if (q) return String(q);
+  } catch { /* 畸形 URL 由路由前段的 BAD_URL 兜住 */ }
   const h = String(req.headers.authorization ?? '');
   return h.startsWith('Bearer ') ? h.slice(7) : String(req.headers['x-brain-token'] ?? '');
 }
