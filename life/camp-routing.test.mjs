@@ -50,6 +50,7 @@ test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则�
     const wb = await get(base, `/world?camp=${b.key}`);
     const wm = await get(base, '/world');
     assert.equal(wa.camp?.key, a.key, '带 camp 应返回该营地');
+    assert.equal(wa.camp?.name, '甲', 'camp.name 必须是名字而不是哈希（P2-a）');
     assert.equal(wb.camp?.key, b.key, '另一份营地也要能读');
     assert.equal(wm.camp, null, '不带 camp 必须是主营地');
     assert.equal(wa.survival.loc?.p1, 'garden', '动作必须落到 ?camp= 指定的世界');

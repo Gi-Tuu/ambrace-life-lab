@@ -167,3 +167,10 @@ test('F14 后端 chip 按两把尺子分别判：不许在节点仍答话时谎�
   assert.doesNotMatch(APP, /\(m\.calls \?\? 0\) >= \(m\.budget/, '仍在用总量 calls 比钱的额度 ⇒ 无人模型上线后必然谎报"今日已用完"');
   assert.match(APP, /unattended === false/, '"无人观看，省额度"这句只允许在无人模型真被关掉时说');
 });
+
+test('F12 URL 的 camp 是路由主路径：localStorage 不可用时轮询仍带 camp（P2-b）', () => {
+  assert.match(APP, /new URL\(location\.href\)\.searchParams\.get\('camp'\)/,'缺少 URL camp 读取');
+  assert.match(APP, /\^\[0-9a-f\]\{32\}\$/, '缺少 32 位十六进制校验');
+  assert.match(APP, /setCampProvider\(\(\) => campKeyNow\)/, 'provider 未绑定内存值');
+  assert.match(APP, /campKeyNow = urlCampKey/, 'provider 初值没有优先取 URL');
+});

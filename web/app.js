@@ -27,7 +27,21 @@ import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels,
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 
-setCampProvider(() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } });
+// P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
+// 隐私模式写不进 localStorage 时，首轮重定向之后的轮询仍然带得上 camp。
+const urlCampKey = (() => {
+  try {
+    const k = new URL(location.href).searchParams.get('camp');
+    return /^[0-9a-f]{32}$/.test(k ?? '') ? k : null;
+  } catch { return null; }
+})();
+let campKeyNow = urlCampKey ?? (() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } })();
+setCampProvider(() => campKeyNow);
+function setCampKey(key) {
+  campKeyNow = key || null;
+  try { if (key) localStorage.setItem('ambrace.camp.v1', key); } catch { /* 隐私模式：内存里仍有 */ }
+  try { if (!key) { localStorage.removeItem('ambrace.camp.v1'); localStorage.removeItem('ambrace.campName.v1'); } } catch { /* 同上 */ }
+}
 async function api(path, body) {
   const result = await postJson(path, body);
   const notice = persistNotices(result, path);
@@ -3482,7 +3496,7 @@ function renderCampCurrent() {
   if (back) back.hidden = !key;
 }
 async function backToMain() {
-  try { localStorage.removeItem('ambrace.camp.v1'); localStorage.removeItem('ambrace.campName.v1'); } catch { /* 忽略 */ }
+  setCampKey(null);
   try { await fetch('/saves/back', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch { /* 服务端失败也回菜单 */ }
   location.href = '/';
 }
@@ -3495,10 +3509,8 @@ async function submitCamp() {
     const res = await fetch('/saves/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
     if (!res.ok) { const j = await res.json().catch(() => ({})); if (status) status.textContent = '进不去：' + (j.error ?? res.status); return; }
     const data = await res.json().catch(() => ({}));
-    try {
-      if (data?.key) localStorage.setItem('ambrace.camp.v1', data.key);
-      if (data?.name) localStorage.setItem('ambrace.campName.v1', data.name);
-    } catch { /* 隐私模式：cookie 仍可能生效 */ }
+    setCampKey(data?.key);
+    try { if (data?.name) localStorage.setItem('ambrace.campName.v1', data.name); } catch { /* 隐私模式 */ }
     // P0-1：query 是主路径（第三方 cookie 在 iframe 里可能既存不下也带不上）
     location.href = '/?mode=survival&camp=' + encodeURIComponent(data?.key ?? '');
   } catch { if (status) status.textContent = '连不上服务。'; }

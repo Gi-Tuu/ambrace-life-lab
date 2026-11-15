@@ -124,6 +124,14 @@
 - 闸门 `camp-routing.test.mjs` SA10：起真服务验证 `?camp=A` / `?camp=B` / 不带 camp 三条路由；
   `scripts/smoke-online.mjs` 增加只读路由检查（`SMOKE_CAMP_KEY` 提供 key，`/saves` 按设计不投影 key）。
 - 三条负向对照均验红并字节还原（整条 key 校验短路、persist 刷新 lastSeenAt、忽略 camp 路由）。
+### 第二轮核验的两处 P2（2026-11-15）
+- **P2-a `/world.camp.name` 恒为哈希**：快照里的营地标签原先走 `listCamps()`，而公开投影按设计不含 `key`，
+  这条 `find` 永不命中。改为读**内部 live 条目**的名字（`S.camps.live.get(key)?.name`），闸门 SA10 增加
+  `camp.name === '甲'` 断言。
+- **P2-b localStorage 写不进时丢营地**：`setCampProvider` 的初值改为优先取 URL 的 `camp`（校验 32 位十六进制），
+  localStorage 只做持久化。实测：清空 localStorage 后用 `?camp=` 刷新，所有 `/world` 请求仍带 `camp=`。
+  闸门 F12 结构性覆盖该路径。
+- 一处自身失误如实记：给快照加行内注释时 `//` 吞掉了同一行的 `saveError`，被 `node --check` 当场抓出，已修。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。
