@@ -1680,7 +1680,15 @@ function drawCamp(cv,w) {
     people=roomCrowd(w,site);
     work=roomPropsMesh(site,w);
     const fire=stage.interactables.find(p=>p.kind==='hearth');
-    if (fire) hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,.79+.14*Math.sin((ACT.motionTime??0)*6)];
+    // Harrowfield 式闪烁（2026-11-15）：单频正弦太干净，换成三层频率叠加 + 偶发下探。
+    // 全部由 ACT.motionTime 驱动（表现层时钟，不进世界 tick、不消费 rng）。
+    if (fire) {
+      const ft=ACT.motionTime??0;
+      const wave=.5+.5*Math.sin(ft*6.1)+.32*Math.sin(ft*13.7+1.7)+.18*Math.sin(ft*23.3+3.1);
+      const dip=1-.10*Math.max(0,Math.sin(ft*2.3+0.7));
+      const strength=Math.max(.42,Math.min(1.02,(.70+.24*wave)*dip));
+      hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
+    }
     people.push({who:'p1',x:(pos.x+8)/TILE,z:(pos.y+16)/TILE,moving:pos.moving,direction:pos.direction,act:campAct(w,'p1')});
     if (campCart?.attached && campCart.site===site && (!right || site===ui.interior)) people.at(-1).act='push';
     if (campPose && (!right || site===ui.interior)) {
@@ -1795,7 +1803,7 @@ function drawCamp(cv,w) {
   } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? 1.10 : 1,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
     physical:physicalLighting,animateParts}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site,covered,
