@@ -85,3 +85,23 @@ test('SA6 列表投影：只给五项，不含背包/关系/对话', () => {
   assert.deepEqual(Object.keys(row).sort(), ['day', 'daysLeft', 'lastSeenAt', 'name', 'population', 'status'].sort());
   assert.equal(row.name, '<img onerror=alert(1)>', '名字按原样返回，转义由渲染层负责');
 });
+
+test('SA3 fork 起点：从 40 天种子开新营地，阈值照 seed-archive 口径（不得放宽）', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 3 });
+  const r = mgr.open('新来的');
+  assert.ok(r.ok, r.code);
+  const dump = dumpSurv(r.sp);
+  const s = dump.survival;
+  assert.ok(Number.isSafeInteger(dump.t) && dump.t > 0, '刻数必须 > 0');
+  assert.notEqual(s.ended, true, '不得是终局');
+  assert.ok(Object.values(dump.minds).filter((m) => m && !m.dead).length >= 4, '在世居民至少 3 + 玩家');
+  assert.ok(Number(s.store) > 0, '公仓必须 > 0');
+  assert.ok(Object.keys(s.buildings ?? {}).length >= 3, '建筑至少 3 座');
+  assert.equal(s.playerDead, false);
+  const p1 = dump.minds.p1;
+  assert.ok(p1 && !p1.dead && Number(p1.viab?.v) >= 0.9, '玩家必须是活着的新到者');
+  assert.ok(dump.loc?.p1 && (dump.occupancy?.[dump.loc.p1] ?? []).includes('p1'), '玩家必须在占用表里');
+  // 起点来自种子（第 40 天），不是第 1 天
+  assert.equal(dump.t, SEED.t, '新营地必须从种子刻数起步');
+});

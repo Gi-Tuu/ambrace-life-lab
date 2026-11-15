@@ -3451,6 +3451,41 @@ function selectWorld(compare) {
   renderPlayMode(S.survivalView);
   refresh();
 }
+// 名字存档（C2）：列表只读投影；进走 /saves/open，成功后整页重载，当前营地由服务端持有。
+async function loadCampList() {
+  const box = $('campList'); if (!box) return;
+  try {
+    const res = await fetch('/saves');
+    const data = await res.json();
+    const rows = data?.entries ?? [];
+    box.replaceChildren();
+    if (!rows.length) { box.textContent = '还没有营地。输入一个名字开始。'; return; }
+    for (const row of rows) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'camp-row';
+      b.textContent = `${row.name} · 第 ${row.day + 1} 天 · ${row.population} 人 · ${row.daysLeft} 天后回收`;
+      b.onclick = () => { const input = $('campName'); if (input) input.value = row.name; submitCamp(); };
+      box.appendChild(b);
+    }
+  } catch { if (box) box.textContent = '读不到营地列表。'; }
+}
+async function submitCamp() {
+  const input = $('campName');
+  const name = (input?.value ?? '').trim();
+  const status = $('startStatus');
+  if (!name) { if (status) status.textContent = '先输入一个名字。'; return; }
+  try {
+    const res = await fetch('/saves/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); if (status) status.textContent = '进不去：' + (j.error ?? res.status); return; }
+    location.href = '/?mode=survival'; // 直接进游戏（营地已由服务端切好）
+  } catch { if (status) status.textContent = '连不上服务。'; }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const form = $('campForm');
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); submitCamp(); });
+  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) loadCampList();
+});
 function showStart() {
   audio.menu(true);
   if (campBusy || enteringRoom || leavingRoom) return;

@@ -23,6 +23,7 @@ import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
+import { CampInstances, listSaves, normalizeName, saveCamp, touchSave } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
@@ -174,7 +175,8 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, campKey: null, campName: null, mainSurv: null, seedSurv: null, camps: null,
+  lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
   // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
@@ -302,6 +304,51 @@ function modelConfigured() {
 
 // 导出给离线工具（scripts/seed-ladder.mjs）复用：公开演示起点必须用运行时同一套生存配置生成，
 // 否则烘出来的营地在正式模式下装不回来。
+// 命名营地：同一时刻只服务一份（多营地并发留给 C3 的三态调度）。
+function campManager() {
+  if (!S.camps) {
+    if (!S.seedSurv) S.seedSurv = structuredClone(dumpSurv(S.mainSurv ?? S.surv));
+    S.camps = new CampInstances({ dataDir: S.dir, options: survivalOptions(), limit: 6, seedSurvival: S.seedSurv });
+  }
+  return S.camps;
+}
+
+export function listCamps() {
+  return listSaves(S.dir, Date.now());
+}
+
+// 进场：先落当前营地，再把指定名字的营地切为当前世界。返回不进游戏时只读的摘要。
+export async function openCamp(name) {
+  const id = normalizeName(name);
+  if (!id.ok) return { ok: false, code: id.code };
+  if (!S.surv) return { ok: false, code: 'NO_SURVIVAL' };
+  const mgr = campManager();
+  await save(); // 切走前先把当前营地写稳
+  const opened = mgr.open(id.display, { now: Date.now() });
+  if (!opened.ok) return opened;
+  if (!S.mainSurv && !S.campKey) S.mainSurv = S.surv;
+  S.surv = opened.sp;
+  S.campKey = opened.key;
+  S.campName = id.display;
+  S.lastVisitor = Date.now();
+  S.viewers.survival = S.lastVisitor;
+  return {
+    ok: true, code: 'OK', key: opened.key, name: id.display,
+    day: Math.floor((opened.sp.world.t ?? 0) / (opened.sp.world.dayTicks ?? 24)),
+    population: Object.values(opened.sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
+  };
+}
+
+// 回到主营地（浏览器刷新后就是它）。
+export async function backToMainCamp() {
+  if (!S.campKey) return { ok: true, code: 'OK', already: true };
+  await save();
+  if (S.mainSurv) S.surv = S.mainSurv;
+  S.campKey = null;
+  S.campName = null;
+  return { ok: true, code: 'OK' };
+}
+
 export function survivalOptions() {
   return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, gameRules: process.env.GAME_RULES === '1', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
@@ -836,6 +883,27 @@ let saveSeq = 0;
 // 那次存档被静默丢弃（实测 80 次并发里 3 轮）。这里串行化 + 唯一 tmp 名（双保险）。
 function save() {
   const run = saveChain.then(async () => {
+    // 命名营地：写 saves/<key>.gz + 索引，绝不覆盖主营地的 world.json
+    if (S.campKey) {
+      try {
+        await mkdir(S.dir, { recursive: true });
+        saveCamp(S.dir, S.campKey, dumpSurv(S.surv));
+        touchSave(S.dir, {
+          key: S.campKey, name: S.campName,
+          day: Math.floor((S.surv.world.t ?? 0) / (S.surv.world.dayTicks ?? 24)),
+          population: Object.values(S.surv.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
+          status: S.surv.world.survival?.playerDead ? 'ended' : 'active',
+          lastSeenAt: Date.now(),
+        });
+        S.savedAt = Date.now();
+        S.saveWrites = (S.saveWrites ?? 0) + 1;
+        S.saveError = null;
+        return true;
+      } catch (error) {
+        S.saveError = String(error?.message ?? error);
+        return false;
+      }
+    }
     const f = join(S.dir, 'world.json');
     const tmp = `${f}.${process.pid}.${(saveSeq += 1)}.tmp`;
     const backupTmp = `${tmp}.bak`;
@@ -1117,6 +1185,9 @@ export const host = {
     }
   },
   status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
+  listCamps,
+  openCamp,
+  backToMainCamp,
   snapshot(mode) {
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p, layered) => ({
@@ -1155,7 +1226,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: S.campKey ? { key: S.campKey, name: S.campName } : null, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body) {
     return queueWorldWrite(async () => {

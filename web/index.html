@@ -19,6 +19,13 @@
           <button id="startSurvival" class="primary" type="button" disabled>继续生存</button>
           <button id="startNew" type="button" disabled>新开一局</button>
         </div>
+        <form id="campForm" class="camp-form" autocomplete="off">
+          <label for="campName">名字（存档钥匙）</label>
+          <input id="campName" name="campName" maxlength="16" placeholder="输入名字，回车进入" />
+          <button id="campEnter" type="submit">进入 / 开新营地</button>
+        </form>
+        <details class="camp-list"><summary>已有营地</summary><div id="campList"></div></details>
+        <p class="camp-note">名字就是钥匙：别人输一样的名字就能进同一个营地。</p>
         <p id="startStatus" role="status">正在连接世界…</p>
       </section>
       <section class="start-card compare" aria-labelledby="startCompareTitle">
