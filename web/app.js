@@ -2061,6 +2061,41 @@ function fillOcc(el, pack) {
   }).join('');
 }
 let survFlash = null, toastTimer = null;
+// 首次进入引导（2026-11-15）：只出现一次，可跳过；进度存 localStorage。
+const FIRST_RUN_KEY = 'ambrace.firstRun.v1';
+const FIRST_RUN_STEPS = [
+  { kind: 'gather', label: '走近树或石头，按 F 采集一次' },
+  { kind: 'eat', label: '回屋，对着桌子按 F 吃一份饭' },
+  { kind: 'sleep', label: '天黑前回屋，对着床按 F 睡一觉' },
+];
+let firstRunStep = (() => { try { return Math.max(0, Number(localStorage.getItem(FIRST_RUN_KEY) ?? 0) || 0); } catch { return 0; } })();
+function firstRunStepOf(kind) {
+  if (['gather', 'harvest', 'forage', 'camp_chop', 'camp_collect', 'plant', 'camp_plant'].includes(kind)) return 0;
+  if (kind === 'camp_eat') return 1;
+  if (kind === 'camp_sleep') return 2;
+  return -1;
+}
+function renderFirstRun() {
+  const box = $('firstRun'); if (!box) return;
+  if (!S.playing || firstRunStep >= FIRST_RUN_STEPS.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = '<b>第一次来？三步上手</b><ol>'
+    + FIRST_RUN_STEPS.map((s, i) => `<li class="${i < firstRunStep ? 'done' : ''}">${esc(s.label)}</li>`).join('')
+    + '</ol><button type="button" data-firstrun="skip">知道了，先自己逛</button>';
+  const skip = box.querySelector('[data-firstrun="skip"]');
+  if (skip) skip.onclick = () => {
+    firstRunStep = FIRST_RUN_STEPS.length;
+    try { localStorage.setItem(FIRST_RUN_KEY, String(firstRunStep)); } catch { /* 隐私模式 */ }
+    renderFirstRun();
+  };
+}
+function markFirstRun(kind) {
+  const step = firstRunStepOf(kind);
+  if (step < 0 || step !== firstRunStep) return;
+  firstRunStep = step + 1;
+  try { localStorage.setItem(FIRST_RUN_KEY, String(firstRunStep)); } catch { /* 隐私模式 */ }
+  renderFirstRun();
+}
 function toast(msg, ms = 2600) {
   const el = $('campToast'); if (!el) return;
   el.textContent = msg;
@@ -2336,6 +2371,7 @@ async function performCamp(body,site,done) {
     }
     const result=await playAct(body);
     survFlash={kind:body.kind,ok:result.ok,code:result.code??result.error??'OK'};
+    if (result.ok) markFirstRun(body.kind);
     await refresh();
     if (done && $('campPropDialog').open) done();
     const msg=result.ok ? (body.kind==='camp_sleep'?`睡过了 ${result.ticks} 刻`:`${campLabels[body.kind]??ACT_ZH[body.kind]??'操作'}成功`)
@@ -2999,6 +3035,7 @@ function renderLabCoop(s) {
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 主 HUD 常驻"当前目标"：玩家不必打开聚落面板也能知道下一步做什么（可玩性 30 分的低成本一段）。
+  renderFirstRun();
   const obj = $('objHud');
   if (obj) {
     const hint = objectiveHint(s);

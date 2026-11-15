@@ -566,6 +566,18 @@
     font-size:12px; color:var(--ink); background:rgba(50,48,44,.8); border:1px solid var(--line);
     text-shadow:1px 1px 0 #000;
   }
+  /* 首次进入引导（只出现一次，可跳过） */
+  #firstRun {
+    position:absolute; top:8px; right:8px; width:min(46%, 300px); padding:8px 10px;
+    background:rgba(50,48,44,.94); border:2px solid var(--gold); box-shadow:3px 3px 0 0 rgba(0,0,0,.35);
+    font-size:12px; line-height:17px; color:var(--ink); text-shadow:1px 1px 0 #000;
+  }
+  #firstRun b { color:var(--gold); display:block; margin-bottom:4px; }
+  #firstRun ol { margin:0 0 6px; padding-left:18px; }
+  #firstRun li { margin:2px 0; }
+  #firstRun li.done { color:var(--gold); text-decoration:line-through; opacity:.75; }
+  #firstRun button { font-size:12px; padding:2px 8px; }
+
   /* 主 HUD：当前目标（可玩性急救，2026-11-15） */
   #objHud {
     position:absolute; bottom:22px; left:0; padding:3px 7px; max-width:min(80%, 430px);
