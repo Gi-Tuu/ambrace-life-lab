@@ -139,10 +139,13 @@ export function musicWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 
 export const windowSignature = (w) => `${w.play ? 1 : 0}|${w.theme}|${w.day ? 1 : 0}`;
 
 // 音乐总线的目标电平：窗口说"不播"就必须是 0，否则"挑时段播"只是一句空话。
-// 危机档压低三成，让心跳与劳动声出头。
+// 所有者裁决（2026-11-15）：整体压低 BGM ⇒ 常规 0.6、危机 0.45，都低于音效峰值 0.5 的听感占位，
+// 让劳动声、畜叫、风声始终在音乐之上；危机时再给心跳让路。
+export const MUSIC_LEVEL = 0.6;
+export const MUSIC_LEVEL_CRISIS = 0.45;
 export const musicTarget = (win, settlement) => {
   if (!win || !win.play) return 0;
-  return win.theme === 'crisis' || settlement === 'crisis' ? 0.7 : 0.9;
+  return win.theme === 'crisis' || settlement === 'crisis' ? MUSIC_LEVEL_CRISIS : MUSIC_LEVEL;
 };
 
 // 远近程度 0（村内）→ 1（村外远征），用于环境声的连续 ducking。

@@ -192,7 +192,7 @@ export function menu(on) {
   if (!on) { state.menu = false; return; }
   state.menu = true;
   startMusic('menu:day');
-  fadeMusic(0.9);
+  fadeMusic(musicTarget({ play: true, theme: 'menu' }, 'active'));
 }
 
 // 环境声床：最多三层（天气 / 昼夜 / 危机），换状态时 1.5 秒交叉淡入淡出。

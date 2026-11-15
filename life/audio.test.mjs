@@ -9,7 +9,7 @@ import {
   renderSfx, sfxNames, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND, themeForSeason,
 } from '../web/audio-data.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
-import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget } from '../web/audio-events.mjs';
+import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS } from '../web/audio-events.mjs';
 import { analyze } from '../web/audio-synth.mjs';
 
 const SR = 44100;
@@ -261,14 +261,17 @@ test('A-21 远近程度单调且钳在 0..1：村内 0，村外 1', () => {
 
 test('A-22 窗口说停，目标电平必须是 0（不是"算对了但没接线"）', () => {
   assert.equal(musicTarget({ play: false, theme: 'spring' }, 'active'), 0, '不播时电平必须归零');
-  assert.equal(musicTarget({ play: true, theme: 'spring' }, 'active'), 0.9);
-  assert.equal(musicTarget({ play: true, theme: 'crisis' }, 'crisis'), 0.7, '危机时给心跳让路');
+  assert.equal(musicTarget({ play: true, theme: 'spring' }, 'active'), MUSIC_LEVEL);
+  assert.equal(musicTarget({ play: true, theme: 'crisis' }, 'crisis'), MUSIC_LEVEL_CRISIS, '危机时给心跳让路');
   assert.equal(musicTarget(null, 'active'), 0, '没有窗口读数时不响');
+  // 所有者裁决：BGM 整体压在音效之下，不许再回到"音乐最响"。
+  assert.ok(MUSIC_LEVEL <= 0.65, `BGM 常规电平 ${MUSIC_LEVEL} 偏高（要求整体压低）`);
+  assert.ok(MUSIC_LEVEL_CRISIS < MUSIC_LEVEL, '危机档必须比常规更低');
   // 接线侧的同一类错误：布尔当电平用会让"停播"永远不生效。
   const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
   assert.equal(/fadeMusic\(\s*(true|false)\s*\)/.test(wired), false,
     'audio.mjs 里还有 fadeMusic(true/false)：电平必须来自 musicTarget');
-  assert.equal(/fadeMusic\(true[,)]/.test(wired), false, '同上：淡出分支不能写成 true');
+  assert.equal(/fadeMusic\(0\.\d/.test(wired), false, '电平不许在接线处硬写小数，必须走 musicTarget');
 });
 
 // ───────────────── 原先"待做"的三条：现在靠现有载荷做，不为声音改规则 ─────────────────

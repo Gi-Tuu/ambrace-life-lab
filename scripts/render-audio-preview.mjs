@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { toWav, analyze, mixMono } from '../web/audio-synth.mjs';
 import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason } from '../web/audio-data.mjs';
+import { MUSIC_LEVEL, MUSIC_LEVEL_CRISIS } from '../web/audio-events.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
 
 const OUT = resolve(process.argv[2] ?? 'docs/audio-preview');
@@ -22,13 +23,16 @@ const toStereo = (mono) => {
   return out;
 };
 
-function write(name, stereo) {
-  const info = analyze(stereo);
-  writeFileSync(join(OUT, name), toWav(stereo));
+function write(name, scaled, material = scaled) {
+  // 静音与削顶是对**素材本身**判的（缩放后 rms 天然低，用它判会误报）；
+  // 打印出来的 peak/rms 则是缩放后的实际听感电平。
+  const check = analyze(material);
+  const info = analyze(scaled);
+  writeFileSync(join(OUT, name), toWav(scaled));
   console.log(`${name.padEnd(28)} ${String(info.seconds).padStart(6)}s  peak ${String(info.peak).padStart(5)}  rms ${String(info.rms).padStart(6)}  削顶 ${info.clippedSamples}`);
-  if (info.rms < 0.005) problems.push(`${name} 近乎静音`);
-  if (info.clippedSamples > 200) problems.push(`${name} 削顶样本过多`);
-  return info;
+  if (check.rms < 0.005) problems.push(`${name} 素材近乎静音（缩放前 rms ${check.rms}）`);
+  if (check.clippedSamples > 200) problems.push(`${name} 素材削顶`);
+  if (info.clippedSamples > 0) problems.push(`${name} 缩放后仍削顶`);
 }
 
 // 1) 音效：按清单分类各出一条巡游，间隔 0.4 秒，并打印「秒 → 条目」对照。
@@ -51,6 +55,14 @@ for (const cat of cats) {
   console.log(`  ${cat}（${items.length} 条）：\n    ` + labels.join('\n    '));
 }
 
+// 试听包按运行时混音电平缩放：BGM 走 musicBus（MUSIC_LEVEL），环境声走声床电平（≈0.5），
+// 音效直连主输出。这样"听到的比例"就是游戏里的比例，而不是各自归一的理想值。
+const scale = (stereo, k) => {
+  const out = new Float32Array(stereo.length);
+  for (let i = 0; i < stereo.length; i++) out[i] = stereo[i] * k;
+  return out;
+};
+
 // 2) BGM：四季出昼/夜两版，其余状态各出一版。
 const themes = ['spring', 'summer', 'autumn', 'winter', 'crisis', 'recovering', 'extinct', 'menu'];
 for (const theme of themes) {
@@ -64,12 +76,16 @@ for (const theme of themes) {
       const start = Math.round(at * SR) * 2;
       for (let i = 0; i + start < stereo.length && i < data.length; i++) stereo[start + i] += data[i];
     }
-    write(`bgm-${theme}${day ? '-day' : '-night'}.wav`, stereo);
+    const level = theme === 'crisis' ? MUSIC_LEVEL_CRISIS : MUSIC_LEVEL;
+    write(`bgm-${theme}${day ? '-day' : '-night'}.wav`, scale(stereo, level), stereo);
   }
 }
 
-// 3) 环境声床（清单里标 bed 的条目）。
-for (const item of SOUND_INVENTORY.filter((x) => x.bed)) write(`amb-${item.id}.wav`, renderAmbience(item.id));
+// 3) 环境声床（清单里标 bed 的条目）：按运行时声床电平 ≈0.5 缩放。
+for (const item of SOUND_INVENTORY.filter((x) => x.bed)) {
+  const material = renderAmbience(item.id);
+  write(`amb-${item.id}.wav`, scale(material, 0.5), material);
+}
 
 // 4) 统计汇总：与清单同一来源，报告里直接抄这段。
 const byStatus = SOUND_INVENTORY.reduce((m, x) => (m[x.status] = (m[x.status] ?? 0) + 1, m), {});
