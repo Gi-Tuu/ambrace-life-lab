@@ -12,6 +12,10 @@ import { spawn } from 'node:child_process';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HTML = readFileSync('web/index.html', 'utf8');
+// 样式已从 index.html 抽到 web/app.css（2026-11-15）。闸门要断言的是"页面上存在这条故障样式"，
+// 不是"它写在哪个文件里"——所以两处合并后再匹配，否则搬一次样式就会让闸门变成噪音。
+const CSS = readFileSync('web/app.css', 'utf8');
+const STYLED = `${HTML}\n${CSS}`;
 
 test('F1 轮询必须串行且后台停轮询（否则请求叠加、且替世界打 touch 烧额度）', () => {
   assert.match(APP, /document\.hidden/, '没有 document.hidden 判断 ⇒ 后台标签页会一直轮询');
@@ -26,7 +30,7 @@ test('F2 重置必须带 confirm（服务端要求，缺了就 400）', () => {
 test('F3 存档失败与决策异常必须出现在页面上', () => {
   assert.match(APP, /j\.saveError/, '前端从不读 saveError ⇒ 存不上盘时页面无感');
   assert.match(APP, /j\.tickError/, '前端从不读 tickError ⇒ 世界静默冻结时页面无感');
-  assert.match(HTML, /\.backend\.bad/, '没有故障样式类');
+  assert.match(STYLED, /\.backend\.bad/, '没有故障样式类（index.html 或 app.css 里都必须能找到）');
 });
 
 test('F4 服务端字符串进 innerHTML 前必须过 esc（抽查所有插值点）', () => {
