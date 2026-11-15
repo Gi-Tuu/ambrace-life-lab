@@ -1697,6 +1697,19 @@ function drawCamp(cv,w) {
       }
     }
   } else {
+    // 首帧不在绘制任务里同步建地形：paintTerrain 实测 ≈600ms 且是**纯计算**（2.46M 像素多趟扫描），
+    // 它的产物 terrain 同时喂碰撞与 3D 可行走性，所以不能只延后贴图。
+    // 这里让步一个任务：先让浏览器把「正在生成地形…」画出来，再同步构建。
+    // 600ms 的 CPU 仍在，但玩家看到的是加载态，而不是画面卡死。
+    if (!campWorlds.has(playerId) && !ui.terrainDeferred) {
+      // 一次性让步：只推迟一次，下个任务必定进入同步构建。
+      // （若在 timeout 里复位这个标志，就会"延迟→复位→再延迟"无限弹跳。）
+      ui.terrainDeferred = true;
+      showTerrainLoading(true);
+      setTimeout(() => { forceRepaint = true; }, 0);
+      return false;
+    }
+    showTerrainLoading(false);
     const world=buildWorld(w);
     exterior=world;
     campWorlds.set(playerId,world);
@@ -1859,6 +1872,17 @@ const GFX_FAILURE_LIMIT = 5;
 let gfxFailureRun = 0;
 let gfxGaveUp = false;
 let gfxFaultMessage = '';   // 非空＝渲染处于故障态，renderPlayMode 必须让提示持续可见
+let forceRepaint = false;   // 地形构建完/加载态切换时，强制下一帧重绘（静态场景否则不会重画）
+
+// 地形构建的加载态：只借用 #playNotice，且不覆盖渲染故障提示。
+function showTerrainLoading(on) {
+  if (gfxFaultMessage) return;
+  const box = $('playNotice');
+  const text = $('playNoticeText');
+  if (!box || !text) return;
+  if (on) { text.textContent = '正在生成地形…'; box.hidden = false; }
+  else if (text.textContent === '正在生成地形…') box.hidden = true;
+}
 
 function showGfxUnavailable(hard, custom) {
   const msg = custom ?? (hard
@@ -4018,7 +4042,7 @@ loadAssets().finally(() => {
     const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
     ACT.motionTime=reduced.matches?0:elapsed;
     const mstep=SPEED*ACT.fps*dt, playerStep=mstep*(keys.has('sprint')?1.75:1);
-    const repaint3d=changed || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24)) ||
+    const repaint3d=forceRepaint || changed || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24)) ||
       mdx || mdy || roomRoute || Object.values(WALK).some(walker=>walker.pi<walker.path?.length);
     // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
@@ -4112,6 +4136,7 @@ loadAssets().finally(() => {
     }
     if (changed) for (const cvId in DUST) DUST[cvId] = DUST[cvId].map(p => ({ ...p, age: p.age + 1 })).filter(p => p.age < 6);
     if (campRenderer && !repaint3d) return;
+  forceRepaint = false;
     if (ui.fullscreen) {
       if (S.viewB) draw($('cvB'), S.viewB);
       draw($('cvFull'), S.view);

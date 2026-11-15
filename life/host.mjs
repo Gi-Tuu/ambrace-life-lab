@@ -50,7 +50,9 @@ const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 // BUG-14：每个角色保留多少条 trace。实测 4.19 KB/行、6.49 行/刻 ⇒ 生产 TICK_MS=6000 时
 // 无上限约 628 MB/天。2000 行 ≈ 8 MB/角色，足够页面/装置读取，又不会把容器撑爆。
-const TRACE_CAP = Number(process.env.TRACE_CAP ?? 2000);
+// 默认从 2000 → 400（2026-11-15 压测）：trace 只用于诊断、不落盘也不参与决策，
+// 实测把 heap 从 ~166MB 压到 ~118MB、RSS 从 ~433MB 压到 ~373MB，存档体积不变。
+const TRACE_CAP = Number(process.env.TRACE_CAP ?? 400);
 // 单拍模型调用上限。默认 **0 = 不设上限 = 现行为逐位不变**。
 // 为什么需要它：真实模型链路实测一拍最多发 8 次调用（3 角色 × 2 侧 + 2 次驳回重问），
 // 每次约 600 ms ⇒ 单拍最坏 ~4.7 s；而线上 TICK_MS=6000，已经贴着边界。
