@@ -398,7 +398,7 @@ const VERTEX = `
   varying float vGlow, vHeight, vRoad, vBank;
   varying mediump vec3 vPhysical;
   varying mediump float vFinish;
-  void main(){
+void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
     float wind=uRegionTexture?0.:aMaterial.x;
@@ -420,6 +420,9 @@ const FRAGMENT = `
   uniform vec3 uSight;
   uniform vec4 uHearth;
 uniform float uExposure;
+uniform vec4 uWindowA, uWindowB;
+uniform float uDaylight;
+uniform bool uInterior;
   uniform mediump vec4 uWeather;
   uniform float uSeason;
   uniform mediump vec3 uLight, uSun;
@@ -436,6 +439,18 @@ uniform float uExposure;
   varying mediump vec3 vPhysical;
   varying mediump float vFinish;
   uniform bool uWild, uRegionTexture;
+  // Room at Dawn 式窗光（2026-11-15）：以窗为源，向屋内与远离窗宽衰减；强度乘 uDaylight，
+// 所以白天有、夜里归零——这就是"白天因子"，不需要把光静态烘进几何。
+// 参数：w = (窗中心x, 窗所在z, 半窗宽, 未用)；p = 世界 xz；h = 高度。
+float windowPool(vec4 w, vec2 p, float h){
+  if (w.z <= 0.) return 0.;
+  float lat = 1. - smoothstep(w.z, w.z + 1.7, abs(p.x - w.x));
+  float deep = exp(-max(0., p.y - w.y) * .42);
+  float high = 1. - smoothstep(1.4, 2.6, h);
+  return lat * deep * high;
+}
+
+
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
     if (uRegionTexture && vUV.y>=0.) {
@@ -520,6 +535,10 @@ uniform float uExposure;
     // 让它读成"空气里的光"而不是贴地的一个亮圆。强度与闪烁共用 uHearth.w，所以会一起呼吸。
     float halo=uHearth.w*(1.-smoothstep(1.,7.2,distance(vWorld,uHearth.xy)))*max(0.,1.-abs(vWorld.y-.75)/2.4);
     lit+=vec3(.17,.08,.03)*halo;
+    if (uInterior && uDaylight > .01) {
+      float pool=windowPool(uWindowA,vWorld,vHeight)+windowPool(uWindowB,vWorld,vHeight);
+      lit+=vec3(.46,.33,.19)*pool*uDaylight;
+    }
     if (uWild) {
       float mist=smoothstep(2.,25.,-vHeight);
       float drift=.92+.08*sin(vWorld.x*.13+vWorld.y*.11+uWeather.x*.2);
@@ -572,7 +591,7 @@ export function createCampRenderer() {
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Sun','SunRay','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Sun','SunRay','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','Daylight','Interior','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
@@ -689,7 +708,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, animateParts=true, exposure=1 }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, animateParts=true, exposure=1, windows=null, daylight=0, interior=false }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -706,6 +725,10 @@ export function createCampRenderer() {
       gl.uniform3fv(uniform.Sight,sight);
       gl.uniform4fv(uniform.Hearth,hearth);
 gl.uniform1f(uniform.Exposure,exposure);
+gl.uniform4fv(uniform.WindowA,windows?.[0]??[0,0,0,0]);
+gl.uniform4fv(uniform.WindowB,windows?.[1]??[0,0,0,0]);
+gl.uniform1f(uniform.Daylight,daylight);
+gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       gl.uniform4fv(uniform.Weather,weather);
       gl.uniform1f(uniform.Season,season);
       gl.uniform1i(uniform.RegionTexture,0);

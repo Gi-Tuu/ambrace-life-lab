@@ -687,8 +687,11 @@ export function roomStage(site, props, front, width, depth) {
       s.box(wx-.08,1.0,rear+.04,1.66,.08,.13,'#D8A667');
       // 窗光烘焙：已回退（2026-11-15）。静态烘焙的暖色会被夜间偏冷的 uLight 乘成蓝灰，
       // 夜里读成"发蓝的地板补丁"。要做对需要给 shader 加一个白天因子通道，
-      // 与曝光分离一起留到冻结后处理。
+      // 2026-11-15：白天因子通道已加 —— 窗光改为 shader 里的程序化通道（见 camp-3d-render.mjs 的 windowPool），
+      // 强度乘 uDaylight，夜里自然归零，不再把暖色静态烘进几何。
     }
+    // 窗位交给渲染器（中心 x / 所在 z / 半宽 / 占位）
+    s.windows = [width*.22, width*.68].map((wx) => [wx + .75, rear + .12, .78, 1]);
     s.box(width*.46,.72,rear+.03,1.24,1.28,.06,'#7E2553');
     s.box(width*.46+.16,1.24,rear+.1,.92,.24,.03,'#EDC787');
     s.box(width*.46+.5,1.5,rear+.1,.24,.28,.03,'#FFEC27');
