@@ -52,6 +52,11 @@ test('F5 页面结构：A/B 双世界栏与关键面板都在', () => {
   }
 });
 
+test('A08 位置上报随当前模式，A/B 各用自己的坐标', () => {
+  assert.match(APP, /mode:'compare', revision, kind:'player_sync', from, otherContact:/);
+  assert.match(APP, /applyPositionSync\(other, r\.sides\?\.B\)/);
+});
+
 test('F7 菜单与终局重开共用确认后的生存重置', () => {
   assert.match(APP, /startNew.*onclick=newSurvival/);
   assert.match(APP, /btnSurvReset.*newSurvival/);

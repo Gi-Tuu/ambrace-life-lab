@@ -44,3 +44,23 @@ test('G6 令牌比较定长：长度不同直接 false，不做前缀旁路', ()
   assert.equal(tokenMatches('', 'abcd'), false);
   assert.equal(tokenMatches('abcd', ''), false);
 });
+
+// 线上真实形状：创空间网关把 Host 改写成容器内地址，浏览器仍带 Origin: https://<空间>.ms.show。
+// 旧实现只比 Origin↔Host ⇒ 每个访客的 /act 都是 CROSS_SITE，游戏里就是"所有交互失败，请重试"。
+// 本地测不出来（本地 Host 与 Origin 一致），所以这三条断言必须写在这里。
+test('G7 网关改写 Host 后，浏览器访客的写请求仍须放行', () => {
+  const STUDIO = 'https://gituuu-ambrace-life-lab.ms.show';
+  const proxied = { ...JSONH, host: '0.0.0.0:7860', origin: STUDIO, 'sec-fetch-site': 'same-origin' };
+  assert.equal(mutatingDenied(req(proxied), ''), null, '浏览器亲口 same-origin ⇒ 必须放行');
+  const fwd = { ...JSONH, host: '0.0.0.0:7860', 'x-forwarded-host': 'gituuu-ambrace-life-lab.ms.show', origin: STUDIO };
+  assert.equal(mutatingDenied(req(fwd), ''), null, '没有 sec-fetch-site 时 x-forwarded-host 也算同源证据');
+  const ported = { ...JSONH, host: 'lab.example:443', origin: 'https://lab.example' };
+  assert.equal(mutatingDenied(req(ported), ''), null, '默认端口不参与比较');
+});
+
+test('G8 跨站证据优先；same-origin 证据与旧行为一样可被脚本伪造（不新增旁路）', () => {
+  assert.equal(mutatingDenied(req({ ...JSONH, host: '0.0.0.0:7860', 'x-forwarded-host': 'lab.example', origin: 'http://lab.example', 'sec-fetch-site': 'cross-site' }), ''),
+    'CROSS_SITE', '网关转发不能翻掉浏览器明确给出的 cross-site');
+  assert.equal(mutatingDenied(req({ ...JSONH, host: '0.0.0.0:7860', origin: 'http://evil.example', 'sec-fetch-site': 'same-origin' }), ''),
+    null, '脚本本来就能伪造这个头（旧实现里"无 Origin 即视为同源"同样放行）；防的是浏览器里的跨站页面，不是 curl');
+});

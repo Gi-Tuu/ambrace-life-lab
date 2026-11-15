@@ -10,16 +10,24 @@ export function isLoopback(req) {
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1' || a === 'localhost';
 }
 
-// 同源判定：sec-fetch-site 明确 cross-site 一律拒；带 Origin 时必须与 Host 一致。
+// 同源判定：sec-fetch-site 明确 cross-site 一律拒；same-origin 是浏览器亲口给的证据，直接认。
+// 为什么不能只比 Origin↔Host：创空间网关会把 Host 改写成容器内地址（实测：带
+// `Origin: https://<空间>.ms.show` 的请求在容器里 Host 已不是这个值 ⇒ 每个真实访客的
+// /act 都被判 CROSS_SITE，游戏里表现为"所有交互失败，请重试"）。这类代理下
+// `sec-fetch-site` / `x-forwarded-host` 才是可用证据；脚本伪造 sec-fetch-site 在本规则下
+// 本来就能通过（无 Origin 即视为同源），所以这里不新增旁路面。
 export function sameOrigin(req) {
   const site = String(req?.headers?.['sec-fetch-site'] ?? '').toLowerCase();
   if (site === 'cross-site') return false;
+  if (site === 'same-origin') return true;
   const origin = req?.headers?.origin;
   if (!origin) return true;
   try {
     const o = new URL(String(origin));
-    const host = String(req?.headers?.host ?? '').toLowerCase();
-    return o.host.toLowerCase() === host;
+    const given = o.host.toLowerCase();
+    const candidates = [req?.headers?.host, req?.headers?.['x-forwarded-host']]
+      .flatMap((h) => String(h ?? '').split(',')).map((h) => h.trim().toLowerCase()).filter(Boolean);
+    return candidates.some((h) => h === given || h.replace(/:(80|443)$/, '') === given.replace(/:(80|443)$/, ''));
   } catch {
     return false;
   }

@@ -39,7 +39,7 @@ test('C-1 开窗后连点只写一次，窗口到期补写 【变红法：把 pe
   const results = [];
   for (let i = 0; i < 5; i += 1) results.push(await host.act({ mode: 'survival', kind: 'talk_close' }));
   assert.ok(results.every((r) => r.ok), '这组动作本身必须成功，否则测不到写盘');
-  assert.ok(results.every((r) => r.persisted === true), '合并模式下动作仍应回报 persisted=true');
+  assert.ok(results.every((r) => r.persistence === 'pending' && r.persisted === undefined), '合并模式先确认受理，写盘前不回报持久化');
   const during = writes() - before;
   assert.ok(during <= 1, `窗口内写了 ${during} 次，应当 ≤1（合并没生效）`);
 

@@ -19,7 +19,7 @@ export function createRelay({ maxPending = 8, ttlMs = 9000 } = {}) {
   const pending = new Map(); // id -> { body, at }   等 agent 来取
   const claimed = new Set(); // id                   已取走，等结果
   const waiters = new Map(); // id -> finish(res)
-  const stat = { served: 0, expired: 0, late: 0, dropped: 0 };
+  const stat = { served: 0, failed: 0, expired: 0, late: 0, dropped: 0 };
 
   // 挂一次请求。队列满时返回 null——宁可立刻失败让引擎走回退，也不堆积等待。
   function submit(body) {

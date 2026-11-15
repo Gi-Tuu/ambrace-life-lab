@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,6 +14,8 @@ function makeData() {
   const base = mkdtempSync(join(tmpdir(), 'arch-gate-'));
   const data = join(base, 'data');
   mkdirSync(join(data, 'saves'), { recursive: true });
+  writeFileSync(join(data, 'comparison.json'), '{"B":"comparison"}');
+  writeFileSync(join(data, 'world.json.bak'), '{"A":"backup"}');
   writeFileSync(join(data, 'world.json'), '{"A":"main"}');
   writeFileSync(join(data, 'saves', 'index.json'), '{"entries":[{"key":"k1","name":"阿禾"}]}');
   writeFileSync(join(data, 'saves', 'k1.json.gz'), 'gzip-bytes');
@@ -31,6 +33,8 @@ test('A1 归档后清空再恢复：文件与内容逐字节一致', () => {
   rmSync(data, { recursive: true, force: true });
   execFileSync(process.execPath, [SCRIPT, 'restore', '--data', data, '--out', out], { encoding: 'utf8' });
   assert.equal(readFileSync(join(data, 'world.json'), 'utf8'), before.world);
+  assert.equal(readFileSync(join(data,'comparison.json'),'utf8'), '{"B":"comparison"}');
+  assert.equal(readFileSync(join(data,'world.json.bak'),'utf8'), '{"A":"backup"}');
   assert.equal(readFileSync(join(data, 'saves', 'index.json'), 'utf8'), before.idx);
   assert.equal(readFileSync(join(data, 'saves', 'k1.json.gz'), 'utf8'), before.camp, '营地档必须恢复（拆掉 saves 复制这行即红）');
 });
@@ -43,4 +47,18 @@ test('A2 没有数据目录时归档必须明确失败，而不是生成空归�
   } catch (e) { code = e.status ?? 1; }
   assert.equal(code, 2);
   assert.equal(existsSync(join(base, 'out')), false, '失败时不该留下归档目录');
+});
+
+test('A05 篡改或漏掉归档文件均拒绝，目标档保持原样', () => {
+  const {data,out}=makeData();
+  execFileSync(process.execPath,[SCRIPT,'--data',data,'--out',out]);
+  const archive=join(out,readdirSync(out)[0]);
+  const restore=()=>execFileSync(process.execPath,[SCRIPT,'restore','--data',data,'--out',out],{stdio:'pipe'});
+  writeFileSync(join(archive,'world.json'),'{"state":"changed"}');
+  assert.throws(restore,{status:1});
+  assert.equal(readFileSync(join(data,'world.json'),'utf8'),'{"A":"main"}');
+  writeFileSync(join(archive,'world.json'),'{"A":"main"}');
+  rmSync(join(archive,'comparison.json'));
+  assert.throws(restore,{status:1});
+  assert.equal(readFileSync(join(data,'comparison.json'),'utf8'),'{"B":"comparison"}');
 });

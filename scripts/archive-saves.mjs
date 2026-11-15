@@ -5,10 +5,10 @@
 //   node scripts/archive-saves.mjs restore              # 恢复最近一份
 //   node scripts/archive-saves.mjs restore <时间戳>      # 恢复指定一份
 //   --data <dir> / --out <dir> 覆盖默认路径
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
 const argOf = (name, fallback) => {
@@ -26,59 +26,107 @@ const DATA = resolve(argOf('--data', process.env.DATA_DIR ?? 'data'));
 const OUT = resolve(argOf('--out', join(homedir(), '.ambrace-archives')));
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
-function hashTree(dir) {
-  const out = {};
-  const walk = (d, base = '') => {
-    for (const name of readdirSync(d).sort()) {
-      const p = join(d, name);
-      const rel = base ? `${base}/${name}` : name;
-      const st = statSync(p);
-      if (st.isDirectory()) walk(p, rel);
-      else out[rel] = createHash('sha256').update(readFileSync(p)).digest('hex');
+const SAVE_ROOTS = ['world.json', 'world.json.bak', 'comparison.json', 'saves'];
+
+function hashTree(dir, {ignoreManifest = false} = {}) {
+  const out = Object.create(null);
+  const walk = (directory, base = '') => {
+    for (const entry of readdirSync(directory,{withFileTypes:true})) {
+      if (!base && ignoreManifest && entry.name === 'manifest.json') continue;
+      const path = join(directory, entry.name);
+      const rel = base ? base + '/' + entry.name : entry.name;
+      if (entry.isDirectory()) walk(path, rel);
+      else if (entry.isFile()) out[rel] = createHash('sha256').update(readFileSync(path)).digest('hex');
+      else throw new Error('归档含有非普通文件：' + rel);
     }
   };
   walk(dir);
   return out;
 }
 
+function entriesAt(dir) {
+  return SAVE_ROOTS.filter(name => existsSync(join(dir,name)));
+}
+
 function archive() {
-  if (!existsSync(DATA)) { console.error(`[archive-saves] 数据目录不存在：${DATA}`); process.exit(2); }
-  const dest = join(OUT, stamp());
-  mkdirSync(dest, { recursive: true });
-  let files = 0;
-  if (existsSync(join(DATA, 'world.json'))) { cpSync(join(DATA, 'world.json'), join(dest, 'world.json')); files += 1; }
-  const saves = join(DATA, 'saves');
-  if (existsSync(saves)) {
-    cpSync(saves, join(dest, 'saves'), { recursive: true });
-    files += Object.keys(hashTree(saves)).length;
+  const entries = entriesAt(DATA);
+  if (!entries.length) { console.error('[archive-saves] 没有可归档的存档'); process.exitCode=2; return; }
+  mkdirSync(OUT,{recursive:true});
+  const work = mkdtempSync(join(OUT,'.staging-'));
+  const dest = join(OUT,stamp());
+  try {
+    for (const name of entries) cpSync(join(DATA,name),join(work,name),{
+      recursive:true, filter: source => !basename(source).endsWith('.tmp'),
+    });
+    const files = hashTree(work);
+    if (!Object.keys(files).length) throw new Error('没有实际存档文件');
+    writeFileSync(join(work,'manifest.json'),JSON.stringify({dataDir:DATA,at:new Date().toISOString(),files},null,2));
+    renameSync(work,dest);
+    console.log('[archive-saves] 已归档 ' + Object.keys(files).length + ' 个文件 → ' + dest);
+  } finally { rmSync(work,{recursive:true,force:true}); }
+}
+
+function verify(dir, expected, ignoreManifest = false) {
+  const actual = hashTree(dir,{ignoreManifest});
+  if (Object.keys(expected).length===0 ||
+      Object.keys(actual).length!==Object.keys(expected).length ||
+      Object.entries(expected).some(([name, hash]) => actual[name]!==hash)) {
+    throw new Error('归档清单或文件哈希不匹配');
   }
-  writeFileSync(join(dest, 'manifest.json'), JSON.stringify({ dataDir: DATA, at: new Date().toISOString(), files: hashTree(dest) }, null, 2));
-  console.log(`[archive-saves] 已归档 ${files} 个文件 → ${dest}`);
-  console.log(`[archive-saves] 部署前把这一行记进 checklist；部署后跑：node scripts/archive-saves.mjs restore`);
 }
 
 function restore() {
-  if (!existsSync(OUT)) { console.error(`[archive-saves] 没有归档目录：${OUT}`); process.exit(2); }
-  const wanted = cmd === 'restore' && positionals[1] ? positionals[1] : null;
-  const dirs = readdirSync(OUT).filter((n) => statSync(join(OUT, n)).isDirectory()).sort();
-  const pick = wanted ?? dirs[dirs.length - 1];
-  if (!pick || !dirs.includes(pick)) { console.error(`[archive-saves] 找不到归档：${wanted ?? '(空)'}`); process.exit(2); }
-  const src = join(OUT, pick);
-  mkdirSync(DATA, { recursive: true });
-  if (existsSync(join(src, 'world.json'))) cpSync(join(src, 'world.json'), join(DATA, 'world.json'));
-  if (existsSync(join(src, 'saves'))) {
-    rmSync(join(DATA, 'saves'), { recursive: true, force: true });
-    cpSync(join(src, 'saves'), join(DATA, 'saves'), { recursive: true });
+  const wanted = positionals[1] ?? null;
+  const dirs = existsSync(OUT) ? readdirSync(OUT,{withFileTypes:true})
+    .filter(e=>e.isDirectory() && !e.name.startsWith('.staging-'))
+    .map(e=>e.name).sort() : [];
+  const pick = wanted ?? dirs.at(-1);
+  if (!pick || !dirs.includes(pick)) { console.error('[archive-saves] 找不到归档'); process.exitCode=2; return; }
+  const src = join(OUT,pick);
+  const manifest = JSON.parse(readFileSync(join(src,'manifest.json'),'utf8'));
+  const expected = manifest.files;
+  if (!expected || typeof expected!=='object' || Array.isArray(expected)) throw new Error('归档清单无效');
+  const entries = entriesAt(src);
+  if (!entries.length || readdirSync(src).some(name=>name!=='manifest.json' && !entries.includes(name))) {
+    throw new Error('归档含有未知的顶层文件');
   }
-  // 校验：恢复后的哈希必须与 manifest 一致（少一个文件就叫出来，不静默）
-  const manifest = join(src, 'manifest.json');
-  if (existsSync(manifest)) {
-    const want = JSON.parse(readFileSync(manifest, 'utf8')).files ?? {};
-    const got = hashTree(src);
-    const missing = Object.keys(want).filter((k) => !(k in got));
-    if (missing.length) { console.error(`[archive-saves] 归档自身缺文件：${missing.join(',')}`); process.exit(1); }
+  verify(src,expected,true);
+
+  mkdirSync(DATA,{recursive:true});
+  const work = mkdtempSync(join(DATA,'.restore-'));
+  const stage = join(work,'incoming'), previous = join(work,'previous');
+  const backups = [], installed = [];
+  let rollbackFailed = false;
+  try {
+    mkdirSync(stage); mkdirSync(previous);
+    for (const name of entries) cpSync(join(src,name),join(stage,name),{recursive:true});
+    verify(stage,expected);
+    for (const name of entries) {
+      if (existsSync(join(DATA,name))) {
+        renameSync(join(DATA,name),join(previous,name));
+        backups.push(name);
+      }
+      renameSync(join(stage,name),join(DATA,name));
+      installed.push(name);
+    }
+  } catch (error) {
+    try {
+      for (const name of installed.reverse()) renameSync(join(DATA,name),join(stage,name));
+      for (const name of backups.reverse()) renameSync(join(previous,name),join(DATA,name));
+    } catch (rollback) {
+      rollbackFailed = true;
+      throw new AggregateError([error,rollback],'恢复和回滚失败，保留工作目录：'+work);
+    }
+    throw error;
+  } finally {
+    if (!rollbackFailed) rmSync(work,{recursive:true,force:true});
   }
-  console.log(`[archive-saves] 已从 ${src} 恢复到 ${DATA}`);
+  console.log('[archive-saves] 已从 ' + src + ' 恢复到 ' + DATA);
 }
 
-if (cmd === 'archive') archive(); else restore();
+try {
+  if (cmd === 'archive') archive(); else restore();
+} catch (error) {
+  console.error('[archive-saves] ' + error.message);
+  process.exitCode=1;
+}

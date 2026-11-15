@@ -62,3 +62,12 @@ test('R4 未知 id 与令牌比较', () => {
   assert.equal(constantTimeEqual('', ''), false);
   assert.equal(constantTimeEqual(undefined, 'tok'), false);
 });
+
+test('A07 中继失败计数是可持久化的整数', async () => {
+  const relay=createRelay();
+  const job=relay.submit({});
+  relay.claim();
+  assert.equal(relay.complete(job.id,{ok:false,code:'MOCK_ERROR'}),true);
+  assert.equal((await job.promise).ok,false);
+  assert.equal(JSON.parse(JSON.stringify(relay.view())).failed,1);
+});

@@ -47,9 +47,11 @@ const campFile = (dataDir, key) => join(savesDir(dataDir), `${key}.json.gz`);
 export function readIndex(dataDir) {
   try {
     const raw = JSON.parse(readFileSync(indexFile(dataDir), 'utf8'));
-    return { entries: Array.isArray(raw?.entries) ? raw.entries : [] };
-  } catch {
-    return { entries: [] };
+    if (!Array.isArray(raw?.entries)) throw new Error('营地索引格式无效');
+    return { entries: raw.entries };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { entries: [] };
+    throw error;
   }
 }
 
@@ -76,21 +78,24 @@ export function listSaves(dataDir, now = Date.now()) {
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
 }
 
+function stageCamp(dataDir, key, survivalDump) {
+  mkdirSync(savesDir(dataDir), {recursive:true});
+  const file = campFile(dataDir,key), tmp = file + '.tmp';
+  writeFileSync(tmp,gzipSync(Buffer.from(JSON.stringify(survivalDump))));
+  return {file,tmp};
+}
+
 export function saveCamp(dataDir, key, survivalDump) {
-  const dir = savesDir(dataDir);
-  mkdirSync(dir, { recursive: true });
-  const tmp = `${campFile(dataDir, key)}.tmp`;
-  writeFileSync(tmp, gzipSync(Buffer.from(JSON.stringify(survivalDump))));
-  renameSync(tmp, campFile(dataDir, key));
-  return campFile(dataDir, key);
+  const {file,tmp} = stageCamp(dataDir,key,survivalDump);
+  renameSync(tmp,file);
+  return file;
 }
 
 export function loadCamp(dataDir, key) {
   return JSON.parse(gunzipSync(readFileSync(campFile(dataDir, key))).toString('utf8'));
 }
 
-export function touchSave(dataDir, entry) {
-  const index = readIndex(dataDir);
+export function touchSave(dataDir, entry, index = readIndex(dataDir)) {
   const i = index.entries.findIndex((e) => e.key === entry.key);
   const next = { ...(i >= 0 ? index.entries[i] : { key: entry.key, name: entry.name }), ...entry, lastSeenAt: entry.lastSeenAt ?? Date.now() };
   if (i >= 0) index.entries[i] = next;
@@ -100,14 +105,14 @@ export function touchSave(dataDir, entry) {
 }
 
 // TTL 清扫：只删 saves/ 里的文件；**正在被观看的营地绝不删**（先查观看计数再动文件）。
-export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, isWatched = () => false } = {}) {
+export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, lastSeenAt = () => 0, isWatched = () => false } = {}) {
   const dir = savesDir(dataDir);
   if (!existsSync(dir)) return { removed: [], kept: 0 };
   const index = readIndex(dataDir);
   const removed = [];
   const kept = [];
   for (const entry of index.entries) {
-    const stale = now - (entry.lastSeenAt ?? 0) > ttlMs;
+    const stale = now - Math.max(entry.lastSeenAt ?? 0, lastSeenAt(entry.key) ?? 0) > ttlMs;
     if (!stale || isWatched(entry.key)) { kept.push(entry); continue; }
     const file = campFile(dataDir, entry.key);
     if (existsSync(file)) rmSync(file);
@@ -128,6 +133,7 @@ export function forkCamp(seedSurvival, { seed = 7, options = {} } = {}) {
   fresh.occupancy = { ...(fresh.occupancy ?? {}), hall: [...new Set([...(fresh.occupancy?.hall ?? []), 'p1'])] };
   fresh.campPlayerRoom = null;
   fresh.survival = { ...(fresh.survival ?? {}), playerDead: false, talk: null };
+  delete fresh.survival.playerPos;
   const back = loadSurv(structuredClone(fresh), seed, options).world.agents.p1;
   if (!back || back.dead) throw new Error('fork 后玩家不是活的：检查 freshenPlayer 步骤');
   return fresh;
@@ -150,11 +156,14 @@ export class CampInstances {
     if (!id.ok) return { ok: false, code: id.code };
     if (this.live.has(id.key)) {
       const hit = this.live.get(id.key);
-      hit.lastUsed = now;
+      this.markSeen(hit,now);
       return { ok: true, code: 'OK', key: id.key, sp: hit.sp, created: false };
     }
     let archive = null;
-    if (existsSync(campFile(this.dataDir, id.key))) archive = loadCamp(this.dataDir, id.key);
+    if (existsSync(campFile(this.dataDir,id.key))) archive=loadCamp(this.dataDir,id.key);
+    else if (readIndex(this.dataDir).entries.some(e=>e.key===id.key)) {
+      return {ok:false,code:'CAMP_UNAVAILABLE'};
+    }
     let sp;
     let created = false;
     if (archive) {
@@ -165,15 +174,8 @@ export class CampInstances {
       created = true;
       this.stats.loaded += 1;
     }
-    this.live.set(id.key, { sp, key: id.key, name: id.display, lastUsed: now, lastSeenAt: now });
-    this.evictIfNeeded();
-    touchSave(this.dataDir, {
-      key: id.key, name: id.display,
-      day: Math.floor((sp.world.t ?? 0) / (sp.world.dayTicks ?? 24)),
-      population: Object.values(sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
-      status: sp.world.survival?.playerDead ? 'ended' : 'active',
-      lastSeenAt: now,
-    });
+    const entry = {sp,key:id.key,name:id.display,lastUsed:now,lastSeenAt:now,savedSeenAt:now};
+    if (!this.admit(entry)) return {ok:false, code:'SAVE_FAILED'};
     return { ok: true, code: 'OK', key: id.key, sp, created };
   }
 
@@ -182,25 +184,62 @@ export class CampInstances {
   openKey(key, { now = Date.now() } = {}) {
     const k = String(key ?? '');
     if (!/^[0-9a-f]{32}$/.test(k)) return null;
-    if (!readIndex(this.dataDir).entries.some((e) => e.key === k)) return null;
     const hit = this.live.get(k);
     if (hit) { hit.lastUsed = now; hit.lastSeenAt = now; return hit.sp; }
-    if (!existsSync(campFile(this.dataDir, k))) return null;
+    const known = readIndex(this.dataDir).entries.find((e) => e.key === k);
+    if (!known) return null;
     const sp = loadSurv(loadCamp(this.dataDir, k), this.options.seed ?? 7, this.options);
     sp.world.campKey = k;
-    this.live.set(k, { sp, key: k, name: readIndex(this.dataDir).entries.find((e) => e.key === k)?.name ?? k, lastUsed: now, lastSeenAt: now });
-    this.evictIfNeeded();
+    if (!this.admit({sp, key:k, name:known.name, lastUsed:now, lastSeenAt:known.lastSeenAt ?? 0}, false)) {
+      throw new Error('当前无法换入营地');
+    }
     return sp;
   }
 
-  evictIfNeeded() {
-    while (this.live.size > this.limit) {
-      let oldestKey = null, oldest = Infinity;
-      for (const [key, v] of this.live) if (v.lastUsed < oldest) { oldest = v.lastUsed; oldestKey = key; }
-      if (!oldestKey) break;
-      this.live.delete(oldestKey);
+  admit(entry, persist = true) {
+    let evicted;
+    if (this.live.size >= this.limit) {
+      const oldest = [...this.live.values()].reduce((a,b) => b.lastUsed < a.lastUsed ? b : a);
+      try { this.persistEntry(oldest); } catch { return false; }
+      evicted = oldest.key;
+    }
+    if (persist) this.persistEntry(entry);
+    if (evicted) {
+      this.live.delete(evicted);
       this.stats.evicted += 1;
     }
+    this.live.set(entry.key, entry);
+    return true;
+  }
+
+  persistEntry({sp, key, name, lastSeenAt}) {
+    const w = sp.world;
+    const before = readIndex(this.dataDir);
+    const {tmp,file} = stageCamp(this.dataDir,key,dumpSurv(sp));
+    let indexed = false;
+    try {
+      touchSave(this.dataDir, {
+        key, name,
+        day: Math.floor((w.t ?? 0) / (w.dayTicks ?? 24)),
+        population: Object.values(w.agents).filter(a => !a.dead && !a.isPlayer).length,
+        status: w.survival?.playerDead ? 'ended' : 'active',
+        lastSeenAt,
+      }, {entries:before.entries.slice()});
+      indexed = true;
+      renameSync(tmp,file);
+    } catch (error) {
+      if (indexed) writeIndex(this.dataDir,before);
+      throw error;
+    } finally {
+      if (existsSync(tmp)) rmSync(tmp,{force:true});
+    }
+  }
+
+  markSeen(entry, now, intervalMs = 60_000) {
+    entry.lastUsed = entry.lastSeenAt = now;
+    if (entry.savedSeenAt !== undefined && now - entry.savedSeenAt < intervalMs) return;
+    touchSave(this.dataDir,{key:entry.key,lastSeenAt:now});
+    entry.savedSeenAt = now;
   }
 
   // 串行 tick：每刻有 wall-time 上限，避免 6 份世界的模型等待互相饿死。
@@ -215,17 +254,8 @@ export class CampInstances {
   }
 
   // 落盘：每份营地各自写 gzip，并更新索引。
-  persist({ now = Date.now() } = {}) {
-    for (const entry of this.live.values()) {
-      saveCamp(this.dataDir, entry.key, dumpSurv(entry.sp));
-      touchSave(this.dataDir, {
-        key: entry.key, name: entry.name,
-        day: Math.floor((entry.sp.world.t ?? 0) / (entry.sp.world.dayTicks ?? 24)),
-        population: Object.values(entry.sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
-        status: entry.sp.world.survival?.playerDead ? 'ended' : 'active',
-        lastSeenAt: entry.lastSeenAt ?? now, // P1-3：落盘不算"有人来"
-      });
-    }
+  persist() {
+    for (const entry of this.live.values()) this.persistEntry(entry);
     return this.live.size;
   }
 

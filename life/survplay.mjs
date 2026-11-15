@@ -483,14 +483,17 @@ export function playerReach(w, from) {
   if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
   let last = s.playerPos;
-  if (!last || !Number.isFinite(last.x) || !Number.isFinite(last.z)) {
+  const first = !last || !Number.isFinite(last.x) || !Number.isFinite(last.z);
+  if (first) {
     const at = worldSite(w, w.loc.p1);
     if (!at) return { ok: false, code: 'OUT_OF_REACH' };
     last = { x: at[0], z: at[1], t: w.t };
   }
   const dt = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
   const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
-  if (dist > PLAYER_UNITS_PER_TICK * dt + 1e-6) return { ok: false, code: 'TELEPORT' };
+  // 前端出生槽与地点中心存在小幅偏移。仅首次定位容许这段偏移。
+  const limit = first ? 2 : PLAYER_UNITS_PER_TICK * dt;
+  if (dist > limit + 1e-6) return { ok: false, code: 'TELEPORT' };
   s.playerPos = { x: from[0], z: from[1], t: w.t };
   return { ok: true };
 }

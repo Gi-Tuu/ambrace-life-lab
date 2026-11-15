@@ -216,14 +216,32 @@ async function handle(req, res) {
     let body;
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
     const opened = await openCamp(body?.name);
-    if (!opened.ok) return json(res, 400, { error: opened.code });
+    if (!opened.ok) return json(res,['CAMP_UNAVAILABLE','SAVE_FAILED'].includes(opened.code)?503:400,{error:opened.code});
     res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
+  // 诊断（只读）：创空间网关会改写 Host，"真实浏览器访客能不能过写路由守卫"只能在线上量，
+  // 不能靠本地推断——这条坑过一次：本地全绿，线上所有交互 403。
+  // 纪律同 H-16：只回显判定结果，不回显地址原值、query、Cookie、令牌与供应商端点。
+  if (req.method === 'GET' && p === '/diag') {
+    const h = req.headers;
+    const oh = (() => { try { return new URL(String(h.origin ?? '')).host.toLowerCase(); } catch { return ''; } })();
+    const strip = (v) => String(v ?? '').trim().toLowerCase().replace(/:(80|443)$/, '');
+    const eq = (a, b) => Boolean(a) && Boolean(b) && strip(a) === strip(b);
+    const dryRun = mutatingDenied({ headers: { ...h, 'content-type': 'application/json' }, socket: req.socket }, CTL_TOKEN);
+    return json(res, 200, {
+      secFetchSite: h['sec-fetch-site'] ?? null,
+      originPresent: Boolean(oh),
+      originMatchesHost: eq(oh, h.host),
+      originMatchesForwardedHost: eq(oh, String(h['x-forwarded-host'] ?? '').split(',').pop()),
+      writeRouteVerdict: dryRun ?? 'PASS',
+      note: '只回显判定结果，不回显地址、query、Cookie 与令牌',
+    });
+  }
   const viewMode = url.searchParams.get('mode');
-  const campCookie = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || null;
-  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode, campCookie || undefined);
+  const campKey = url.searchParams.get('camp') ??
+    (req.headers.cookie ?? '').split(';').map(x => x.trim()).find(x => x.startsWith('camp='))?.slice(5);
 
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
@@ -240,7 +258,13 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     });
   }
 
-  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode, campCookie || undefined));
+  if (req.method === 'GET' && p === '/world') {
+    try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
+    catch (error) {
+      if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
+      throw error;
+    }
+  }
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
     const denied = mutatingDenied(req, CTL_TOKEN);
@@ -263,8 +287,12 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
-    const campForAct = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || undefined;
-    return json(res, 200, await (p === '/act' ? host.act(body, campForAct) : host.ctl(body)));
+    try {
+      return json(res,200,await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined)));
+    } catch (error) {
+      if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
+      throw error;
+    }
   }
 
   // BUG-8：鉴权 → 与 modelBrain 同一套预算/在场闸门 → 才转发。
