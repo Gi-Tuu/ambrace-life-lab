@@ -11,7 +11,9 @@
     "test": "node scripts/test.mjs",
     "coverage": "node scripts/test.mjs --coverage",
     "lint": "node scripts/check.mjs",
-    "check": "npm run lint && npm test",
+    "art": "node scripts/art-hashes.mjs",
+    "art:check": "node scripts/art-hashes.mjs --check",
+    "check": "npm run lint && npm run art:check && npm test",
     "assets": "node scripts/gen-pixel-assets.mjs && node scripts/pack-assets.mjs && node scripts/gen-actions.mjs",
     "actions": "node scripts/gen-actions.mjs",
     "serve": "node serve.mjs"

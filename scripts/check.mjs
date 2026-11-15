@@ -27,11 +27,12 @@ const walk = (dir) => {
 const problems = [];
 const fail = (msg) => problems.push(msg);
 
+// web/ 下的 3D、音频、寻路都是 .mjs 真模块（app.js 只是入口）；只查 .js 会让 27 个模块逃过语法与 import 图检查。
 // 1) 语法
 const sources = [
   ...walk(join(ROOT, 'life')).filter((f) => f.endsWith('.mjs')),
   ...walk(join(ROOT, 'scripts')).filter((f) => f.endsWith('.mjs')),
-  ...walk(join(ROOT, 'web')).filter((f) => f.endsWith('.js')),
+  ...walk(join(ROOT, 'web')).filter((f) => f.endsWith('.js') || f.endsWith('.mjs')),
   join(ROOT, 'serve.mjs'),
 ];
 let checked = 0;
