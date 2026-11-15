@@ -149,6 +149,11 @@
 - `agent.pendingSay` 是唯一交接点：模型只写"怎么说"，不改世界。
 - 闸门 `life/say.test.mjs`（S2-5，假 OpenAI 端点、零联网）：非法 act → `SAY:INVALID` 且绝不进 converse；
   合法句子 → `served:'node'`、文本与 act 原样。两条负向对照（去掉投递 / 去掉词表校验）均验红并字节还原。
+### SA8：两本账分离 + 熔断只关免费路（P2，2026-11-15）
+- 新增独立闸门 `life/lane-accounting.test.mjs`（不再只靠 `model-lanes` 间接覆盖）：
+  免费路被 `BREAKER`/`NODE_BUDGET` 挡住时不受钱账影响；付费路**不受熔断连坐**，
+  无人时 `NO_OBSERVER`（除非显式允许），钱账/节点账互不牵连。
+- 负向对照：把熔断判断挪到两路之前（连付费一起挡）⇒ SA8-2 红，已验并字节还原。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。
