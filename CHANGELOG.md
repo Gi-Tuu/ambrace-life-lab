@@ -140,6 +140,15 @@
 - 闸门 F13（面板存在、读 converse、textContent、替身徽章中文、开始页会加载）。
 - 一次自身失误如实记：面板常量名 `ACT_ZH` 与既有常量重名 ⇒ 模块级 SyntaxError、整页不启动，F6 冒烟 19s 超时抓到；
   改名 `CONV_ACT_ZH/CONV_TOPIC_ZH` 后恢复（F6 回到 ~3.1s）。
+### 模型 `say` 接线（P2，2026-11-15）
+- `modelBrain` 的 JSON 协议从 `{id,reason}` 扩成可选 `{act,topic,text}`：提示词里给出闭合词表与 28 字上限，
+  模型不想说可以省略。
+- **规则层仍是唯一裁决者**：`parseSay` 校验词表与文本长度（非法则丢弃并记 `SAY:INVALID`），
+  真正投递走 `converse`（同地点、上限 A=3/P=1、信任变化 ≤±8）；动作执行后由 `survplay` 投递，
+  条目带 `served:'node'`，面板徽章从"本地替身"变成"模型"。
+- `agent.pendingSay` 是唯一交接点：模型只写"怎么说"，不改世界。
+- 闸门 `life/say.test.mjs`（S2-5，假 OpenAI 端点、零联网）：非法 act → `SAY:INVALID` 且绝不进 converse；
+  合法句子 → `served:'node'`、文本与 act 原样。两条负向对照（去掉投递 / 去掉词表校验）均验红并字节还原。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

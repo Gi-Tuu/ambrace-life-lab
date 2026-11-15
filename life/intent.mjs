@@ -137,3 +137,13 @@ export function converseRound(world) {
   const topic = INTENT_TOPICS[(h >>> 5) % INTENT_TOPICS.length];
   return converse(world, from, to, { act, topic, served: 'standin' });
 }
+
+// 模型在决策 JSON 里顺带给的"想说的话"：词表闭合、文本归一化；不合法就丢弃（不让它变成事实）。
+export function parseSay(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { act, topic, text } = payload;
+  if (!INTENT_ACTS.includes(act) || !INTENT_TOPICS.includes(topic)) return null;
+  const clean = normalizeIntentText(text);
+  if (!clean) return null;
+  return { act, topic, text: clean };
+}

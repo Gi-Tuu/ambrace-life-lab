@@ -23,6 +23,7 @@ import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
+import { parseSay } from './intent.mjs';
 import { CampInstances, listSaves, normalizeName, saveCamp, sweepSaves, touchSave } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
@@ -408,6 +409,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   ].filter(Boolean);
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
+  lines.push('如果此刻有在场的人、你想顺带说一句话，再加三个字段："act" 从 request/offer/warn/inform/greet/accuse/thank/decline/refuse 里选一个；"topic" 从 food/firewood/shelter/child/work/weather/boundary/trust 里选一个；"text" 不超过 28 字。不想说就省略这三项。');
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   // C3：按营地判车道。分名字营地在无人时直接走确定性替身，询问不发出。
   const campKey = world?.campKey ?? 'MAIN';
@@ -459,6 +461,10 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
       const hit = scored.find((s) => s.id === p.id);
       if (!hit) return null;
       agent.lastReason = p.reason ?? '';
+      // S2 say：只在这里收下；是否说得出口、说了有什么后果，由规则层（converse）裁决。
+      const say = parseSay(p);
+      if (say) agent.pendingSay = say;
+      else if (p?.act || p?.text) S.model.attempts.push('SAY:INVALID');
       if (world.survival) S.model.survivalChoices = (S.model.survivalChoices ?? 0) + 1;
       return { id: hit.id };
     } catch (e) {

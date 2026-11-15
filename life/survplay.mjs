@@ -14,7 +14,7 @@ import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
-import { converseRound } from './intent.mjs';
+import { converseRound, converse } from './intent.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -325,6 +325,17 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
     }
     const traceStart = onResidentAction ? a.trace.length : 0;
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
+    if (w.gameRules && a.pendingSay) {
+      const say = a.pendingSay;
+      delete a.pendingSay;
+      const here = w.loc[a.id];
+      const other = (w.occupancy[here] ?? []).find((id) => id !== a.id && w.agents[id] && !w.agents[id].dead);
+      if (other) {
+        const r = converse(w, a.id, other, { act: say.act, topic: say.topic, say: say.text, served: 'node' });
+        if (!r.ok) { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = r.code; }
+      } else { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = 'NO_COMPANY'; }
+    }
     if (onResidentAction) onResidentAction(a, a.trace.slice(traceStart));
     if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
     if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
