@@ -67,6 +67,54 @@ const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(proce
 // 调用预算闸门：线上审议路径必须与离线脚本同源受控，否则"MAX_CALLS"只是文档里的装饰（真实风险：无上限烧第三方余额）
 // 语义是**每日**额度：魔粒按天回血（签到 250），预算跟着按天归零，否则 60 次烧完整段剩余时间都是替身
 const BUDGET = Number(process.env.MAX_CALLS ?? 120);
+// 两把尺子：`MAX_CALLS` 数**钱**（托管推理/第三方），`NODE_CALLS_DAY` 数**电**（自有节点或本机中继）。
+// 旧版只有前者：实测无人全开的询问率≈4 次/分（5790 次/现实日），拿钱的额度去闸只花电的链路会在 2 小时内掐死模型，
+// 反过来让免费链路也计入 calls 又会让"还剩多少魔粒"这个读数失真。所以分账：calls 仍是总量，moneyCalls/nodeCalls 各归各。
+const NODE_BUDGET = Number(process.env.NODE_CALLS_DAY ?? (GAME_MODE === 'game' ? 8000 : 0)); // 0 = 不限（research 默认）
+// 无人观看时是否仍上真模型：游戏默认开（世界要自洽），研究默认关（既有轨迹逐位不变）。
+const UNATTENDED_ON = String(process.env.MODEL_UNATTENDED ?? (GAME_MODE === 'game' ? '1' : '0')) === '1';
+const UNATTENDED_ASK_CAP = Number(process.env.UNATTENDED_CALLS_PER_TICK ?? 1);
+// 无人时禁止付费回退：节点没答上来就退回确定性替身。宁可这一拍不用模型，也不在没人看的时候花魔粒。
+const PAID_WHEN_UNATTENDED = String(process.env.MODEL_PAID_UNATTENDED ?? '0') === '1';
+// 中继熔断：连续失败若干次就冷一段，避免每次询问都白等一个 TTL。
+const BREAKER_FAILS = Number(process.env.MODEL_BREAKER_FAILS ?? 3);
+const BREAKER_MS = Number(process.env.MODEL_BREAKER_MS ?? 60000);
+// 免费端点的判定：回环＝自己人（创空间的模型中继就是 127.0.0.1 上的一个路径），其余按主机名白名单追加。
+// PAID_MODEL_HOSTS 是反向覆盖：某些主机名（哪怕解析到本机）确实要花钱，或测试需要把两条路区分开。
+const FREE_HOSTS = (process.env.FREE_MODEL_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const PAID_HOSTS = (process.env.PAID_MODEL_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+export function isFreeProvider(base) {
+  const b = String(base ?? '');
+  let host = '';
+  try { host = new URL(b).hostname; } catch { return false; }
+  if (PAID_HOSTS.includes(host)) return false;
+  if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?([/?]|$)/i.test(b)) return true;
+  return FREE_HOSTS.includes(host);
+}
+// 纯函数：给定「有没有观众 / 这条链路花不花钱 / 两本账 / 熔断」，决定这次能不能发、该记哪本账。
+// 拆出来的理由：这是"无人时不花钱"这条承诺的全部逻辑，必须能被逐格断言，而不是藏在循环里靠运气绿。
+export function modelChannel({ watched, free, moneyCalls = 0, nodeCalls = 0, moneyBudget = 0, nodeBudget = 0, breakerOpen = false, allowPaidUnattended = false }) {
+  if (free) {
+    if (breakerOpen) return { go: false, kind: 'node', why: 'BREAKER' };
+    if (nodeBudget > 0 && nodeCalls >= nodeBudget) return { go: false, kind: 'node', why: 'NODE_BUDGET' };
+    return { go: true, kind: 'node' };
+  }
+  if (!watched && !allowPaidUnattended) return { go: false, kind: 'money', why: 'NO_OBSERVER' };
+  if (moneyBudget > 0 && moneyCalls >= moneyBudget) return { go: false, kind: 'money', why: 'BUDGET' };
+  return { go: true, kind: 'money' };
+}
+// 熔断只是运行时状态（不进存档）：节点重启或中继抖动后应当重新试探，而不是把黑名单写进世界。
+export function breakerOpenAt(breaker, now = Date.now()) { return Number(breaker?.openUntil ?? 0) > now; }
+function breakerSee(free, ok, now = Date.now()) {
+  if (!free) return;
+  if (ok) { S.breaker.fails = 0; return; }
+  S.breaker.fails += 1;
+  if (BREAKER_FAILS > 0 && S.breaker.fails >= BREAKER_FAILS) {
+    S.breaker.openUntil = now + BREAKER_MS;
+    S.breaker.trips = (S.breaker.trips ?? 0) + 1;
+    S.breaker.fails = 0;
+  }
+}
 const ATTEMPT_CAP = 20;
 // 有观众才上真模型：无人访问时走替身（0 成本），有人打开页面才调模型。
 // 依据是 1 魔粒≈2 次旗舰调用、签到 250/天=500 次/天，全天不间断约需 2880 魔粒，必须按在场性省。
@@ -81,6 +129,8 @@ export function budgetTick(model, dayKey) {
   model.dayKey = dayKey;
   model.calls = 0;
   model.tokens = 0;
+  model.moneyCalls = 0;
+  model.nodeCalls = 0;
   if ('survivalChoices' in model) model.survivalChoices = 0;
   model.attempts.length = 0;
   return model;
@@ -124,7 +174,7 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
   // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
@@ -292,26 +342,42 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
-  if (S.model.calls >= BUDGET) return null; // 预算用尽：退回确定性替身，世界照跑，不再发请求
-  if (!observerActive(S.viewers[world.survival ? 'survival' : 'compare'], Date.now())) return null;
+  const watched = observerActive(S.viewers[world.survival ? 'survival' : 'compare'], Date.now());
+  // 无人观看：研究态照旧直接走替身（既有轨迹逐位不变）；游戏态继续上真模型，让世界自洽。
+  if (!watched && !UNATTENDED_ON) return null;
   // 单拍上限：默认 0 = 不限（保证默认行为逐位不变）。见 PER_TICK_CAP 的注释。
-  if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
+  // 无人时压到 UNATTENDED_CALLS_PER_TICK：看得见的时刻优先，没人看时吃吞吐而不是抢并发。
+  const askCap = watched ? PER_TICK_CAP
+    : (PER_TICK_CAP > 0 ? Math.min(PER_TICK_CAP, UNATTENDED_ASK_CAP) : UNATTENDED_ASK_CAP);
+  if (askCap > 0 && (S.asksThisTick ?? 0) >= askCap) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
   const note = (msg) => { S.model.attempts.push(msg); if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift(); };
+  const laneOf = (base) => modelChannel({
+    watched, free: isFreeProvider(base),
+    moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0,
+    moneyBudget: BUDGET, nodeBudget: NODE_BUDGET,
+    breakerOpen: breakerOpenAt(S.breaker), allowPaidUnattended: PAID_WHEN_UNATTENDED
+  });
+  let refusal = null;
   for (let i = 0; i < CFG.providers.length; i++) {
     // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
     const mdl = CFG.models[i] ?? CFG.model;
     if (!mdl) { note('NO_MODEL'); continue; }
+    const lane = laneOf(CFG.providers[i]);
+    if (!lane.go) { refusal = lane.why; continue; } // 这条路不该走（无人时的付费路／熔断／该本账用完）：换下一条，世界照跑
+    const free = lane.kind === 'node';
     const ac = new AbortController();
     const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
     if (waitMs <= 0) return null;
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
       const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
-      if (!res.ok) { note(`HTTP ${res.status}`); continue; }
+      if (!res.ok) { note(`HTTP ${res.status}`); breakerSee(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
+      if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
       S.model.tokens += j.usage?.total_tokens ?? 0;
+      breakerSee(free, true);
       const p = JSON.parse(String(j.choices?.[0]?.message?.content ?? '').replace(/^```json?/i, '').replace(/```\s*$/i, '').trim());
       const hit = scored.find((s) => s.id === p.id);
       if (!hit) return null;
@@ -320,20 +386,22 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
       return { id: hit.id };
     } catch (e) {
       note(String(e.message).slice(0, 40));
+      breakerSee(free, false); // 超时/断连是熔断的输入：中继没答上来就该冷一段，别每次都白等一个 TTL
     } finally {
       clearTimeout(to);
     }
   }
+  if (refusal) note(`LANE:${refusal}`); // 一条路都没走成时留个原因，否则"没人看时不上模型"会变成一个查不到的黑箱
   return null;
 }
 
 // 对话模型：只负责"怎么说"，态度已由 dialogue.sayTo 在服务端裁决。
-// 与决策模型共用同一本每日预算与在场闸门；任何失败都返回 null，让模板兜底。
+// 这条路**始终要求有观众**：它是玩家开口引发的对话，没人说话时不该存在。
+// 但记账与决策模型共用同一套分账（节点=电，托管=钱），否则节点聊得多了会把付费额度吃掉。
 async function modelTalk({ npc, world, history, text, trust }) {
   if (!CFG.providers.length || !CFG.keys.some(Boolean)) return null;
   if (CFG.brain !== 'model') return null;
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
-  if (S.model.calls >= BUDGET) return null;
   if (!observerActive(S.viewers.survival, Date.now())) return null;
   if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
@@ -350,17 +418,26 @@ async function modelTalk({ npc, world, history, text, trust }) {
   for (let i = 0; i < CFG.providers.length; i++) {
     const mdl = CFG.models[i] ?? CFG.model;
     if (!mdl) continue;
+    const free = isFreeProvider(CFG.providers[i]);
+    const lane = modelChannel({
+      watched: true, free,
+      moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0,
+      moneyBudget: BUDGET, nodeBudget: NODE_BUDGET, breakerOpen: breakerOpenAt(S.breaker)
+    });
+    if (!lane.go) continue;
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), MODEL_TIMEOUT_MS);
     try {
       const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
-      if (!res.ok) continue;
+      if (!res.ok) { breakerSee(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
+      if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
       S.model.tokens += j.usage?.total_tokens ?? 0;
+      breakerSee(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
       if (line) return line.slice(0, 80);
-    } catch { /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
+    } catch { breakerSee(free, false); /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
   }
   return null;
 }
@@ -1039,7 +1116,7 @@ export const host = {
       sigHandlers = null;
     }
   },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
   snapshot(mode) {
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p, layered) => ({
@@ -1078,7 +1155,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body) {
     return queueWorldWrite(async () => {
