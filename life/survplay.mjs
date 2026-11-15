@@ -17,7 +17,7 @@ import { speechLine } from './speech.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { buildLot, doBuild, doRepair, effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, addFood, takeFood, takeFoodKind, initFoodStore, FOOD_KINDS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
@@ -46,7 +46,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -56,6 +56,8 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   world.eventRulesVersion = eventRulesVersion;
   world.unifiedCooperation = unifiedCooperation;
   world.independentWorld = independentWorld;
+  world.gameRules = gameRules;
+  if (gameRules) initFoodStore(world.survival);
   world.autonomousGoals = autonomousGoals;
   if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
@@ -559,6 +561,23 @@ function survActInner(sp, body) {
     if (building.type==='granary') {
       const bag=w.pinv.p1, toStore=body.type==='deposit', take=body.type==='withdraw';
       if (!toStore && !take) return {ok:false,code:'BAD_ITEM'};
+      if (s.food) {
+        // 分类粮仓：存取都带品类，品类为 0 时自动挑存量最多的一种
+        const want = body.item ?? null;
+        if (toStore) {
+          const kind = want && (bag[want] ?? 0) >= 1 ? want
+            : ['crop','berry','fruit','egg','milk','meat'].find((k) => (bag[k] ?? 0) >= 1);
+          if (!kind) return {ok:false,code:'EMPTY'};
+          if (s.store+1>effectiveMods(w).storeCap) return {ok:false,code:'CONTAINER_FULL'};
+          bag[kind]-=1; addFood(s, kind, 1);
+          return {ok:true,code:'OK',item:kind};
+        }
+        if (s.store<1) return {ok:false,code:'EMPTY'};
+        const kind = takeFoodKind(s, want);
+        if (!kind) return {ok:false,code:'EMPTY'};
+        bag[kind]=(bag[kind]??0)+1;
+        return {ok:true,code:'OK',item:kind};
+      }
       if (toStore && !(bag.crop>=1) || take && s.store<1) return {ok:false,code:'EMPTY'};
       if (toStore && s.store+1>effectiveMods(w).storeCap) return {ok:false,code:'CONTAINER_FULL'};
       s.store+=toStore?1:-1;
@@ -747,7 +766,7 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
-    store: s.store, storeCap: mods.storeCap, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
+    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
@@ -772,7 +791,7 @@ export function survView(sp) {
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
     produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
     economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
-    buildingsDef: BUILDINGS,
+    buildingsDef: buildingsFor(w),
   };
 }
 
@@ -836,6 +855,17 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    // 旧档（开关之前烘的）没有 food 字段：新建世界留下的分档必须按载入后的 store 重新入账，
+    // 否则 Σ分档 与 store 会永久差着一截，配给扣完而公仓显示不变。
+    if (sp.world.gameRules && sp.world.survival) {
+      const s = sp.world.survival;
+      // 旧档没有分档：先按载入后的 store 建账（全部记作物，不凭空猜品类）。
+      if (!s.food) initFoodStore(s);
+      // 任何载入路径都要保证 Σ分档 === store：差多少就补/扣作物，不动其它品类。
+      const sum = FOOD_KINDS.reduce((n, k) => n + (s.food[k] ?? 0), 0);
+      const diff = (s.store ?? 0) - sum;
+      if (diff !== 0) s.food.crop = Math.max(0, (s.food.crop ?? 0) + diff);
+    }
     restoreDistricts(w);
     restoreFarmPlots(w);
     restoreSources(w);

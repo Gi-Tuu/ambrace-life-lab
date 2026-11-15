@@ -151,3 +151,12 @@ test('F10 树生成必须排除田块（田里长树是可见的常识错误）'
   // 实测：去掉这条排除后，同一世界有 15 棵树落在田块内；加上后为 0。
   assert.match(APP, /onFarm\(tx \+ \.5, ty \+ \.5, 2\)/, '树循环缺少田块排除（树会长进田里）');
 });
+
+test('F11 首次进入三步引导：只出现一次、可跳过、动作能推进', () => {
+  assert.match(APP, /ambrace\.firstRun\.v1/, '缺少一次性标记的 localStorage 键');
+  assert.match(APP, /FIRST_RUN_STEPS/, '缺少三步定义');
+  assert.match(APP, /data-firstrun="skip"/, '缺少跳过入口');
+  assert.match(APP, /if \(result\.ok\) markFirstRun\(body\.kind\)/, '动作成功后没有推进步骤');
+  assert.match(APP, /camp_eat'\]?\) return 1/, '吃饭这一步没接');
+  assert.match(APP, /camp_sleep'\]?\) return 2/, '睡觉这一步没接');
+});

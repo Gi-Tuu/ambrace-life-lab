@@ -4,7 +4,7 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
-import { initProduction, effectiveMods, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
+import { initProduction, effectiveMods, addFood, takeFood, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 
 export const SURV = Object.freeze({
@@ -134,8 +134,19 @@ export function advanceSurvival(world) {
   let shortfall = 0;
   if (!ended) {
     world.observeProduction?.('ration', 'store', Math.min(s.store, need));
-    if (s.store >= need) s.store -= need;
+    // gameRules：按品类扣配给；研究世界保持原算术
+    if (s.food) { const taken = takeFood(s, null, need); shortfall = need - taken; }
+    else if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
+  }
+
+  // 灯火燃料（仅 gameRules）：每天烧 1 份木料；没柴就熄灯，屋里夜里变暗。
+  // 先烧公共柴堆，再烧玩家背包——居民与玩家同一条规则。
+  if (world.gameRules && !ended) {
+    const bag = (world.pinv ?? {})['p1'] ?? {};
+    if ((s.inv?.wood ?? 0) >= 1) { s.inv.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    else if ((bag.wood ?? 0) >= 1) { bag.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    // 亮不亮由当前柴量推导（见 survView.light），这里只负责每天烧一份。
   }
 
   // P0-2：家里容器里的食物是真缓冲——公仓缺口先用它抵，再饿人（玩家与居民同规则）。
@@ -198,7 +209,9 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
   s.harvestCount = (s.harvestCount ?? 0) + 1;
   const before = s.store;
-  s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
+  // gameRules：收获按品类入库；研究世界保持原算术
+  if (s.food) addFood(s, 'crop', Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  else s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
   world.observeProduction?.('gross', 'crop', yieldAmt);
   world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };

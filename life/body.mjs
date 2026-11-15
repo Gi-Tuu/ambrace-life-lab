@@ -15,7 +15,7 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -348,7 +348,7 @@ export function affordancesFor(world, agentId) {
     if ((urg > 0 && (s0.moveUrgency === true || isFarmer)) || hungry) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
       const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
-      const affordable = Object.entries(BUILDINGS).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);
+      const affordable = Object.entries(buildingsFor(world)).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);
       const hereFree = !s0.sites.some((x) => x.loc === here) && !s0.buildings.some((x) => x.loc === here);
       if (affordable && hereFree) {
         const free = (world.outdoor ?? []).find((l) => l !== here && !s0.sites.some((x) => x.loc === l) && !s0.buildings.some((x) => x.loc === l));
@@ -381,15 +381,15 @@ export function affordancesFor(world, agentId) {
     const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);
     const built = world.survival.buildings.find((b) => b.loc === here);
-    if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${BUILDINGS[site.type]?.label ?? site.type}`, cost: SURV_COST.build, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
+    if (site) out.push({ id: 'build', kind: 'build', label: `${BASE_KINDS.build.label}·${buildDef(world, site.type)?.label ?? site.type}`, cost: SURV_COST.build, impulse: 0.3, serves: { energy: 0.25, social: 0.1 } });
     else if (!built && (world.outdoor ?? []).includes(here)) {
-      for (const [type, def] of Object.entries(BUILDINGS)) {
+      for (const [type, def] of Object.entries(buildingsFor(world))) {
         if (poolW >= def.cost.wood && poolS >= def.cost.stone)
           out.push({ id: `plan:${type}`, kind: 'plan', type, label: `奠基·${def.label}`, cost: SURV_COST.plan, impulse: 0.2, serves: { stimulation: 0.3 } });
       }
     }
     if (built && built.integrity < 1 && poolW >= 1 && poolS >= 1)
-      out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${BUILDINGS[built.type]?.label ?? built.type}`, cost: SURV_COST.repair, impulse: 0.2, serves: { stimulation: 0.2 } });
+      out.push({ id: `repair:${built.type}`, kind: 'repair', label: `维修·${buildDef(world, built.type)?.label ?? built.type}`, cost: SURV_COST.repair, impulse: 0.2, serves: { stimulation: 0.2 } });
     // §15 P2-C 公仓存取（同权动作集）：在公仓可存/取个人包
     if (here === 'store') {
       for (const res of ['wood', 'stone']) {
@@ -669,13 +669,13 @@ function actuateInner(world, agentId, action, actionLoc) {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里不能建造' };
       const r = doPlan(world, agentId, action.type, actionLoc);
       if (!r.ok) return { action, ok: false, code: r.code, observation: r.code === 'NO_MATERIAL' ? '材料不够' : r.code === 'OCCUPIED' ? '这里已经有建筑或工地' : '这里不能奠基' };
-      return { action, ok: true, code: 'OK', observation: `奠基：${BUILDINGS[action.type]?.label ?? action.type}`, evt: evt({ kind: 'plan', valence: 0.2, serves: 'stimulation' }) };
+      return { action, ok: true, code: 'OK', observation: `奠基：${buildDef(world, action.type)?.label ?? action.type}`, evt: evt({ kind: 'plan', valence: 0.2, serves: 'stimulation' }) };
     }
     case 'build': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有工地' };
       const r = doBuild(world, agentId);
       if (!r.ok) return { action, ok: false, code: r.code, observation: '这里没有工地' };
-      return { action, ok: true, code: 'OK', observation: r.completed ? `建成：${BUILDINGS[r.completed]?.label ?? r.completed}` : '施工推进', evt: evt({ kind: 'build', valence: 0.25, serves: 'social' }) };
+      return { action, ok: true, code: 'OK', observation: r.completed ? `建成：${buildDef(world, r.completed)?.label ?? r.completed}` : '施工推进', evt: evt({ kind: 'build', valence: 0.25, serves: 'social' }) };
     }
     case 'repair': {
       if (!world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '这里没有可维修的建筑' };

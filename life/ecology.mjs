@@ -6,6 +6,7 @@
 import { dayOf, seasonOf, DAY_TICKS } from './clock.mjs';
 import { survivalRoll } from './rng.mjs';
 import { MATURE_DAYS, takeProduce } from './source-produce.mjs';
+import { takeFood } from './production.mjs';
 
 export const ECO = Object.freeze({
   orchardCap: 12, chickenCap: 12,
@@ -78,7 +79,7 @@ export function stepEcosystem(world, log) {
   }
   if (consumed < need) {
     const take = Math.min(s.store ?? 0, need - consumed);
-    s.store -= take;
+    if (s.food) takeFood(s, null, take); else s.store -= take;
     consumed += take;
     world.observeProduction?.('chickenFeed', 'store', take);
   }

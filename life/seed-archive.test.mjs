@@ -40,6 +40,11 @@ const campFacts = (a) => {
 test('种子档带营地世界，且能在正式配置下装回同一个世界', () => {
   const facts = campFacts(raw);
   for (const [name, ok] of Object.entries(facts)) assert.ok(ok, `种子档不合格：${name}`);
+  // 分类粮仓的交付物：起点档必须 Σfood === store（任务一的成果钉在这里）。
+  const sv = raw.survival.survival;
+  const sumFood = Object.values(sv.food ?? {}).reduce((a, b) => a + b, 0);
+  assert.ok(sv.food, '起点档必须带分类粮仓');
+  assert.equal(sumFood, sv.store, `起点档 Σfood( + '' + ) 必须等于 store( + '' + )`);
   const sp = loadSurv(structuredClone(raw.survival), raw.seed ?? 7, OPTIONS);
   const w = sp.world;
   assert.equal(w.t, raw.survival.t, '装回后的刻数必须与档案一致');

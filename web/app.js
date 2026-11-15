@@ -1687,7 +1687,7 @@ function drawCamp(cv,w) {
       const wave=.5+.5*Math.sin(ft*6.1)+.32*Math.sin(ft*13.7+1.7)+.18*Math.sin(ft*23.3+3.1);
       const dip=1-.10*Math.max(0,Math.sin(ft*2.3+0.7));
       const strength=Math.max(.42,Math.min(1.02,(.70+.24*wave)*dip));
-      hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
+      hearth=(w.light===false)?[0,0,0,0]:[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
     }
     people.push({who:'p1',x:(pos.x+8)/TILE,z:(pos.y+16)/TILE,moving:pos.moving,direction:pos.direction,act:campAct(w,'p1')});
     if (campCart?.attached && campCart.site===site && (!right || site===ui.interior)) people.at(-1).act='push';
@@ -1806,7 +1806,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? 1.10 : 1,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? (w.light === false && w.phase === '夜' ? .62 : 1.10) : 1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight: room ? Math.max(0, Math.min(1, daylightDirect / .5)) : 0,
@@ -2061,6 +2061,41 @@ function fillOcc(el, pack) {
   }).join('');
 }
 let survFlash = null, toastTimer = null;
+// 首次进入引导（2026-11-15）：只出现一次，可跳过；进度存 localStorage。
+const FIRST_RUN_KEY = 'ambrace.firstRun.v1';
+const FIRST_RUN_STEPS = [
+  { kind: 'gather', label: '走近树或石头，按 F 采集一次' },
+  { kind: 'eat', label: '回屋，对着桌子按 F 吃一份饭' },
+  { kind: 'sleep', label: '天黑前回屋，对着床按 F 睡一觉' },
+];
+let firstRunStep = (() => { try { return Math.max(0, Number(localStorage.getItem(FIRST_RUN_KEY) ?? 0) || 0); } catch { return 0; } })();
+function firstRunStepOf(kind) {
+  if (['gather', 'harvest', 'forage', 'camp_chop', 'camp_collect', 'plant', 'camp_plant'].includes(kind)) return 0;
+  if (kind === 'camp_eat') return 1;
+  if (kind === 'camp_sleep') return 2;
+  return -1;
+}
+function renderFirstRun() {
+  const box = $('firstRun'); if (!box) return;
+  if (!S.playing || firstRunStep >= FIRST_RUN_STEPS.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = '<b>第一次来？三步上手</b><ol>'
+    + FIRST_RUN_STEPS.map((s, i) => `<li class="${i < firstRunStep ? 'done' : ''}">${esc(s.label)}</li>`).join('')
+    + '</ol><button type="button" data-firstrun="skip">知道了，先自己逛</button>';
+  const skip = box.querySelector('[data-firstrun="skip"]');
+  if (skip) skip.onclick = () => {
+    firstRunStep = FIRST_RUN_STEPS.length;
+    try { localStorage.setItem(FIRST_RUN_KEY, String(firstRunStep)); } catch { /* 隐私模式 */ }
+    renderFirstRun();
+  };
+}
+function markFirstRun(kind) {
+  const step = firstRunStepOf(kind);
+  if (step < 0 || step !== firstRunStep) return;
+  firstRunStep = step + 1;
+  try { localStorage.setItem(FIRST_RUN_KEY, String(firstRunStep)); } catch { /* 隐私模式 */ }
+  renderFirstRun();
+}
 function toast(msg, ms = 2600) {
   const el = $('campToast'); if (!el) return;
   el.textContent = msg;
@@ -2218,7 +2253,9 @@ function inspectRoomProp(prop) {
     if (facility) {
       const use=(type,tool)=>performCamp({kind:'facility_use',target:ui.interior,type,tool},ui.interior,()=>inspectRoomProp(prop));
       if (prop.kind==='grain') {
-        $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap} · 背包作物 ${s.pinv.p1.crop??0}`;
+        const FOOD_ZH={crop:'作物',berry:'浆果',fruit:'果',egg:'蛋',milk:'奶',meat:'肉'};
+        const fb=s.food?Object.entries(s.food).filter(([,n])=>n>0).map(([k,n])=>`${FOOD_ZH[k]??k} ${n}`).join(' · '):'';
+        $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap}${fb?`（${fb}）`:''} · 背包作物 ${s.pinv.p1.crop??0}`;
         propOption(options,'存入一份作物',!(s.pinv.p1.crop>=1)?'背包没有作物':s.store+1>s.storeCap?'公仓已满':'',()=>use('deposit'));
         propOption(options,'领取一份粮食',s.store<1?'公仓没有整份粮食':'',()=>use('withdraw'));
       } else if (facility.type==='shelter') {
@@ -2334,6 +2371,7 @@ async function performCamp(body,site,done) {
     }
     const result=await playAct(body);
     survFlash={kind:body.kind,ok:result.ok,code:result.code??result.error??'OK'};
+    if (result.ok) markFirstRun(body.kind);
     await refresh();
     if (done && $('campPropDialog').open) done();
     const msg=result.ok ? (body.kind==='camp_sleep'?`睡过了 ${result.ticks} 刻`:`${campLabels[body.kind]??ACT_ZH[body.kind]??'操作'}成功`)
@@ -2997,11 +3035,13 @@ function renderLabCoop(s) {
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
   // 主 HUD 常驻"当前目标"：玩家不必打开聚落面板也能知道下一步做什么（可玩性 30 分的低成本一段）。
+  renderFirstRun();
   const obj = $('objHud');
   if (obj) {
     const hint = objectiveHint(s);
-    obj.textContent = hint ? '目标：' + hint : '';
-    obj.hidden = !hint;
+    const lamp = s.light === false ? '没柴，夜里点不着火 · ' : '';
+    obj.textContent = lamp + (hint ? '目标：' + hint : '');
+    obj.hidden = !hint && !lamp;
   }
   // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
   if (survFlash && !survFlash.at) survFlash.at = Date.now();
@@ -3020,6 +3060,7 @@ function renderSurv(s) {
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(campCodes[survFlash.code] ?? SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
   const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
   el.innerHTML = `
+    ${s.light === false ? '<div class="survbanner bad">屋里没柴了，夜里点不着火。去砍点木头（院子/树林）。</div>' : ''}
     ${banner}
     <div class="survrow stat-icons">
       <span class="stat" title="季节与日期">${STAT_ICON.calendar}<b>${esc(s.season ?? '')} ${s.dayInSeason ?? '?'} / ${s.day+1}</b></span>

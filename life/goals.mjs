@@ -5,7 +5,7 @@ import { laborStage, strictLifecycle } from './households.mjs';
 // （含前置移动/采集）。planGoal 每次调用重评⇒资源/环境变化或失败后自动重规划。
 // 复用既有 affordances/validate/actuate，不另造决策器；基础动作仍由规则层裁决、世界计算结果。
 // 示范目标用于验证组合能力（派单允许少量示范）；自主层默认决策环不受影响。
-import { BUILDINGS, gatherPlace, forageRule } from './production.mjs';
+import { buildDef, gatherPlace, forageRule } from './production.mjs';
 import { validate, actionId } from './rules.mjs';
 import { actuate, BASE_KINDS, SURV_COST, livingResidents } from './body.mjs';
 
@@ -54,8 +54,8 @@ export const GOALS = Object.freeze({
   shelter: {
     label: '建造住所',
     steps: [
-      { need: (w, id) => founded(w, 'shelter') || pool(w, id).wood >= BUILDINGS.shelter.cost.wood, action: (w, id) => gatherAction(w, id, 'wood') },
-      { need: (w, id) => founded(w, 'shelter') || pool(w, id).stone >= BUILDINGS.shelter.cost.stone, action: (w, id) => gatherAction(w, id, 'stone') },
+      { need: (w, id) => founded(w, 'shelter') || pool(w, id).wood >= buildDef(w, 'shelter').cost.wood, action: (w, id) => gatherAction(w, id, 'wood') },
+      { need: (w, id) => founded(w, 'shelter') || pool(w, id).stone >= buildDef(w, 'shelter').cost.stone, action: (w, id) => gatherAction(w, id, 'stone') },
       { need: (w, id) => founded(w, 'shelter'), action: (w, id) => planAction(w, id, 'shelter') },
       { need: (w, id) => completed(w, 'shelter'), action: (w, id) => buildAction(w, id, 'shelter') },
     ],
