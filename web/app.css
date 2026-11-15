@@ -302,11 +302,16 @@
   #keysHelp summary { cursor:pointer; border:1px solid var(--line); padding:2px 8px; background:var(--bg); color:var(--ink); }
   #keysHelp div { padding:4px 8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); max-width:460px; }
   /* ── 排版重整：侧栏分组折叠 + 底部工具栏 + 背包独立界面 ── */
-  aside { display:flex; flex-direction:column; gap:8px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) var(--sunken); }
-  aside::-webkit-scrollbar, .log::-webkit-scrollbar, #bpBody::-webkit-scrollbar, #mapbar::-webkit-scrollbar { width:10px; height:10px; }
-  aside::-webkit-scrollbar-track, .log::-webkit-scrollbar-track, #bpBody::-webkit-scrollbar-track, #mapbar::-webkit-scrollbar-track { background:var(--sunken); }
-  aside::-webkit-scrollbar-thumb, .log::-webkit-scrollbar-thumb, #bpBody::-webkit-scrollbar-thumb, #mapbar::-webkit-scrollbar-thumb { background:var(--line); border:2px solid var(--sunken); }
-  aside::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover, #bpBody::-webkit-scrollbar-thumb:hover, #mapbar::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+  aside { display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+  /* 滚动条按元素手列清单是维护陷阱：后来加的对话面板没进清单，就露出浏览器默认的中灰拇指和
+     上下箭头，在一片墨绿里格外显眼。改成全局一套——scrollbar-* 会继承，一处声明处处生效。 */
+  :root { scrollbar-width:thin; scrollbar-color:var(--line) var(--sunken); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-track { background:var(--sunken); }
+  ::-webkit-scrollbar-thumb { background:var(--line); border:2px solid var(--sunken); }
+  ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+  ::-webkit-scrollbar-corner { background:var(--sunken); }
+  ::-webkit-scrollbar-button { width:0; height:0; display:none; }
   body.play-mode { padding-bottom:76px; }
   details.grp { border:2px solid var(--line); background:var(--panel); }
   details.grp > summary { cursor:pointer; padding:6px 10px; font-weight:bold; color:var(--gold); background:var(--sunken); list-style:none; }
