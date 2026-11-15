@@ -105,3 +105,16 @@ test('SA3 fork 起点：从 40 天种子开新营地，阈值照 seed-archive �
   // 起点来自种子（第 40 天），不是第 1 天
   assert.equal(dump.t, SEED.t, '新营地必须从种子刻数起步');
 });
+
+test('SA7 三态：表格逐格（有观众→watched；无人主营地→node；无人分名字→idle；无人未开启→off）', async () => {
+  const { modelLaneFor } = await import('./camp-lane.mjs');
+  assert.equal(modelLaneFor({ campKey: 'MAIN', watched: true, unattendedOn: true }), 'watched');
+  assert.equal(modelLaneFor({ campKey: 'abc', watched: true, unattendedOn: false }), 'watched');
+  assert.equal(modelLaneFor({ campKey: 'MAIN', watched: false, unattendedOn: true }), 'node');
+  assert.equal(modelLaneFor({ campKey: 'abc', watched: false, unattendedOn: true }), 'idle');
+  assert.equal(modelLaneFor({ campKey: 'MAIN', watched: false, unattendedOn: false }), 'off');
+  // SA8：同一判定对两份不同营地互不影响（纯函数，无共享计数）
+  const a = modelLaneFor({ campKey: 'a', watched: false, unattendedOn: true });
+  const b = modelLaneFor({ campKey: 'b', watched: false, unattendedOn: true });
+  assert.deepEqual([a, b], ['idle', 'idle']);
+});

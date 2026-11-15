@@ -71,10 +71,10 @@ const BUDGET = Number(process.env.MAX_CALLS ?? 120);
 // 两把尺子：`MAX_CALLS` 数**钱**（托管推理/第三方），`NODE_CALLS_DAY` 数**电**（自有节点或本机中继）。
 // 旧版只有前者：实测无人全开的询问率≈4 次/分（5790 次/现实日），拿钱的额度去闸只花电的链路会在 2 小时内掐死模型，
 // 反过来让免费链路也计入 calls 又会让"还剩多少魔粒"这个读数失真。所以分账：calls 仍是总量，moneyCalls/nodeCalls 各归各。
-const NODE_BUDGET = Number(process.env.NODE_CALLS_DAY ?? (GAME_MODE === 'game' ? 8000 : 0)); // 0 = 不限（research 默认）
+const NODE_BUDGET = Number(process.env.NODE_CALLS_DAY ?? (GAME_MODE === 'game' ? 12000 : 0)); // 0 = 不限（research 默认）
 // 无人观看时是否仍上真模型：游戏默认开（世界要自洽），研究默认关（既有轨迹逐位不变）。
 const UNATTENDED_ON = String(process.env.MODEL_UNATTENDED ?? (GAME_MODE === 'game' ? '1' : '0')) === '1';
-const UNATTENDED_ASK_CAP = Number(process.env.UNATTENDED_CALLS_PER_TICK ?? 1);
+const UNATTENDED_ASK_CAP = Number(process.env.UNATTENDED_CALLS_PER_TICK ?? 2);
 // 无人时禁止付费回退：节点没答上来就退回确定性替身。宁可这一拍不用模型，也不在没人看的时候花魔粒。
 const PAID_WHEN_UNATTENDED = String(process.env.MODEL_PAID_UNATTENDED ?? '0') === '1';
 // 中继熔断：连续失败若干次就冷一段，避免每次询问都白等一个 TTL。
@@ -121,6 +121,9 @@ const ATTEMPT_CAP = 20;
 // 依据是 1 魔粒≈2 次旗舰调用、签到 250/天=500 次/天，全天不间断约需 2880 魔粒，必须按在场性省。
 const PRESENCE_MS = Number(process.env.PRESENCE_MS ?? 180000);
 // 纯函数便于闸门测试：最近有人在看才允许调用
+import { modelLaneFor } from './camp-lane.mjs';
+export { modelLaneFor };
+
 export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
   return now - lastVisitor <= presenceMs;
 }
@@ -175,7 +178,7 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, campKey: null, campName: null, mainSurv: null, seedSurv: null, camps: null,
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, campKey: null, campName: null, campViewers: {}, mainSurv: null, seedSurv: null, camps: null,
   lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
   // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
@@ -328,6 +331,7 @@ export async function openCamp(name) {
   if (!opened.ok) return opened;
   if (!S.mainSurv && !S.campKey) S.mainSurv = S.surv;
   S.surv = opened.sp;
+  S.surv.world.campKey = opened.key;
   S.campKey = opened.key;
   S.campName = id.display;
   S.lastVisitor = Date.now();
@@ -343,7 +347,7 @@ export async function openCamp(name) {
 export async function backToMainCamp() {
   if (!S.campKey) return { ok: true, code: 'OK', already: true };
   await save();
-  if (S.mainSurv) S.surv = S.mainSurv;
+  if (S.mainSurv) { S.surv = S.mainSurv; S.surv.world.campKey = 'MAIN'; }
   S.campKey = null;
   S.campName = null;
   return { ok: true, code: 'OK' };
@@ -389,7 +393,17 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
-  const watched = observerActive(S.viewers[world.survival ? 'survival' : 'compare'], Date.now());
+  // C3：按营地判车道。分名字营地在无人时直接走确定性替身，询问不发出。
+  const campKey = world?.campKey ?? 'MAIN';
+  const watched = campKey === 'MAIN'
+    ? observerActive(S.viewers[world.survival ? 'survival' : 'compare'], Date.now())
+    : observerActive(S.campViewers[campKey], Date.now());
+  const lane = modelLaneFor({ campKey, watched, unattendedOn: UNATTENDED_ON });
+  if (lane === 'idle') {
+    S.model.attempts.push('LANE:IDLE_CAMP');
+    if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift();
+    return null;
+  }
   // 无人观看：研究态照旧直接走替身（既有轨迹逐位不变）；游戏态继续上真模型，让世界自洽。
   if (!watched && !UNATTENDED_ON) return null;
   // 单拍上限：默认 0 = 不限（保证默认行为逐位不变）。见 PER_TICK_CAP 的注释。
@@ -706,7 +720,7 @@ async function tickBody(onError = null) {
     });
     if (p.series.length > SERIES_CAP) p.series.splice(0, p.series.length - SERIES_CAP);
   }
-  if (S.surv) await tickSurvPlay(S.surv);   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
+  if (S.surv) { S.surv.world.campKey ??= 'MAIN'; await tickSurvPlay(S.surv); }   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
   if (saveTick % SAVE_EVERY === 0) await save();
 }
@@ -1080,7 +1094,7 @@ export const host = {
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
   touch: mode => {
     S.lastVisitor = Date.now();
-    if (!mode || mode === 'survival') S.viewers.survival = S.lastVisitor;
+    if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[S.campKey ?? 'MAIN'] = S.lastVisitor; }
     if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
     if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
   },
