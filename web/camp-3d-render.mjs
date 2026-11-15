@@ -516,6 +516,10 @@ uniform float uExposure;
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
     lit+=vec3(.31,.145,.048)*fire;
+    // Harrowfield 式加法假体积光（2026-11-15）：核心火光之外再叠一层更宽、随高度衰减的光晕，
+    // 让它读成"空气里的光"而不是贴地的一个亮圆。强度与闪烁共用 uHearth.w，所以会一起呼吸。
+    float halo=uHearth.w*(1.-smoothstep(1.,7.2,distance(vWorld,uHearth.xy)))*max(0.,1.-abs(vWorld.y-.75)/2.4);
+    lit+=vec3(.17,.08,.03)*halo;
     if (uWild) {
       float mist=smoothstep(2.,25.,-vHeight);
       float drift=.92+.08*sin(vWorld.x*.13+vWorld.y*.11+uWeather.x*.2);
