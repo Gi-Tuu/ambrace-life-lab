@@ -60,6 +60,121 @@
 - **重烘公开起点**：按新规则跑 `seed-ladder` 960 刻（第 40 日：6 位在世居民、3 生 1 死、公仓 11、4 座建筑），
   拼进 `seed/world.json` 时只替换 `survival` 值、A/B 块逐字节不变；`seed-archive.test.mjs` 新增
   「起点档 Σfood === store」断言。体积 877 KB → 978 KB（如实记）。
+### S2 意图通道（C0，2026-11-15）
+- 新增 `life/intent.mjs`：一条意图消息 = 结构化事件；**闭合词表**（9 act × 8 topic）、文本归一化（≤28 字）、
+  后果表（信任 ±，单次 ≤ ±8）、每日上限（每人 3 次 / 同一对 1 次）、`converseLog` 环形 240 条。
+- 接线：`agent.receiveMessage`（只留痕与计数，不碰世界数值）、`survplay` 每刻至多一轮遭遇对话
+  （只在 `GAME_RULES=1`）、`survView` 暴露最近 12 条与条数。
+- 闸门 `game-rules.test.mjs` S2-1（词表拒收）/ S2-2（文本不造事实、信任 ≤±8）/ S2-3（A=3、P=1）/
+  S2-4（落盘往返逐位一致；摘掉即少条目）。三条负向对照均验红并字节还原。
+- 未做：模型侧"选动作时顺带输出 say"的接线（属 C3 调度）、开始页回看面板（属 C2）。
+### 名字存档的世界实例管理器（C1，2026-11-15）
+- 新增 `life/camp-instances.mjs`：**不实例化 host 单例**，直接组合 `survplay` 纯 API；
+  名字校验（1–16 字，拦分隔符/`..`/控制符/零宽）、`sha256(归一化名字)` 派生 key（名字永不进路径）、
+  `saves/index.json` + `saves/<key>.json.gz`、LRU 常驻 ≤6、`tickAll` 有 wall-time 上限、
+  TTL 3 天且**正在被观看的绝不删**、公开列表只投影五项。
+- `forkCamp` 复用 `seed-ladder` 的换玩家槽位做法（新名从 40 天种子起步，玩家是活的新到者）。
+- 闸门 `camp-saves.test.mjs` SA1（隔离）/ SA2（往返不动点 + Σfood 对账）/ SA5（名字安全且不产生文件）/
+  SA4（TTL 不删活跃）/ SA6（列表投影）。四条负向对照均验红并字节还原。
+  注：SA5 删单条检查不会红——**名字不进路径**这层更强；短路整个校验即红。
+- 未做：HTTP `/saves`、开始页进场 UI、三态调度（C2/C3）。
+### 名字存档的进场流程（C2，2026-11-15）
+- **host 支持按名字切换当前营地**（一次只服务一份，多营地并发留给 C3）：`openCamp(name)` 先落当前营地，
+  再把该名字的营地切为当前世界；`save()` 分流——命名营地只写 `saves/<key>.gz` + 索引，**绝不覆盖主营地 world.json**。
+- **serve 路由**：`GET /saves`（只投影六项）、`POST /saves/open`（写路由，走同源/令牌守卫）。
+- **开始页**：名字输入框 + 「已有营地」列表 + 一句话红线「名字就是钥匙」；提交成功后直接进
+  `/?mode=survival`，当前营地由服务端持有。
+- 实机点通：起始页输入「阿禾」→ 重载进游戏 → 第 40 天、6 位居民、玩家为活的新到者（HUD 体力 0.7 / 存续 1）。
+- 闸门 `camp-saves.test.mjs` 新增 SA3：fork 起点照 `seed-archive` 口径（刻数>0、未终局、在世≥3+玩家、
+  公仓>0、建筑≥3、玩家在世且在占用表、刻数等于种子刻数），阈值未放宽。
+### 三态调度与按营地观看计数（C3，2026-11-15）
+- 新增 `life/camp-lane.mjs` 纯判定：有观众→`watched`；无人+主营地→`node`；无人+分名字营地→`idle`（确定性替身，询问不发出）；
+  无人且未开启无人运行→`off`。`modelBrain` 在顶部按 `world.campKey` 判道，`idle` 直接返回 null 并记 `LANE:IDLE_CAMP`。
+- `host.touch` 除既有三个 key 外，按**当前营地**打点（`S.campViewers[campKey]`）；`openCamp` 给世界打 `campKey`，
+  主营地启动时标 `MAIN`。
+- 默认值按所有者批准上调：`NODE_CALLS_DAY` game 8000 → **12000**、`UNATTENDED_CALLS_PER_TICK` 1 → **2**。
+  线上仍在部署会话的环境变量里，需同步（env 显式值会盖住代码默认）。
+- 闸门 `camp-saves.test.mjs` SA7：三态表格逐格 + 两份营地互不影响；把 `idle` 放行即红（已验，字节还原）。
+### TTL 清扫接线与存档归档脚本（C4，2026-11-15）
+- host 启动时扫一次名字营地、之后**每小时**扫一次（`unref`，不拖住进程退出）；`stop()` 清掉定时器。
+  清扫复用 `sweepSaves` 的"正在被观看的绝不删"逻辑（SA4 覆盖）。
+- 新增 `scripts/archive-saves.mjs`：`archive` 把 `DATA_DIR/world.json` 与 `saves/` 复制到**仓库外**
+  `~/.ambrace-archives/<时间戳>/` 并写 sha256 manifest；`restore` 默认取最近一份、可按时间戳指定，
+  恢复后校验 manifest。数据目录不存在时 exit 2，**不生成空归档**。
+- `docs/deploy-checklist.md` 顶部新增「0. 重新部署前必须先归档」一节，把这条从登记项升成交付步骤。
+- 闸门 `save-archive.test.mjs` A1（归档→清空→恢复，逐字节一致）/ A2（无数据目录必须失败且不留目录）；
+  拆掉归档里复制 `saves/` 那行即红（已验，字节还原）。
+### 多营地并发（C3 补齐，2026-11-15）
+- `openCamp` 不再替换当前世界：装载后由每个请求按 `camp` cookie 选世界（`/saves/open` 下发，
+  `Path=/; Max-Age=30d; SameSite=Lax`），`/world` 与 `/act` 按 cookie 路由；无 cookie 即主营地。
+- 按营地 tick：每拍推进主世界与所有常驻分名字营地（同一套预算/熔断/两本账），单份异常不拖垮整拍。
+- 按营地落盘：主营地仍写 `world.json`；每个常驻营地各写 `saves/<key>.gz` + 索引。
+- `ctl` 的 `reset` / `survival_reset` 同步 `S.mainSurv`（修掉并发改动打红的 3 条既有测试）。
+- 闸门 SA9：`tickAll` 必须推进每个营地（只跑第一份即红）；实机两个 cookie 各自 960→963，
+  对甲 `move garden` 后甲变、乙不变。
+### 核验修复：路由补 query、camp key 校验、TTL 语义（2026-11-15）
+- **P0-1 营地路由不再只依赖第三方 cookie**：`web/net.mjs` 的唯一出口按注入的 provider 给 `/world`、`/act`
+  自动追加 `?camp=`；`web/app.js` 从 `localStorage: ambrace.camp.v1` 提供 key，进场后写 key 并带
+  `&camp=` 跳转；开始页新增"当前营地 / 回主营地"（`POST /saves/back` 清 cookie 与本地 key）。
+  跨站 iframe 里 cookie 可能存不下也带不上，query 是主路径，cookie 只当加分项。
+- **P0-2 `camp` key 二重校验**：`openKey` 只接受 `^[0-9a-f]{32}$` **且**必须是索引成员（`campSurv` 再兜一层）。
+  截断了 `../archive-2026/victim` 这类"复活并覆盖归档"的路径穿越。闸门 SA5b。
+- **P1-3 TTL 语义**：`lastSeenAt` 只由观众行为推进（`open`/`openKey`/`touch`），落盘（`save`/`persist`）
+  不再刷新；常驻但三天无人会被扫掉。闸门 SA4b。
+- 闸门 `camp-routing.test.mjs` SA10：起真服务验证 `?camp=A` / `?camp=B` / 不带 camp 三条路由；
+  `scripts/smoke-online.mjs` 增加只读路由检查（`SMOKE_CAMP_KEY` 提供 key，`/saves` 按设计不投影 key）。
+- 三条负向对照均验红并字节还原（整条 key 校验短路、persist 刷新 lastSeenAt、忽略 camp 路由）。
+### 第二轮核验的两处 P2（2026-11-15）
+- **P2-a `/world.camp.name` 恒为哈希**：快照里的营地标签原先走 `listCamps()`，而公开投影按设计不含 `key`，
+  这条 `find` 永不命中。改为读**内部 live 条目**的名字（`S.camps.live.get(key)?.name`），闸门 SA10 增加
+  `camp.name === '甲'` 断言。
+- **P2-b localStorage 写不进时丢营地**：`setCampProvider` 的初值改为优先取 URL 的 `camp`（校验 32 位十六进制），
+  localStorage 只做持久化。实测：清空 localStorage 后用 `?camp=` 刷新，所有 `/world` 请求仍带 `camp=`。
+  闸门 F12 结构性覆盖该路径。
+- 一处自身失误如实记：给快照加行内注释时 `//` 吞掉了同一行的 `saveError`，被 `node --check` 当场抓出，已修。
+### 回看面板 + `served` 徽章（P1，2026-11-15）
+- 开始页新增「这一段他们之间发生了什么」：只读 `/world` 的 `survival.converse`（最近 12 条），
+  每条显示 第几天 · 谁 → 谁 · act/topic 中文 · 原话 · 信任变化 · `served` 徽章（`standin` → **本地替身**）。
+- 全部用 `textContent` 与 `createElement` 渲染，不拼 `innerHTML`（原话是模型输出，按不可信文本处理）。
+- 面板与「当前营地」都按内存 provider（URL 优先）取营地；URL 直达没有本地名字时，用 `/world.camp.name` 兜底显示。
+- 闸门 F13（面板存在、读 converse、textContent、替身徽章中文、开始页会加载）。
+- 一次自身失误如实记：面板常量名 `ACT_ZH` 与既有常量重名 ⇒ 模块级 SyntaxError、整页不启动，F6 冒烟 19s 超时抓到；
+  改名 `CONV_ACT_ZH/CONV_TOPIC_ZH` 后恢复（F6 回到 ~3.1s）。
+### 模型 `say` 接线（P2，2026-11-15）
+- `modelBrain` 的 JSON 协议从 `{id,reason}` 扩成可选 `{act,topic,text}`：提示词里给出闭合词表与 28 字上限，
+  模型不想说可以省略。
+- **规则层仍是唯一裁决者**：`parseSay` 校验词表与文本长度（非法则丢弃并记 `SAY:INVALID`），
+  真正投递走 `converse`（同地点、上限 A=3/P=1、信任变化 ≤±8）；动作执行后由 `survplay` 投递，
+  条目带 `served:'node'`，面板徽章从"本地替身"变成"模型"。
+- `agent.pendingSay` 是唯一交接点：模型只写"怎么说"，不改世界。
+- 闸门 `life/say.test.mjs`（S2-5，假 OpenAI 端点、零联网）：非法 act → `SAY:INVALID` 且绝不进 converse；
+  合法句子 → `served:'node'`、文本与 act 原样。两条负向对照（去掉投递 / 去掉词表校验）均验红并字节还原。
+### SA8：两本账分离 + 熔断只关免费路（P2，2026-11-15）
+- 新增独立闸门 `life/lane-accounting.test.mjs`（不再只靠 `model-lanes` 间接覆盖）：
+  免费路被 `BREAKER`/`NODE_BUDGET` 挡住时不受钱账影响；付费路**不受熔断连坐**，
+  无人时 `NO_OBSERVER`（除非显式允许），钱账/节点账互不牵连。
+- 负向对照：把熔断判断挪到两路之前（连付费一起挡）⇒ SA8-2 红，已验并字节还原。
+### 第三轮核验：非法 camp 回落 + 观看键校验 + lint 真 import（2026-11-16）
+- **N1（必修）**：非法/未登记的 `camp` 不再让访客拿到空世界——`snapshot` 先解析一次，
+  不可用就一律按主营地服务（`camp:null`，`survival` 有值）；`camp.name` 只从索引取，**绝不回显请求原语**。
+  闸门 SA11：`?camp=../etc/passwd` 与格式合法但未登记的键都断言 `camp===null && survival!==null` 且载荷不含输入；
+  拆掉回落行即红。
+- **N3（必修）**：`host.touch` 先用 `validCampKey` 验一次，非法/未登记键不写 `S.campViewers`
+  （否则每个乱码 URL 都留一条永久记录，污染三态调度的观看判据）。闸门 `camp-viewers.test.mjs` 覆盖。
+- **lint 盲区**：`scripts/check.mjs` 增加一次**真 `import('web/app.js')`**，只接受非 SyntaxError 的失败
+  （`ReferenceError: document is not defined` 是预期）。验红：在文件末尾注入 `let broken = (((;`，
+  旧 lint 打"✔ 通过"，新 lint 报 `✖ 真 import() 失败：Unexpected token ';'`。
+- **顺手**：回主菜单时保留 `?camp=`（隐私模式下 URL 是唯一凭据，否则面板会显示主营地的对话）。
+- 更正上一轮的归因：`node --check` 漏报**不是**"重复声明不算语法错"，而是 `package.json` 没声明 `type`，
+  含 import 的 `.js` 先按 CJS 解析、失败后重探为 ESM，重探只报前半段——Qoder 的定位是对的。
+### 第四轮核验：观看打点不得兜到"最后打开的营地"（N4，2026-11-16）
+- **P1-N4**：`host.touch` 原先用 `campKey ?? S.campKey` 判定打点对象，而 `S.campKey` 是全局"最后一次被打开"；
+  于是任何**不带 camp 的主营地轮询**都会把别人的分名字营地标成"有人看" ⇒ 三态调度被绕过、该营地恒用真模型，
+  同时 `served` 读数会说谎。现在只认请求自带的 camp（`campKey ?? 'MAIN'`），`S.campKey` 仅留给 healthz 读数。
+- 闸门 `life/camp-watch.test.mjs`：`openCamp('阿禾')` 后一次 `touch('survival')` ⇒ `campViewerKeys()` 必须含
+  `MAIN` 且不含该营地 key；明确带 key 时才打点。负向对照：恢复 `?? S.campKey` ⇒ 红（已验、字节还原）。
+- 登记两条（非缺陷）：`validCampKey` 经 `campSurv` 可能触发磁盘载入（校验带 I/O 副作用）；lint 会**真执行**
+  `web/app.js` 顶层（目前只会以 ReferenceError 收场，但新增了执行面）。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

@@ -14,6 +14,7 @@ import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
+import { converseRound, converse } from './intent.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -324,6 +325,17 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
     }
     const traceStart = onResidentAction ? a.trace.length : 0;
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
+    if (w.gameRules && a.pendingSay) {
+      const say = a.pendingSay;
+      delete a.pendingSay;
+      const here = w.loc[a.id];
+      const other = (w.occupancy[here] ?? []).find((id) => id !== a.id && w.agents[id] && !w.agents[id].dead);
+      if (other) {
+        const r = converse(w, a.id, other, { act: say.act, topic: say.topic, say: say.text, served: 'node' });
+        if (!r.ok) { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = r.code; }
+      } else { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = 'NO_COMPANY'; }
+    }
     if (onResidentAction) onResidentAction(a, a.trace.slice(traceStart));
     if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
     if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
@@ -339,6 +351,8 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
     // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
     a.ch.m3 = w.residentChannelMask?.m3 ?? Number(w.survival.commitChain === true);
   }
+  // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
+  try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
@@ -766,7 +780,7 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
-    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
+    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,

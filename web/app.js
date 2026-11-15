@@ -14,7 +14,7 @@ import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignatur
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
 import { TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
-import { postJson, persistNotices } from './net.mjs';
+import { postJson, persistNotices, setCampProvider } from './net.mjs';
 
 
 import {
@@ -27,6 +27,21 @@ import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels,
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 
+// P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
+// 隐私模式写不进 localStorage 时，首轮重定向之后的轮询仍然带得上 camp。
+const urlCampKey = (() => {
+  try {
+    const k = new URL(location.href).searchParams.get('camp');
+    return /^[0-9a-f]{32}$/.test(k ?? '') ? k : null;
+  } catch { return null; }
+})();
+let campKeyNow = urlCampKey ?? (() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } })();
+setCampProvider(() => campKeyNow);
+function setCampKey(key) {
+  campKeyNow = key || null;
+  try { if (key) localStorage.setItem('ambrace.camp.v1', key); } catch { /* 隐私模式：内存里仍有 */ }
+  try { if (!key) { localStorage.removeItem('ambrace.camp.v1'); localStorage.removeItem('ambrace.campName.v1'); } } catch { /* 同上 */ }
+}
 async function api(path, body) {
   const result = await postJson(path, body);
   const notice = persistNotices(result, path);
@@ -3273,12 +3288,19 @@ async function refresh() {
     } else if (S.soloSurv && j.survival.model?.enabled && !j.survival.model.configured) {
       chip.textContent='生存：本地替身（模型未配置）'; chip.classList.remove('on');
     } else if (j.brain !== 'model') { chip.textContent = '后端：本地替身'; chip.classList.remove('on'); }
-    else if (!m.watching) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
-    else if ((m.calls ?? 0) >= (m.budget ?? 0)) { chip.textContent = `后端：替身（今日 ${m.budget} 次已用完）`; chip.classList.remove('on'); }
+    // 两把尺子分开判：钱＝m.budget 对 m.moneyCalls，电＝m.nodeBudget 对 m.nodeCalls。
+    // 用总量 calls 去比钱的额度，会在节点仍在一一答话时谎称"今日额度已用完"（无人模型权限上线后必然发生）。
+    else if (!m.watching && m.unattended === false) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
+    else if ((m.nodeBudget ?? 0) > 0 && (m.moneyCalls ?? 0) >= (m.budget ?? 0) && (m.nodeCalls ?? 0) >= (m.nodeBudget ?? 0)) {
+      chip.textContent = `后端：替身（今日两把额度都用完：额度 ${m.budget}／节点 ${m.nodeBudget}）`; chip.classList.remove('on');
+    }
+    else if ((m.nodeBudget ?? 0) === 0 && (m.budget ?? 0) > 0 && (m.moneyCalls ?? 0) >= (m.budget ?? 0)) {
+      chip.textContent = `后端：替身（今日 ${m.budget} 次额度已用完）`; chip.classList.remove('on');
+    }
     else {
       chip.textContent=S.soloSurv && j.survival.model
         ? `生存：模型已接入 · 今日有效选择 ${j.survival.model.choices}`
-        : `后端：真模型 ${m.calls ?? 0}/${m.budget ?? '?'}（今日额度）`;
+        : `后端：真模型 · 节点 ${m.nodeCalls ?? 0}${m.nodeBudget ? '/' + m.nodeBudget : ''} · 额度 ${m.moneyCalls ?? 0}/${m.budget ?? '?'}`;
       chip.classList.add('on');
     }
     // H-15 / BUG-18：存档失败与 tick 异常原先在页面上**完全不可见**（只有 /healthz 里埋着），
@@ -3444,6 +3466,113 @@ function selectWorld(compare) {
   renderPlayMode(S.survivalView);
   refresh();
 }
+// 名字存档（C2）：列表只读投影；进走 /saves/open，成功后整页重载，当前营地由服务端持有。
+async function loadCampList() {
+  const box = $('campList'); if (!box) return;
+  try {
+    const res = await fetch('/saves');
+    const data = await res.json();
+    const rows = data?.entries ?? [];
+    box.replaceChildren();
+    if (!rows.length) { box.textContent = '还没有营地。输入一个名字开始。'; return; }
+    for (const row of rows) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'camp-row';
+      b.textContent = `${row.name} · 第 ${row.day + 1} 天 · ${row.population} 人 · ${row.daysLeft} 天后回收`;
+      b.onclick = () => { const input = $('campName'); if (input) input.value = row.name; submitCamp(); };
+      box.appendChild(b);
+    }
+  } catch { if (box) box.textContent = '读不到营地列表。'; }
+}
+// P1：居民之间说过的话（只读）。数据来自 /world 的 survival.converse（最近 12 条）。
+const CONV_ACT_ZH = { request: '请求', offer: '提供', warn: '提醒', inform: '告知', greet: '问候', accuse: '指责', thank: '道谢', decline: '婉拒', refuse: '拒绝' };
+const CONV_TOPIC_ZH = { food: '吃食', firewood: '柴火', shelter: '住处', child: '孩子', work: '活计', weather: '天气', boundary: '地界', trust: '信任' };
+function serveBadge(served) {
+  const span = document.createElement('span');
+  span.className = 'served-badge' + (served === 'standin' ? ' standin' : '');
+  span.textContent = served === 'standin' ? '本地替身' : (served === 'node' ? '模型' : String(served ?? ''));
+  return span;
+}
+async function loadConverse() {
+  const box = $('converseLog'); if (!box) return;
+  box.replaceChildren();
+  try {
+    const { key } = currentCamp();
+    const res = await fetch('/world' + (key ? '?camp=' + encodeURIComponent(key) : ''));
+    const j = await res.json();
+    const log = j?.survival?.converse ?? [];
+    const names = j?.survival?.agents ?? {};
+    if (!log.length) { box.textContent = '还没有人说过话。世界继续走，这里会出现他们之间的对话。'; return; }
+    for (const e of [...log].reverse()) {
+      const row = document.createElement('div');
+      row.className = 'converse-row';
+      const head = document.createElement('div');
+      head.className = 'converse-head';
+      const who = names[e.from]?.name ?? e.from;
+      const to = names[e.to]?.name ?? e.to;
+      head.textContent = `第${(e.day ?? 0) + 1}天 · ${who} → ${to} · ${CONV_ACT_ZH[e.act] ?? e.act}·${CONV_TOPIC_ZH[e.topic] ?? e.topic}`;
+      head.appendChild(serveBadge(e.served));
+      const line = document.createElement('div');
+      line.className = 'converse-text';
+      line.textContent = e.text ?? '';
+      const eff = document.createElement('div');
+      eff.className = 'converse-eff';
+      const d = Number(e.effect?.trust ?? 0);
+      eff.textContent = d === 0 ? '关系未变' : `信任 ${d > 0 ? '+' : ''}${d.toFixed(1)}`;
+      row.append(head, line, eff);
+      box.appendChild(row);
+    }
+  } catch { box.textContent = '读不到对话记录。'; }
+}
+function currentCamp() {
+  // key 以内存 provider 为准（它优先取 URL，localStorage 只做持久化）；名字仅用于展示。
+  let name = null;
+  try { name = localStorage.getItem('ambrace.campName.v1'); } catch { /* 隐私模式 */ }
+  return { key: campKeyNow, name };
+}
+async function renderCampCurrent() {
+  const box = $('campCurrent'); if (!box) return;
+  const { key, name } = currentCamp();
+  if (!key) { box.textContent = '你当前在主营地'; const b = $('campBack'); if (b) b.hidden = true; return; }
+  const back = $('campBack');
+  if (back) back.hidden = false;
+  box.textContent = `你当前在「${name || key.slice(0, 8)}」的营地`;
+  if (name) return;
+  // URL 直达（没有本地名字）时向服务端要 label；P2-a 之后 camp.name 就是名字而不是哈希。
+  try {
+    const j = await (await fetch('/world?camp=' + encodeURIComponent(key))).json();
+    const label = j?.camp?.name;
+    if (label && label !== key) box.textContent = `你当前在「${label}」的营地`;
+  } catch { /* 保持哈希回落 */ }
+}
+async function backToMain() {
+  setCampKey(null);
+  try { await fetch('/saves/back', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch { /* 服务端失败也回菜单 */ }
+  location.href = '/';
+}
+async function submitCamp() {
+  const input = $('campName');
+  const name = (input?.value ?? '').trim();
+  const status = $('startStatus');
+  if (!name) { if (status) status.textContent = '先输入一个名字。'; return; }
+  try {
+    const res = await fetch('/saves/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); if (status) status.textContent = '进不去：' + (j.error ?? res.status); return; }
+    const data = await res.json().catch(() => ({}));
+    setCampKey(data?.key);
+    try { if (data?.name) localStorage.setItem('ambrace.campName.v1', data.name); } catch { /* 隐私模式 */ }
+    // P0-1：query 是主路径（第三方 cookie 在 iframe 里可能既存不下也带不上）
+    location.href = '/?mode=survival&camp=' + encodeURIComponent(data?.key ?? '');
+  } catch { if (status) status.textContent = '连不上服务。'; }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const form = $('campForm');
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); submitCamp(); });
+  const back = $('campBack');
+  if (back) back.addEventListener('click', backToMain);
+  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) { loadCampList(); renderCampCurrent(); loadConverse(); }
+});
 function showStart() {
   audio.menu(true);
   if (campBusy || enteringRoom || leavingRoom) return;
@@ -3457,6 +3586,9 @@ function showStart() {
   toast('');
   ui.surveyRoom=null;
   ui.menu=true;
+  // 第三轮 §4：回到菜单也保留 ?camp=——隐私模式（localStorage 不可用）下 URL 是唯一凭据，
+  // 否则菜单里的对话面板会显示主营地的记录。
+  try { history.replaceState(null, '', campKeyNow ? '/?camp=' + encodeURIComponent(campKeyNow) : '/'); } catch { /* 忽略 */ }
   renderPlayMode(S.survivalView);
   $('startTitle').focus();
   poll();

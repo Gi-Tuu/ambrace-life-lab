@@ -9,7 +9,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const rel = (p) => p.split(sep).join('/');
@@ -136,6 +136,17 @@ for (const name of testFiles) {
   if (/\.only\(/.test(text)) fail(`life/${name} 含 .only( ⇒ 会静默跳过同文件其它用例`);
   if (!/\btest\(/.test(text)) fail(`life/${name} 里没有 test( 调用`);
   if (/Math\.random\(/.test(text) && !allowRandom.has(name)) fail(`life/${name} 用了 Math.random（测试也应当可复现）`);
+}
+
+// 6) 真 import() 一遍入口：package.json 没声明 type，含 import 的 web/app.js 会先按 CJS 解析、
+//    再重探为 ESM；重探只报前半段，文件末尾的语法错会从 node --check 溜过去（第三轮实测）。
+//    这里只接受"非语法错"的失败：ReferenceError: document/window is not defined 是预期（Node 没有浏览器环境）。
+try {
+  await import(pathToFileURL(join(ROOT, 'web', 'app.js')).href);
+} catch (e) {
+  const name = String(e?.name ?? '');
+  if (name === 'SyntaxError') fail('web/app.js 真 import() 失败（语法错，node --check 可能漏报）：' + String(e?.message ?? e).slice(0, 160));
+  else if (!(e instanceof ReferenceError)) fail('web/app.js 真 import() 抛出非预期错误：' + String(e?.message ?? e).slice(0, 160));
 }
 
 // 汇总

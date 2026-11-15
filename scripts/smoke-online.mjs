@@ -76,6 +76,22 @@ try {
   check('生存世界已载入', Boolean(world.survival), world.survival ? 'enabled' : 'null');
   check('生存世界未终局', !world.survival?.ended, world.survival ? `settlement=${world.survival.settlement}${world.survival.endReason ? ' endReason=' + world.survival.endReason : ''}` : 'n/a');
   check('对照世界 B 存在', Boolean(world.B), world.B?.t != null ? 't=' + world.B.t + (world.mode === 'game' ? '（game 模式下冻结，正常）' : '') : '');
+
+  // P0-1：线上只有这条能证明营地路由真的在工作（第三方 cookie 在 iframe 里可能失效）。
+  // 只读：key 由操作者通过 SMOKE_CAMP_KEY 提供（/saves 按设计不投影 key，脚本也不能代开营地）。
+  if (process.env.SMOKE_CAMP_KEY) {
+    try {
+      const key = process.env.SMOKE_CAMP_KEY;
+      const withCamp = await (await get('/world?camp=' + encodeURIComponent(key))).json();
+      const plain = await (await get('/world')).json();
+      check('camp 路由：?camp= 指向该营地', withCamp?.camp?.key === key, 'camp=' + (withCamp?.camp?.name ?? 'null'));
+      check('camp 路由：不带 camp 是主营地', plain?.camp == null, 'camp=' + (plain?.camp?.name ?? 'null'));
+    } catch (error) {
+      check('camp 路由检查', false, String(error?.cause?.code ?? error));
+    }
+  } else {
+    skip('camp 路由', '未提供 SMOKE_CAMP_KEY（/saves 不投影 key）');
+  }
 } catch (error) {
   check('/world 可读', false, String(error?.cause?.code ?? error));
 }

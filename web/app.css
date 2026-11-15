@@ -7,6 +7,8 @@
      · 禁：圆角、渐变、模糊、抗锯齿、半透明叠加；hover/active 一律换色 + 1px 位移。 */
   @font-face { font-family:"fusion-pixel"; src:url("/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2") format("woff2"); font-display:swap; }
   :root {
+    /* 整套界面是深色的：不声明这一条，原生滚动条/下拉/日期控件会按浅色画，白边直接压在墨绿上。 */
+    color-scheme:dark;
     --bg:#18251E; --panel:#32302C; --sunken:#263D29;
     --line:#72513B; --line-hi:#BA8752;
     --ink:#FFF0CC; --dim:#D9D6B8;
@@ -300,11 +302,16 @@
   #keysHelp summary { cursor:pointer; border:1px solid var(--line); padding:2px 8px; background:var(--bg); color:var(--ink); }
   #keysHelp div { padding:4px 8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); max-width:460px; }
   /* ── 排版重整：侧栏分组折叠 + 底部工具栏 + 背包独立界面 ── */
-  aside { display:flex; flex-direction:column; gap:8px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) var(--sunken); }
-  aside::-webkit-scrollbar, .log::-webkit-scrollbar, #bpBody::-webkit-scrollbar, #mapbar::-webkit-scrollbar { width:10px; height:10px; }
-  aside::-webkit-scrollbar-track, .log::-webkit-scrollbar-track, #bpBody::-webkit-scrollbar-track, #mapbar::-webkit-scrollbar-track { background:var(--sunken); }
-  aside::-webkit-scrollbar-thumb, .log::-webkit-scrollbar-thumb, #bpBody::-webkit-scrollbar-thumb, #mapbar::-webkit-scrollbar-thumb { background:var(--line); border:2px solid var(--sunken); }
-  aside::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover, #bpBody::-webkit-scrollbar-thumb:hover, #mapbar::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+  aside { display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+  /* 滚动条按元素手列清单是维护陷阱：后来加的对话面板没进清单，就露出浏览器默认的中灰拇指和
+     上下箭头，在一片墨绿里格外显眼。改成全局一套——scrollbar-* 会继承，一处声明处处生效。 */
+  :root { scrollbar-width:thin; scrollbar-color:var(--line) var(--sunken); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-track { background:var(--sunken); }
+  ::-webkit-scrollbar-thumb { background:var(--line); border:2px solid var(--sunken); }
+  ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+  ::-webkit-scrollbar-corner { background:var(--sunken); }
+  ::-webkit-scrollbar-button { width:0; height:0; display:none; }
   body.play-mode { padding-bottom:76px; }
   details.grp { border:2px solid var(--line); background:var(--panel); }
   details.grp > summary { cursor:pointer; padding:6px 10px; font-weight:bold; color:var(--gold); background:var(--sunken); list-style:none; }
@@ -566,6 +573,46 @@
     font-size:12px; color:var(--ink); background:rgba(50,48,44,.8); border:1px solid var(--line);
     text-shadow:1px 1px 0 #000;
   }
+  /* 名字存档（C2）：输入 + 已有营地列表。控件必须走这套深色风格——浏览器默认的白底输入框和
+     白底按钮会在一整片墨绿里跳出来，等于告诉玩家"这块还没做完"。与 .start-actions 同源。 */
+  .camp-form { display:flex; gap:6px; align-items:center; margin:8px 0 4px; flex-wrap:wrap; }
+  .camp-form label { font-size:12px; color:var(--gold); }
+  .camp-form input {
+    flex:1 1 140px; min-width:120px; font:inherit; font-size:13px; padding:6px 8px;
+    color:var(--ink); background:var(--sunken); border:2px solid var(--line-hi);
+    box-shadow:2px 2px 0 var(--shadow); border-radius:0; appearance:none; -webkit-appearance:none;
+  }
+  .camp-form input::placeholder { color:var(--dim); opacity:.7; }
+  .camp-form button, .camp-current button, #campList .camp-row {
+    font:inherit; font-size:12px; padding:6px 12px; cursor:pointer; border-radius:0;
+    color:var(--ink); background:var(--panel); border:2px solid var(--line-hi);
+    box-shadow:2px 2px 0 var(--shadow);
+  }
+  .camp-form button { background:var(--gold); color:var(--bg); border-color:var(--gold); font-weight:bold; }
+  .camp-current button { padding:2px 8px; }
+  #campList .camp-row { text-align:left; padding:3px 6px; border-color:var(--line); }
+  #campList .camp-row:hover { border-color:var(--line-hi); }
+  .camp-form button:hover, .camp-current button:hover, #campList .camp-row:hover { filter:brightness(1.12); }
+  .camp-form input:focus-visible, .camp-form button:focus-visible,
+  .camp-current button:focus-visible, #campList .camp-row:focus-visible {
+    outline:2px solid var(--ink); outline-offset:2px;
+  }
+  .camp-form button:active, .camp-current button:active, #campList .camp-row:active { transform:translate(2px,2px); box-shadow:none; }
+  .camp-note { font-size:12px; color:var(--ink); opacity:.85; margin:2px 0 8px; }
+  .camp-current { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--ink); margin:2px 0 8px; flex-wrap:wrap; }
+  .converse-list { margin:4px 0; font-size:12px; }
+  #converseLog { display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height:220px; overflow:auto; }
+  .converse-row { border-left:2px solid var(--line); padding-left:6px; }
+  .converse-head { color:var(--gold); font-size:12px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .converse-text { font-size:12px; color:var(--ink); margin:1px 0; }
+  .converse-eff { font-size:11px; opacity:.8; }
+  .served-badge { font-size:10px; padding:0 4px; border:1px solid var(--line); color:var(--ink); }
+  .served-badge.standin { border-color:#8a6d3b; color:#d8a667; }
+
+  .camp-list { margin:4px 0; font-size:12px; }
+  #campList { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+  #campList .camp-row { text-align:left; font-size:12px; padding:3px 6px; }
+
   /* 首次进入引导（只出现一次，可跳过） */
   #firstRun {
     position:absolute; top:8px; right:8px; width:min(46%, 300px); padding:8px 10px;

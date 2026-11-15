@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
-import { host, modelGate, modelCharged, modelRelease } from './life/host.mjs';
+import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease } from './life/host.mjs';
 import { mutatingDenied, isJson } from './life/request-guard.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -201,9 +201,29 @@ async function handle(req, res) {
   // H-03：观众在场打点只认**读**路径。/act、/ctl 是写路由——让它们自己 touch 自己，
   // 等于任何人都能用一条 POST 把 watching 顶成 true 并烧真模型额度（实测 4 条 say 烧完 5 次调用）。
   // /healthz 也不算（平台探活会让"有观众"恒真）。/chat 同理。
-  if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
+    // 名字存档：公开列表只投影六项；进场是写路由（同源/令牌守卫）。
+  if (p === '/saves' && req.method === 'GET') return json(res, 200, { entries: listCamps() });
+  if (p === '/saves/back' && req.method === 'POST') {
+    const denied = mutatingDenied(req, CTL_TOKEN);
+    if (denied) return json(res, 403, { error: denied });
+    const back = await backToMainCamp();
+    res.setHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
+    return json(res, 200, back);
+  }
+  if (p === '/saves/open' && req.method === 'POST') {
+    const denied = mutatingDenied(req, CTL_TOKEN);
+    if (denied) return json(res, 403, { error: denied });
+    let body;
+    try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
+    const opened = await openCamp(body?.name);
+    if (!opened.ok) return json(res, 400, { error: opened.code });
+    res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
+    return json(res, 200, opened);
+  }
+if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
   const viewMode = url.searchParams.get('mode');
-  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode);
+  const campCookie = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || null;
+  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode, campCookie || undefined);
 
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
@@ -220,7 +240,7 @@ async function handle(req, res) {
     });
   }
 
-  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode));
+  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode, campCookie || undefined));
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
     const denied = mutatingDenied(req, CTL_TOKEN);
@@ -243,7 +263,8 @@ async function handle(req, res) {
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
-    return json(res, 200, await (p === '/act' ? host.act(body) : host.ctl(body)));
+    const campForAct = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || undefined;
+    return json(res, 200, await (p === '/act' ? host.act(body, campForAct) : host.ctl(body)));
   }
 
   // BUG-8：鉴权 → 与 modelBrain 同一套预算/在场闸门 → 才转发。

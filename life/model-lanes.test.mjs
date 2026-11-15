@@ -87,6 +87,7 @@ test('N3 无人运行：节点答活，付费端点一次都不许被碰到', as
   assert.ok((st.nodeCalls ?? 0) >= 1, '免费账本要记上');
   assert.equal(st.unattended, true);
   assert.equal(st.paidWhenUnattended, false);
+  assert.ok(Number(st.campT) > 0, 'healthz 要能看见营地刻数：否则只能打 /world 观测，而那一打就把观众状态点亮，测到的不是无人状态');
 });
 
 test('N4 中继坏了：熔断打开后停止白等，且无人时仍不花钱', async () => {

@@ -160,3 +160,25 @@ test('F11 首次进入三步引导：只出现一次、可跳过、动作能推�
   assert.match(APP, /camp_eat'\]?\) return 1/, '吃饭这一步没接');
   assert.match(APP, /camp_sleep'\]?\) return 2/, '睡觉这一步没接');
 });
+
+test('F14 后端 chip 按两把尺子分别判：不许在节点仍答话时谎称额度用完', () => {
+  assert.match(APP, /m\.moneyCalls \?\? 0\) >= \(m\.budget/, 'chip 没拿"钱"这本账（moneyCalls）与额度比较');
+  assert.match(APP, /m\.nodeCalls \?\? 0\) >= \(m\.nodeBudget/, 'chip 没拿"电"这本账（nodeCalls）与节点预算比较');
+  assert.doesNotMatch(APP, /\(m\.calls \?\? 0\) >= \(m\.budget/, '仍在用总量 calls 比钱的额度 ⇒ 无人模型上线后必然谎报"今日已用完"');
+  assert.match(APP, /unattended === false/, '"无人观看，省额度"这句只允许在无人模型真被关掉时说');
+});
+
+test('F12 URL 的 camp 是路由主路径：localStorage 不可用时轮询仍带 camp（P2-b）', () => {
+  assert.match(APP, /new URL\(location\.href\)\.searchParams\.get\('camp'\)/,'缺少 URL camp 读取');
+  assert.match(APP, /\^\[0-9a-f\]\{32\}\$/, '缺少 32 位十六进制校验');
+  assert.match(APP, /setCampProvider\(\(\) => campKeyNow\)/, 'provider 未绑定内存值');
+  assert.match(APP, /campKeyNow = urlCampKey/, 'provider 初值没有优先取 URL');
+});
+
+test('F13 回看面板：只读 converse、全部 textContent、替身有徽章（P1）', () => {
+  assert.match(HTML, /id="conversePanel"/, '缺少回看面板容器');
+  assert.match(APP, /survival?.converse/, '面板没有读 converse');
+  assert.match(APP, /textContent = e\.text/, '原话必须走 textContent（不能拼 innerHTML）');
+  assert.match(APP, /served === 'standin' \? '本地替身'/, '替身句子必须有中文徽章');
+  assert.match(APP, /loadConverse\(\)/, '开始页没有加载对话');
+});
