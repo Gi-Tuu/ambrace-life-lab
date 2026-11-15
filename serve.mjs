@@ -221,6 +221,24 @@ async function handle(req, res) {
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
+  // 诊断（只读）：创空间网关会改写 Host，"真实浏览器访客能不能过写路由守卫"只能在线上量，
+  // 不能靠本地推断——这条坑过一次：本地全绿，线上所有交互 403。
+  // 纪律同 H-16：只回显判定结果，不回显地址原值、query、Cookie、令牌与供应商端点。
+  if (req.method === 'GET' && p === '/diag') {
+    const h = req.headers;
+    const oh = (() => { try { return new URL(String(h.origin ?? '')).host.toLowerCase(); } catch { return ''; } })();
+    const strip = (v) => String(v ?? '').trim().toLowerCase().replace(/:(80|443)$/, '');
+    const eq = (a, b) => Boolean(a) && Boolean(b) && strip(a) === strip(b);
+    const dryRun = mutatingDenied({ headers: { ...h, 'content-type': 'application/json' }, socket: req.socket }, CTL_TOKEN);
+    return json(res, 200, {
+      secFetchSite: h['sec-fetch-site'] ?? null,
+      originPresent: Boolean(oh),
+      originMatchesHost: eq(oh, h.host),
+      originMatchesForwardedHost: eq(oh, String(h['x-forwarded-host'] ?? '').split(',').pop()),
+      writeRouteVerdict: dryRun ?? 'PASS',
+      note: '只回显判定结果，不回显地址、query、Cookie 与令牌',
+    });
+  }
   const viewMode = url.searchParams.get('mode');
   const campKey = url.searchParams.get('camp') ??
     (req.headers.cookie ?? '').split(';').map(x => x.trim()).find(x => x.startsWith('camp='))?.slice(5);
