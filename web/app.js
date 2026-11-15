@@ -1680,7 +1680,15 @@ function drawCamp(cv,w) {
     people=roomCrowd(w,site);
     work=roomPropsMesh(site,w);
     const fire=stage.interactables.find(p=>p.kind==='hearth');
-    if (fire) hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,.79+.14*Math.sin((ACT.motionTime??0)*6)];
+    // Harrowfield 式闪烁（2026-11-15）：单频正弦太干净，换成三层频率叠加 + 偶发下探。
+    // 全部由 ACT.motionTime 驱动（表现层时钟，不进世界 tick、不消费 rng）。
+    if (fire) {
+      const ft=ACT.motionTime??0;
+      const wave=.5+.5*Math.sin(ft*6.1)+.32*Math.sin(ft*13.7+1.7)+.18*Math.sin(ft*23.3+3.1);
+      const dip=1-.10*Math.max(0,Math.sin(ft*2.3+0.7));
+      const strength=Math.max(.42,Math.min(1.02,(.70+.24*wave)*dip));
+      hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
+    }
     people.push({who:'p1',x:(pos.x+8)/TILE,z:(pos.y+16)/TILE,moving:pos.moving,direction:pos.direction,act:campAct(w,'p1')});
     if (campCart?.attached && campCart.site===site && (!right || site===ui.interior)) people.at(-1).act='push';
     if (campPose && (!right || site===ui.interior)) {
@@ -1769,7 +1777,10 @@ function drawCamp(cv,w) {
   const climate=campClimate(w);
   const time=ACT.motionTime??0, open=!room || ['hall','yard','garden','well','watch'].includes(site);
   const elapsed=S.running ? Math.max(0,performance.now()-(S.sunTickAt??performance.now())) : 0;
-  const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
+  // 室内判定的 solarLight 会把 direct 置 0（indoor:true），所以白天因子必须用"室外视角"再算一次。
+const daylightDirect=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
+  {storm:climate.storm,overcast:climate.rain||climate.snow,indoor:false}).direct : 0;
+const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
     {storm:climate.storm,overcast:climate.rain||climate.snow,indoor:!open}) : null;
   const light=sun?.light??(w.phase==='夜'?[.55,.62,.76]:w.phase==='暮'?[.88,.79,.70]:climate.storm?[.68,.76,.82]:[1,1,1]);
   const weather=[time,open?(climate.storm?2.7:climate.rain?1.15:.55):0,Number(open&&climate.drought),
@@ -1795,7 +1806,11 @@ function drawCamp(cv,w) {
   } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? 1.10 : 1,
+      // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
+      windows: room ? (stage.windows ?? null) : null,
+      daylight: room ? Math.max(0, Math.min(1, daylightDirect / .5)) : 0,
+      interior: Boolean(room),frame:ACT.frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
     physical:physicalLighting,animateParts}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site,covered,
