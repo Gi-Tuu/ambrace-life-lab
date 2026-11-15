@@ -276,6 +276,16 @@ export class Organism {
     return softmaxPick(this.rng, scored, temp).picked;
   }
 
+  // S2：收到一条意图消息。后果只有三件——关系（调用方已按规则表改）、情景记忆、计数。
+  // 仍然只有规则层能改世界：这里不碰 store/pinv/位置。
+  receiveMessage(world, msg) {
+    const rec = { t: world.t, id: this.id, name: this.name, layer: 'message', from: msg.from, act: msg.act, topic: msg.topic, text: msg.text, served: msg.served };
+    this.counters.messages = (this.counters.messages ?? 0) + 1;
+    this.trace.push(rec);
+    this.lastMessage = rec;
+    return rec;
+  }
+
   // S3：被告知一条秘密。认知后果只有两件事——known 集合（由调用方改）与一次评价注入。
   // ⑨ 关掉时**只留痕迹不注入**：这样"传过话"的运行能与"没传话"逐动作比对（负向对照要求它必须相同）。
   receive(world, secret, fromId) {

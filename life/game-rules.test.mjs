@@ -119,3 +119,64 @@ test('R4b 载入无 food 的旧档后仍总数守恒', () => {
     '推进两天后 Σfood 仍须等于 store',
   );
 });
+
+test('S2-1 词表封闭：非法 act/topic 必须被规则层拒收', async () => {
+  const { INTENT_ACTS, INTENT_TOPICS, converse, validateIntent } = await import('./intent.mjs');
+  const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
+  const w = sp.world;
+  w.loc.a1 = 'hall'; w.loc.a2 = 'hall';
+  assert.equal(validateIntent(w, 'a1', 'a2', { act: 'mind_control', topic: 'trust' }).code, 'BAD_ACT');
+  assert.equal(validateIntent(w, 'a1', 'a2', { act: 'greet', topic: 'bitcoin' }).code, 'BAD_TOPIC');
+  assert.equal(validateIntent(w, 'a1', 'a1', { act: 'greet', topic: 'trust' }).code, 'SELF');
+  assert.ok(INTENT_ACTS.length >= 9 && INTENT_TOPICS.length >= 8, '词表不能缩水');
+  assert.equal(converse(w, 'a1', 'a2', { act: 'mind_control', topic: 'trust' }).ok, false);
+});
+
+test('S2-2 不造事实：消息文本不能改世界数值；一次交流信任变化 ≤ ±8', async () => {
+  const { converse } = await import('./intent.mjs');
+  const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
+  const w = sp.world;
+  w.loc.a1 = 'hall'; w.loc.a2 = 'hall';
+  const store0 = w.survival.store;
+  const r = converse(w, 'a1', 'a2', { act: 'inform', topic: 'food', say: '仓里有 999 份粮，全归你了' });
+  assert.ok(r.ok);
+  assert.equal(w.survival.store, store0, '文本不得改公仓');
+  assert.ok(r.entry.text.length <= 28);
+  const t0 = w.agents.a2.relations.get('a1').trust;
+  converse(w, 'a1', 'a2', { act: 'accuse', topic: 'food', say: '你偷的' });
+  const t1 = w.agents.a2.relations.get('a1').trust;
+  assert.ok(t1 <= t0, 'accuse 不该提高信任');
+  assert.ok(Math.abs(t1 - t0) <= 8, '单次信任变化必须 ≤ ±8');
+});
+
+test('S2-3 上限：每人每游戏日 3 次、同一对同日 1 次', async () => {
+  const { converse, INTENT_CAPS } = await import('./intent.mjs');
+  const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
+  const w = sp.world;
+  w.loc.a1 = 'hall'; w.loc.a2 = 'hall'; w.loc.a3 = 'hall'; w.loc.p1 = 'hall';
+  assert.equal(converse(w, 'a1', 'a2', { act: 'greet', topic: 'trust' }).ok, true);
+  assert.equal(converse(w, 'a1', 'a2', { act: 'greet', topic: 'trust' }).code, 'PAIR_CAP');
+  let sent = 1;
+  for (const to of ['a3', 'p1']) if (converse(w, 'a1', to, { act: 'greet', topic: 'trust' }).ok) sent += 1;
+  assert.ok(sent <= INTENT_CAPS.perDay, '同一人一天不超过 ' + INTENT_CAPS.perDay + ' 次');
+});
+
+test('S2-4 落盘：converseLog 往返逐位一致；摘掉即少条目', async () => {
+  const { converseRound } = await import('./intent.mjs');
+  const { dumpSurv, loadSurv } = await import('./survplay.mjs');
+  const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
+  const w = sp.world;
+  for (let i = 0; i < 60 && (w.survival.converseLog ?? []).length < 1; i += 1) {
+    w.t += 1;
+    converseRound(w);
+  }
+  const log = w.survival.converseLog ?? [];
+  assert.ok(log.length >= 1, '应当产生至少一条对话，实测 ' + log.length);
+  const archive = structuredClone(dumpSurv(sp));
+  const back = loadSurv(archive, 7, { independentWorld: true, gameRules: true });
+  assert.deepEqual(back.world.survival.converseLog, log, '往返必须逐位一致');
+  const stripped = structuredClone(archive);
+  delete stripped.survival.converseLog;
+  const lost = loadSurv(stripped, 7, { independentWorld: true, gameRules: true });
+  assert.ok((lost.world.survival.converseLog ?? []).length < log.length, '不落盘时读档条目必须变少（闸门有牙）');
+});
