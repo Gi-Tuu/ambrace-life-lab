@@ -95,6 +95,15 @@
 - 默认值按所有者批准上调：`NODE_CALLS_DAY` game 8000 → **12000**、`UNATTENDED_CALLS_PER_TICK` 1 → **2**。
   线上仍在部署会话的环境变量里，需同步（env 显式值会盖住代码默认）。
 - 闸门 `camp-saves.test.mjs` SA7：三态表格逐格 + 两份营地互不影响；把 `idle` 放行即红（已验，字节还原）。
+### TTL 清扫接线与存档归档脚本（C4，2026-11-15）
+- host 启动时扫一次名字营地、之后**每小时**扫一次（`unref`，不拖住进程退出）；`stop()` 清掉定时器。
+  清扫复用 `sweepSaves` 的"正在被观看的绝不删"逻辑（SA4 覆盖）。
+- 新增 `scripts/archive-saves.mjs`：`archive` 把 `DATA_DIR/world.json` 与 `saves/` 复制到**仓库外**
+  `~/.ambrace-archives/<时间戳>/` 并写 sha256 manifest；`restore` 默认取最近一份、可按时间戳指定，
+  恢复后校验 manifest。数据目录不存在时 exit 2，**不生成空归档**。
+- `docs/deploy-checklist.md` 顶部新增「0. 重新部署前必须先归档」一节，把这条从登记项升成交付步骤。
+- 闸门 `save-archive.test.mjs` A1（归档→清空→恢复，逐字节一致）/ A2（无数据目录必须失败且不留目录）；
+  拆掉归档里复制 `saves/` 那行即红（已验，字节还原）。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

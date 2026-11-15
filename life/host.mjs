@@ -23,7 +23,7 @@ import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
-import { CampInstances, listSaves, normalizeName, saveCamp, touchSave } from './camp-instances.mjs';
+import { CampInstances, listSaves, normalizeName, saveCamp, sweepSaves, touchSave } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
@@ -314,6 +314,11 @@ function campManager() {
     S.camps = new CampInstances({ dataDir: S.dir, options: survivalOptions(), limit: 6, seedSurvival: S.seedSurv });
   }
   return S.camps;
+}
+
+// TTL 清扫：删 3 天无活跃的分名字营地；**正在被观看的绝不删**（先查观看计数再动文件）。
+export function sweepCamps({ now = Date.now() } = {}) {
+  return sweepSaves(S.dir, { now, isWatched: (key) => observerActive(S.campViewers[key], now) });
 }
 
 export function listCamps() {
@@ -1170,6 +1175,12 @@ export const host = {
     // 预算闸门失真、modelCalls 少记、A/B 刻数错位（实测 t=23 vs t=20），"世界状态单一写者"这个
     // 隐含不变量同时被破坏。线上 TICK_MS=6000 而部署侧实测约 5.9 秒/刻，已经贴着边界。
     S.timer = setInterval(autoTick, TICK_MS);
+  // 名字存档 TTL：启动先扫一次，之后每小时一次（unref：不拖住进程退出）。
+  try { sweepCamps(); } catch { /* 清扫失败不影响世界 */ }
+  if (!S.sweepTimer) {
+    S.sweepTimer = setInterval(() => { try { sweepCamps(); } catch { /* 同上 */ } }, 60 * 60 * 1000);
+    S.sweepTimer.unref?.();
+  }
     if (!sigHandlers) {
       process.on('SIGINT', onSignal);
       process.on('SIGTERM', onSignal);
@@ -1188,6 +1199,7 @@ export const host = {
   // 常驻循环必须能关掉：测试里 import 过 host 之后若不 stop，node --test 会因为计时器还活着而不退出
   stop() {
     takePendingFlush();
+    if (S.sweepTimer) { clearInterval(S.sweepTimer); S.sweepTimer = null; }
     if (S.timer) clearInterval(S.timer);
     S.timer = null;
     // H-10：不再强行复位在途标志。复位等于把锁打开，老 tick 还在跑、新 interval 又起一拍。
@@ -1200,6 +1212,7 @@ export const host = {
   },
   status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
   listCamps,
+  sweepCamps,
   openCamp,
   backToMainCamp,
   snapshot(mode) {
