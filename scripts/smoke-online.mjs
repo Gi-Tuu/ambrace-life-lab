@@ -4,13 +4,17 @@
 //   node scripts/smoke-online.mjs                                  # 默认 http://127.0.0.1:7860
 //   SMOKE_URL=https://xxx.ms.show node scripts/smoke-online.mjs    # 公开实例
 //   SMOKE_URL=... SMOKE_COOKIE='ms_session=...' node ...           # 非公开实例（浏览器里复制 Cookie）
-//   SMOKE_TOKEN=... node ...                                       # 顺带验令牌可用
+//   SMOKE_URL=... SMOKE_STUDIO_TOKEN=... node ...                   # 魔搭私有创空间：走 ?studio_token=（浏览器地址栏里那串）
+//   SMOKE_TOKEN=... node ...                                       # 顺带验 /ctl 令牌可用
 //
 // 退出码：0 全过；1 有失败项。
 
 const BASE = (process.env.SMOKE_URL ?? 'http://127.0.0.1:7860').replace(/\/+$/, '');
 const COOKIE = process.env.SMOKE_COOKIE ?? '';
 const TOKEN = process.env.SMOKE_TOKEN ?? '';
+const STUDIO_TOKEN = process.env.SMOKE_STUDIO_TOKEN ?? '';
+// 魔搭 ms.show 对非浏览器 UA 直接 403（实测同一 URL：无 UA 403、带 UA 200），冒烟必须伪装成浏览器。
+const UA = process.env.SMOKE_UA ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(BASE);
 
 const rows = [];
@@ -22,8 +26,9 @@ const skip = (name, why) => {
   rows.push({ name, ok: true, detail: 'skipped: ' + why });
   console.log(`⏭  ${name} — 跳过（${why}）`);
 };
-const headers = (extra = {}) => ({ ...(COOKIE ? { cookie: COOKIE } : {}), ...extra });
-const get = (path, init = {}) => fetch(BASE + path, { ...init, headers: headers(init.headers), redirect: 'manual' });
+const headers = (extra = {}) => ({ 'user-agent': UA, ...(COOKIE ? { cookie: COOKIE } : {}), ...extra });
+const withToken = (path) => (STUDIO_TOKEN ? `${path}${path.includes('?') ? '&' : '?'}studio_token=${encodeURIComponent(STUDIO_TOKEN)}` : path);
+const get = (path, init = {}) => fetch(BASE + withToken(path), { ...init, headers: headers(init.headers), redirect: 'manual' });
 
 console.log(`冒烟目标: ${BASE}${LOOPBACK ? '（loopback）' : ''}\n`);
 
@@ -60,13 +65,17 @@ try {
   check('/world 200', res.status === 200, 'HTTP ' + res.status);
   const world = await res.json();
   check('/world 是合法 JSON', Boolean(world));
-  check('世界在走（A.t>0）', Number(world.A?.t) > 0, 't=' + world.A?.t);
   check('无存档失败', !world.saveError, String(world.saveError ?? ''));
   check('无决策异常', !world.tickError, String(world.tickError ?? ''));
-  const agents = Object.keys(world.A?.agents ?? {}).length;
+  // GAME_MODE=game 只推进生存世界，研究世界 A/B 的 t 按设计冻结 ⇒ 计时读数取 survival。
+  const live = world.survival ?? world.A ?? {};
+  const liveLabel = world.survival ? 'survival' : 'A';
+  check('世界在走（t>0）', Number(live.t) > 0, `${liveLabel}.t=${live.t}`);
+  const agents = Object.keys(live.agents ?? {}).length;
   check('营地居民在位', agents >= 3, agents + ' 人');
   check('生存世界已载入', Boolean(world.survival), world.survival ? 'enabled' : 'null');
-  check('对照世界 B 存在', Boolean(world.B), world.B?.t != null ? 't=' + world.B.t : '');
+  check('生存世界未终局', !world.survival?.ended, world.survival ? `settlement=${world.survival.settlement}${world.survival.endReason ? ' endReason=' + world.survival.endReason : ''}` : 'n/a');
+  check('对照世界 B 存在', Boolean(world.B), world.B?.t != null ? 't=' + world.B.t + (world.mode === 'game' ? '（game 模式下冻结，正常）' : '') : '');
 } catch (error) {
   check('/world 可读', false, String(error?.cause?.code ?? error));
 }
