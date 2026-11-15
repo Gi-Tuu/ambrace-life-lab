@@ -108,8 +108,11 @@ test('D3 Qwen3.8 带关思考参数；端点 400 时去掉参数重试；非 Qwe
 });
 
 test('D3 适配器覆盖命名变体与请求体剥离', () => {
-  for (const m of ['Qwen/Qwen3.8-27B', 'qwen3.8-27b', 'qwen3.8-27b-fp8', 'QWEN3.8-27B']) assert.equal(needsNoThink(m), true, m);
-  for (const m of ['Qwen/Qwen3-8B', 'deepseek-v4.1-flash', 'qwen2.5-32b']) assert.equal(needsNoThink(m), false, m);
+  for (const m of ['Qwen/Qwen3.8-27B', 'qwen3.8-27b', 'qwen3.8-27b-fp8', 'QWEN3.8-27B',
+    'Qwen/Qwen3.5-35B-A3B', 'Qwen/Qwen3.5-27B', 'qwen3.5-397b-a17b']) assert.equal(needsNoThink(m), true, m);
+  // 无点号的历史命名按原登记口径不带参数；魔搭下拉里的 DeepSeek/Nex 同理。
+  for (const m of ['Qwen/Qwen3-8B', 'deepseek-v4.1-flash', 'deepseek-ai/DeepSeek-V4.1-Flash-1017',
+    'nex-agi/Nex-N2.5-Pro', 'qwen2.5-32b']) assert.equal(needsNoThink(m), false, m);
   const b = withNoThink({ model: 'x' }, 'Qwen/Qwen3.8-27B');
   assert.deepEqual(b.chat_template_kwargs, { enable_thinking: false });
   assert.equal('chat_template_kwargs' in withoutNoThink(b), false);
