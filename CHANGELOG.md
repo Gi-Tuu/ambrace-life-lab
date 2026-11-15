@@ -154,6 +154,19 @@
   免费路被 `BREAKER`/`NODE_BUDGET` 挡住时不受钱账影响；付费路**不受熔断连坐**，
   无人时 `NO_OBSERVER`（除非显式允许），钱账/节点账互不牵连。
 - 负向对照：把熔断判断挪到两路之前（连付费一起挡）⇒ SA8-2 红，已验并字节还原。
+### 第三轮核验：非法 camp 回落 + 观看键校验 + lint 真 import（2026-11-16）
+- **N1（必修）**：非法/未登记的 `camp` 不再让访客拿到空世界——`snapshot` 先解析一次，
+  不可用就一律按主营地服务（`camp:null`，`survival` 有值）；`camp.name` 只从索引取，**绝不回显请求原语**。
+  闸门 SA11：`?camp=../etc/passwd` 与格式合法但未登记的键都断言 `camp===null && survival!==null` 且载荷不含输入；
+  拆掉回落行即红。
+- **N3（必修）**：`host.touch` 先用 `validCampKey` 验一次，非法/未登记键不写 `S.campViewers`
+  （否则每个乱码 URL 都留一条永久记录，污染三态调度的观看判据）。闸门 `camp-viewers.test.mjs` 覆盖。
+- **lint 盲区**：`scripts/check.mjs` 增加一次**真 `import('web/app.js')`**，只接受非 SyntaxError 的失败
+  （`ReferenceError: document is not defined` 是预期）。验红：在文件末尾注入 `let broken = (((;`，
+  旧 lint 打"✔ 通过"，新 lint 报 `✖ 真 import() 失败：Unexpected token ';'`。
+- **顺手**：回主菜单时保留 `?camp=`（隐私模式下 URL 是唯一凭据，否则面板会显示主营地的对话）。
+- 更正上一轮的归因：`node --check` 漏报**不是**"重复声明不算语法错"，而是 `package.json` 没声明 `type`，
+  含 import 的 `.js` 先按 CJS 解析、失败后重探为 ESM，重探只报前半段——Qoder 的定位是对的。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

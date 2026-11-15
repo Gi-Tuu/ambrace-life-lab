@@ -3586,6 +3586,9 @@ function showStart() {
   toast('');
   ui.surveyRoom=null;
   ui.menu=true;
+  // 第三轮 §4：回到菜单也保留 ?camp=——隐私模式（localStorage 不可用）下 URL 是唯一凭据，
+  // 否则菜单里的对话面板会显示主营地的记录。
+  try { history.replaceState(null, '', campKeyNow ? '/?camp=' + encodeURIComponent(campKeyNow) : '/'); } catch { /* 忽略 */ }
   renderPlayMode(S.survivalView);
   $('startTitle').focus();
   poll();

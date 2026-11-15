@@ -60,3 +60,23 @@ test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则�
     await new Promise((r) => setTimeout(r, 300));
   }
 });
+
+test('SA11 非法/未登记 camp 回落主营地：survival 不为空、不回显输入、camp=null', async () => {
+  const { child, base } = await boot();
+  try {
+    const a = await (await post(base, '/saves/open', { name: '甲' })).json();
+    assert.ok(a.ok);
+    for (const bad of ['../etc/passwd', 'a'.repeat(32)]) {
+      const r = await (await fetch(base + '/world?camp=' + encodeURIComponent(bad))).json();
+      assert.equal(r.camp, null, '非法/未登记 camp 必须回落 MAIN：' + bad);
+      assert.notEqual(r.survival, null, '不得把空世界发给访客：' + bad);
+      assert.ok(!JSON.stringify(r).includes('../etc/passwd'), '不得回显请求原语');
+    }
+    const ok = await (await fetch(base + '/world?camp=' + a.key)).json();
+    assert.equal(ok.camp?.key, a.key, '合法已登记 key 仍然正常');
+    assert.notEqual(ok.survival, null);
+  } finally {
+    child.kill();
+    await new Promise((r) => setTimeout(r, 300));
+  }
+});

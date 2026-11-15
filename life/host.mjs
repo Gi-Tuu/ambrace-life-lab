@@ -323,6 +323,17 @@ export function sweepCamps({ now = Date.now() } = {}) {
 }
 
 // 按营地 key 取世界：MAIN 走主世界，其它走实例管理器（live 或磁盘）。
+// camp 键是否可用：MAIN 恒可；分名字营地必须 32hex 且能取到（live 或已登记）。
+export function validCampKey(campKey) {
+  if (!campKey || campKey === 'MAIN') return true;
+  return campSurv(campKey) != null;
+}
+
+// 观测用：非法键不得留痕（第三轮 §3），也给 healthz/测试一个读法。
+export function campViewerKeys() {
+  return Object.keys(S.campViewers);
+}
+
 export function campSurv(campKey) {
   if (!campKey || campKey === 'MAIN') return S.mainSurv ?? S.surv;
   if (!/^[0-9a-f]{32}$/.test(String(campKey))) return null; // P0-2：第二道闸
@@ -1137,9 +1148,11 @@ export const host = {
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
   touch: (mode, campKey) => {
     S.lastVisitor = Date.now();
-    if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[campKey ?? S.campKey ?? 'MAIN'] = S.lastVisitor; }
+    // 第三轮 N3：请求里的 camp 先验一次；非法/未登记不得在 campViewers 留永久键。
+    const key = validCampKey(campKey ?? S.campKey) ? (campKey ?? S.campKey) : null;
+    if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[key ?? 'MAIN'] = S.lastVisitor; }
     // P1-3：观众行为推进 lastSeenAt（落盘不推进）
-    const liveCamp = campKey && S.camps ? S.camps.live.get(campKey) : null;
+    const liveCamp = key && S.camps ? S.camps.live.get(key) : null;
     if (liveCamp) liveCamp.lastSeenAt = S.lastVisitor;
     if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
     if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
@@ -1259,7 +1272,10 @@ export const host = {
   openCamp,
   backToMainCamp,
   snapshot(mode, campKey) {
-    const survSel = campSurv(campKey);
+    // 第三轮 N1：请求里的 camp 不可用（格式错/未登记/过期）⇒ 按主营地服务。
+    // 绝不把请求原语回显到 camp.name，也绝不让 survival 变 null（那是一个空世界）。
+    const key = campKey && campKey !== 'MAIN' && validCampKey(campKey) ? campKey : null;
+    const survSel = campSurv(key);
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p, layered) => ({
       t: p.world.t,
@@ -1297,7 +1313,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: (campKey && campKey !== 'MAIN') ? { key: campKey, name: S.camps?.live.get(campKey)?.name ?? campKey } : null, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : null, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
     return queueWorldWrite(async () => {
