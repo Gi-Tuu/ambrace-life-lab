@@ -1149,7 +1149,10 @@ export const host = {
   touch: (mode, campKey) => {
     S.lastVisitor = Date.now();
     // 第三轮 N3：请求里的 camp 先验一次；非法/未登记不得在 campViewers 留永久键。
-    const key = validCampKey(campKey ?? S.campKey) ? (campKey ?? S.campKey) : null;
+    // 第四轮 N4：观看打点只认请求自己带的 camp，绝不兜到 S.campKey（那是"最后一次被打开"的全局读数）。
+    // 否则任何主营地访客的常规轮询都会把别人的分名字营地标成"有人看"，绕过三态调度。
+    const requested = campKey ?? 'MAIN';
+    const key = validCampKey(requested) ? requested : null;
     if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[key ?? 'MAIN'] = S.lastVisitor; }
     // P1-3：观众行为推进 lastSeenAt（落盘不推进）
     const liveCamp = key && S.camps ? S.camps.live.get(key) : null;

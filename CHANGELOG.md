@@ -167,6 +167,14 @@
 - **顺手**：回主菜单时保留 `?camp=`（隐私模式下 URL 是唯一凭据，否则面板会显示主营地的对话）。
 - 更正上一轮的归因：`node --check` 漏报**不是**"重复声明不算语法错"，而是 `package.json` 没声明 `type`，
   含 import 的 `.js` 先按 CJS 解析、失败后重探为 ESM，重探只报前半段——Qoder 的定位是对的。
+### 第四轮核验：观看打点不得兜到"最后打开的营地"（N4，2026-11-16）
+- **P1-N4**：`host.touch` 原先用 `campKey ?? S.campKey` 判定打点对象，而 `S.campKey` 是全局"最后一次被打开"；
+  于是任何**不带 camp 的主营地轮询**都会把别人的分名字营地标成"有人看" ⇒ 三态调度被绕过、该营地恒用真模型，
+  同时 `served` 读数会说谎。现在只认请求自带的 camp（`campKey ?? 'MAIN'`），`S.campKey` 仅留给 healthz 读数。
+- 闸门 `life/camp-watch.test.mjs`：`openCamp('阿禾')` 后一次 `touch('survival')` ⇒ `campViewerKeys()` 必须含
+  `MAIN` 且不含该营地 key；明确带 key 时才打点。负向对照：恢复 `?? S.campKey` ⇒ 红（已验、字节还原）。
+- 登记两条（非缺陷）：`validCampKey` 经 `campSurv` 可能触发磁盘载入（校验带 I/O 副作用）；lint 会**真执行**
+  `web/app.js` 顶层（目前只会以 ReferenceError 收场，但新增了执行面）。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。
