@@ -78,19 +78,35 @@ try {
   check('对照世界 B 存在', Boolean(world.B), world.B?.t != null ? 't=' + world.B.t + (world.mode === 'game' ? '（game 模式下冻结，正常）' : '') : '');
 
   // P0-1：线上只有这条能证明营地路由真的在工作（第三方 cookie 在 iframe 里可能失效）。
-  // 只读：key 由操作者通过 SMOKE_CAMP_KEY 提供（/saves 按设计不投影 key，脚本也不能代开营地）。
-  if (process.env.SMOKE_CAMP_KEY) {
+  // 只读路由检查。key 可以由操作者给（SMOKE_CAMP_KEY），也可以只给名字（SMOKE_CAMP_NAME）：
+  // 归一化必须走服务端同一个 normalizeName，脚本自己复制一份迟早和线上算出不一样的键。
+  // 建档这一下脚本代不了——网关把独立访问打回 iframe，写路由从外面判 CROSS_SITE，
+  // 所以名字要在页面里点一次，之后这里全是只读。
+  let campKey = process.env.SMOKE_CAMP_KEY || '';
+  if (!campKey && process.env.SMOKE_CAMP_NAME) {
+    const { normalizeName } = await import('../life/camp-instances.mjs');
+    const id = normalizeName(process.env.SMOKE_CAMP_NAME);
+    if (id.ok) campKey = id.key;
+    else check('camp 名字归一化', false, 'SMOKE_CAMP_NAME 被拒：' + id.code);
+  }
+  if (campKey) {
     try {
-      const key = process.env.SMOKE_CAMP_KEY;
+      const key = campKey;
       const withCamp = await (await get('/world?camp=' + encodeURIComponent(key))).json();
       const plain = await (await get('/world')).json();
       check('camp 路由：?camp= 指向该营地', withCamp?.camp?.key === key, 'camp=' + (withCamp?.camp?.name ?? 'null'));
       check('camp 路由：不带 camp 是主营地', plain?.camp == null, 'camp=' + (plain?.camp?.name ?? 'null'));
+      check('camp 路由：label 不是哈希回落', Boolean(withCamp?.camp?.name) && withCamp.camp.name !== key, 'name=' + (withCamp?.camp?.name ?? 'null'));
+      check('camp 路由：两份世界各自独立', withCamp?.survival?.t !== undefined && plain?.survival?.t !== undefined,
+        `营地 t=${withCamp?.survival?.t} · 主营地 t=${plain?.survival?.t}`);
+      const bad = await (await get('/world?camp=' + encodeURIComponent('../etc/passwd'))).json();
+      check('camp 路由：非法 key 回落主营地而不是空世界', bad?.camp == null && Boolean(bad?.survival),
+        `camp=${JSON.stringify(bad?.camp)} survival=${bad?.survival ? 't=' + bad.survival.t : 'null'}`);
     } catch (error) {
       check('camp 路由检查', false, String(error?.cause?.code ?? error));
     }
   } else {
-    skip('camp 路由', '未提供 SMOKE_CAMP_KEY（/saves 不投影 key）');
+    skip('camp 路由', '未提供 SMOKE_CAMP_KEY / SMOKE_CAMP_NAME（建档要在页面里点一次）');
   }
 } catch (error) {
   check('/world 可读', false, String(error?.cause?.code ?? error));
