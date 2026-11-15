@@ -1848,10 +1848,19 @@ function campPoint(cv, ev) {
 // 本版本只提供 3D 世界：没有 WebGL 就明确告知并挡住入口，不再退到第二套 2D 画面。
 // hard=true 表示设备能力不足（按钮一并禁用）；false 表示这一帧渲染失败（可刷新重试）。
 let gfxNoticeShown = '';
-function showGfxUnavailable(hard) {
-  const msg = hard
+// 渲染失败策略（审计 2026-11-15 的 POTENTIAL #2）：
+// 旧实现每帧都 console.warn + 重试，注入一次"每帧抛错"实测 6 秒虚拟时间里打了 26 条，
+// 且永远不停。这里给一条连续失败计数：只记第一次、到上限就停试并换成明确文案。
+const GFX_FAILURE_LIMIT = 5;
+let gfxFailureRun = 0;
+let gfxGaveUp = false;
+let gfxFaultMessage = '';   // 非空＝渲染处于故障态，renderPlayMode 必须让提示持续可见
+
+function showGfxUnavailable(hard, custom) {
+  const msg = custom ?? (hard
     ? '此设备或浏览器不支持 WebGL，无法显示 3D 世界。请改用较新的 Chrome / Edge / Firefox，或在浏览器设置里开启硬件加速后刷新。'
-    : '3D 渲染这一帧失败了，画面已暂停。刷新页面可重试。';
+    : '3D 渲染这一帧失败了，画面已暂停。刷新页面可重试。');
+  gfxFaultMessage = msg;
   if (gfxNoticeShown === msg) return;
   gfxNoticeShown = msg;
   const box = $('playNotice');
@@ -1867,12 +1876,22 @@ function showGfxUnavailable(hard) {
 
 function draw(cv, w) {
   cv._anim = ACT.frame;   // 渲染元数据：验收可核对 A/B 是否共用同一动画帧号
-  if (!campRenderer) { showGfxUnavailable(true); return; }
+  if (!campRenderer || gfxGaveUp) { showGfxUnavailable(!campRenderer); return; }
   if (cv.id === 'cvB' && !ui.compare) return;
   try {
-    if (drawCamp(cv, w)) return;
+    if (drawCamp(cv, w)) {
+      gfxFailureRun = 0;
+      gfxFaultMessage = ''; gfxNoticeShown = '';
+      return;
+    }
   } catch (error) {
-    console.warn('3D 绘制失败', error);
+    gfxFailureRun += 1;
+    if (gfxFailureRun === 1) console.warn('3D 绘制失败', error);   // 只记第一次，避免每帧刷日志
+    if (gfxFailureRun >= GFX_FAILURE_LIMIT) {
+      gfxGaveUp = true;
+      showGfxUnavailable(false, '3D 渲染连续失败，已停止重试。刷新页面可重试。');
+      return;
+    }
     showGfxUnavailable(false);
   }
 }
@@ -3005,6 +3024,8 @@ const ROOM_LABELS = { ...LOCS, workshop: '工坊', garden: '菜园', well: '井�
 const collisionEditor = { cells: () => new Map(), revision: 0 };
 
 function renderPlayMode(sv, comparison = S.comparison) {
+  // 离开菜单时交给世界场景音频（audio.scene 会在下一轮把菜单主题换成营地主题）。
+  if (!ui.menu) audio.menu(false);
   const hasSurvival=Boolean(sv);
   S.survivalView=sv;
   S.comparison=comparison;
@@ -3035,6 +3056,12 @@ function renderPlayMode(sv, comparison = S.comparison) {
       : !S.campReady ? '当前入口的生存服务版本较旧。新版入口支持家具存取、睡觉和采集工具。' : '';
   notice.hidden=!message;
   if ($('playNoticeText').textContent!==message) $('playNoticeText').textContent=message;
+  // 渲染故障是"持续态"：renderPlayMode 每轮轮询都会按上面的 message 重置可见性，
+  // 所以这里必须把故障提示重新压回去，否则它只会闪现一轮（实测截图里完全看不到）。
+  if (gfxFaultMessage) {
+    notice.hidden = false;
+    if ($('playNoticeText').textContent !== gfxFaultMessage) $('playNoticeText').textContent = gfxFaultMessage;
+  }
   const isLocal=['localhost','127.0.0.1','[::1]'].includes(location.hostname);
   preview.hidden=!isLocal || S.campReady || location.port==='17948';
   if (!preview.hidden) preview.href='http://127.0.0.1:17948/';
@@ -3053,6 +3080,11 @@ let audioWindowSig = null;
 let audioPrev = null;
 function syncAudioScene(sv) {
   if (!sv) return;
+  // 审计 2026-11-15 POTENTIAL #1：菜单用独立主题（audio.menu），世界场景音频不得接管。
+  // 旧实现没有这条守卫，而 audio.scene() 会无条件把 state.menu 置 false ⇒
+  // 点「主菜单」后菜单曲最多活一次轮询（≤900ms）就被营地音乐顶掉。
+  // 同时把签名清空：回到游玩时下一轮会重新应用世界场景。
+  if (ui.menu) { audioSceneSig = null; audioWindowSig = null; return; }
   const sig = sceneSignature(sv);
   // 播放窗口每轮都重算（纯函数，成本可忽略）：它比场景签名变得频繁，音乐该淡出时就淡出。
   const win = musicWindow(sv, { now: sv.t ?? 0 });
@@ -3395,7 +3427,7 @@ function cycleAudio(){
 }
 $('btnAudio').onclick=cycleAudio;
 bindAudioDialogs();
-const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); } };
+const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); if (ui.menu) audio.menu(true); } };
 ['pointerdown','keydown'].forEach(type=>window.addEventListener(type,unlockAudio,{once:true,capture:true}));
 paintAudioButton();
 // 说明书 / 家庭与住房：局内屏幕中央新 UI

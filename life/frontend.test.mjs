@@ -130,3 +130,18 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
     await new Promise((r) => setTimeout(r, 400));
   }
 });
+
+test('F8 菜单主题不得被世界场景音频接管（审计 POTENTIAL #1）', () => {
+  // 旧实现：syncAudioScene 无菜单守卫，而 audio.scene() 会无条件 state.menu=false
+  // ⇒ 点「主菜单」后菜单曲最多活一次轮询（≤900ms）就被营地音乐顶掉。
+  assert.match(APP, /function syncAudioScene\(sv\) \{[\s\S]{0,500}?if \(ui\.menu\)/, 'syncAudioScene 缺菜单守卫');
+  assert.match(APP, /if \(ui\.menu\) audio\.menu\(true\)/, '首次手势解锁后没有补起菜单主题（菜单会静音）');
+  assert.match(APP, /audio\.menu\(false\)/, '离开菜单时没有交还给世界场景音频');
+});
+
+test('F9 渲染连续失败必须只记一次日志、到上限停试、且提示持续可见（审计 POTENTIAL #2）', () => {
+  assert.match(APP, /const GFX_FAILURE_LIMIT = \d+;/, '没有连续失败上限');
+  assert.match(APP, /gfxFailureRun === 1\) console\.warn/, '日志不是只记第一次（实测旧实现 6 秒打了 26 条）');
+  assert.match(APP, /gfxGaveUp = true;/, '到上限没有停试，会每帧无限重试');
+  assert.match(APP, /if \(gfxFaultMessage\) \{[\s\S]{0,200}notice\.hidden = false/, '故障提示会被 renderPlayMode 每轮重置隐藏');
+});
