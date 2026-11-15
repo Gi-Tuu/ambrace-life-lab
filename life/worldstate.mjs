@@ -4,7 +4,7 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
-import { initProduction, effectiveMods, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
+import { initProduction, effectiveMods, addFood, takeFood, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 
 export const SURV = Object.freeze({
@@ -134,7 +134,9 @@ export function advanceSurvival(world) {
   let shortfall = 0;
   if (!ended) {
     world.observeProduction?.('ration', 'store', Math.min(s.store, need));
-    if (s.store >= need) s.store -= need;
+    // gameRules：按品类扣配给；研究世界保持原算术
+    if (s.food) { const taken = takeFood(s, null, need); shortfall = need - taken; }
+    else if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
   }
 
@@ -198,7 +200,9 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   s.yieldTotal = (s.yieldTotal ?? 0) + yieldAmt;
   s.harvestCount = (s.harvestCount ?? 0) + 1;
   const before = s.store;
-  s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
+  // gameRules：收获按品类入库；研究世界保持原算术
+  if (s.food) addFood(s, 'crop', Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  else s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
   world.observeProduction?.('gross', 'crop', yieldAmt);
   world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };

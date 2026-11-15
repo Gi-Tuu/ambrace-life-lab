@@ -2218,7 +2218,9 @@ function inspectRoomProp(prop) {
     if (facility) {
       const use=(type,tool)=>performCamp({kind:'facility_use',target:ui.interior,type,tool},ui.interior,()=>inspectRoomProp(prop));
       if (prop.kind==='grain') {
-        $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap} · 背包作物 ${s.pinv.p1.crop??0}`;
+        const FOOD_ZH={crop:'作物',berry:'浆果',fruit:'果',egg:'蛋',milk:'奶',meat:'肉'};
+        const fb=s.food?Object.entries(s.food).filter(([,n])=>n>0).map(([k,n])=>`${FOOD_ZH[k]??k} ${n}`).join(' · '):'';
+        $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap}${fb?`（${fb}）`:''} · 背包作物 ${s.pinv.p1.crop??0}`;
         propOption(options,'存入一份作物',!(s.pinv.p1.crop>=1)?'背包没有作物':s.store+1>s.storeCap?'公仓已满':'',()=>use('deposit'));
         propOption(options,'领取一份粮食',s.store<1?'公仓没有整份粮食':'',()=>use('withdraw'));
       } else if (facility.type==='shelter') {

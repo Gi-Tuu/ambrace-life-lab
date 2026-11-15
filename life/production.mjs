@@ -26,6 +26,44 @@ export const GAME_BUILDINGS = Object.freeze({
 // 开关刻意不是 independentWorld：长程/游戏预设的研究样本也用它，会把既有读数一起改掉。
 // gameRules 默认关，只有正式部署与演示显式打开。
 export const buildingsFor = (world) => (world?.gameRules ? GAME_BUILDINGS : BUILDINGS);
+
+// 分类粮仓（2026-11-15，仅 gameRules）：s.store 永远等于各品类之和，
+// 既有逻辑（配给、生态、饥荒阈值）继续读总数，研究世界则完全没有 s.food。
+export const FOOD_KINDS = Object.freeze(['crop', 'berry', 'fruit', 'egg', 'milk', 'meat']);
+export function initFoodStore(s) {
+  s.food = Object.fromEntries(FOOD_KINDS.map((k) => [k, 0]));
+  s.food.crop = Math.max(0, s.store ?? 0); // 旧存量按作物入账，保证 sum(food) === store
+  return s.food;
+}
+export function addFood(s, kind, n = 1) {
+  if (!s.food || n <= 0) return 0;
+  const k = FOOD_KINDS.includes(kind) ? kind : 'crop';
+  s.food[k] = (s.food[k] ?? 0) + n;
+  s.store = (s.store ?? 0) + n;
+  return n;
+}
+// 取一件并返回实际品类（玩家取用需要知道往背包里放什么）。
+export function takeFoodKind(s, want = null) {
+  if (!s.food) { if ((s.store ?? 0) < 1) return null; s.store -= 1; return 'crop'; }
+  if (want && (s.food[want] ?? 0) >= 1) { s.food[want] -= 1; s.store -= 1; return want; }
+  const k = [...FOOD_KINDS].sort((a, b) => (s.food[b] ?? 0) - (s.food[a] ?? 0))[0];
+  if (!k || (s.food[k] ?? 0) < 1) return null;
+  s.food[k] -= 1; s.store -= 1; return k;
+}
+// 取用：给 kind 就优先取该品类，否则从存量最多的品类开始。
+export function takeFood(s, kind = null, n = 1) {
+  if (!s.food) { const take = Math.min(s.store ?? 0, n); s.store = (s.store ?? 0) - take; return take; }
+  let left = n;
+  const order = kind ? [kind, ...FOOD_KINDS.filter((k) => k !== kind)] : [...FOOD_KINDS].sort((a, b) => (s.food[b] ?? 0) - (s.food[a] ?? 0));
+  for (const k of order) {
+    const t = Math.min(left, s.food[k] ?? 0);
+    s.food[k] -= t; left -= t;
+    if (!left) break;
+  }
+  const taken = n - left;
+  s.store = Math.max(0, (s.store ?? 0) - taken);
+  return taken;
+}
 export const buildDef = (world, type) => buildingsFor(world)[type] ?? BUILDINGS[type];
 export const GATHER_BY_LOC = Object.freeze({ yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' });
 export const gatherResource = (world,loc) => world.districts?.[loc]?.resource ?? GATHER_BY_LOC[loc];
@@ -262,7 +300,9 @@ export function doExchange(world, id, kind) {
   let gained;
   if (rate.store) {
     const before = s.store;
-    s.store = Math.min(cap, before + rate.store);
+    // gameRules 下按品类记账；研究世界仍是纯整数
+    if (s.food) addFood(s, kind, Math.min(cap - before, rate.store));
+    else s.store = Math.min(cap, before + rate.store);
     world.observeProduction?.('food', kind, s.store - before);
     gained = `粮+${rate.store}`;
   } else {
