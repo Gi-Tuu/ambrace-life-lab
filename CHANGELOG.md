@@ -42,7 +42,11 @@
 - 未搬的 7 个函数（`stepCampWalker`/`syncPlayerPos`/`savedOuting`/`peripheralStepCap`/`playAct`/
   `comparisonContact`）都抓着 `S`、`life3d`、`sessionStorage` 或 DOM；搬它们要拉一个很宽的上下文对象，
   收益是行数、代价是回归面，冻结前不做。
-- `app.js` 里还有约 1500 行的 2D 回退渲染器（阶段 2），等 UI 定稿后再动。
+- **本版本只做 3D（2026-11-15 决定）**：2D 游戏视口与 2D 碰撞工作台已删除，仓库里不再有第二套俯视渲染。
+  没有 WebGL 的设备会看到明确说明，入口按钮一并禁用。
+  *保留*：`paintTerrain` / `terrainPixels` / `paintForestFloor` / `outskirtsAtlas` / `campOutskirts` 与
+  `buildWorld` 的离屏画布——它们产出的正是 3D 着色器采样的 `uGround` 贴图与 `uWater` 掩码，删了就掉地面与水面。
+  *受影响*：手工碰撞覆盖（原本只在 localhost 生效、存在浏览器 localStorage）不再参与判定；线上行为不变。
 ## [0.1.1] - 2026-11-13
 
 ### 生存机制整合

@@ -44,7 +44,6 @@
 <header>
   <h1>拥爱生命实验室<span id="tagline">无尽生存 · 在荒野与居民共同生活 ｜ 长期经营：维持食物、住所和生态，应对四季与灾害 ｜ 与居民同一套存续规则：不吃饭会死</span></h1>
   <div id="backend" class="backend">后端：读取中…</div>
-  <button id="btnCollision" type="button" disabled hidden>碰撞编辑</button>
 </header>
 <div id="mapbar">
   <button id="btnMenu" type="button">主菜单</button>
@@ -225,45 +224,6 @@
     <button id="btnFullExit">✕ 退出全屏</button>
   </div>
 </div>
-<dialog id="collisionEditor" aria-labelledby="collisionTitle">
-  <div class="collision-row">
-    <h2 class="collision-title" id="collisionTitle">碰撞工作台</h2>
-    <label>场景 <select id="collisionScene"></select></label>
-    <div class="collision-row" role="group" aria-label="地图缩放">
-      <button id="collisionZoomOut" type="button" aria-label="缩小" disabled>−</button>
-      <select id="collisionZoom" aria-label="缩放倍率">
-        <option value="1">适应窗口</option><option value="2">2 倍</option><option value="4">4 倍</option>
-        <option value="8">8 倍</option><option value="16">16 倍</option>
-      </select>
-      <button id="collisionZoomIn" type="button" aria-label="放大">＋</button>
-    </div>
-    <button id="collisionClose" type="button">返回游戏</button>
-  </div>
-  <div class="collision-row" aria-label="碰撞工具">
-    <button type="button" data-collision-tool="block" aria-pressed="true">画阻挡</button>
-    <button type="button" data-collision-tool="clear" aria-pressed="false" title="覆盖地图阻挡，素材蒙版仍生效">擦成可走</button>
-    <button type="button" data-collision-tool="inherit" aria-pressed="false" title="删除笔刷范围内的手绘覆盖">恢复原样</button>
-    <button type="button" data-collision-tool="test" aria-pressed="false">试走</button>
-    <button type="button" data-collision-tool="pan" aria-pressed="false">拖动地图</button>
-    <label>笔刷边长 <input id="collisionBrush" type="number" min="1" max="32" step="1" value="1"> 像素</label>
-    <button type="button" id="collisionUndo">撤销</button>
-    <button type="button" id="collisionRedo">重做</button>
-    <label><input type="checkbox" id="collisionOverlay" checked> 显示碰撞</label>
-  </div>
-  <div id="collisionSurface" tabindex="0" aria-label="可滚动的场景画布">
-    <canvas id="collisionCanvas" tabindex="0" aria-label="碰撞编辑地图"></canvas>
-  </div>
-  <div class="collision-row">
-    <span class="collision-block">红色挡路</span><span class="collision-clear">绿色为通行覆盖</span>
-    <span>紫色为房间边界 · 素材阻挡优先</span><span id="collisionCursor"></span>
-  </div>
-  <div class="collision-row">
-    <button type="button" id="collisionClearPass">清除本场景通行覆盖</button>
-    <button type="button" id="collisionExport">导出 JSON</button>
-    <label class="collision-import">导入 JSON<input id="collisionImport" type="file" accept=".json,application/json" aria-label="导入碰撞 JSON"></label>
-    <span id="collisionStatus" role="status"></span>
-  </div>
-</dialog>
 <script type="module" src="/web/app.js"></script>
 </body>
 </html>
