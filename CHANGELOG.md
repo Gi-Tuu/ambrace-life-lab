@@ -24,7 +24,7 @@
 
 - README/创作手记/CHANGELOG 同源刷新：测试 556 项/82 文件、模块 180、覆盖率行 90.24%/分支 88.35%/函数 92.10%（2026-11-15 实测）。
 
-## [Unreleased]
+## [0.1.2] - 2026-11-15
 
 ### 重构（web/app.js 阶段 3/4）
 - `web/player-move.mjs`：行走几何（`TILE` / `rectGap` / `campBodyWorld` / `exteriorAllows` /
