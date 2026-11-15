@@ -527,7 +527,7 @@ function buildWorld(w) {
   const trees = [];
   const chimneys = [];
   // 高个可遮挡物（树 / 屋舍）不再烘进静态底图，而是各自记录为对象，交给 drawViewport 按脚底 Y 深度排序绘制。
-  const objects = [], bridges = [], rocks = [];
+  const bridges = [], rocks = [];
 
   // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
   const roads=[],bins=new Map(),binSize=64;
@@ -709,7 +709,7 @@ function buildWorld(w) {
     if (mask) masks.push(mask);
     occupy(tx, ty, mask);
     trees.push([tx, ty]);
-    objects.push({ kind: 'tree', tx, ty });
+
   }
 
   // 世界植被：果树棵数与服务器 livestock.orchards 同源绑定（改量#12 遗项⑤），其余植被确定性哈希。
@@ -752,16 +752,16 @@ function buildWorld(w) {
       for (const [px,py] of [[-4,-4],[3,-4],[-4,-1],[3,-1]]) occupy(sx + px, sy + py, mask); // 四柱
     }
     const chimney = r === 'workshop';
-    if (r === 'hall') {
-      // 两段绘制：背段（屋顶/后柱/后棍）先画，前段（前柱/前棍）后画 ⇒ 站上站台被前柱/前棍遮挡
-      objects.push({ kind:'house', part:'back', site:r, sx, sy, foot: sy-4, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
-      objects.push({ kind:'house', part:'front', site:r, sx, sy, foot: sy-1, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
-    } else {
-      objects.push({
-        kind: 'house', site: r, sx, sy, roof: ROOF[i % ROOF.length],
-        thing: SITE_THING[r], fence: r === 'yard' || r === 'well', chimney,
-      });
-    }
+
+
+
+
+
+
+
+
+
+
     if (chimney) chimneys.push([sx + 1, sy - 6]);
   });
 
@@ -801,7 +801,7 @@ function buildWorld(w) {
   const waterMask=scene3d ? {width:WORLD_W,height:WORLD_H,bytes:terrain.map(k=>k===GROUND.water?255:0)} : null;
   const terrainWalk3d=scene3d ? terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE))))) : null;
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -832,14 +832,17 @@ function contactProfile(image){
     if(pixels[(y*c.width+x)*4+3]===255){edge[x]=y+1;break;}
   }
   CONTACT_PROFILES.set(image,edge);return edge;
-}const treeAsset = (x, y) => `tree_oak${Math.floor(hash2(x, y, 6) * 3)}`;// 生存建筑实体：素材钩子 bld_<type> 优先（美术到货即生效），缺省程序化像素兜底（色板内）。
+}
+const treeAsset = (x, y) => `tree_oak${Math.floor(hash2(x, y, 6) * 3)}`;
+// 生存建筑实体：素材钩子 bld_<type> 优先（美术到货即生效），缺省程序化像素兜底（色板内）。
 const BLD_ROOF = { shelter: '#FF004D', granary: '#83769C', workshop: '#008751', wall: '#D8A667' };
 
 
 const BLD_LABEL = { shelter: '住所', granary: '储粮', workshop: '工坊', wall: '防护' };
 const BLD_LABOR = { shelter: 6, granary: 6, workshop: 8, wall: 8 };
 // 环境光由世界相位决定，过渡只使用共享渲染时钟；每一输出颜色仍在固定色板内。
-const TONE_CACHE=new Map();// ── 点哪走哪（纯表现层）───────────────────────────────────────────────────────
+const TONE_CACHE=new Map();
+// ── 点哪走哪（纯表现层）───────────────────────────────────────────────────────
 // 引擎是「地点制」：w.occupancy 决定 p1 在哪个地点，/act move 也只把人挪到某个地点。
 // 这里不改世界状态、不发请求、不消费 rng —— 只是把「角色此刻画在哪」从「瞬移到地点」
 // 变成「沿 A* 路径走过去」。点击空地 = 一个纯视觉的临时目标；引擎一旦把人挪走（auth 变化），
@@ -1179,7 +1182,8 @@ function roomNavigation(g,w,site){
   for(const [room,x,label] of [['home',0,'← 居所'],['store',218,'公仓 →']])if(w.rooms?.[room]){
     g.fillStyle='#514134';g.fillRect(x,104,38,22);g.fillStyle='#EDC787';g.fillRect(x,104,38,1);g.fillStyle='#FFF0CC';g.fillText(label,x+4,118);
   }
-}let campAngle=0;
+}
+let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
 const campFog=new WeakMap();
 const previewFlags=new URLSearchParams(location.search);
@@ -3019,7 +3023,8 @@ function table(a, b) {
 const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true, masks: null, layer: null };
 
 const MAP_GRID={width:WORLD_W,height:WORLD_H,cell:COLLISION_CELL,legacy:[96*TILE,64*TILE]};
-const ROOM_LABELS = { ...LOCS, workshop: '工坊', garden: '菜园', well: '井台', yard: '院子' };// 2D 碰撞工作台已移除（本版本只做 3D）。玩法侧的碰撞栅格仍然通过这些调用点读"手工覆盖"，
+const ROOM_LABELS = { ...LOCS, workshop: '工坊', garden: '菜园', well: '井台', yard: '院子' };
+// 2D 碰撞工作台已移除（本版本只做 3D）。玩法侧的碰撞栅格仍然通过这些调用点读"手工覆盖"，
 // 所以保留一个不渲染、不读 localStorage 的空实现：cells() 永远返回空集合，revision 恒为 0。
 const collisionEditor = { cells: () => new Map(), revision: 0 };
 
@@ -3204,7 +3209,8 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
-    syncAudioScene(viewA);    if (!$('worldMain').hidden) {
+    syncAudioScene(viewA);
+    if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
       else { draw($('cvA'), viewA); if (B) draw($('cvB'), B); }
     }
