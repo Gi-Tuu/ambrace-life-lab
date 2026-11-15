@@ -60,7 +60,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
-│  ├─ *.test.mjs          #   92 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   93 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
@@ -107,6 +107,8 @@ node serve.mjs          # http://localhost:7860
 ```bash
 cp .env.example .env               # 然后填 MODEL_PROVIDERS / MODEL_KEYS / MODEL_NAME
 node --env-file=.env serve.mjs
+# 注意：GAME_RULES（游戏态规则层）只写在镜像 ENV 里。本地默认关，想复现线上手感用
+#   GAME_RULES=1 node serve.mjs   或把它写进 .env 再 --env-file 启动。
 ```
 
 环境变量的完整清单（含每个开关的"不设＝什么行为"）见 [`.env.example`](./.env.example)。
@@ -133,8 +135,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 92 个测试文件 / 597 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 90.25% / 分支 88.13% / 函数 92.15%，92 个被加载模块；2026-11-15 实测）
+npm test          # 93 个测试文件 / 603 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 90.29% / 分支 88.17% / 函数 92.18%，92 个被加载模块；2026-11-15 实测）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
 npm run check     # lint + art:check + test

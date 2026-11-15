@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { BUILDINGS, GAME_BUILDINGS, buildingsFor, buildDef, doPlan, doBuild, addFood, takeFood, takeFoodKind } from './production.mjs';
 import { createSurvPlay } from './survplay.mjs';
 import { advanceSurvival } from './worldstate.mjs';
+import { dumpSurv, loadSurv } from './survplay.mjs';
 import { survView } from './survplay.mjs';
 
 test('R1 研究世界仍用原表（五面基线不被动到）', () => {
@@ -91,4 +92,30 @@ test('R5 灯火燃料：游戏世界每天烧一份木料并记亮/灭；研究�
   advanceSurvival(rw);
   assert.equal(survView(research).light, null, '研究世界没有灯火概念');
   assert.equal(rs.inv.wood, 5, '研究世界不烧柴');
+});
+
+test('R4b 载入无 food 的旧档后仍总数守恒', () => {
+  // 旧档：开关之前烘的，只有整数 store，没有分档
+  const legacy = createSurvPlay(7);
+  legacy.world.survival.store = 17;
+  const raw = structuredClone(dumpSurv(legacy));
+  assert.equal(raw.survival.food, undefined, '旧档不应带分档');
+
+  const loaded = loadSurv(raw, 7, { gameRules: true });
+  const s = loaded.world.survival;
+  assert.ok(s.food, '载入后应当补出分档');
+  assert.equal(
+    Object.values(s.food).reduce((a, b) => a + b, 0), s.store,
+    '载入后 Σfood 必须等于 store',
+  );
+
+  // 推进两天配给：差额仍必须为 0（旧实现在这里会永久挂着 11）
+  loaded.world.t = 24; s.lastDay = -1;
+  advanceSurvival(loaded.world);
+  loaded.world.t = 48; s.lastDay = -1;
+  advanceSurvival(loaded.world);
+  assert.equal(
+    Object.values(s.food).reduce((a, b) => a + b, 0), s.store,
+    '推进两天后 Σfood 仍须等于 store',
+  );
 });

@@ -17,7 +17,7 @@ import { speechLine } from './speech.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, addFood, takeFood, takeFoodKind, initFoodStore, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, addFood, takeFood, takeFoodKind, initFoodStore, FOOD_KINDS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
@@ -855,6 +855,17 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    // 旧档（开关之前烘的）没有 food 字段：新建世界留下的分档必须按载入后的 store 重新入账，
+    // 否则 Σ分档 与 store 会永久差着一截，配给扣完而公仓显示不变。
+    if (sp.world.gameRules && sp.world.survival) {
+      const s = sp.world.survival;
+      // 旧档没有分档：先按载入后的 store 建账（全部记作物，不凭空猜品类）。
+      if (!s.food) initFoodStore(s);
+      // 任何载入路径都要保证 Σ分档 === store：差多少就补/扣作物，不动其它品类。
+      const sum = FOOD_KINDS.reduce((n, k) => n + (s.food[k] ?? 0), 0);
+      const diff = (s.store ?? 0) - sum;
+      if (diff !== 0) s.food.crop = Math.max(0, (s.food.crop ?? 0) + diff);
+    }
     restoreDistricts(w);
     restoreFarmPlots(w);
     restoreSources(w);
