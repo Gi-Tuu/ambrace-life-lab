@@ -51,6 +51,34 @@ for (const f of sources) {
   }
 }
 
+// 2b) 具名导入必须真的被导出（node --check 只查语法，抓不到 "does not provide an export named"）
+for (const f of sources) {
+  const text = readFileSync(f, 'utf8');
+  for (const m of text.matchAll(/import\s*\{([^}]+)\}\s*from\s*'(\.{1,2}\/[^']+)'/g)) {
+    const names = m[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+    const target = resolve(dirname(f), m[2]);
+    if (!existsSync(target)) continue; // 已在 2) 报过
+    const t = readFileSync(target, 'utf8');
+    if (/export\s+\*/.test(t)) continue; // 星号再导出：不在这里猜
+    const exported = new Set();
+    // 单声明：export function f / export class C / export const A = ...
+    for (const e of t.matchAll(/export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/g)) exported.add(e[1]);
+    // const/let/var 可能有多个声明符（export const A=1, B=2;），逐个取；解构形态跳过，宁漏不误报
+    for (const e of t.matchAll(/export\s+(?:const|let|var)\s+([^;\n]*)/g)) {
+      const decl = e[1].trim();
+      if (decl.startsWith('{') || decl.startsWith('[')) continue;
+      for (const part of decl.split(',')) {
+        const m = /^\s*([A-Za-z_$][\w$]*)\s*=/.exec(part);
+        if (m) exported.add(m[1]);
+      }
+    }
+    for (const e of t.matchAll(/export\s*\{([^}]+)\}/g)) for (const n of e[1].split(',')) exported.add(n.trim().split(/\s+as\s+/).pop());
+    if (/export\s+default/.test(t)) exported.add('default');
+    for (const n of names) {
+      if (!exported.has(n)) fail(`${rel(f).replace(rel(ROOT) + '/', '')} 从 ${m[2]} 导入了 ${n}，但那边没有导出它`);
+    }
+  }
+}
 // 3) JSON 可解析
 const jsons = [
   join(ROOT, 'package.json'),

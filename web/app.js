@@ -13,6 +13,10 @@ import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignatur
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
+import { TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
+import { postJson, persistNotices } from './net.mjs';
+
+
 import {
   COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
   overrideWalk, pathFromWalker, roomAllows,
@@ -23,6 +27,18 @@ import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels,
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 import { createCollisionEditor } from './collision-editor.mjs';
+
+async function api(path, body) {
+  const result = await postJson(path, body);
+  const notice = persistNotices(result, path);
+  if (notice) {
+    const warning = $('saveNotice');
+    warning.hidden = notice === 'ok';
+    if (notice === 'lost') warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
+  }
+  return result;
+}
+
 // 验收/调试钩子：占位碰撞与寻路可在浏览器内断言（drive6 用）
 window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf, talk: (target) => openTalkWith(target) };
 const ROOMS = ['home', 'hall', 'watch', 'store'];
@@ -129,25 +145,13 @@ function comparisonContact(body) {
   return {from, to:person?[person.x,person.z]:null};
 }
 
-async function api(path, body) {
-  const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const result = await res.json();
-  if (result.persisted === false) {
-    const warning = $('saveNotice');
-    warning.hidden = false;
-    warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
-  } else if (result.persisted === true || path.startsWith('/world') && !result.saveError) {
-    $('saveNotice').hidden = true;
-  }
-  return result;
-}
+
 
 // ── 自然世界地图 ──────────────────────────────────────────────────────────────
 // 引擎仍是「地点制」：w.rooms 是地点表、w.loc.p1 是玩家所在地点、w.occupancy 是各地点的人。
 // 载荷字段一个不动；这里只在表现层把地点摆进一张连续的自然地形，用相机视口取局部放大画面。
 // 世界地图与视口分开；旧地形坐标保持原位，住宅区向东南扩展。
-const TILE = 16; // 寻路与布局单位；美术原生 32px，通过独立密度映射，避免改动世界坐标。
+
 const ART = 2;
 const WORLD_TW=TOWN_SIZE.width, WORLD_TH=TOWN_SIZE.depth;
 const WORLD_W=WORLD_TW*TILE, WORLD_H=WORLD_TH*TILE;
@@ -1047,54 +1051,9 @@ function roomPlayerPosition(pos, site) {
 }
 let roomRoute=null;
 // isWalkable / astar / stepWalker 都在 web/walk.mjs（纯函数、可单测）。这里只保留行走器状态表与接线。
-function campBodyWorld(world,openEdge=false) {
-  return { ...world, collisionGrid:bodyGrid(world.collisionGrid,TILE,openEdge) };
-}
-function exteriorAllows(world,x,z) {
-  return world.landscape?.walkable(x,z) &&
-    !(world.outsideSolids??[]).some(b=>rectGap(x,z,b.x,b.z,b.w,b.d)<CAMP_BODY_RADIUS);
-}
-function routeForWalker(world, walker, goal, bodies=[]) {
-  const from=[walker.x+.5,walker.y+.5], to=goal.map(v=>v+.5);
-  if (world.landscape && (!inCamp(...from) || !inCamp(...to))) {
-    const map=campBodyWorld(world,true);
-    const allows=(x,z)=>(inCamp(x,z)?mapAllows(map,x-.5,z-.5):exteriorAllows(world,x,z)) &&
-      bodies.every(b=>Math.hypot(x-b.x,z-b.z)>=b.r+CAMP_BODY_RADIUS+.05);
-    return joinedRoute(from,to,allows)
-      ?.map(p=>p.map(v=>v-.5))??null;
-  }
-  const path = pathFromWalker(world, walker, goal);
-  if (!world.scene3d) return path;
-  world=campBodyWorld(world);
-  if (!mapAllows(world,...goal)) return null;
-  // 快速路线在穿过窄栏杆时可能遗漏细格，逐段复核后再采用。
-  if (path) {
-    let x=walker.x, z=walker.y;
-    const complete=[...path,goal], smooth=[];
-    const clear=([nx,nz])=>{
-      const dx=nx-x, dz=nz-z, steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)*TILE*2));
-      for (let i=1;i<=steps;i++) {
-        const px=x+dx*i/steps, pz=z+dz*i/steps;
-        if (!mapAllows(world,px,pz) || !mapAllows(world,px,pz-dz/steps)) return false;
-      }
-      return true;
-    };
-    for (let i=0;i<complete.length;) {
-      let next=Math.min(i+2,complete.length-1);
-      while (next>i && !clear(complete[next])) next-=1;
-      if (!clear(complete[next])) break;
-      [x,z]=complete[next];
-      smooth.push(complete[next]);
-      i=next+1;
-      if (i===complete.length) return smooth;
-    }
-  }
-  const pixel = v=>Math.floor((v+.5)*TILE);
-  const start = [pixel(walker.x),pixel(walker.y)];
-  const exact = pixelPath(world.collisionGrid,start,goal.map(pixel));
-  if (!exact?.length) return exact;
-  return [start,...exact].map(cell=>cell.map(v=>(v+.5)/TILE-.5));
-}
+
+
+
 
 function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   const distance=Math.hypot(dx,dz);
@@ -1140,20 +1099,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   }
 }
 
-function detourAroundBodies(world,walker,neighbours) {
-  const nearby=neighbours.filter(o=>Math.hypot(o.x-walker.x-.5,o.z-walker.y-.5)<2.5);
-  if (!nearby.length) return null;
-  const grid=world.collisionGrid, walk=grid.walk.slice();
-  for (const o of nearby) {
-    const r=o.r+CAMP_BODY_RADIUS+.08;
-    const x=Math.floor((o.x-r)*TILE), z=Math.floor((o.z-r)*TILE);
-    fillCollisionRect(walk,grid.tw,grid.th,x,z,Math.ceil((o.x+r)*TILE)-x,Math.ceil((o.z+r)*TILE)-z,0);
-  }
-  const pixel=coordinate=>Math.floor((coordinate+.5)*TILE);
-  const [goalX,goalZ]=walker.path.at(-1);
-  const path=pixelPath({...grid,walk},[pixel(walker.x),pixel(walker.y)],[pixel(goalX),pixel(goalZ)]);
-  return path?.length ? path.map(cell=>cell.map(v=>(v+.5)/TILE-.5)) : null;
-}
+
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
 // 允许速度＝PLAYER_UNITS_PER_TICK×1000/tickMs（单位/秒），换算每帧 tile 数；村内不限（保留冲刺）。
@@ -2636,9 +2582,7 @@ const ROOM_PROPS = {
   cart: ['手推车','整理随身材料。'],
   pen: ['养殖围栏','查看存栏、兑换收成或用公仓材料扩建。'],
 };
-function rectGap(x,z,left,top,w,d) {
-  return Math.hypot(Math.max(left-x,x-left-w,0),Math.max(top-z,z-top-d,0));
-}
+
 function atRoomDoor(site, walking=false) {
   const x=IPOS.x+8, z=IPOS.y+16;
   if (walking && site==='hall') return hallExitAt(hallFront,x,z,true);

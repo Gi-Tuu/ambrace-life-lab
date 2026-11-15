@@ -24,6 +24,25 @@
 
 - README/创作手记/CHANGELOG 同源刷新：测试 556 项/82 文件、模块 180、覆盖率行 90.24%/分支 88.35%/函数 92.10%（2026-11-15 实测）。
 
+## [Unreleased]
+
+### 重构（web/app.js 阶段 3/4）
+- `web/player-move.mjs`：行走几何（`TILE` / `rectGap` / `campBodyWorld` / `exteriorAllows` /
+  `detourAroundBodies` / `routeForWalker`）从 `app.js` 抽出。都是纯函数，不读 DOM、不读模块级状态、不消费随机。
+  `exteriorAllows` 的返回值由 `undefined` 收紧为真布尔（调用点都在布尔上下文，判定不变）。
+- `web/net.mjs`：`postJson()` + `persistNotices()`。后者把"存档失败要不要提示"变成可单测的纯函数，
+  DOM 提示留在 `app.js` 的薄包装里。
+- `life/player-move.test.mjs`：8 条闸门（矩形距离、身体半径挖边、外部可走性、通路/封死寻路、
+  绕人不改写栅格、存档提示判定、POST 形状与非 2xx 抛错），每条都写了变红法。
+- `scripts/check.mjs`：新增**具名导出检查**——`node --check` 只查语法，抓不到
+  "does not provide an export named"。检查支持 `export const A=1, B=2;` 的多声明符（首版只取第一个，
+  造成过 `WORLD_TH` 假阳性，已修）。
+
+### 已知边界
+- 未搬的 7 个函数（`stepCampWalker`/`syncPlayerPos`/`savedOuting`/`peripheralStepCap`/`playAct`/
+  `comparisonContact`）都抓着 `S`、`life3d`、`sessionStorage` 或 DOM；搬它们要拉一个很宽的上下文对象，
+  收益是行数、代价是回归面，冻结前不做。
+- `app.js` 里还有约 1500 行的 2D 回退渲染器（阶段 2），等 UI 定稿后再动。
 ## [0.1.1] - 2026-11-13
 
 ### 生存机制整合
