@@ -132,6 +132,14 @@
   localStorage 只做持久化。实测：清空 localStorage 后用 `?camp=` 刷新，所有 `/world` 请求仍带 `camp=`。
   闸门 F12 结构性覆盖该路径。
 - 一处自身失误如实记：给快照加行内注释时 `//` 吞掉了同一行的 `saveError`，被 `node --check` 当场抓出，已修。
+### 回看面板 + `served` 徽章（P1，2026-11-15）
+- 开始页新增「这一段他们之间发生了什么」：只读 `/world` 的 `survival.converse`（最近 12 条），
+  每条显示 第几天 · 谁 → 谁 · act/topic 中文 · 原话 · 信任变化 · `served` 徽章（`standin` → **本地替身**）。
+- 全部用 `textContent` 与 `createElement` 渲染，不拼 `innerHTML`（原话是模型输出，按不可信文本处理）。
+- 面板与「当前营地」都按内存 provider（URL 优先）取营地；URL 直达没有本地名字时，用 `/world.camp.name` 兜底显示。
+- 闸门 F13（面板存在、读 converse、textContent、替身徽章中文、开始页会加载）。
+- 一次自身失误如实记：面板常量名 `ACT_ZH` 与既有常量重名 ⇒ 模块级 SyntaxError、整页不启动，F6 冒烟 19s 超时抓到；
+  改名 `CONV_ACT_ZH/CONV_TOPIC_ZH` 后恢复（F6 回到 ~3.1s）。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

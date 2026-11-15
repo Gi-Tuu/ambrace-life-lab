@@ -174,3 +174,11 @@ test('F12 URL 的 camp 是路由主路径：localStorage 不可用时轮询仍�
   assert.match(APP, /setCampProvider\(\(\) => campKeyNow\)/, 'provider 未绑定内存值');
   assert.match(APP, /campKeyNow = urlCampKey/, 'provider 初值没有优先取 URL');
 });
+
+test('F13 回看面板：只读 converse、全部 textContent、替身有徽章（P1）', () => {
+  assert.match(HTML, /id="conversePanel"/, '缺少回看面板容器');
+  assert.match(APP, /survival?.converse/, '面板没有读 converse');
+  assert.match(APP, /textContent = e\.text/, '原话必须走 textContent（不能拼 innerHTML）');
+  assert.match(APP, /served === 'standin' \? '本地替身'/, '替身句子必须有中文徽章');
+  assert.match(APP, /loadConverse\(\)/, '开始页没有加载对话');
+});

@@ -3485,15 +3485,66 @@ async function loadCampList() {
     }
   } catch { if (box) box.textContent = '读不到营地列表。'; }
 }
-function currentCamp() {
-  try { return { key: localStorage.getItem('ambrace.camp.v1'), name: localStorage.getItem('ambrace.campName.v1') }; } catch { return {}; }
+// P1：居民之间说过的话（只读）。数据来自 /world 的 survival.converse（最近 12 条）。
+const CONV_ACT_ZH = { request: '请求', offer: '提供', warn: '提醒', inform: '告知', greet: '问候', accuse: '指责', thank: '道谢', decline: '婉拒', refuse: '拒绝' };
+const CONV_TOPIC_ZH = { food: '吃食', firewood: '柴火', shelter: '住处', child: '孩子', work: '活计', weather: '天气', boundary: '地界', trust: '信任' };
+function serveBadge(served) {
+  const span = document.createElement('span');
+  span.className = 'served-badge' + (served === 'standin' ? ' standin' : '');
+  span.textContent = served === 'standin' ? '本地替身' : (served === 'node' ? '模型' : String(served ?? ''));
+  return span;
 }
-function renderCampCurrent() {
+async function loadConverse() {
+  const box = $('converseLog'); if (!box) return;
+  box.replaceChildren();
+  try {
+    const { key } = currentCamp();
+    const res = await fetch('/world' + (key ? '?camp=' + encodeURIComponent(key) : ''));
+    const j = await res.json();
+    const log = j?.survival?.converse ?? [];
+    const names = j?.survival?.agents ?? {};
+    if (!log.length) { box.textContent = '还没有人说过话。世界继续走，这里会出现他们之间的对话。'; return; }
+    for (const e of [...log].reverse()) {
+      const row = document.createElement('div');
+      row.className = 'converse-row';
+      const head = document.createElement('div');
+      head.className = 'converse-head';
+      const who = names[e.from]?.name ?? e.from;
+      const to = names[e.to]?.name ?? e.to;
+      head.textContent = `第${(e.day ?? 0) + 1}天 · ${who} → ${to} · ${CONV_ACT_ZH[e.act] ?? e.act}·${CONV_TOPIC_ZH[e.topic] ?? e.topic}`;
+      head.appendChild(serveBadge(e.served));
+      const line = document.createElement('div');
+      line.className = 'converse-text';
+      line.textContent = e.text ?? '';
+      const eff = document.createElement('div');
+      eff.className = 'converse-eff';
+      const d = Number(e.effect?.trust ?? 0);
+      eff.textContent = d === 0 ? '关系未变' : `信任 ${d > 0 ? '+' : ''}${d.toFixed(1)}`;
+      row.append(head, line, eff);
+      box.appendChild(row);
+    }
+  } catch { box.textContent = '读不到对话记录。'; }
+}
+function currentCamp() {
+  // key 以内存 provider 为准（它优先取 URL，localStorage 只做持久化）；名字仅用于展示。
+  let name = null;
+  try { name = localStorage.getItem('ambrace.campName.v1'); } catch { /* 隐私模式 */ }
+  return { key: campKeyNow, name };
+}
+async function renderCampCurrent() {
   const box = $('campCurrent'); if (!box) return;
   const { key, name } = currentCamp();
-  box.textContent = key ? `你当前在「${name || key.slice(0, 8)}」的营地` : '你当前在主营地';
+  if (!key) { box.textContent = '你当前在主营地'; const b = $('campBack'); if (b) b.hidden = true; return; }
   const back = $('campBack');
-  if (back) back.hidden = !key;
+  if (back) back.hidden = false;
+  box.textContent = `你当前在「${name || key.slice(0, 8)}」的营地`;
+  if (name) return;
+  // URL 直达（没有本地名字）时向服务端要 label；P2-a 之后 camp.name 就是名字而不是哈希。
+  try {
+    const j = await (await fetch('/world?camp=' + encodeURIComponent(key))).json();
+    const label = j?.camp?.name;
+    if (label && label !== key) box.textContent = `你当前在「${label}」的营地`;
+  } catch { /* 保持哈希回落 */ }
 }
 async function backToMain() {
   setCampKey(null);
@@ -3520,7 +3571,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); submitCamp(); });
   const back = $('campBack');
   if (back) back.addEventListener('click', backToMain);
-  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) { loadCampList(); renderCampCurrent(); }
+  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) { loadCampList(); renderCampCurrent(); loadConverse(); }
 });
 function showStart() {
   audio.menu(true);
