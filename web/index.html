@@ -109,6 +109,7 @@
           </div>
           <div id="playerHud" aria-label="体力 / 存续 / 本刻行动"></div>
           <div id="placeHud" aria-label="地点"></div>
+        <div id="objHud" aria-label="当前目标" hidden></div>
           <div id="residentSpeech" hidden><span id="residentSpeechText"></span></div>
         </div>
       </div>
@@ -137,7 +138,7 @@
 
   </aside>
 </main>
-    <details class="lab grp" id="labPanel" open>
+    <details class="lab grp" id="labPanel">
       <summary>研究面板 · 判据 / 对照 / 日志</summary>
       <p class="compare-status" id="compareOrigin"></p>
       <output class="compare-status" id="compareAction"></output>

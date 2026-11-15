@@ -566,6 +566,13 @@
     font-size:12px; color:var(--ink); background:rgba(50,48,44,.8); border:1px solid var(--line);
     text-shadow:1px 1px 0 #000;
   }
+  /* 主 HUD：当前目标（可玩性急救，2026-11-15） */
+  #objHud {
+    position:absolute; bottom:22px; left:0; padding:3px 7px; max-width:min(80%, 430px);
+    font-size:12px; line-height:15px; color:var(--gold); background:rgba(50,48,44,.86);
+    border:1px solid var(--line); text-shadow:1px 1px 0 #000;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden;
+  }
   @container (max-width: 460px) {
     #seasonHud { max-width:min(54%, calc(100% - 142px)); padding:3px 5px; font-size:12px; }
     #playerHud { padding:3px 5px; gap:0; }

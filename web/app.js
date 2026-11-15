@@ -2996,6 +2996,13 @@ function renderLabCoop(s) {
 }
 function renderSurv(s) {
   const el = $('survPanel'); if (!el || !s) return;
+  // 主 HUD 常驻"当前目标"：玩家不必打开聚落面板也能知道下一步做什么（可玩性 30 分的低成本一段）。
+  const obj = $('objHud');
+  if (obj) {
+    const hint = objectiveHint(s);
+    obj.textContent = hint ? '目标：' + hint : '';
+    obj.hidden = !hint;
+  }
   // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
   if (survFlash && !survFlash.at) survFlash.at = Date.now();
   if (survFlash && Date.now() - survFlash.at > 3000) survFlash = null;
