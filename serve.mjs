@@ -106,7 +106,10 @@ function chatAuthorized(req) {
 // 对引擎而言这只是一个普通的 OpenAI 兼容供应商（MODEL_PROVIDERS 指到 /brain/v1），
 // 因此 host.mjs 一行没动；节点不在/超时 ⇒ 这里回 5xx ⇒ 引擎的供应商循环自动落到下一个回退位。
 // 与 /chat 同一条纪律：没配 BRAIN_RELAY_TOKEN 就整组端点 404 —— 默认关闭，而不是默认开放。
-const RELAY_TOKEN = process.env.BRAIN_RELAY_TOKEN ?? '';
+// 值写成 `@model-key` 表示"认本容器自己的模型密钥"：MODEL_KEYS 是密文变量、平台不回显，
+// 而我们无法往其中插入新令牌；容器已有的那把只有容器知道，等价于内部凭据，无需再管一次密钥。
+const RELAY_TOKEN_ENV = process.env.BRAIN_RELAY_TOKEN ?? '';
+const RELAY_TOKEN = RELAY_TOKEN_ENV === '@model-key' ? String(KEYS[0] ?? '') : RELAY_TOKEN_ENV;
 const brainRelay = createRelay({
   maxPending: Number(process.env.BRAIN_RELAY_PENDING ?? 8) || 8,
   ttlMs: Number(process.env.BRAIN_RELAY_TTL_MS ?? 4500) || 4500 // 必须小于 MODEL_TIMEOUT_MS，否则引擎先放弃、答案回来也没人要

@@ -133,3 +133,20 @@ test('R8 迟到的结果被拒（409），不会把答案塞给已走开的等�
     assert.deepEqual({ expired: st.relay.expired, late: st.relay.late, served: st.relay.served }, { expired: 1, late: 1, served: 0 });
   } finally { await stop(child); }
 });
+
+test('R9 BRAIN_RELAY_TOKEN=@model-key 时认容器自己的模型密钥（密文变量插不进新令牌）', async () => {
+  const { child, base } = await boot({ BRAIN_RELAY_TOKEN: '@model-key', MODEL_KEYS: 'k-model-only' });
+  try {
+    assert.equal((await post(base, '/brain/claim', {}, 'k-other')).status, 401, '别的令牌必须拒');
+    const waiter = post(base, '/brain/v1/chat/completions', ENGINE_BODY, 'k-model-only');
+    await new Promise((r) => setTimeout(r, 120));
+    const got = await (await post(base, '/brain/claim', {}, 'k-model-only')).json();
+    assert.equal((await post(base, '/brain/result', { id: got.id, content: '好' }, 'k-model-only')).status, 200);
+    assert.equal((await waiter).status, 200, '@model-key 必须能走完整条链');
+  } finally { await stop(child); }
+
+  const off = await boot({ BRAIN_RELAY_TOKEN: '@model-key', MODEL_KEYS: '' });
+  try {
+    assert.equal((await post(off.base, '/brain/claim', {}, 'anything')).status, 404, '无可比对密钥时仍默认关闭');
+  } finally { await stop(off.child); }
+});
