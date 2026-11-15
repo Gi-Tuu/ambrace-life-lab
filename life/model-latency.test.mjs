@@ -87,7 +87,7 @@ test('D2 供应商 500 记录 attempts，世界仍推进', async () => {
   assert.ok(st.survival.t >= 1);
 });
 
-test('D3 Qwen3.8 带关思考参数；端点 400 时去掉参数重试；非 Qwen 不带', async () => {
+test('D3 默认思考的模型带关思考参数；端点 400 时去掉参数重试；旧命名不带', async () => {
   fake.mode = 'ok'; fake.delay = 0; fake.calls = [];
   host.setBackend({ providers: ['https://fake.invalid/v1'], keys: ['k'], model: 'Qwen/Qwen3.8-27B', models: [], brain: 'model' });
   host.touch('survival');
@@ -100,19 +100,26 @@ test('D3 Qwen3.8 带关思考参数；端点 400 时去掉参数重试；非 Qwe
   assert.ok(fake.calls.some((b) => b.chat_template_kwargs), '第一次应尝试带参数');
   assert.ok(fake.calls.some((b) => !b.chat_template_kwargs), '400 后应去掉参数重试');
 
+  // 实测依据：托管推理上的 DeepSeek-V4.1 不带该参数时 finish_reason=length、正文为空 ⇒ 审议层静默失效。
   fake.mode = 'ok'; fake.calls = [];
-  host.setBackend({ providers: ['https://fake.invalid/v1'], keys: ['k'], model: 'deepseek-v4.1-flash', models: [], brain: 'model' });
+  host.setBackend({ providers: ['https://fake.invalid/v1'], keys: ['k'], model: 'deepseek/deepseek-v4.1-flash-1017', models: [], brain: 'model' });
   host.touch('survival');
   await runUntil(() => fake.calls.length > 0);
-  assert.ok(fake.calls.every((b) => !b.chat_template_kwargs), '非 Qwen 不应带额外参数');
+  assert.ok(fake.calls.every((b) => b.chat_template_kwargs?.enable_thinking === false), 'DeepSeek V4 也应带 enable_thinking=false');
+
+  fake.calls = [];
+  host.setBackend({ providers: ['https://fake.invalid/v1'], keys: ['k'], model: 'qwen2.5-32b', models: [], brain: 'model' });
+  host.touch('survival');
+  await runUntil(() => fake.calls.length > 0);
+  assert.ok(fake.calls.every((b) => !b.chat_template_kwargs), '非默认思考的模型不应带额外参数');
 });
 
 test('D3 适配器覆盖命名变体与请求体剥离', () => {
   for (const m of ['Qwen/Qwen3.8-27B', 'qwen3.8-27b', 'qwen3.8-27b-fp8', 'QWEN3.8-27B',
-    'Qwen/Qwen3.5-35B-A3B', 'Qwen/Qwen3.5-27B', 'qwen3.5-397b-a17b']) assert.equal(needsNoThink(m), true, m);
-  // 无点号的历史命名按原登记口径不带参数；魔搭下拉里的 DeepSeek/Nex 同理。
-  for (const m of ['Qwen/Qwen3-8B', 'deepseek-v4.1-flash', 'deepseek-ai/DeepSeek-V4.1-Flash-1017',
-    'nex-agi/Nex-N2.5-Pro', 'qwen2.5-32b']) assert.equal(needsNoThink(m), false, m);
+    'Qwen/Qwen3.5-35B-A3B', 'Qwen/Qwen3.5-27B', 'qwen3.5-397b-a17b',
+    'deepseek-ai/DeepSeek-V4.1-Flash-1017', 'deepseek/deepseek-v4.1-flash-1017', 'deepseek-ai/DeepSeek-V4-Pro']) assert.equal(needsNoThink(m), true, m);
+  // 无点号的历史命名按原登记口径不带参数；实测 DeepSeek V4 不带就会把 max_tokens 烧在思考上（PLAN §49）。
+  for (const m of ['Qwen/Qwen3-8B', 'deepseek-chat', 'deepseek-reasoner', 'nex-agi/Nex-N2.5-Pro', 'qwen2.5-32b']) assert.equal(needsNoThink(m), false, m);
   const b = withNoThink({ model: 'x' }, 'Qwen/Qwen3.8-27B');
   assert.deepEqual(b.chat_template_kwargs, { enable_thinking: false });
   assert.equal('chat_template_kwargs' in withoutNoThink(b), false);
