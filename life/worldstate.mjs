@@ -140,6 +140,15 @@ export function advanceSurvival(world) {
     else { shortfall = need - s.store; s.store = 0; }
   }
 
+  // 灯火燃料（仅 gameRules）：每天烧 1 份木料；没柴就熄灯，屋里夜里变暗。
+  // 先烧公共柴堆，再烧玩家背包——居民与玩家同一条规则。
+  if (world.gameRules && !ended) {
+    const bag = (world.pinv ?? {})['p1'] ?? {};
+    if ((s.inv?.wood ?? 0) >= 1) { s.inv.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    else if ((bag.wood ?? 0) >= 1) { bag.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    // 亮不亮由当前柴量推导（见 survView.light），这里只负责每天烧一份。
+  }
+
   // P0-2：家里容器里的食物是真缓冲——公仓缺口先用它抵，再饿人（玩家与居民同规则）。
   if (!ended && shortfall > 0) shortfall = drainCampPantry(world, shortfall);
   if (!ended && shortfall > 0) {

@@ -1687,7 +1687,7 @@ function drawCamp(cv,w) {
       const wave=.5+.5*Math.sin(ft*6.1)+.32*Math.sin(ft*13.7+1.7)+.18*Math.sin(ft*23.3+3.1);
       const dip=1-.10*Math.max(0,Math.sin(ft*2.3+0.7));
       const strength=Math.max(.42,Math.min(1.02,(.70+.24*wave)*dip));
-      hearth=[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
+      hearth=(w.light===false)?[0,0,0,0]:[fire.x+fire.w*.5,fire.z+fire.d*.85,0,strength];
     }
     people.push({who:'p1',x:(pos.x+8)/TILE,z:(pos.y+16)/TILE,moving:pos.moving,direction:pos.direction,act:campAct(w,'p1')});
     if (campCart?.attached && campCart.site===site && (!right || site===ui.interior)) people.at(-1).act='push';
@@ -1806,7 +1806,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? 1.10 : 1,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,hearth,covered,sun: room ? { ...sun, strength: (sun?.strength ?? 0) * .85 } : sun,exposure: room ? (w.light === false && w.phase === '夜' ? .62 : 1.10) : 1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight: room ? Math.max(0, Math.min(1, daylightDirect / .5)) : 0,
@@ -3002,8 +3002,9 @@ function renderSurv(s) {
   const obj = $('objHud');
   if (obj) {
     const hint = objectiveHint(s);
-    obj.textContent = hint ? '目标：' + hint : '';
-    obj.hidden = !hint;
+    const lamp = s.light === false ? '没柴，夜里点不着火 · ' : '';
+    obj.textContent = lamp + (hint ? '目标：' + hint : '');
+    obj.hidden = !hint && !lamp;
   }
   // 动作结果提示只在 3 秒内显示，之后自动收起（renderSurv 每 900ms 轮询重建）
   if (survFlash && !survFlash.at) survFlash.at = Date.now();
@@ -3022,6 +3023,7 @@ function renderSurv(s) {
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(campCodes[survFlash.code] ?? SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
   const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
   el.innerHTML = `
+    ${s.light === false ? '<div class="survbanner bad">屋里没柴了，夜里点不着火。去砍点木头（院子/树林）。</div>' : ''}
     ${banner}
     <div class="survrow stat-icons">
       <span class="stat" title="季节与日期">${STAT_ICON.calendar}<b>${esc(s.season ?? '')} ${s.dayInSeason ?? '?'} / ${s.day+1}</b></span>

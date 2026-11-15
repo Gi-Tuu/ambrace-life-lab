@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BUILDINGS, GAME_BUILDINGS, buildingsFor, buildDef, doPlan, doBuild, addFood, takeFood, takeFoodKind } from './production.mjs';
 import { createSurvPlay } from './survplay.mjs';
+import { advanceSurvival } from './worldstate.mjs';
+import { survView } from './survplay.mjs';
 
 test('R1 研究世界仍用原表（五面基线不被动到）', () => {
   const { world } = createSurvPlay();
@@ -67,4 +69,26 @@ test('R4 分类粮仓：游戏世界按品类记账且总数守恒；研究世�
   const before = rs.store;
   assert.equal(addFood(rs, 'meat', 1), 0, '无账本时 addFood 是空操作');
   assert.equal(rs.store, before);
+});
+
+test('R5 灯火燃料：游戏世界每天烧一份木料并记亮/灭；研究世界不烧也不记', () => {
+  const game = createSurvPlay(7, { gameRules: true });
+  const w = game.world; const s = w.survival;
+  w.t = 24; s.lastDay = -1; s.inv.wood = 0; w.pinv.p1.wood = 0; s.fuelBurnDays = 0;
+  advanceSurvival(w);
+  assert.equal(survView(game).light, false, '没柴应当没灯');
+  assert.equal(s.fuelBurnDays, 0, '没柴时不应记燃烧');
+
+  w.t = 48; s.lastDay = -1; s.inv.wood = 2;
+  advanceSurvival(w);
+  assert.equal(survView(game).light, true, '有柴应当有灯');
+  assert.equal(s.inv.wood, 1, '每天烧一份木料');
+  assert.equal(s.fuelBurnDays, 1, '烧过应记一天');
+
+  const research = createSurvPlay(7);
+  const rw = research.world; const rs = rw.survival;
+  rw.t = 24; rs.lastDay = -1; rs.inv.wood = 5;
+  advanceSurvival(rw);
+  assert.equal(survView(research).light, null, '研究世界没有灯火概念');
+  assert.equal(rs.inv.wood, 5, '研究世界不烧柴');
 });
