@@ -270,3 +270,44 @@ test('A-22 窗口说停，目标电平必须是 0（不是"算对了但没接线
     'audio.mjs 里还有 fadeMusic(true/false)：电平必须来自 musicTarget');
   assert.equal(/fadeMusic\(true[,)]/.test(wired), false, '同上：淡出分支不能写成 true');
 });
+
+// ───────────────── 原先"待做"的三条：现在靠现有载荷做，不为声音改规则 ─────────────────
+
+test('A-23 树再生、丧偶、工人退出各自在事实发生的那一刻触发', () => {
+  assert.deepEqual(step({}, { camp: { timber: { grove1: { stage: 'mature' } } } }), [],
+    '第一次接手不算"刚长好"');
+  assert.deepEqual(step({ camp: { timber: { grove1: { stage: 'sapling' } } } },
+    { camp: { timber: { grove1: { stage: 'mature' } } } }), ['regrow']);
+  assert.deepEqual(step({ camp: { timber: { grove1: { stage: 'mature' } } } },
+    { camp: { timber: { grove1: { stage: 'mature' } } } }), [], '没变化不该响');
+  assert.deepEqual(step({ households: { widowed: {} } }, { households: { widowed: { a3: { spouse: 'a1', t: 72 } } } }), ['widow']);
+  assert.deepEqual(step({ coop: { exits: 4 } }, { coop: { exits: 5 } }), ['coopExit']);
+  assert.deepEqual(step({ coop: { exits: 5 } }, { coop: { exits: 5 } }), [], '计数没涨不该响');
+});
+
+test('A-24 丧偶优先于死亡，且同一次只播一条', () => {
+  const both = step({ deaths: [], households: { widowed: {} } },
+    { deaths: [{}], households: { widowed: { a3: { spouse: 'a1', t: 72 } } } });
+  assert.deepEqual(both, ['widow'], '同一刻既死人又有人丧偶，该听见的是活着的那个');
+  const plain = step({ deaths: [], households: { widowed: {} } }, { deaths: [{}], households: { widowed: {} } });
+  assert.deepEqual(plain, ['death'], '无配偶的死亡仍是死亡音');
+  assert.equal(both.length, 1);
+});
+
+test('A-25 三条依赖的载荷字段真的在 survView 里（防止差分对着空气算）', async () => {
+  const { createSurvPlay, tickSurvPlay, survView } = await import('../life/survplay.mjs');
+  const sp = createSurvPlay(7, { residentialDecisions: true, eventRulesVersion: 2, ecosystem: true,
+    unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true,
+    settlementLife: true, regionalWork: true });
+  for (let i = 0; i < 240; i++) tickSurvPlay(sp);
+  const v = survView(sp);
+  assert.ok(v.camp?.timber, '载荷缺 camp.timber ⇒ regrow 永远不触发');
+  assert.ok(Object.hasOwn(v.coop ?? {}, 'exits'), '载荷缺 coop.exits ⇒ coopExit 永远不触发');
+  // widowed 是懒创建的键：世界里有记录时载荷必须带出来，没有时不该凭空出现。
+  const widowed = sp.world.survival.households?.widowed;
+  if (widowed) assert.deepEqual(v.households.widowed, widowed, '世界里有丧偶记录但载荷没带出来');
+  else assert.equal(v.households.widowed, undefined, '世界里没有丧偶记录，载荷不该造一个');
+  const sample = readWorld(v);
+  assert.ok(typeof sample.exits === 'number' && typeof sample.timber === 'object' && typeof sample.widowed === 'string',
+    'readWorld 必须把三条事实读成可比对的形状');
+});

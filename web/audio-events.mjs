@@ -6,6 +6,7 @@ import { themeForSeason } from './audio-data.mjs';
 // 必须能被闸门钉住；留在 app.js 里就只能靠手点验证，改坏了没人知道。
 
 const stages = (sv) => Object.fromEntries(Object.entries(sv.households?.residents ?? {}).map(([id, r]) => [id, r.stage]));
+const timberStages = (sv) => Object.fromEntries(Object.entries(sv.camp?.timber ?? {}).map(([id, t]) => [id, t.stage]));
 const sitePhases = (sv) => Object.fromEntries((sv.sites ?? []).map((s) => [`site:${s.loc}:${s.type}`, s.phase ?? 'complete']));
 const damageTiers = (sv) => Object.fromEntries((sv.buildings ?? []).map((b) => {
   const integrity = b.integrity ?? 1;
@@ -28,6 +29,10 @@ export const readWorld = (sv) => ({
   sites: sitePhases(sv),
   tiers: damageTiers(sv),
   shortfall: (sv.history ?? [])[Math.max(0, (sv.history ?? []).length - 1)]?.shortfall ?? 0,
+  // 三条原先"待做"的声音所依赖的事实：丧偶结算、协作退出计数、树木再生阶段。
+  widowed: Object.keys(sv.households?.widowed ?? {}).sort().join(','),
+  exits: sv.coop?.exits ?? 0,
+  timber: timberStages(sv),
 });
 
 // 返回本轮该播的事件音（最多一条）；prev 为 null 表示刚接手这个世界，不补播历史。
@@ -43,7 +48,9 @@ export function diffAudioEvents(prev, next) {
   if (next.drought && !prev.drought) return ['drought'];
 
   // 死亡盖过出生：同一天既有人走又有人来，先听见的是失去。
-  if (next.deaths > prev.deaths) return ['death'];
+  // 但丧偶更具体：同一刻里"有人死了"和"有人失去配偶"，后者才是该听的那一声。
+  if (next.deaths > prev.deaths) return [next.widowed && next.widowed !== prev.widowed ? 'widow' : 'death'];
+  if (next.widowed && next.widowed !== prev.widowed) return ['widow'];
   if (next.births > prev.births) return ['birth'];
   if (next.won && !prev.won) return ['milestone'];
 
@@ -59,6 +66,14 @@ export function diffAudioEvents(prev, next) {
   }
   for (const [key, tier] of Object.entries(next.tiers)) {
     if ((prev.tiers[key] ?? 0) < tier) return ['damaged'];
+  }
+
+  // 工人中途退出：exits 是累计计数，计数涨了就是这一轮有人走了。
+  if (next.exits > prev.exits) return ['coopExit'];
+  // 树木再生完成：从 sapling 回到 mature 的那一刻（原来"待做"是因为没找到这个时刻，
+  // 其实载荷里的 camp.timber 每棵树都带 stage，不需要为声音改规则）。
+  for (const [id, stage] of Object.entries(next.timber)) {
+    if (prev.timber[id] === 'sapling' && stage === 'mature') return ['regrow'];
   }
 
   if (next.day > prev.day) return [next.shortfall > 0 ? 'shortfall' : 'ration'];

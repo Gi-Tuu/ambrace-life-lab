@@ -196,6 +196,13 @@ const recipes = {
     })),
   ),
   treeFall: () => crackFall({ seed: 401 }),
+  // 再生完成：三粒上扬的光点加一记轻叶响，音量小——它不该盖过手头的活。
+  regrow: () => mixMono([
+    { at: 0, data: pluck({ freq: 783.99, dur: 0.4, gain: 0.09, bright: 0.5, seed: 561 }) },
+    { at: 0.12, data: pluck({ freq: 987.77, dur: 0.4, gain: 0.085, bright: 0.5, seed: 563 }) },
+    { at: 0.24, data: pluck({ freq: 1174.66, dur: 0.5, gain: 0.08, bright: 0.5, seed: 567 }) },
+    { at: 0.3, data: leafRustle({ seed: 569, gain: 0.5 }) },
+  ]),
 
   // 生命周期
   adult: () => rising([523.25, 659.25], { gain: 0.14 }),
@@ -204,6 +211,11 @@ const recipes = {
     { at: 0, data: pluck({ freq: 523.25, dur: 0.9, gain: 0.16, bright: 0.4, seed: 411 }) },
     { at: 0.16, data: pluck({ freq: 659.25, dur: 0.9, gain: 0.16, bright: 0.4, seed: 413 }) },
     { at: 0.5, data: chime([783.99, 1046.5], { gain: 0.12 }) },
+  ]),
+  // 丧偶：成婚的双声部只剩一条，另一条的位置留空 ⇒ 听得出"少了一个人"。
+  widow: () => mixMono([
+    { at: 0, data: pluck({ freq: 659.25, dur: 1.1, gain: 0.15, bright: 0.3, decay: 0.9972, seed: 415 }) },
+    { at: 0.62, data: osc({ freq: 293.66, glideTo: 246.94, dur: 0.7, type: 'sine', gain: 0.1, release: 0.5 }) },
   ]),
   milestone: () => chime([523.25, 659.25, 783.99, 1046.5], { gain: 0.16 }),
   sleep: () => mixMono([
@@ -249,6 +261,12 @@ const recipes = {
 
   // 合作与交谈
   coopAccept: () => rising([392, 523.25], { gain: 0.13, spread: 0.09 }),
+  // 中途退出：答应时的上行反过来，末尾两下渐远的脚步感（闷击一次比一次轻）。
+  coopExit: () => mixMono([
+    { at: 0, data: falling([523.25, 392], { gain: 0.12, spread: 0.09 }) },
+    { at: 0.34, data: thump({ seed: 551, gain: 0.24 }) },
+    { at: 0.62, data: thump({ seed: 553, gain: 0.14 }) },
+  ]),
   coopRefuse: () => mixMono([
     { at: 0, data: osc({ freq: 196, dur: 0.1, type: 'triangle', gain: 0.13, release: 0.06 }) },
     { at: 0.12, data: osc({ freq: 164.81, dur: 0.14, type: 'triangle', gain: 0.11, release: 0.1 }) },
