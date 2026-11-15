@@ -134,19 +134,25 @@ test('R8 迟到的结果被拒（409），不会把答案塞给已走开的等�
   } finally { await stop(child); }
 });
 
-test('R9 BRAIN_RELAY_TOKEN=@model-key 时认容器自己的模型密钥（密文变量插不进新令牌）', async () => {
-  const { child, base } = await boot({ BRAIN_RELAY_TOKEN: '@model-key', MODEL_KEYS: 'k-model-only' });
+test('R9 引擎入口认容器自己的密钥，但节点端点不认它（两条边界分开）', async () => {
+  const { child, base } = await boot({ BRAIN_RELAY_TOKEN: 'tok-r9', MODEL_KEYS: 'k-model-only' });
   try {
-    assert.equal((await post(base, '/brain/claim', {}, 'k-other')).status, 401, '别的令牌必须拒');
+    // 引擎（容器内）发的是 MODEL_KEYS[0]：插不进密文变量，所以入口额外认它
     const waiter = post(base, '/brain/v1/chat/completions', ENGINE_BODY, 'k-model-only');
     await new Promise((r) => setTimeout(r, 120));
-    const got = await (await post(base, '/brain/claim', {}, 'k-model-only')).json();
-    assert.equal((await post(base, '/brain/result', { id: got.id, content: '好' }, 'k-model-only')).status, 200);
-    assert.equal((await waiter).status, 200, '@model-key 必须能走完整条链');
-  } finally { await stop(child); }
+    const got = await (await post(base, '/brain/claim', {}, 'tok-r9')).json();
+    assert.equal(got.body.model, 'qwen3.8-27b');
+    await post(base, '/brain/result', { id: got.id, content: '好' }, 'tok-r9');
+    assert.equal((await waiter).status, 200, '模型密钥必须能走通引擎入口');
 
-  const off = await boot({ BRAIN_RELAY_TOKEN: '@model-key', MODEL_KEYS: '' });
-  try {
-    assert.equal((await post(off.base, '/brain/claim', {}, 'anything')).status, 404, '无可比对密钥时仍默认关闭');
-  } finally { await stop(off.child); }
+    // 反向：节点端点只认中继令牌。模型密钥泄露不等于任何人都能喂答案进游戏。
+    assert.equal((await post(base, '/brain/claim', {}, 'k-model-only')).status, 401, 'agent 端点不得认模型密钥');
+    assert.equal((await post(base, '/brain/result', { id: 'x', content: 'y' }, 'k-model-only')).status, 401);
+    const w2 = post(base, '/brain/v1/chat/completions', ENGINE_BODY, 'tok-r9');
+    await new Promise((r) => setTimeout(r, 120));
+    const g2 = await (await post(base, '/brain/claim', {}, 'tok-r9')).json();
+    await post(base, '/brain/result', { id: g2.id, content: 'ok' }, 'tok-r9');
+    assert.equal((await w2).status, 200, '中继令牌同样可用');
+    assert.equal((await post(base, '/brain/v1/chat/completions', ENGINE_BODY, 'tok-nope')).status, 401);
+  } finally { await stop(child); }
 });

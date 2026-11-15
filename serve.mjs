@@ -106,19 +106,27 @@ function chatAuthorized(req) {
 // 对引擎而言这只是一个普通的 OpenAI 兼容供应商（MODEL_PROVIDERS 指到 /brain/v1），
 // 因此 host.mjs 一行没动；节点不在/超时 ⇒ 这里回 5xx ⇒ 引擎的供应商循环自动落到下一个回退位。
 // 与 /chat 同一条纪律：没配 BRAIN_RELAY_TOKEN 就整组端点 404 —— 默认关闭，而不是默认开放。
-// 值写成 `@model-key` 表示"认本容器自己的模型密钥"：MODEL_KEYS 是密文变量、平台不回显，
-// 而我们无法往其中插入新令牌；容器已有的那把只有容器知道，等价于内部凭据，无需再管一次密钥。
-const RELAY_TOKEN_ENV = process.env.BRAIN_RELAY_TOKEN ?? '';
-const RELAY_TOKEN = RELAY_TOKEN_ENV === '@model-key' ? String(KEYS[0] ?? '') : RELAY_TOKEN_ENV;
+// 两个调用方持有的是不同的东西，必须分开认：
+//   · 引擎入口（容器内）发的是 MODEL_KEYS[0]——那是密文变量，平台不回显，我们插不进新令牌，所以这里额外认它；
+//     能拿出这把密钥的只有容器自己（外部拿到它的话，他本来就能直接用它调托管推理，边界没有变宽）。
+//   · 节点 agent（容器外）发的是 BRAIN_RELAY_TOKEN 本身。
+const RELAY_TOKEN = process.env.BRAIN_RELAY_TOKEN ?? '';
+const ENGINE_KEY = String(KEYS[0] ?? '');
 const brainRelay = createRelay({
   maxPending: Number(process.env.BRAIN_RELAY_PENDING ?? 8) || 8,
   ttlMs: Number(process.env.BRAIN_RELAY_TTL_MS ?? 4500) || 4500 // 必须小于 MODEL_TIMEOUT_MS，否则引擎先放弃、答案回来也没人要
 });
 
-function relayAuthorized(req) {
+const relayAuthorized = (req) => constantTimeEqual(relayPresented(req), RELAY_TOKEN);
+// 引擎侧入口：中继令牌或容器自己的模型密钥，二者之一即可。
+const engineAuthorized = (req) => {
+  const got = relayPresented(req);
+  return constantTimeEqual(got, RELAY_TOKEN) || (Boolean(ENGINE_KEY) && constantTimeEqual(got, ENGINE_KEY));
+};
+
+function relayPresented(req) {
   const h = String(req.headers.authorization ?? '');
-  const got = h.startsWith('Bearer ') ? h.slice(7) : String(req.headers['x-brain-token'] ?? '');
-  return constantTimeEqual(got, RELAY_TOKEN);
+  return h.startsWith('Bearer ') ? h.slice(7) : String(req.headers['x-brain-token'] ?? '');
 }
 
 async function readJsonBody(req) {
@@ -236,7 +244,7 @@ async function handle(req, res) {
   // 引擎侧入口：请求体原样转给节点，这层绝不解释内容；响应拼成 OpenAI 形状给 host.postChat 读。
   if (req.method === 'POST' && p === '/brain/v1/chat/completions') {
     if (!RELAY_TOKEN) return json(res, 404, { error: 'NOT_FOUND' });
-    if (!relayAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
+    if (!engineAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
     const parsed = await readJsonBody(req);
     if (!parsed.ok || !parsed.value || typeof parsed.value !== 'object') return json(res, 400, { error: 'BAD_JSON' });
     const job = brainRelay.submit(parsed.value);
