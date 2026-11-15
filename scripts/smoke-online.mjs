@@ -84,6 +84,13 @@ try {
 try {
   const res = await get('/healthz');
   check('/healthz 200', res.status === 200, 'HTTP ' + res.status);
+  // 大脑中继只报读数不作判据：agent 不在时本来就会超时，那正是设计好的降级路径。
+  try {
+    const r = (await res.clone().json()).relay;
+    console.log(r && !r.off
+      ? `ℹ️  大脑中继 served=${r.served} expired=${r.expired} late=${r.late} dropped=${r.dropped} · 等待上限 ${r.limits?.ttlMs}ms`
+      : 'ℹ️  大脑中继未启用：模型请求走配置里的供应商');
+  } catch { /* 旧镜像没有 relay 字段 */ }
 } catch (error) {
   check('/healthz 200', false, String(error?.cause?.code ?? error));
 }
