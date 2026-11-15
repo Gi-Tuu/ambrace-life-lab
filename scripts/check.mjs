@@ -128,7 +128,7 @@ for (const name of ENGINE) {
 
 // 5) 测试纪律
 const testFiles = readdirSync(join(ROOT, 'life')).filter((f) => f.endsWith('.test.mjs'));
-const allowRandom = new Set(['serve-guard.test.mjs', 'frontend.test.mjs']); // 只为挑一个空闲端口
+const allowRandom = new Set(['serve-guard.test.mjs', 'frontend.test.mjs', 'brain-relay-routes.test.mjs']); // 只为挑一个空闲端口
 if (!testFiles.length) fail('life/ 下没有任何 *.test.mjs');
 for (const name of testFiles) {
   const f = join(ROOT, 'life', name);

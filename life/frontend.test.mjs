@@ -145,3 +145,9 @@ test('F9 渲染连续失败必须只记一次日志、到上限停试、且提�
   assert.match(APP, /gfxGaveUp = true;/, '到上限没有停试，会每帧无限重试');
   assert.match(APP, /if \(gfxFaultMessage\) \{[\s\S]{0,200}notice\.hidden = false/, '故障提示会被 renderPlayMode 每轮重置隐藏');
 });
+
+test('F10 树生成必须排除田块（田里长树是可见的常识错误）', () => {
+  // 苗床坐标来自 campBeds（garden 站点南侧 12 块），而树循环原先只排除站点与车位。
+  // 实测：去掉这条排除后，同一世界有 15 棵树落在田块内；加上后为 0。
+  assert.match(APP, /onFarm\(tx \+ \.5, ty \+ \.5, 2\)/, '树循环缺少田块排除（树会长进田里）');
+});
