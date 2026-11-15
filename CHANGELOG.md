@@ -112,6 +112,18 @@
 - `ctl` 的 `reset` / `survival_reset` 同步 `S.mainSurv`（修掉并发改动打红的 3 条既有测试）。
 - 闸门 SA9：`tickAll` 必须推进每个营地（只跑第一份即红）；实机两个 cookie 各自 960→963，
   对甲 `move garden` 后甲变、乙不变。
+### 核验修复：路由补 query、camp key 校验、TTL 语义（2026-11-15）
+- **P0-1 营地路由不再只依赖第三方 cookie**：`web/net.mjs` 的唯一出口按注入的 provider 给 `/world`、`/act`
+  自动追加 `?camp=`；`web/app.js` 从 `localStorage: ambrace.camp.v1` 提供 key，进场后写 key 并带
+  `&camp=` 跳转；开始页新增"当前营地 / 回主营地"（`POST /saves/back` 清 cookie 与本地 key）。
+  跨站 iframe 里 cookie 可能存不下也带不上，query 是主路径，cookie 只当加分项。
+- **P0-2 `camp` key 二重校验**：`openKey` 只接受 `^[0-9a-f]{32}$` **且**必须是索引成员（`campSurv` 再兜一层）。
+  截断了 `../archive-2026/victim` 这类"复活并覆盖归档"的路径穿越。闸门 SA5b。
+- **P1-3 TTL 语义**：`lastSeenAt` 只由观众行为推进（`open`/`openKey`/`touch`），落盘（`save`/`persist`）
+  不再刷新；常驻但三天无人会被扫掉。闸门 SA4b。
+- 闸门 `camp-routing.test.mjs` SA10：起真服务验证 `?camp=A` / `?camp=B` / 不带 camp 三条路由；
+  `scripts/smoke-online.mjs` 增加只读路由检查（`SMOKE_CAMP_KEY` 提供 key，`/saves` 按设计不投影 key）。
+- 三条负向对照均验红并字节还原（整条 key 校验短路、persist 刷新 lastSeenAt、忽略 camp 路由）。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

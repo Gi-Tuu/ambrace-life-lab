@@ -324,6 +324,7 @@ export function sweepCamps({ now = Date.now() } = {}) {
 // 按营地 key 取世界：MAIN 走主世界，其它走实例管理器（live 或磁盘）。
 export function campSurv(campKey) {
   if (!campKey || campKey === 'MAIN') return S.mainSurv ?? S.surv;
+  if (!/^[0-9a-f]{32}$/.test(String(campKey))) return null; // P0-2：第二道闸
   if (!S.camps) return null;
   const live = S.camps.live.get(campKey);
   if (live) return live.sp;
@@ -928,7 +929,7 @@ function save() {
             day: Math.floor((entry.sp.world.t ?? 0) / (entry.sp.world.dayTicks ?? 24)),
             population: Object.values(entry.sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
             status: entry.sp.world.survival?.playerDead ? 'ended' : 'active',
-            lastSeenAt: Date.now(),
+            lastSeenAt: entry.lastSeenAt ?? Date.now(), // P1-3：落盘不算有人来
           });
         } catch (error) { S.saveError = String(error?.message ?? error); }
       }
@@ -1131,6 +1132,9 @@ export const host = {
   touch: (mode, campKey) => {
     S.lastVisitor = Date.now();
     if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[campKey ?? S.campKey ?? 'MAIN'] = S.lastVisitor; }
+    // P1-3：观众行为推进 lastSeenAt（落盘不推进）
+    const liveCamp = campKey && S.camps ? S.camps.live.get(campKey) : null;
+    if (liveCamp) liveCamp.lastSeenAt = S.lastVisitor;
     if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
     if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
   },

@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
-import { host, listCamps, openCamp, modelGate, modelCharged, modelRelease } from './life/host.mjs';
+import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease } from './life/host.mjs';
 import { mutatingDenied, isJson } from './life/request-guard.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -203,6 +203,13 @@ async function handle(req, res) {
   // /healthz 也不算（平台探活会让"有观众"恒真）。/chat 同理。
     // 名字存档：公开列表只投影六项；进场是写路由（同源/令牌守卫）。
   if (p === '/saves' && req.method === 'GET') return json(res, 200, { entries: listCamps() });
+  if (p === '/saves/back' && req.method === 'POST') {
+    const denied = mutatingDenied(req, CTL_TOKEN);
+    if (denied) return json(res, 403, { error: denied });
+    const back = await backToMainCamp();
+    res.setHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
+    return json(res, 200, back);
+  }
   if (p === '/saves/open' && req.method === 'POST') {
     const denied = mutatingDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });

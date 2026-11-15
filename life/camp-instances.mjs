@@ -165,7 +165,7 @@ export class CampInstances {
       created = true;
       this.stats.loaded += 1;
     }
-    this.live.set(id.key, { sp, key: id.key, name: id.display, lastUsed: now });
+    this.live.set(id.key, { sp, key: id.key, name: id.display, lastUsed: now, lastSeenAt: now });
     this.evictIfNeeded();
     touchSave(this.dataDir, {
       key: id.key, name: id.display,
@@ -177,15 +177,18 @@ export class CampInstances {
     return { ok: true, code: 'OK', key: id.key, sp, created };
   }
 
-  // 按 key 取（cookie 路由用）：先 live，再磁盘；都没有返回 null。
+  // 按 key 取（query/cookie 路由用）：先 live，再磁盘；都没有返回 null。
+  // 安全：key 只接受 32 位十六进制，且必须是索引成员——两条都要，防目录穿越与"复活孤儿文件"。
   openKey(key, { now = Date.now() } = {}) {
-    if (!key) return null;
-    const hit = this.live.get(key);
-    if (hit) { hit.lastUsed = now; return hit.sp; }
-    if (!existsSync(campFile(this.dataDir, key))) return null;
-    const sp = loadSurv(loadCamp(this.dataDir, key), this.options.seed ?? 7, this.options);
-    sp.world.campKey = key;
-    this.live.set(key, { sp, key, name: readIndex(this.dataDir).entries.find((e) => e.key === key)?.name ?? key, lastUsed: now });
+    const k = String(key ?? '');
+    if (!/^[0-9a-f]{32}$/.test(k)) return null;
+    if (!readIndex(this.dataDir).entries.some((e) => e.key === k)) return null;
+    const hit = this.live.get(k);
+    if (hit) { hit.lastUsed = now; hit.lastSeenAt = now; return hit.sp; }
+    if (!existsSync(campFile(this.dataDir, k))) return null;
+    const sp = loadSurv(loadCamp(this.dataDir, k), this.options.seed ?? 7, this.options);
+    sp.world.campKey = k;
+    this.live.set(k, { sp, key: k, name: readIndex(this.dataDir).entries.find((e) => e.key === k)?.name ?? k, lastUsed: now, lastSeenAt: now });
     this.evictIfNeeded();
     return sp;
   }
@@ -220,7 +223,7 @@ export class CampInstances {
         day: Math.floor((entry.sp.world.t ?? 0) / (entry.sp.world.dayTicks ?? 24)),
         population: Object.values(entry.sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
         status: entry.sp.world.survival?.playerDead ? 'ended' : 'active',
-        lastSeenAt: now,
+        lastSeenAt: entry.lastSeenAt ?? now, // P1-3：落盘不算"有人来"
       });
     }
     return this.live.size;

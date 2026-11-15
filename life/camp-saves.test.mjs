@@ -1,7 +1,7 @@
 // C1 闸门：实例隔离 / 往返不动点与对账 / 名字安全 / TTL 不删活跃 / 列表投影。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -129,4 +129,38 @@ test('SA9 按营地 tick：一份管理器里的每个常驻营地都各走一�
   await mgr.tickAll({ budgetMs: 20000 });
   assert.equal(a.sp.world.t, t0a + 1, '甲应当前进一刻');
   assert.equal(b.sp.world.t, t0b + 1, '乙也应当前进一刻（只 tick 第一份就会红）');
+});
+
+test('SA5b camp key：32 位十六进制 ∧ 必须是索引成员；穿越串零写入', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 2 });
+  // 在 saves/ 之外放一个"受害者"，再用穿越串去开它
+  mkdirSync(join(dataDir, 'archive-2026'), { recursive: true });
+  writeFileSync(join(dataDir, 'archive-2026', 'victim.json.gz'), 'victim');
+  const victimBefore = statSync(join(dataDir, 'archive-2026', 'victim.json.gz')).mtimeMs;
+  assert.equal(mgr.openKey('../archive-2026/victim'), null, '穿越串必须被拒');
+  assert.equal(mgr.live.size, 0, '穿越串不得进入常驻');
+  assert.equal(statSync(join(dataDir, 'archive-2026', 'victim.json.gz')).mtimeMs, victimBefore, '不得改写 saves 之外的文件');
+  // 格式合法但不在索引里：同样不能开（防"复活孤儿文件"）
+  const fake = 'a'.repeat(32);
+  mkdirSync(join(dataDir, 'saves'), { recursive: true });
+  writeFileSync(join(dataDir, 'saves', fake + '.json.gz'), 'orphan');
+  assert.equal(mgr.openKey(fake), null, '不在索引里的 key 不得打开');
+  // 合法且已登记：可以开
+  const opened = mgr.open('正常');
+  assert.ok(opened.ok);
+  assert.ok(mgr.openKey(opened.key));
+});
+
+test('SA4b 常驻但 3 天无人：必须被扫掉（落盘不得刷新活跃时间）', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 3 });
+  const camp = mgr.open('老营地');
+  assert.ok(camp.ok);
+  const key = camp.key;
+  // 模拟"一直常驻、但三天没人来"
+  mgr.live.get(key).lastSeenAt = Date.now() - 4 * 86400000;
+  mgr.persist(); // 旧实现会在这里把 lastSeenAt 刷成 now ⇒ 永远删不掉
+  const r = sweepSaves(dataDir, { now: Date.now() });
+  assert.ok(r.removed.includes(key), '常驻不等于活跃：三天无人必须删，实测 removed=' + JSON.stringify(r.removed));
 });

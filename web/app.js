@@ -14,7 +14,7 @@ import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignatur
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
 import { TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
-import { postJson, persistNotices } from './net.mjs';
+import { postJson, persistNotices, setCampProvider } from './net.mjs';
 
 
 import {
@@ -27,6 +27,7 @@ import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels,
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 
+setCampProvider(() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } });
 async function api(path, body) {
   const result = await postJson(path, body);
   const notice = persistNotices(result, path);
@@ -3470,6 +3471,21 @@ async function loadCampList() {
     }
   } catch { if (box) box.textContent = '读不到营地列表。'; }
 }
+function currentCamp() {
+  try { return { key: localStorage.getItem('ambrace.camp.v1'), name: localStorage.getItem('ambrace.campName.v1') }; } catch { return {}; }
+}
+function renderCampCurrent() {
+  const box = $('campCurrent'); if (!box) return;
+  const { key, name } = currentCamp();
+  box.textContent = key ? `你当前在「${name || key.slice(0, 8)}」的营地` : '你当前在主营地';
+  const back = $('campBack');
+  if (back) back.hidden = !key;
+}
+async function backToMain() {
+  try { localStorage.removeItem('ambrace.camp.v1'); localStorage.removeItem('ambrace.campName.v1'); } catch { /* 忽略 */ }
+  try { await fetch('/saves/back', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch { /* 服务端失败也回菜单 */ }
+  location.href = '/';
+}
 async function submitCamp() {
   const input = $('campName');
   const name = (input?.value ?? '').trim();
@@ -3478,13 +3494,21 @@ async function submitCamp() {
   try {
     const res = await fetch('/saves/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
     if (!res.ok) { const j = await res.json().catch(() => ({})); if (status) status.textContent = '进不去：' + (j.error ?? res.status); return; }
-    location.href = '/?mode=survival'; // 直接进游戏（营地已由服务端切好）
+    const data = await res.json().catch(() => ({}));
+    try {
+      if (data?.key) localStorage.setItem('ambrace.camp.v1', data.key);
+      if (data?.name) localStorage.setItem('ambrace.campName.v1', data.name);
+    } catch { /* 隐私模式：cookie 仍可能生效 */ }
+    // P0-1：query 是主路径（第三方 cookie 在 iframe 里可能既存不下也带不上）
+    location.href = '/?mode=survival&camp=' + encodeURIComponent(data?.key ?? '');
   } catch { if (status) status.textContent = '连不上服务。'; }
 }
 document.addEventListener('DOMContentLoaded', () => {
   const form = $('campForm');
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); submitCamp(); });
-  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) loadCampList();
+  const back = $('campBack');
+  if (back) back.addEventListener('click', backToMain);
+  if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) { loadCampList(); renderCampCurrent(); }
 });
 function showStart() {
   audio.menu(true);
