@@ -92,21 +92,24 @@ test('N3 无人运行：节点答活，付费端点一次都不许被碰到', as
 test('N4 中继坏了：熔断打开后停止白等，且无人时仍不花钱', async () => {
   hits.node = 0; hits.money = 0; nodeMode = 'fail';
   await host.start(); host.stop();
-  for (let i = 0; i < 12; i += 1) await host.tickOnce();
+  // 询问是事件驱动的（不是每拍都问），所以轮到熔断真的打开为止，而不是赌一个固定拍数——
+  // 赌拍数在负载下会先红后绿，那种"偶发"其实是我们自己写的假设错了。
+  let spins = 0;
+  while (!breakerOpenAt(host.status().breaker) && spins < 400) { await host.tickOnce(); spins += 1; }
   const st = host.status();
+  assert.equal(st.breaker.open, true, `轮到 ${spins} 拍仍未熔断（节点被试 ${hits.node} 次）`);
   assert.ok(hits.node >= 2, `连续失败要喂给熔断，实测只试了 ${hits.node} 次`);
   assert.equal(hits.money, 0, '节点挂掉也不等于可以偷偷花钱');
   const before = hits.node;
   for (let i = 0; i < 8; i += 1) await host.tickOnce();
   assert.equal(hits.node, before, '熔断打开后不该每次询问都再白等一次');
-  assert.equal(st.breaker.open, true, 'healthz 要能看出熔断是开着的');
   assert.ok(st.breaker.trips >= 1);
 });
 
 test('N5 有观众且节点仍坏：允许落到付费路，账记在钱上', async () => {
   hits.node = 0; hits.money = 0; nodeMode = 'fail';
   await host.start(); host.stop();
-  for (let i = 0; i < 30 && hits.money === 0; i += 1) { host.touch('survival'); await host.tickOnce(); }
+  for (let i = 0; i < 400 && hits.money === 0; i += 1) { host.touch('survival'); await host.tickOnce(); }
   const st = host.status();
   assert.ok(hits.money >= 1, `有观众时应当允许回退到付费端点，实测 ${hits.money}`);
   assert.ok((st.moneyCalls ?? 0) >= 1, '付费成功要记账，且记在钱这本上');
