@@ -704,7 +704,7 @@ function buildWorld(w) {
     const density = landscape ? forestDensity(mapSeed,tx+.5,ty+.5)*.76 :
       edge < 6 ? 0.20 : edge < 14 ? 0.10 : 0.038;
     if(trees.some(([x,y])=>Math.hypot(x-tx,(y-ty)*1.25)<2.8)||beds.some(b=>insideBed(tx*TILE+8,ty*TILE+8,b,28)))continue;
-    if (terrainHash(tx, ty, 4) > density || nearSite(tx, ty, 4) || Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
+    if (terrainHash(tx, ty, 4) > density || nearSite(tx, ty, 4) || onFarm(tx + .5, ty + .5, 2) || Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
     const mask = campRenderer ? null : placement(treeAsset(tx, ty), tx * TILE - 24, ty * TILE - 64, 64, 80);
     if (mask) masks.push(mask);
     occupy(tx, ty, mask);
