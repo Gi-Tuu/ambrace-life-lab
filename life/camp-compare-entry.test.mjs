@@ -74,6 +74,14 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     assert.deepEqual(origin.branches.A.world, origin.branches.B.world, '首刻包含完全相同的角色状态和 RNG 状态');
     assert.ok(origin.branches.A.world.minds.a1.rng);
     const act = (kind, fields = {}) => host.act({mode:'compare', revision:pair.revision, kind,...fields});
+    await control('step');
+    const {x,z}=official.playerPos;
+    const synced=await act('player_sync',{from:[x-.5,z+.5],otherContact:{from:[x+.5,z+.5]}});
+    assert.equal(synced.sides.A.ok,true);
+    assert.equal(synced.sides.B.ok,true);
+    assert.deepEqual(snapshot().comparison.B.playerPos,{x:x+.5,z:z+.5,t:pair.startTick+1});
+    assert.deepEqual(snapshot().survival.playerPos,official.playerPos);
+    await control('step');
     const source = Object.entries(pair.A.districts).find(([, site]) => site.resource === 'wood');
     const [district, {source: point}] = source;
     const gather = await act('gather', {target:district, tool:'axe', from:point, otherContact:{from:[0,0]}});
@@ -90,9 +98,9 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     assert.equal(snapshot().running, true);
     await control('step');
     const advanced = snapshot().comparison;
-    assert.equal(advanced.A.t, pair.startTick+1);
+    assert.equal(advanced.A.t, pair.startTick+3);
     assert.equal(advanced.B.t, advanced.A.t);
-    assert.equal(advanced.A.series.length, 2);
+    assert.equal(advanced.A.series.length, 4);
     assert.equal(snapshot().survival.t, official.t);
     assert.equal(readFileSync(worldFile, 'utf8'), officialFile);
 

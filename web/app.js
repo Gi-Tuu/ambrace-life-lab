@@ -935,6 +935,10 @@ const SYNC_DIST = 2, SYNC_MS = 1200;
 let playerSyncInFlight = false;
 function syncPlayerPos(walker, snapshot) {
   if (playerSyncInFlight || !snapshot?.districts) return;
+  const compare = ui.compare;
+  const revision = S.compareRevision;
+  const other = compare ? WALK['cvB:p1'] : null;
+  if (compare && (!other || revision == null || S.view !== snapshot)) return;
   const px = walker.x + .5, pz = walker.y + .5;
   const last = walker.lastSync, now = performance.now();
   const moved = !last || Math.hypot(px - last.x, pz - last.z) > SYNC_DIST;
@@ -942,18 +946,28 @@ function syncPlayerPos(walker, snapshot) {
   if (!moved && !due) return;
   playerSyncInFlight = true;
   walker.lastSync = { x: px, z: pz, t: now };
-  api('/act', { mode: 'survival', kind: 'player_sync', from: [px, pz] }).then(r => {
-    playerSyncInFlight = false;
-    if (r?.ok) { walker.lastSync = { x: px, z: pz, t: performance.now() }; return; }
-    if (r?.playerPos) { // 被拒（TELEPORT）：把可视位置钳回服务端认可点，画面与服务端一致
-      walker.x = r.playerPos.x - .5; walker.y = r.playerPos.z - .5;
-      walker.path = []; walker.pi = 0;
-      walker.lastSync = { x: r.playerPos.x, z: r.playerPos.z, t: performance.now() };
-    }
-  }).catch(() => { playerSyncInFlight = false; });
+  const from = [px, pz];
+  const command = compare
+    ? {mode:'compare', revision, kind:'player_sync', from, otherContact:{from:[other.x+.5,other.y+.5]}}
+    : {mode:'survival', kind:'player_sync', from};
+  api('/act', command).then(r => {
+    if (ui.compare!==compare || WALK['cvA:p1']!==walker || compare && S.compareRevision!==revision) return;
+    applyPositionSync(walker, r.sides?.A ?? r);
+    if (other && WALK['cvB:p1']===other) applyPositionSync(other, r.sides?.B);
+  }).catch(() => {}).finally(() => { playerSyncInFlight=false; });
 }
 
-const outingKey=w=>`ambrace:outing:${w?.layoutVersion??0}:${w?.mapSeed??0}`;
+function applyPositionSync(walker, result) {
+  const pos = result?.playerPos;
+  if (!pos) return;
+  walker.lastSync={x:pos.x,z:pos.z,t:performance.now()};
+  if (!result.ok) {
+    walker.x=pos.x-.5; walker.y=pos.z-.5;
+    walker.path=[]; walker.pi=0;
+  }
+}
+
+const outingKey=w=>`ambrace:outing:${campKeyNow??'MAIN'}:${w?.layoutVersion??0}:${w?.mapSeed??0}`;
 function savedOuting(w,world) {
   try {
     const point=JSON.parse(sessionStorage.getItem(outingKey(w)));
@@ -998,7 +1012,10 @@ function ensureWalker(cvId, who, world, slots) {
   const k = walkKey(cvId, who);
   let s = WALK[k];
   if (!s) {
-    const point=campRenderer && S.soloSurv && k==='cvA:p1' ? savedOuting(S.view,world) : null;
+    const savedPos=who==='p1' ? snapshot?.playerPos : null;
+    const serverPoint=Number.isFinite(savedPos?.x) && Number.isFinite(savedPos?.z)
+      ? [savedPos.x-.5,savedPos.z-.5] : null;
+    const point=serverPoint ?? (campRenderer && S.soloSurv && k==='cvA:p1' ? savedOuting(S.view,world) : null);
     const room=who==='p1' && snapshot?.campPlayerRoom;
     const facility=room && facilityOf(snapshot,room);
     const gate=room && (facility ? facilityGate(facility,snapshot.layout) : world.homes3d?.entrances[room]);
@@ -3388,15 +3405,21 @@ async function refresh() {
     }
   } catch (e) {
     $('log').innerHTML=`<div class="rej">与服务端断开：${esc(e.message)}</div>`;
-    if (ui.menu) $('startStatus').textContent='无法连接世界，正在重试。';
-    $('playNoticeText').textContent='无法连接生存服务，正在重试。';
+    const message=e.code==='CAMP_UNAVAILABLE'
+      ? '当前名字营地暂时无法加载，正在重试。' : '无法连接生存服务，正在重试。';
+    if (ui.menu) $('startStatus').textContent=message;
+    $('playNoticeText').textContent=message;
     $('playNotice').hidden=false;
   }
 }
 
 async function ctl(body) {
-  const result=await api('/ctl', ui.compare?{...body,mode:'compare'}:body);
-  if (!result.ok && result.error) toast('操作未完成：'+result.error);
+  try {
+    const result=await api('/ctl', ui.compare?{...body,mode:'compare'}:body);
+    if (!result.ok && result.error) toast('操作未完成：'+result.error);
+  } catch (error) {
+    toast(error.code==='CAMP_UNAVAILABLE'?'当前名字营地暂时无法加载。':'操作未完成，请重试。');
+  }
   refresh();
 }
 
@@ -3595,7 +3618,7 @@ function showStart() {
 }
 
 async function newSurvival() {
-  if (resettingSurvival || !window.confirm('新开一局会替换此服务器的当前生存存档。继续吗？')) return;
+  if (resettingSurvival || !window.confirm('新开一局会替换当前营地的生存存档。继续吗？')) return;
   resettingSurvival=true;
   startError=false;
   $('startStatus').textContent='正在生成新的生存地图…';

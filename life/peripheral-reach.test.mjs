@@ -116,3 +116,12 @@ test('V4-07 lab/town 不受影响：无 districts 的世界外围校验不生效
   const r=survAct(lab,{kind:'move',room:'yard'});
   assert.ok(r.ok,'核心移动不受外围校验影响');
 });
+test('A09 新档和旧档首次同步允许出生槽的小偏移，远处仍拒绝', () => {
+  for (const sp of [start(),copy(start())]) {
+    const w=sp.world, [x,z]=worldSite(w,w.loc.p1);
+    assert.equal(survAct(sp,{kind:'player_sync',from:[x+4,z]}).code,'TELEPORT');
+    const first=survAct(sp,{kind:'player_sync',from:[x-.5,z+.5]});
+    assert.equal(first.ok,true);
+    assert.equal(survAct(sp,{kind:'player_sync',from:[x+1,z]}).code,'TELEPORT');
+  }
+});

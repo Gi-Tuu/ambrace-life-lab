@@ -8,12 +8,15 @@ export async function postJson(path, body) {
   // 只给会读世界的路径带 camp；/saves、/healthz 等不需要。
   let url = path;
   const camp = campProvider?.() || null;
-  if (camp && (path.startsWith('/world') || path.startsWith('/act'))) {
+  if (camp && (path.startsWith('/world') || path.startsWith('/act') || path.startsWith('/ctl'))) {
     url = path + (path.includes('?') ? '&' : '?') + 'camp=' + encodeURIComponent(camp);
   }
   const res = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  if (res.ok) return res.json();
+  const bodyError=await res.json().catch(()=>null);
+  const error=new Error(`HTTP ${res.status}`);
+  error.code=bodyError?.error;
+  throw error;
 }
 
 // 返回 'lost' | 'ok' | null —— 与抽离前的判断逐字一致。

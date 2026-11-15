@@ -24,7 +24,7 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
-import { CampInstances, listSaves, normalizeName, saveCamp, sweepSaves, touchSave } from './camp-instances.mjs';
+import { CampInstances, listSaves, normalizeName, sweepSaves } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
@@ -319,7 +319,16 @@ function campManager() {
 
 // TTL 清扫：删 3 天无活跃的分名字营地；**正在被观看的绝不删**（先查观看计数再动文件）。
 export function sweepCamps({ now = Date.now() } = {}) {
-  return sweepSaves(S.dir, { now, isWatched: (key) => observerActive(S.campViewers[key], now) });
+  const result = sweepSaves(S.dir, {now,
+    lastSeenAt: key => S.camps?.live.get(key)?.lastSeenAt,
+    isWatched: key => observerActive(S.campViewers[key],now),
+  });
+  for (const key of result.removed) {
+    delete S.campViewers[key];
+    S.camps?.live.delete(key);
+    S.campSaveErrors?.delete(key);
+  }
+  return result;
 }
 
 // 按营地 key 取世界：MAIN 走主世界，其它走实例管理器（live 或磁盘）。
@@ -337,10 +346,16 @@ export function campViewerKeys() {
 export function campSurv(campKey) {
   if (!campKey || campKey === 'MAIN') return S.mainSurv ?? S.surv;
   if (!/^[0-9a-f]{32}$/.test(String(campKey))) return null; // P0-2：第二道闸
-  if (!S.camps) return null;
-  const live = S.camps.live.get(campKey);
-  if (live) return live.sp;
-  try { return S.camps.openKey(campKey) ?? null; } catch { return null; }
+  if (!S.surv) return null;
+  const camps = campManager();
+  const live = camps.live.get(campKey);
+  if (live) { live.lastUsed = Date.now(); return live.sp; }
+  try { return camps.openKey(campKey); }
+  catch (cause) {
+    const error = new Error('当前营地暂时无法载入',{cause});
+    error.code = 'CAMP_UNAVAILABLE';
+    throw error;
+  }
 }
 
 export function listCamps() {
@@ -348,13 +363,18 @@ export function listCamps() {
 }
 
 // 进场：先落当前营地，再把指定名字的营地切为当前世界。返回不进游戏时只读的摘要。
-export async function openCamp(name) {
+export function openCamp(name) {
+  return queueWorldWrite(() => openCampInQueue(name));
+}
+
+function openCampInQueue(name) {
   const id = normalizeName(name);
   if (!id.ok) return { ok: false, code: id.code };
   if (!S.surv) return { ok: false, code: 'NO_SURVIVAL' };
   const mgr = campManager();
-  await save(); // 切走前先把当前营地写稳
-  const opened = mgr.open(id.display, { now: Date.now() });
+  let opened;
+  try { opened = mgr.open(id.display); }
+  catch { return {ok:false, code:'SAVE_FAILED'}; }
   if (!opened.ok) return opened;
   if (!S.mainSurv) S.mainSurv = S.surv;
   S.mainSurv.world.campKey = 'MAIN';
@@ -363,7 +383,6 @@ export async function openCamp(name) {
   S.campKey = opened.key;
   S.campName = id.display;
   S.lastVisitor = Date.now();
-  S.viewers.survival = S.lastVisitor;
   return {
     ok: true, code: 'OK', key: opened.key, name: id.display,
     day: Math.floor((opened.sp.world.t ?? 0) / (opened.sp.world.dayTicks ?? 24)),
@@ -372,7 +391,11 @@ export async function openCamp(name) {
 }
 
 // 回到主营地（浏览器刷新后就是它）。
-export async function backToMainCamp() {
+export function backToMainCamp() {
+  return queueWorldWrite(backToMainCampInQueue);
+}
+
+async function backToMainCampInQueue() {
   if (!S.campKey) return { ok: true, code: 'OK', already: true };
   await save();
   if (S.mainSurv) { S.surv = S.mainSurv; S.surv.world.campKey = 'MAIN'; }
@@ -758,7 +781,7 @@ async function tickBody(onError = null) {
   // 按营地 tick：主世界 + 常驻的分名字营地；共享同一套模型预算与熔断。
   const camps = [S.mainSurv, ...(S.camps ? [...S.camps.live.values()].map((v) => v.sp) : [])].filter(Boolean);
   for (const sp of camps) {
-    try { await tickSurvPlay(sp); } catch (e) { S.tickError = String(e?.message ?? e); }
+    try { await tickSurvPlay(sp); } catch (e) { onError?.(String(e?.message ?? e).slice(0,120)); }
   }   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
   if (saveTick % SAVE_EVERY === 0) await save();
@@ -809,13 +832,14 @@ async function actInComparison(body) {
       results[key] = await actInSurvival(pair.branches[key].play, command, null, now);
     }
   }
-  for (const key of COMPARE_SIDES) {
+  if (body.kind !== 'player_sync') for (const key of COMPARE_SIDES) {
     const branch = pair.branches[key], r = results[key];
     branch.log.push({t: branch.play.world.t, who: '玩家', kind: r.ok ? 'player' : 'rej',
       text: [body.kind, r.line ?? r.code ?? r.error].filter(Boolean).join(' · ')});
     if (branch.log.length > 80) branch.log.shift();
   }
   publishComparison();
+  if (body.kind === 'player_sync' && !Object.values(results).some(r => r.ok)) return {...results.A,sides:results};
   return {...results.A, sides: results, persisted: await saveComparison()};
 }
 
@@ -833,7 +857,7 @@ async function sleepSurvival(sp) {
   }
   const ticks=sp.world.t-start;
   sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
-  return {ok:true,code:'OK',ticks,persisted:await save()};
+  return {ok:true,code:'OK',ticks,persisted:await saveWorld(sp)};
 }
 
 function enqueueTick(auto = false) {
@@ -886,12 +910,11 @@ function catchUp(minutes) {
 // P1-8 生存世界离线补时：从存档刻继续推进（不重复结算已结算的日），有界（SURV_CATCHUP_CAP 刻）、
 // 本地自主（临时撤 deliberator，不烧模型预算）、终局/失败即停。游戏时间换算＝真实毫秒/TICK_MS。
 // 与床加速（sleepSurvival，玩家主动）和服务暂停恢复（本函数，被动）区分；超长空档如实标 capped。
-async function catchUpSurvival(minutes) {
-  if (!S.surv || !(minutes > 0)) return;
+async function catchUpSurvival(minutes, sp = S.surv) {
+  if (!sp || !(minutes > 0)) return;
   const want = Math.round(minutes * 60000 / TICK_MS);
   const steps = Math.min(SURV_CATCHUP_CAP, Math.max(0, want));
   if (steps <= 0) return;
-  const sp = S.surv;
   const savedDelib = sp.world.survivalDeliberator;
   setSurvivalDeliberator(sp, null); // 离线补时走本地替身
   const start = sp.world.t;
@@ -901,8 +924,10 @@ async function catchUpSurvival(minutes) {
     setSurvivalDeliberator(sp, savedDelib);
   }
   const applied = sp.world.t - start;
-  S.missed = { ...S.missed, survival: { applied, capped: want > SURV_CATCHUP_CAP } };
+  const summary={applied,capped:want > SURV_CATCHUP_CAP};
+  if (sp === S.surv) S.missed = {...S.missed,survival:summary};
   sp.log.push({ t: sp.world.t, kind: 'catchup', ok: true, code: `离线补 ${applied} 刻${want > SURV_CATCHUP_CAP ? '（超上限截断）' : ''}` });
+  return summary;
 }
 
 function serialize() {
@@ -934,44 +959,34 @@ let saveSeq = 0;
 
 // H-09：并发 save 原先共用固定 `${f}.tmp` 且无锁 ⇒ 一个 rename 先成功、另一个拿 ENOENT，
 // 那次存档被静默丢弃（实测 80 次并发里 3 轮）。这里串行化 + 唯一 tmp 名（双保险）。
-function save() {
+function saveCampEntry(entry) {
+  try {
+    S.camps.persistEntry(entry);
+    S.campSaveErrors.delete(entry.key);
+    return true;
+  } catch (error) {
+    S.campSaveErrors.set(entry.key, String(error?.message ?? error).slice(0,80));
+    return false;
+  }
+}
+
+function saveWorld(sp) {
+  const key = sp.world.campKey;
+  const entry = key && key !== 'MAIN' ? S.camps?.live.get(key) : null;
+  if (key && key !== 'MAIN') return Boolean(entry?.sp === sp && saveCampEntry(entry));
+  return saveMain();
+}
+
+async function save() {
+  let campsSaved = true;
+  for (const entry of S.camps?.live.values() ?? []) {
+    if (!saveCampEntry(entry)) campsSaved = false;
+  }
+  return await saveMain() && campsSaved;
+}
+
+function saveMain() {
   const run = saveChain.then(async () => {
-    // 命名营地逐份落盘（每个常驻营地各写 gzip + 索引；主营地仍走下面的 world.json）
-    if (S.camps) {
-      for (const [key, entry] of S.camps.live) {
-        try {
-          saveCamp(S.dir, key, dumpSurv(entry.sp));
-          touchSave(S.dir, {
-            key, name: entry.name ?? key,
-            day: Math.floor((entry.sp.world.t ?? 0) / (entry.sp.world.dayTicks ?? 24)),
-            population: Object.values(entry.sp.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
-            status: entry.sp.world.survival?.playerDead ? 'ended' : 'active',
-            lastSeenAt: entry.lastSeenAt ?? Date.now(), // P1-3：落盘不算有人来
-          });
-        } catch (error) { S.saveError = String(error?.message ?? error); }
-      }
-    }
-    // 兼容：S.campKey 存在但实例不在 live 里（旧路径）
-    if (S.campKey && !(S.camps && S.camps.live.has(S.campKey))) {
-      try {
-        await mkdir(S.dir, { recursive: true });
-        saveCamp(S.dir, S.campKey, dumpSurv(S.surv));
-        touchSave(S.dir, {
-          key: S.campKey, name: S.campName,
-          day: Math.floor((S.surv.world.t ?? 0) / (S.surv.world.dayTicks ?? 24)),
-          population: Object.values(S.surv.world.agents).filter((a) => !a.dead && !a.isPlayer).length,
-          status: S.surv.world.survival?.playerDead ? 'ended' : 'active',
-          lastSeenAt: Date.now(),
-        });
-        S.savedAt = Date.now();
-        S.saveWrites = (S.saveWrites ?? 0) + 1;
-        S.saveError = null;
-        return true;
-      } catch (error) {
-        S.saveError = String(error?.message ?? error);
-        return false;
-      }
-    }
     const f = join(S.dir, 'world.json');
     const tmp = `${f}.${process.pid}.${(saveSeq += 1)}.tmp`;
     const backupTmp = `${tmp}.bak`;
@@ -1005,24 +1020,23 @@ function save() {
   return run;
 }
 
-// 动作落盘：默认立即写；只有配了 ACT_SAVE_COALESCE_MS 才合并（窗口内多次动作只写一次）。
-// 合并时仍返回 persisted=true（动作已受理）；真正的失败照旧经 /world.saveError 暴露，
-// 与「立即写」失败时同一条通道，前端不会看不见。
+// 合并模式只延迟主档。名字档动作立即写目标营地，避免等待期间被淘汰。
 let actFlushTimer = null;
-async function persistAfterAction() {
-  if (!ACT_SAVE_COALESCE_MS) return save();
-  if (!actFlushTimer) {
-    actFlushTimer = setTimeout(() => { actFlushTimer = null; void save(); }, ACT_SAVE_COALESCE_MS);
-    actFlushTimer.unref?.(); // 待落盘不拖住进程退出
+async function persistAfterAction(sp) {
+  if ((sp.world.campKey && sp.world.campKey !== 'MAIN') || !ACT_SAVE_COALESCE_MS) {
+    return {persisted: await saveWorld(sp)};
   }
-  return true;
+  if (!actFlushTimer) {
+    actFlushTimer = setTimeout(() => { actFlushTimer = null; void queueWorldWrite(saveMain); }, ACT_SAVE_COALESCE_MS);
+    actFlushTimer.unref?.();
+  }
+  return {persistence:'pending'};
 }
-// stop() 保持同步（20+ 处调用不带 await）；有待刷的写盘时把它踢起来。
 function takePendingFlush() {
   if (!actFlushTimer) return;
   clearTimeout(actFlushTimer);
   actFlushTimer = null;
-  void save();
+  void queueWorldWrite(saveMain);
 }
 
 // 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
@@ -1153,10 +1167,17 @@ export const host = {
     // 否则任何主营地访客的常规轮询都会把别人的分名字营地标成"有人看"，绕过三态调度。
     const requested = campKey ?? 'MAIN';
     const key = validCampKey(requested) ? requested : null;
-    if (!mode || mode === 'survival') { S.viewers.survival = S.lastVisitor; S.campViewers[key ?? 'MAIN'] = S.lastVisitor; }
+    if (!mode || mode === 'survival') {
+      const watched = key ?? 'MAIN';
+      if (watched === 'MAIN') S.viewers.survival = S.lastVisitor;
+      S.campViewers[watched] = S.lastVisitor;
+    }
     // P1-3：观众行为推进 lastSeenAt（落盘不推进）
     const liveCamp = key && S.camps ? S.camps.live.get(key) : null;
-    if (liveCamp) liveCamp.lastSeenAt = S.lastVisitor;
+    if (liveCamp) {
+      try { S.camps.markSeen(liveCamp,S.lastVisitor); }
+      catch { /* 本拍和清扫仍使用内存中的真实访问时间。 */ }
+    }
     if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
     if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
   },
@@ -1174,6 +1195,11 @@ export const host = {
     S.masks = { m3: false, coupling: false }; // 演示开关按设计不落盘，重启即回到默认关
     S.tickError = null;
     S.saveError = null;
+    S.campSaveErrors = new Map();
+    S.camps = null;
+    S.campKey = S.campName = null;
+    S.campViewers = {};
+    S.mainSurv = S.seedSurv = null;
     S.lastVisitor = S.viewers.survival = S.viewers.compare = S.viewers.comparison = 0;
     // BUG-5：装载必须在**副本**上做，全部成功才提交。上一版直接对活 pack 调 applyInto，
     // 任一字段抛错（例如越界的 m3.remaining）就留在半载入状态；catch 又把它当成"没有存档"，
@@ -1237,7 +1263,7 @@ export const host = {
   // 名字存档 TTL：启动先扫一次，之后每小时一次（unref：不拖住进程退出）。
   try { sweepCamps(); } catch { /* 清扫失败不影响世界 */ }
   if (!S.sweepTimer) {
-    S.sweepTimer = setInterval(() => { try { sweepCamps(); } catch { /* 同上 */ } }, 60 * 60 * 1000);
+    S.sweepTimer = setInterval(() => { void queueWorldWrite(() => sweepCamps()).catch(()=>{}); }, 60 * 60 * 1000);
     S.sweepTimer.unref?.();
   }
     if (!sigHandlers) {
@@ -1269,11 +1295,17 @@ export const host = {
       sigHandlers = null;
     }
   },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError, tickError: S.tickError, masks: S.masks }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, masks: S.masks }),
   listCamps,
   sweepCamps,
   openCamp,
   backToMainCamp,
+  readWorld(mode, campKey) {
+    return queueWorldWrite(() => {
+      if (mode !== 'menu') this.touch(mode === 'compare' ? 'comparison' : mode, campKey);
+      return structuredClone(this.snapshot(mode,campKey));
+    });
+  },
   snapshot(mode, campKey) {
     // 第三轮 N1：请求里的 camp 不可用（格式错/未登记/过期）⇒ 按主营地服务。
     // 绝不把请求原语回显到 camp.name，也绝不让 survival 变 null（那是一个空世界）。
@@ -1316,7 +1348,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : null, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : null, saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
     return queueWorldWrite(async () => {
@@ -1328,7 +1360,7 @@ export const host = {
         if (!survSel) return {ok:false,error:'NO_SURV'};
         if (body.kind === 'camp_sleep') return sleepSurvival(survSel);
         const result = await actInSurvival(survSel, body, modelTalk);
-        if (result.ok || result.settled) return {...result, persisted: await persistAfterAction()};
+        if (result.ok || result.settled) return {...result, ...await persistAfterAction(survSel)};
         return result;
       }
       const kind = String(body?.kind ?? '');
@@ -1399,7 +1431,7 @@ export const host = {
       return { ok: true, t: S.packs.A.world.t };
     });
   },
-  ctl(body) {
+  ctl(body, campKey) {
     if (body.action === 'step' && body.mode === 'compare') return queueWorldWrite(async () => {
       await tickComparison();
       publishComparison();
@@ -1425,24 +1457,37 @@ export const host = {
       }
       if (body.action === 'survival_reset') {
         if (body.confirm !== true) return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
-          const old = S.surv;
-          let seed;
-          do { seed = randomInt(1, 0x7fffffff); } while (seed === old?.world.mapSeed);
-          S.surv = createSurvPlay(seed, { ...survivalOptions(), mapSeed: seed, layoutVersion: CURRENT_LAYOUT });
-  S.mainSurv = S.surv; // 单世界语义：主世界跟着重置（快照/动作按主世界取）
-          await save();
-          if (S.saveError) {
-            S.surv = old;
-            return { ...this.status(), ok: false, error: 'SAVE_FAILED' };
+        const old = campSurv(campKey);
+        if (!old) return {...this.status(), ok:false, error:'NO_SURV'};
+        let seed;
+        do { seed = randomInt(1, 0x7fffffff); } while (seed === old.world.mapSeed);
+        const next = createSurvPlay(seed, {...survivalOptions(), mapSeed:seed, layoutVersion:CURRENT_LAYOUT});
+        const entry = S.camps?.live.get(campKey);
+        if (entry) {
+          next.world.campKey = entry.key;
+          const replacement = {...entry, sp:next, lastUsed:Date.now(), lastSeenAt:Date.now()};
+          if (!saveCampEntry(replacement)) return {...this.status(), ok:false, error:'SAVE_FAILED'};
+          S.camps.live.set(entry.key, replacement);
+        } else {
+          const formerSurv = S.surv, formerMain = S.mainSurv;
+          next.world.campKey = 'MAIN';
+          S.surv = S.mainSurv = next;
+          if (!await saveMain()) {
+            S.surv = formerSurv;
+            S.mainSurv = formerMain;
+            return {...this.status(), ok:false, error:'SAVE_FAILED'};
           }
-          return { ...this.status(), ok: true, mapSeed: seed };
+        }
+        return {...this.status(), saveError:null, ok:true, mapSeed:seed};
       }
       if (body.action === 'compare_reset' && body.confirm !== true) {
         return { ...this.status(), ok: false, error: 'RESET_NEEDS_CONFIRM' };
       }
       if (body.action === 'compare_reset' && body.mode === 'compare') {
         const previous = S.comparison;
-        const origin = body.fromSurvival === true ? structuredClone(dumpSurv(S.surv)) : previous.origin;
+        const source = body.fromSurvival === true ? campSurv(campKey) : null;
+        if (body.fromSurvival === true && !source) return {...this.status(), ok:false, error:'NO_SURV'};
+        const origin = source ? structuredClone(dumpSurv(source)) : previous.origin;
         S.comparison = makeComparison(origin, previous.revision + 1);
         if (await saveComparison()) { publishComparison(); return {...this.status(), ok: true}; }
         S.comparison = previous;
@@ -1468,6 +1513,13 @@ export const host = {
         // 负数被照收；无限次 360 分钟补时能把三个人的 drives 压到 0。
         const m = Number(body.minutes ?? 30);
         if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
+        if (campKey && campKey !== 'MAIN') {
+          const target=campSurv(campKey);
+          if (!target) return {...this.status(),ok:false,error:'NO_SURV'};
+          const summary=await catchUpSurvival(m,target);
+          const persisted=await saveWorld(target);
+          return {...this.status(),ok:persisted,persisted,catchup:summary,...(!persisted && {error:'SAVE_FAILED'})};
+        }
         catchUp(m);
         await catchUpSurvival(m);
         await save(); // P1-8：手动补时也推进生存世界

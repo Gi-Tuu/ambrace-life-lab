@@ -24,6 +24,12 @@ test('N4 不带 camp 的主营地轮询不得把最后打开的营地标成"有�
   assert.ok(opened.ok, JSON.stringify(opened));
   const key = opened.key;
   // 此时 S.campKey === key；一次不带 camp 的轮询必须记到 MAIN，而不是 key
+  host.touch('survival',key);
+  assert.equal(host.snapshot('survival').survival.model.watching,false);
+  assert.equal(host.snapshot('survival',key).survival.model.watching,true);
+  host.stop();
+  await host.start();
+  host.stop();
   host.touch('survival');
   const keys = campViewerKeys();
   assert.ok(keys.includes('MAIN'), '不带 camp 的打点应记到主营地，实测 ' + JSON.stringify(keys));
