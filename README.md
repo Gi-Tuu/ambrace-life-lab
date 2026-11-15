@@ -59,15 +59,21 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
-│  ├─ *.test.mjs          #   70 个测试文件（闸门，含负向对照）
+│  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
+│  ├─ *.test.mjs          #   82 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
 │  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
 │  ├─ camp-3d-scene.mjs   #   3D 营地几何（代码定义的 box 模型，随 progress/integrity/季节重建）
+│  ├─ camp-lighting.mjs / camp-sun.mjs   # 受光与日照（接触阴影，纯表现）
+│  ├─ wild-landscape.mjs / camp-outskirts.mjs   # 野外地形 / 郊区（河流、岸线、植被）
+│  ├─ camp-districts.mjs / camp-region-entities.mjs   # 外围资源点（内环日常 + 外环远征）/ 区域实体
+│  ├─ camp-sight.mjs / camp-facility.mjs   # 视野 / 设施几何
+│  ├─ audio.mjs           #   程序化声音：状态驱动 SFX / 环境声 / BGM（离聚落越远越稀疏）
 │  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
-│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体
+│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体 + art-hashes 指纹
 ├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
 │  ├─ gen-pixel-assets.mjs / gen-actions.mjs / pack-assets.mjs
 │  ├─ editor-catalog.mjs / pixel-overrides.mjs
@@ -90,9 +96,11 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 node serve.mjs          # http://localhost:7860
 ```
 
-启动生存试玩时可设 `GAME_MODE=game`，服务器只推进生存世界。需要实时 A/B 对照时用 `GAME_MODE=research`（默认）。生存玩法为无尽经营，个人死亡后可继续观察世界。关闭页面或未操作时，已运行的服务器照常推进；服务暂停只接受显式单步或补时。重新加载存档时，离线补时默认最多 120 刻并走本地决策。床铺睡眠是玩家主动操作，和离线补时分别处理。
+启动生存试玩时可设 `GAME_MODE=game`，服务器持续推进生存世界。游戏界面的生存 A/B 仅在有对照观众时自动推进，也可独立暂停或单步。`GAME_MODE=research`（默认）还会持续推进兼容接口的旧城镇研究预设。生存玩法为无尽经营，个人死亡后可继续观察世界。关闭页面或未操作时，已运行的服务器照常推进；服务暂停只接受显式单步或补时。重新加载存档时，离线补时默认最多 120 刻并走本地决策。床铺睡眠是玩家主动操作，和离线补时分别处理。
 
 生存世界使用一份共享存档，多位玩家访问同一服务时会互相影响。将 `DATA_DIR` 放在持久卷上可以跨容器恢复。没有持久卷的平台只能在容器存续期间保存进度。
+
+游戏内的「研究对照 A/B」从同一份生存快照复制两条独立分支，沿用相同的地图、玩法、裁决和居民初始随机状态。两侧都用本地决策，B 切断登记的状态通道。在 A 侧操作，两侧分别裁决。点击「重跑对照」回到本轮起点，或点击「用当前生存快照」另起一轮。对照进度单独存于 `DATA_DIR/comparison.json`，正式生存继续使用 `DATA_DIR/world.json`。
 
 未配置模型端点时世界自动退回本地确定性替身，照常运行。接入真实模型：
 
@@ -108,7 +116,7 @@ MODEL_PROVIDERS=  # 供应商端点，逗号分隔可配多个，按序退回（
 MODEL_KEYS=       # 与端点按位对应的密钥（兼容旧名 MODEL_KEY）
 MODEL_NAME=       # 单供应商模型 id；多供应商用 MODEL_NAMES 按位对应
 MAX_CALLS=        # 每日调用预算闸门（跨天归零）
-GAME_MODE=        # research（默认）| game（只推进生存世界）
+GAME_MODE=        # research（默认）| game（有对照观众时才推进 A/B）
 SURV_CATCHUP_CAP= # 生存离线补时上限，默认 120 刻
 BRAIN=            # local（默认，0 成本）| model
 TICK_MS=          # 每拍间隔，毫秒
@@ -125,10 +133,14 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 70 个测试文件 / 475 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 88.8% / 分支 87.8% / 函数 91.1%，69 个被加载模块）
-npm run check     # lint + test
+npm test          # 82 个测试文件 / 556 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 90.24% / 分支 88.35% / 函数 92.10%，89 个被加载模块；2026-11-15 实测）
+npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
+npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
+npm run check     # lint + art:check + test
 ```
+
+**为什么美术也要指纹**：研究面早有"五份面 md5"钉死，但素材没有指纹时，"改图"只能靠肉眼发现——重生成、覆盖稿、别人提交一张图都可能在无人察觉时改变游戏外观。`art:check` 把外观也纳入"改了就必须在提交里承认"的纪律（与五份面同源思路）。哈希对 PNG 字节取，Node 大版本升级可能改变压缩输出（像素相同、字节不同）⇒ 那时 `--check` 会红，逼你显式重钉并在 CHANGELOG 说明"只是压缩器变了"。
 
 研究读数（五份面随仓库发布在 `evidence/`，md5 与复现方法见 [`EVIDENCE.md`](./EVIDENCE.md)）：
 

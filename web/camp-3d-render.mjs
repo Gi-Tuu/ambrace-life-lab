@@ -1,14 +1,58 @@
 import { itemBoxes } from './camp-items.mjs';
+import { WALK_DIRECTIONS } from './walk.mjs';
+import { contactShadowMesh, materialGrain } from './camp-lighting.mjs';
+
+function rotateXZ([x,y,z], angle, px=0, pz=0) {
+  const c=Math.cos(angle), s=Math.sin(angle);
+  return [px+(x-px)*c-(z-pz)*s,y,pz+(x-px)*s+(z-pz)*c];
+}
+
+// Euler order X → Y → Z. The legacy yaw uses its original sign convention.
+function rotate(point, angles, pivot=[0,0,0], inverse=false) {
+  const v=point.map((n,i)=>n-pivot[i]);
+  for (const axis of inverse?[2,1,0]:[0,1,2]) {
+    const a=(axis+1)%3,b=(axis+2)%3, angle=angles[axis]*(inverse?-1:1);
+    const c=Math.cos(angle),s=Math.sin(angle), left=v[a],right=v[b];
+    v[a]=left*c-right*s;
+    v[b]=left*s+right*c;
+  }
+  return v.map((n,i)=>n+pivot[i]);
+}
+
+function transformBox(point,b) {
+  if (b.rot) return rotate(point,b.rot,b.pivot);
+  return b.yaw?rotateXZ(point,b.yaw,b.pivotX,b.pivotZ):point;
+}
+
+export function boxVertices(b) {
+  const {x,y,z,w,h,d,axis,end}=b;
+  const top=(u,v)=>axis==='x'?y+(end-y)*u:axis==='z'?y+(end-y)*v:y+h;
+  const bottom=axis?Math.min(y,end)-.11:y;
+  const x1=x+w,z1=z+d;
+  const points=[[x,top(0,0),z],[x1,top(1,0),z],[x1,top(1,1),z1],[x,top(0,1),z1],
+    [x,bottom,z],[x1,bottom,z],[x1,bottom,z1],[x,bottom,z1]];
+  return b.rot || b.yaw ? points.map(p=>transformBox(p,b)) : points;
+}
 
 const rgb = (hex, shade = 1) => [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)*shade/255);
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const norm = v => { const len=Math.hypot(...v); return v.map(a=>a/len); };
+export const MODEL_STRIDE=15;
+const WOOD=new Set(['#514134','#72513B','#976A45','#BA8752','#D8A667','#EDC787','#8A633F','#5B4434','#8D593F']);
+const METAL=new Set(['#458996','#939584','#9DA8A8','#6D7165']);
+const finishOf=color=>WOOD.has(color)?1:METAL.has(color)?2:0;
+const faceNormal=(a,b,c)=>{
+  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  const x=uy*vz-uz*vy,y=uz*vx-ux*vz,z=ux*vy-uy*vx;
+  const len=Math.hypot(x,y,z)||1;
+  return [x/len,y/len,z/len];
+};
 
-export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65 }) {
+export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55 }) {
   const back = [Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)];
   const right = norm(cross([0,1,0],back)), up = cross(back,right);
-  const aim = [x,.55,z], eye = aim.map((v,i)=>v+80*back[i]);
+  const aim = [x,targetY,z], eye = aim.map((v,i)=>v+80*back[i]);
   const halfX = span/2, halfY = halfX*height/width;
   return {
     back,
@@ -30,7 +74,19 @@ export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65 }) {
 
 // 射线用同一相机方向判定点击深度和实际遮挡。
 export function rayBox(origin, direction, b) {
+  if (b.shape==='beam') return rayBeam(origin,direction,b);
+  if (b.rot) {
+    origin=rotate(origin,b.rot,b.pivot,true);
+    direction=rotate(direction,b.rot,undefined,true);
+  } else if (b.yaw) {
+    origin=rotateXZ(origin,-b.yaw,b.pivotX,b.pivotZ);
+    direction=rotateXZ(direction,-b.yaw);
+  }
   const lower=[b.x,b.y,b.z], upper=[b.x+b.w,b.y+b.h,b.z+b.d];
+  return rayBounds(origin,direction,lower,upper);
+}
+
+function rayBounds(origin,direction,lower,upper) {
   let near=0, far=Infinity;
   for (let i=0;i<3;i+=1) {
     const o=origin[i], d=direction[i];
@@ -46,14 +102,74 @@ export function rayBox(origin, direction, b) {
   return near;
 }
 
+export function beam(from,to,r,color,segments=6) {
+  const axis=to.map((n,i)=>n-from[i]), length=Math.hypot(...axis);
+  if (!(length>1e-8 && r>0)) return null;
+  const unit=axis.map(n=>n/length);
+  const u=norm(cross(Math.abs(unit[1])>.95?[1,0,0]:[0,1,0],unit));
+  const v=cross(unit,u);
+  const count=Number.isFinite(segments)?Math.max(6,Math.min(64,Math.floor(segments))):6;
+  return {shape:'beam',from,to,r,color,segments:count,unit,u,v,length};
+}
+
+export function cyl(x,y,z,r,h,color,segments=8,axis='y') {
+  if (!['x','y','z'].includes(axis) || !(h>0)) return null;
+  const from=[x,y,z], to=from.slice();
+  to['xyz'.indexOf(axis)]+=h;
+  return beam(from,to,r,color,segments);
+}
+
+function beamRing(b) {
+  return Array.from({length:b.segments},(_,i)=>{
+    const angle=i*2*Math.PI/b.segments,c=Math.cos(angle)*b.r,s=Math.sin(angle)*b.r;
+    return b.u.map((n,j)=>n*c+b.v[j]*s);
+  });
+}
+
+function rayBeam(origin,direction,b) {
+  // Clip against the two caps and the actual polygon faces, not the enclosing box.
+  const relative=origin.map((n,i)=>n-b.from[i]);
+  let near=0,far=Infinity;
+  const normals=[[b.unit,b.length],[b.unit.map(n=>-n),0]];
+  for (let i=0;i<b.segments;i++) {
+    const angle=(i+.5)*2*Math.PI/b.segments;
+    const normal=b.u.map((n,j)=>n*Math.cos(angle)+b.v[j]*Math.sin(angle));
+    normals.push([normal,b.r*Math.cos(Math.PI/b.segments)]);
+  }
+  for (const [normal,bound] of normals) {
+    const left=bound-dot(relative,normal), speed=dot(direction,normal);
+    if (Math.abs(speed)<1e-8) { if (left<0) return null; }
+    else if (speed>0) far=Math.min(far,left/speed);
+    else near=Math.max(near,left/speed);
+    if (near>far) return null;
+  }
+  return near;
+}
+
+export function modelBounds(b) {
+  if (!b.shape && !b.rot && !b.yaw) return b;
+  const points=b.shape==='beam'?beamRing(b).flatMap(offset=>[b.from,b.to].map(p=>p.map((n,i)=>n+offset[i]))):boxVertices(b);
+  const low=[0,1,2].map(i=>Math.min(...points.map(p=>p[i])));
+  const high=[0,1,2].map(i=>Math.max(...points.map(p=>p[i])));
+  return {x:low[0],y:low[1],z:low[2],w:high[0]-low[0],h:high[1]-low[1],d:high[2]-low[2]};
+}
+
+export function collisionFootprint(b,scale) {
+  const {x,z,w,d}=b.bounds??modelBounds(b);
+  const left=Math.floor(x*scale), top=Math.floor(z*scale);
+  return [left,top,Math.ceil((x+w)*scale)-left,Math.ceil((z+d)*scale)-top];
+}
+
 export function coveredModels(camera, player, ...lists) {
   const covered=new Set();
   if (!player || camera.back[1]>.995) return covered;
   const {x,y,z}=player;
   const samples=[[x,y+.12,z],[x,y+.59,z],[x,y+1.11,z]];
   for (const boxes of lists) for (const b of boxes) {
-    if (!b.occluder || covered.has(b.occluder) || b.fx || b.y+b.h<=y+.12 ||
-        b.x>x+9 || b.x+b.w<x-9 || b.z>z+9 || b.z+b.d<z-9) continue;
+    if (!b.occluder || covered.has(b.occluder) || b.fx) continue;
+    const bounds=b.bounds??modelBounds(b);
+    if (bounds.y+bounds.h<=y+.12 || bounds.x>x+9 || bounds.x+bounds.w<x-9 ||
+        bounds.z>z+9 || bounds.z+bounds.d<z-9) continue;
     if (samples.some(origin => {
       const distance=rayBox(origin,camera.back,b);
       return distance!==null && distance>.025;
@@ -62,24 +178,43 @@ export function coveredModels(camera, player, ...lists) {
   return covered;
 }
 
-function quad(data,a,b,c,d,color,uv=[[0,0],[0,0],[0,0],[0,0]],material=()=>[0,0,0]) {
+const QUAD_UV=[[0,0],[0,0],[0,0],[0,0]];
+const noFx=()=>[0,0,0];
+function quad(data,a,b,c,d,color,uv=QUAD_UV,material=noFx,normal=faceNormal(a,c,b),surface=.5) {
   const points=[a,b,c,d];
-  for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]));
+  for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]),...normal,surface);
 }
 
-function prism(data,{ x,y,z,w,h,d,color,axis,end,glow,wind }) {
+export function modelMesh(data,b) {
+  if (b.shape==='beam') {
+    const ring=beamRing(b), add=(p,q)=>p.map((n,i)=>n+q[i]);
+    const color=rgb(b.color), finish=finishOf(b.color), lower=b.unit.map(n=>-n);
+    for (let i=0;i<ring.length;i++) {
+      const next=(i+1)%ring.length;
+      const a=add(b.from,ring[i]), c=add(b.to,ring[i]), d=add(b.to,ring[next]), e=add(b.from,ring[next]);
+      const normal=norm(ring[i].map((n,j)=>n+ring[next][j]));
+      quad(data,a,e,d,c,color,QUAD_UV,noFx,normal,finish+(.76+.18*Math.cos(i*2*Math.PI/ring.length))*.5);
+      for (const point of [b.from,e,a]) data.push(...point,...color,0,0,0,0,0,...lower,finish+.34);
+      for (const point of [b.to,c,d]) data.push(...point,...color,0,0,0,0,0,...b.unit,finish+.5);
+    }
+    return;
+  }
+  prism(data,b);
+}
+
+function prism(data,b) {
+  const { x,y,z,w,h,d,color,axis,glow,wind }=b;
   if (w <= 0 || d <= 0 || h < 0) return;
-  const x1=x+w,z1=z+d;
-  const height=(u,v)=>axis==='x' ? y+(end-y)*u : axis==='z' ? y+(end-y)*v : y+h;
-  const bottom=axis ? Math.min(y,end)-.11 : y;
-  const a=[x,height(0,0),z],b=[x1,height(1,0),z],c=[x1,height(1,1),z1],d0=[x,height(0,1),z1];
-  const A=[x,bottom,z],B=[x1,bottom,z],C=[x1,bottom,z1],D=[x,bottom,z1];
+  const [a,bb,c,d0,A,B,C,D]=boxVertices(b);
   const material=point=>[wind ? wind.weight*(wind.rooted ? (point[1]-y)/Math.max(h,.01) : 1) : 0,
     wind?.phase??0,Number(Boolean(glow))];
-  const face=(a,b,c,d,shade=1)=>quad(data,a,b,c,d,rgb(color,shade),undefined,material);
-  face(a,b,c,d0);
+  const tint=rgb(color), finish=wind||glow?0:finishOf(color);
+  const face=(a,b,c,d,shade)=>{
+    quad(data,a,b,c,d,tint,QUAD_UV,material,faceNormal(a,b,c),finish+shade*.5);
+  };
+  quad(data,a,bb,c,d0,tint,QUAD_UV,material,faceNormal(a,c,bb),finish+.5);
   if (!axis && h===0) return;
-  face(a,b,B,A,.70); face(b,c,C,B,.78);
+  face(a,bb,B,A,.70); face(bb,c,C,B,.78);
   face(c,d0,D,C,.91); face(d0,a,A,D,.65);
 }
 
@@ -94,7 +229,8 @@ function stageMesh(stage) {
       const points=[[x,y+.006,z],corner.map((v,i)=>i===1?v+.006:v),[x+1,y+ax+az+.006,z+1]];
       const shade=Math.min(1.08,Math.max(.91,1-ax*.16+az*.12));
       if (f.triangle===2) [points[1],points[2]]=[points[2],points[1]];
-      for (const point of points) out.push(...point,shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0);
+      const normal=faceNormal(points[0],points[2],points[1]);
+      for (const point of points) out.push(...point,shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0,...normal,.5);
       terrainCount+=3;
       continue;
     }
@@ -107,12 +243,12 @@ function stageMesh(stage) {
       prism(out,{x:f.x,y:top+.003,z:f.z+i,w:f.w,d:.025,h:0,axis:f.axis==='x'?'x':undefined,end:end+.003,color:'#976A45'});
     }
   }
-  if (out.length/11>terrainCount) ranges.push({id:null,from:terrainCount,count:out.length/11-terrainCount});
+  if (out.length/MODEL_STRIDE>terrainCount) ranges.push({id:null,from:terrainCount,count:out.length/MODEL_STRIDE-terrainCount});
   for (const b of stage.boxes) {
     if (b.fx) continue;
-    const from=out.length/11;
-    prism(out,b);
-    const count=out.length/11-from, last=ranges.at(-1);
+    const from=out.length/MODEL_STRIDE;
+    modelMesh(out,b);
+    const count=out.length/MODEL_STRIDE-from, last=ranges.at(-1);
     if (last && last.id===b.occluder) last.count+=count;
     else ranges.push({id:b.occluder,from,count});
   }
@@ -120,7 +256,7 @@ function stageMesh(stage) {
 }
 
 // 呼吸感：带 fx 标记的几何不进静态网格，按共享帧号逐帧重建（独立 6fps 时钟，不读 w.t、不消费 rng）。
-function fx3d(data, list, frame) {
+export function fx3d(data, list, frame) {
   if (!list || !list.length) return;
   const t = frame % 4;
   for (const b of list) {
@@ -152,22 +288,33 @@ function turnBox(x,z,w,d,turn) {
 }
 function animalMesh(data,animals,time) {
   for (const a of animals) {
-    const turn=a.direction??0, gait=a.moving?Math.sin(time*10+a.phase)*.08:0;
-    for (const b of a.boxes) {
-      const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
-      const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
-      const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
-      prism(data,{...b,x:a.x+x,z:a.z+z,w,d,y:b.y+Math.max(0,stride*.4)+nod});
-    }
+    for (const box of animalBoxes(a,time)) prism(data,box);
   }
 }
-function actor(data,p,frame) {
+export function animalBoxes(a,time) {
+  const turn=a.direction??0, gait=a.moving?Math.sin(time*10+a.phase)*.08:0;
+  return a.boxes.map(b=>{
+    const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
+    const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
+    const [x,z,w,d]=turnBox(b.x,b.z+stride,b.w,b.d,turn);
+    const flight=a.kind==='bird'?2.7+.7*Math.sin(time*1.8+a.phase):0;
+    const flap=b.fx==='wing'?.095*Math.sin(time*15):0;
+    return {...b,x:a.x+x,z:a.z+z,w,d,y:b.y+(a.groundY??0)+Math.max(0,stride*.4)+nod+flight+flap};
+  });
+}
+function actor(data,p,frame) { actorGeometry(p,frame,box=>prism(data,box)); }
+export function actorBoxes(p,frame) {
+  const boxes=[];
+  actorGeometry(p,frame,box=>boxes.push(box));
+  return boxes;
+}
+function actorGeometry(p,frame,emit) {
   const {x,y,z}=p, t=frame%4, gait=p.moving ? [0,.15,0,-.15][t] : 0;
-  const turn={down:0,left:1,up:2,right:3}[p.direction]??0;
+  const turn=Math.max(0,WALK_DIRECTIONS.indexOf(p.direction));
   const child=p.stage==='child';
   const feminine=p.sex==='F', hair=p.hair??(feminine?'#573B31':'#403631');
   const act=String(p.act??'idle');
-  const build=/^(build|plan|repair|work)$/.test(act);
+  const build=/^(build|plan|repair|work|till)$/.test(act);
   const gather=/^(gather|harvest|plant|forage|collect)$/.test(act);
   const talk=/^(talk|hail|say|companion)$/.test(act);
   const food=/^(eat|food|trade|buy|take_shared)$/.test(act);
@@ -182,7 +329,7 @@ function actor(data,p,frame) {
       h*=head?.81:.63;
     }
     if (p.pose==='sleep') {
-      prism(data,{x:x-dy-h+.74,y:y+dz+.23,z:z+dx,w:h,h:d,d:w,color});
+      emit({x:x-dy-h+.74,y:y+dz+.23,z:z+dx,w:h,h:d,d:w,color});
       return;
     }
     if (p.pose==='sit') {
@@ -190,8 +337,12 @@ function actor(data,p,frame) {
       if (dy<.3) { h*=.66; dz+=.16; }
     }
     if (dy>.4) dz+=bend;
-    const [px,pz,pw,pd]=turnBox(dx,dz,w,d,turn);
-    prism(data,{x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
+    if (turn % 2) {
+      emit({x:x+dx,y:y+dy+bob,z:z+dz,w,h,d,color,yaw:turn*Math.PI/4,pivotX:x,pivotZ:z});
+    } else {
+      const [px,pz,pw,pd]=turnBox(dx,dz,w,d,turn/2);
+      emit({x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
+    }
   };
   if (!p.pose) draw(-.27,.004,-.20,.54,0,.45,'#72513B');
   draw(-.20,0,-.12+gait,.15,.46,.25,'#324D59');
@@ -231,43 +382,99 @@ const VERTEX = `
   attribute vec3 aColor;
   attribute vec2 aUV;
   attribute vec3 aMaterial;
+  attribute vec4 aNormal;
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
+  uniform bool uRegionTexture;
+  uniform vec4 uSunRay;
+  uniform mediump vec3 uLight, uSun;
   varying vec3 vColor;
-  varying vec2 vUV, vWorld;
-  varying float vGlow;
+  varying vec2 vUV;
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+    varying highp vec2 vWorld;
+  #else
+    varying mediump vec2 vWorld;
+  #endif
+  varying float vGlow, vHeight, vRoad, vBank;
+  varying mediump vec3 vPhysical;
+  varying mediump float vFinish;
   void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
-    point.x+=sin(phase)*aMaterial.x*uWeather.y;
-    point.z+=sin(phase*.72+.8)*aMaterial.x*uWeather.y*.43;
+    float wind=uRegionTexture?0.:aMaterial.x;
+    point.x+=sin(phase)*wind*uWeather.y;
+    point.z+=sin(phase*.72+.8)*wind*uWeather.y*.43;
     gl_Position=uProjection*uView*vec4(point,1.);
-    vGlow=aMaterial.z;
+    vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x; vBank=aMaterial.y;
+    float diffuse=max(0.,dot(aNormal.xyz,uSunRay.xyz));
+    vPhysical=uLight*(.78+.14*max(0.,aNormal.y)+diffuse*uSunRay.w*.55)+vec3(.22,.09,.035)*uSun.z*diffuse;
+    vFinish=aNormal.w;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
 `;
 const FRAGMENT = `
   precision mediump float;
-  uniform sampler2D uGround, uFog, uWater;
-  uniform vec2 uExtent;
+  uniform sampler2D uGround, uFog, uWater, uGrain;
+  uniform vec4 uFogBounds;
   uniform bool uTexture, uVisibility, uHasWater;
   uniform vec3 uSight;
   uniform vec4 uHearth;
   uniform mediump vec4 uWeather;
   uniform float uSeason;
-  uniform vec3 uLight;
+  uniform mediump vec3 uLight, uSun;
+  uniform bool uPhysical, uShadow;
   uniform float uAlpha;
   varying vec3 vColor;
-  varying vec2 vUV, vWorld;
-  varying float vGlow;
+  varying vec2 vUV;
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+    varying highp vec2 vWorld;
+  #else
+    varying mediump vec2 vWorld;
+  #endif
+  varying float vGlow, vHeight, vRoad, vBank;
+  varying mediump vec3 vPhysical;
+  varying mediump float vFinish;
+  uniform bool uWild, uRegionTexture;
   void main(){
     vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
-    float water=uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.;
+    if (uRegionTexture && vUV.y>=0.) {
+      vec2 pixel=floor(vWorld*32.);
+      float fleck=fract(sin(dot(mod(pixel,257.),vec2(.93,1.71)))*105.7);
+      vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,128.);
+      color=texture2D(uGround,texel).rgb*vColor;
+      if (vUV.y<1.5) {
+        vec2 dirt=vec2(texel.x,texel.y+(1.-vUV.y)*.25);
+        vec2 grass=vec2(texel.x,texel.y-vUV.y*.25);
+        color=texture2D(uGround,grass).rgb*vColor;
+        if (vRoad>1.52+fleck*.23) {
+          color=mix(texture2D(uGround,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
+        }
+        float shore=.30+fleck*.20;
+        if (vBank<shore) {
+          vec3 sand=mix(vec3(.73,.72,.63),vec3(.93,.78,.53),step(.30,fleck));
+          vec3 damp=mix(vec3(.33,.23,.17),vec3(.49,.36,.24),fleck);
+          color=mix(damp,sand,smoothstep(.03,.33,vBank))*vColor;
+        } else if (vBank<shore+.13 && fleck<.38) {
+          color=mix(color,vec3(.73,.72,.63)*vColor,.62);
+        }
+      }
+    }
+    bool river=uRegionTexture && vGlow<-.5 && vGlow>-1.5 && vUV.y<0.;
+    float water=river?1.:(uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.);
+    if (river) {
+      vec2 pixel=floor(vWorld*32.);
+      vec2 sampleAt=(mod(pixel+vec2(0.,-floor(uWeather.x*5.)),32.)+.5)/128.;
+      vec3 deep=texture2D(uGround,sampleAt+vec2(0.,.75)).rgb;
+      float shore=1.-smoothstep(.03,.41,vBank);
+      float fleck=fract(sin(dot(mod(pixel,257.),vec2(1.7,2.9)))*87.3);
+      vec3 shallow=mix(vec3(.27,.54,.59),vec3(.52,.70,.70),step(.79,fleck));
+      color=mix(deep,shallow,shore*.84);
+    }
     bool green=color.g>color.r*1.12 && color.g>color.b*1.10;
     if (green && water<.5) {
       if (uSeason==1.) color*=vec3(1.08,1.03,.93);
       if (uSeason==2.) color=mix(color,vec3(.64,.38,.15)*(.6+color.g*.7),.61);
-      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),uTexture?.68:.37);
+      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),(uTexture || uRegionTexture)?.68:.37);
       if (uWeather.z>.5) color=mix(color,vec3(.55,.39,.20),.45);
     }
     if (water>.5) {
@@ -275,19 +482,73 @@ const FRAGMENT = `
       float ripple=smoothstep(.78,1.,flow)*(.55+.45*sin(vWorld.x*17.+vWorld.y*2.));
       color+=vec3(.075,.15,.17)*ripple;
     }
+    if (uWild && vGlow<-1.5) {
+      float phase=vHeight*.83+uWeather.x*6.;
+      float foam=smoothstep(.72,1.,sin(phase+sin(vWorld.x*14.)*.6));
+      color+=foam*vec3(.085,.13,.14);
+    }
     float shade=1.;
-    if (uVisibility) {
+    if (uSight.z>0.) {
       float radius=uSight.z;
       float radial=1.-smoothstep(radius-1.6,radius+.45,distance(vWorld,uSight.xy));
-      shade=texture2D(uFog,vWorld/uExtent).r*radial;
+      vec2 local=(vWorld-uFogBounds.xy)/uFogBounds.zw;
+      bool known=uVisibility && all(greaterThanEqual(local,vec2(0.))) && all(lessThan(local,vec2(1.)));
+      shade=(known?texture2D(uFog,local).r:0.)*radial;
     }
-    vec3 lit=color*uLight*mix(.48,1.,shade);
+    if (uShadow) {
+      gl_FragColor=vec4(.105,.135,.12,vColor.r*shade);
+      return;
+    }
+    float facing=1.;
+    if (!uPhysical || water>.5) facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
+    vec3 sunlight=vec3(.27,.123,.046)*uSun.z*(.7+facing*.6);
+    float baked=fract(vFinish)*2.;
+    float finish=floor(vFinish);
+    if (uPhysical && finish>0. && !uTexture && !uRegionTexture) {
+      vec2 grain=vec2(vWorld.x+vWorld.y*.53,vHeight+vWorld.y*.73);
+      float row=finish>1.5?.5:0.;
+      float tone=texture2D(uGrain,vec2(fract(grain.x*.82),fract(grain.y*1.21)*.48+.01+row)).r;
+      color*=mix(.87,1.12,tone);
+    }
+    vec3 lit=color*(uPhysical?vPhysical:(uLight+sunlight)*baked)*mix(.48,1.,shade);
+    if (water>.5) lit+=vec3(.20,.105,.037)*uSun.z*facing;
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
     lit+=vec3(.31,.145,.048)*fire;
-    gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),vGlow*uWeather.w),uAlpha);
+    if (uWild) {
+      float mist=smoothstep(2.,25.,-vHeight);
+      float drift=.92+.08*sin(vWorld.x*.13+vWorld.y*.11+uWeather.x*.2);
+      lit=mix(lit,vec3(.38,.48,.51),mist*drift*.79);
+    }
+    gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),max(0.,vGlow)*uWeather.w),uAlpha);
   }
 `;
+
+function terrainWithNormals(mesh) {
+  const data=new Float32Array(mesh.length/11*MODEL_STRIDE);
+  for (let i=0,j=0;i<mesh.length;i+=33,j+=MODEL_STRIDE*3) {
+    const normal=faceNormal(mesh.subarray(i,i+3),mesh.subarray(i+11,i+14),mesh.subarray(i+22,i+25));
+    if (mesh[i+10]>=-1.5 && normal[1]<0) for(let k=0;k<3;k++) normal[k]*=-1;
+    for(let k=0;k<3;k++){
+      const target=j+k*MODEL_STRIDE, source=i+k*11;
+      data.set(mesh.subarray(source,source+11),target);
+      data.set(normal,target+11);
+      data[target+14]=.5;
+    }
+  }
+  return data;
+}
+
+export function regionOnScreen(bounds,camera,width,height) {
+  if (!bounds) return true;
+  const [x,y,z,X,Y,Z]=bounds;
+  let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
+  for (const px of [x,X]) for (const py of [y,Y]) for (const pz of [z,Z]) {
+    const [u,v]=camera.project(px,py,pz);
+    left=Math.min(left,u);right=Math.max(right,u);top=Math.min(top,v);bottom=Math.max(bottom,v);
+  }
+  return right>=0 && bottom>=0 && left<=width && top<=height;
+}
 
 export function createCampRenderer() {
   const canvas=document.createElement('canvas');
@@ -304,11 +565,12 @@ export function createCampRenderer() {
   gl.deleteShader(vs);gl.deleteShader(fs);
   if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
+  const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','Extent','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['Sun','SunRay','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
-  for (const a of [aPos,aColor,aUV,aMaterial]) gl.enableVertexAttribArray(a);
-  const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer();
+  for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
+  const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
   const createTexture=(unit)=>{
     const t=gl.createTexture();
     gl.activeTexture(unit);gl.bindTexture(gl.TEXTURE_2D,t);
@@ -322,6 +584,10 @@ export function createCampRenderer() {
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.activeTexture(gl.TEXTURE2);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,1,1,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,new Uint8Array(1));
+  createTexture(gl.TEXTURE3);
+  const grain=materialGrain();
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,64,64,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,grain);
+  gl.uniform1i(uniform.Grain,3);
   gl.uniform1i(uniform.Water,2);
   gl.uniform1i(uniform.Ground,0);gl.uniform1i(uniform.Fog,1);
   // 两个采样器始终绑定完整纹理，室内和全景也能正常绘制。
@@ -330,7 +596,7 @@ export function createCampRenderer() {
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
   const terrainTextures=new Map(), maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  let groundSize='', visibilityImage=null, waterImage=null;
+  let groundSize='', visibilityImage=null, waterImage=null, shadowData=null;
   function terrainTexture(source) {
     let texture=terrainTextures.get(source);
     if (texture) {
@@ -359,29 +625,31 @@ export function createCampRenderer() {
   canvas.addEventListener('webglcontextlost',event=>{ event.preventDefault(); lost=true; });
   function bind(buffer) {
     gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-    gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,44,0);
-    gl.vertexAttribPointer(aColor,3,gl.FLOAT,false,44,12);
-    gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,44,24);
-    gl.vertexAttribPointer(aMaterial,3,gl.FLOAT,false,44,32);
+    gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,MODEL_STRIDE*4,0);
+    gl.vertexAttribPointer(aColor,3,gl.FLOAT,false,MODEL_STRIDE*4,12);
+    gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,MODEL_STRIDE*4,24);
+    gl.vertexAttribPointer(aMaterial,3,gl.FLOAT,false,MODEL_STRIDE*4,32);
+    gl.vertexAttribPointer(aNormal,4,gl.FLOAT,false,MODEL_STRIDE*4,44);
   }
   function paint(buffer,count,textured,from=0) {
     bind(buffer);gl.uniform1i(uniform.Texture,Number(textured));gl.drawArrays(gl.TRIANGLES,from,count);
   }
   // 仅保留当前几种场景的缓冲，地图/对照切换时释放长期不用的资源。
-  const lru=[];
-  function stageBuffer(stage) {
+  const lru=[], workMeshes=new WeakMap();
+  function stageBuffer(stage, limit) {
     if (stages.has(stage)) {
       const index=lru.indexOf(stage);
       lru.splice(index,1);
       lru.push(stage);
       return stages.get(stage);
     }
-    const b=gl.createBuffer(), {mesh,ranges,terrainCount}=stageMesh(stage);
+    const b=gl.createBuffer();
+    const {mesh,ranges,terrainCount}=stage.mesh ? {mesh:terrainWithNormals(stage.mesh),ranges:[],terrainCount:0} : stageMesh(stage);
     bind(b);gl.bufferData(gl.ARRAY_BUFFER,mesh,gl.STATIC_DRAW);
-    const item={ b,count:mesh.length/11,ranges,terrainCount };
+    const item={ b,count:mesh.length/MODEL_STRIDE,ranges,terrainCount };
     stages.set(stage,item);
     lru.push(stage);
-    if(lru.length>12){
+    while(lru.length>limit){
       const old=lru.shift();
       gl.deleteBuffer(stages.get(old).b);
       stages.delete(old);
@@ -416,7 +684,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0] }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, animateParts=true }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -426,10 +694,16 @@ export function createCampRenderer() {
       gl.uniformMatrix4fv(uniform.View,false,camera.view);
       gl.uniformMatrix4fv(uniform.Projection,false,camera.projection);
       gl.uniform3fv(uniform.Light,light);
+      gl.uniform3fv(uniform.Sun,sun?[...sun.direction,sun.strength]:[0,0,0]);
+      gl.uniform4fv(uniform.SunRay,sun?[...sun.sunVector,sun.direct]:[0,1,0,0]);
+      gl.uniform1i(uniform.Physical,Number(physical));
+      gl.uniform1i(uniform.Shadow,0);
       gl.uniform3fv(uniform.Sight,sight);
       gl.uniform4fv(uniform.Hearth,hearth);
       gl.uniform4fv(uniform.Weather,weather);
       gl.uniform1f(uniform.Season,season);
+      gl.uniform1i(uniform.RegionTexture,0);
+      gl.uniform1i(uniform.Wild,Number(Boolean(regions?.length)));
       gl.uniform1i(uniform.HasWater,Number(Boolean(waterMask)));
       if (waterMask && waterMask!==waterImage) {
         gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,water);
@@ -439,12 +713,12 @@ export function createCampRenderer() {
         waterImage=waterMask;
       }
       gl.uniform1f(uniform.Alpha,1);
-      gl.uniform2f(uniform.Extent,stage.width,stage.depth);
       gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
+      if (visibility) gl.uniform4f(uniform.FogBounds,...visibility.origin,visibility.extent,visibility.extent);
       if (visibility && visibilityImage!==visibility) {
         gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-        gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,stage.width,stage.depth,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,visibility);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,visibility.size,visibility.size,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,visibility.bytes);
         visibilityImage=visibility;
       }
       if(terrain) {
@@ -460,21 +734,65 @@ export function createCampRenderer() {
         paint(groundBuffer,6,true);
       }
       const faded=[];
-      paintStage(stageBuffer(stage),covered,faded,Boolean(terrain));
-      if (life) paintStage(stageBuffer(life),covered,faded);
-      if (homes) paintStage(stageBuffer(homes),covered,faded);
+      const cacheLimit=regions?.length ? 48 : 12;
+      if (regions?.length) {
+        if (regionAtlas) {
+          const texture=terrainTexture(regionAtlas);
+          gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+        }
+        for (const region of regions) {
+          if (!regionOnScreen(region.viewBounds,camera,width,height)) continue;
+          gl.uniform1i(uniform.RegionTexture,Number(Boolean(regionAtlas && region.mesh)));
+          paintStage(stageBuffer(region,cacheLimit),covered,faded);
+        }
+        gl.uniform1i(uniform.RegionTexture,0);
+        if (terrain) {
+          const texture=terrainTexture(terrain);
+          gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
+        }
+      }
+      paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));
+      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
+      if (physical && sun?.phase!=='夜晚' && sun?.direct && shadows) {
+        const data=contactShadowMesh(shadows,sun);
+        if (data.length) {
+          bind(shadowBuffer);
+          if (data!==shadowData) {
+            gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);
+            shadowData=data;
+          }
+          gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+          gl.depthMask(false);gl.uniform1i(uniform.Shadow,1);
+          paint(shadowBuffer,data.length/MODEL_STRIDE,false);
+          gl.uniform1i(uniform.Shadow,0);gl.depthMask(true);gl.disable(gl.BLEND);
+        }
+      }
       const moving=[];
       const translucent=[];
-      for (const box of work) prism(covered.has(box.occluder)?translucent:moving,box);
+      for (const box of work) {
+        const fadedModel=covered.has(box.occluder), out=fadedModel?translucent:moving;
+        if (box.fx) {
+          if (!fadedModel) fx3d(out,[box],animateParts?frame:0);
+          continue;
+        }
+        let mesh=!box.transient && workMeshes.get(box);
+        if (!mesh) {
+          mesh=[];
+          modelMesh(mesh,box);
+          if (!box.transient) workMeshes.set(box,mesh);
+        }
+        out.push(...mesh);
+      }
       fx3d(moving,stage.fxs?.filter(b=>!covered.has(b.occluder)),frame);
       fx3d(moving,life?.fxs,frame);
       animalMesh(moving,animals,weather[0]);
       for(const person of people)actor(moving,person,frame);
       bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(moving),gl.DYNAMIC_DRAW);
-      paint(movingBuffer,moving.length/11,false);
+      paint(movingBuffer,moving.length/MODEL_STRIDE,false);
       if (translucent.length) {
         bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(translucent),gl.DYNAMIC_DRAW);
-        faded.push({b:movingBuffer,from:0,count:translucent.length/11});
+        faded.push({b:movingBuffer,from:0,count:translucent.length/MODEL_STRIDE});
       }
       paintFaded(faded);
       const ctx=target.getContext('2d');
@@ -483,5 +801,6 @@ export function createCampRenderer() {
       ctx.drawImage(canvas,0,0);
       return true;
     },
+    regionStats:()=>({buffers:lru.length,bytes:lru.reduce((sum,stage)=>sum+stages.get(stage).count*MODEL_STRIDE*4,0)}),
   };
 }

@@ -99,11 +99,15 @@ export function advanceSurvival(world) {
   s.water = clamp01(s.water + (rain ? (s.rainRefill ?? 0.25) : -0.08) - (dis && s.drought ? 0.06 : 0)); // §15.5 M2 雨补挂开关
   const empty = s.plots.filter((p) => p.growth === 0).length;
   s.soil = clamp01(s.soil + 0.05 + (s.eco === true ? 0.05 * empty : 0));
-  const wf = 0.4 + 0.6 * s.water, sf = 0.4 + 0.6 * s.soil;
+  const sf = 0.4 + 0.6 * s.soil;
   const coldF = cold ? 0.5 : 1;
   const seasonGrow = [1.0, 1.15, 0.9, 0.6][seasonOf(day)]; // §15 P2-B 四季调制生长
   const droughtF = dis && s.drought ? 0.8 : 1;
-  for (const p of s.plots) if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * coldF * droughtF * seasonGrow);
+  for (const p of s.plots) {
+    const wf = 0.4 + 0.6 * Math.min(1, s.water + .5 * (p.moisture ?? 0));
+    if (p.growth > 0 && p.growth < 1) p.growth = clamp01(p.growth + SURV.growPerDay * wf * sf * coldF * droughtF * seasonGrow);
+    if (p.moisture > 0) p.moisture = Math.max(0, p.moisture - (s.drought ? .4 : .25));
+  }
 
   // §11 R4 灾害：风暴（预警领先 1 天、冷却 4 天、day≥3）；寒潮＝cold 连≥2 天。
   s.disasterToday = null;

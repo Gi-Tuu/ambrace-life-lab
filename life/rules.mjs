@@ -1,16 +1,19 @@
+import { roadRule } from './home-roads.mjs';
+import { homeEntry } from './home-access.mjs';
+import { discussionAction } from './settlement-social.mjs';
 import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './households.mjs';
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
+import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS, GATHER_BY_LOC, forageRule } from './production.mjs';
+import { BUILDINGS, gatherResource, forageRule } from './production.mjs';
 
-export function validate(world, agentId, intent) {
-  const here = world.loc[agentId];
+export function validate(world, agentId, intent, here = world.loc[agentId]) {
   const locs = world.locs ?? LOCS;
-  const others = (world.occupancy[here] ?? []).filter((x) => x !== agentId);
+  const others = (world.occupancy[here] ?? []).filter(x=>x!==agentId && !world.survival?.districtTravel?.[x]);
   const kind = intent?.kind;
   const fail = (code, why) => ({ ok: false, code, why });
 
@@ -27,7 +30,14 @@ export function validate(world, agentId, intent) {
   // M4 消费者④：闭门的人在世界里确实叫不到（不是"他心里不想理你"）。others 已由 body 侧排除不可达者，
   // 这里再查一次是为了让"叫不到"成为**规则层的裁决**，而不是某处过滤的副作用。
   if (kind === 'talk' && !reachableOf(world.agents[intent.target])) return fail('SECLUDED', `${world.agents[intent.target]?.name ?? intent.target} 躲起来了，这会儿叫不到`);
-  if (kind === 'move_to' && !locs[intent.to]) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
+  if (kind === 'move_to') {
+    if (!Object.hasOwn(locs,intent.to)) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
+    const access=homeEntry(world,agentId,intent.to);
+    if (!access.ok) return fail(access.code,'住宅没有开放进入');
+  }
+  if (kind==='road_lay' || kind==='road_remove') return roadRule(world,agentId,intent);
+  if (kind.startsWith('discuss_') && !discussionAction(world,agentId,kind).ok)
+    return fail('NO_DISCUSSION','没有可参与的讨论');
   if (kind === 'take_shared') {
     if (!intent.target) return fail('NO_TARGET', '没指定拿谁的');
     if ((world.stash[intent.target] ?? 0) <= 0) return fail('DEPLETED', `${world.agents[intent.target]?.name} 门口已经空了`);
@@ -43,11 +53,15 @@ export function validate(world, agentId, intent) {
     if ((world.coins?.[agentId] ?? 0) < 2) return fail('NO_COINS', '铜币不够');
   }
   // Phase A/B 生存动作：只在 survival 世界合法，且须在菜园、有成熟/空地块。
+  if (kind === 'till') {
+    const gate = tillRule(world, agentId, intent.plot);
+    if (!gate.ok) return fail(gate.code, '当前无法开垦指定地块');
+  }
   if (kind === 'harvest' || kind === 'plant') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这个世界没有菜畦');
     if (here !== 'garden') return fail('NOT_GARDEN', '得到菜园才能耕作');
-    if (kind === 'harvest' && !maturePlots(world.survival).length) return fail('NO_MATURE', '没有成熟的菜畦');
-    if (kind === 'plant' && !world.survival.plots.some((p) => p.growth === 0)) return fail('NO_EMPTY_PLOT', '没有空菜畦');
+    if (kind === 'harvest' && !maturePlots(world.survival).some(p => intent.plot === undefined || p.id === intent.plot)) return fail('NO_MATURE', '没有成熟的菜畦');
+    if (kind === 'plant' && !world.survival.plots.some(p => p.growth === 0 && (intent.plot === undefined || p.id === intent.plot))) return fail('NO_EMPTY_PLOT', '没有空菜畦');
   }
   // Phase B 建设动作：采集/奠基/施工/维修。
   if (kind === 'forage' && world.survival?.wildBerries) {
@@ -56,7 +70,7 @@ export function validate(world, agentId, intent) {
   }
   if (kind === 'gather') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可采集的');
-    if (!GATHER_BY_LOC[here]) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
+    if (!gatherResource(world,here)) return fail('NOT_GATHER_LOC', `${here} 没有可采集的资源`); // P0-3：地点门控
     if ((world.survival.resStock?.[here] ?? 0) <= 0) return fail('NO_RESOURCE', '这里的资源采空了，等它恢复'); // P0-3：储量门控
   }
   if (kind === 'plan') {

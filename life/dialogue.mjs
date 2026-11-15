@@ -4,7 +4,8 @@ import { isAlive } from './viability.mjs';
 // 门槛在服务端按关系、能量、性格、忙碌状态裁决，模型只负责把已定的态度说成人话。
 // 这样模型宕机/预算耗尽时，居民仍然是有边界的人，而不是一个永远微笑的问答机。
 import { speechLine, classifySay } from './speech.mjs';
-import { move } from './body.mjs';
+import { startMove } from './body.mjs';
+import { residentContact } from './camp-play.mjs';
 
 const BUSY = new Set(['work', 'build', 'gather', 'harvest', 'plant', 'repair', 'camp_chop', 'camp_collect']);
 const INSULT = /滚|闭嘴|废物|蠢|傻|去死|没用|垃圾|讨厌你|烦人/;
@@ -30,19 +31,27 @@ export function engagementOf(world, npc) {
 
 export function talkInRange(world, talk) {
   return Boolean(talk) && isAlive(world.agents.p1) && isAlive(world.agents[talk.target]) &&
-    world.loc.p1 === world.loc[talk.target];
+    (talk.contact ? world.loc.p1===talk.contact.playerSite && world.loc[talk.target]===talk.contact.site && !residentContact(world,talk.contact) :
+      world.loc.p1 === world.loc[talk.target]);
 }
 
-export function openTalk(sp, body) {
+export function openTalk(sp, body, now = Date.now()) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   const npc = w.agents[target];
   if (!npc || npc.isPlayer || !npc.drives) return { ok: false, code: 'NO_RESIDENT' };
-  if (w.loc.p1 !== w.loc[target]) return { ok: false, code: 'NOT_TOGETHER', why: `${npc.name} 不在这里` };
   if (!isAlive(npc)) return { ok: false, code: 'RESIDENT_GONE' };
+  let contact;
+  if (Object.hasOwn(body,'from')) {
+    contact={target,room:body.room,from:body.from,to:body.to,site:w.loc[target],playerSite:w.loc.p1};
+    const code=residentContact(w,contact);
+    if (code) return {ok:false,code};
+  } else if (w.loc.p1 !== w.loc[target]) {
+    return { ok: false, code: 'NOT_TOGETHER', why: `${npc.name} 不在这里` };
+  }
   const engage = engagementOf(w, npc);
   // 不耐烦按服务器墙钟计（世界 tick 可能很慢：1 tick≈12s 时“10 刻”不是人能感知的耐心）。
-  s.talk = { target, openTick: w.t, openAt: Date.now(), count: 0, engage, history: [], patienceMs: engage === 'open' ? 20000 : 12000 };
+  s.talk = { target, ...(contact&&{contact}), openTick: w.t, openAt: now, count: 0, engage, history: [], patienceMs: engage === 'open' ? 20000 : 12000 };
   const line = engage === 'refuse'
     ? `（${npc.name}没有抬头，手上的活没停。）`
     : speechLine(npc, { world: w, kind: 'talk', actionId: 'talk:p1', t: w.t });
@@ -60,7 +69,7 @@ function walkAway(w, npc) {
   const to = home && Object.hasOwn(w.locs, home) && home !== here
     ? home
     : ['home', 'hall', 'watch', 'yard'].find((l) => l !== here && Object.hasOwn(w.locs, l));
-  if (to) move(w, npc.id, to);
+  if (to) startMove(w, npc.id, to);
 }
 
 function attack(w, npc) {
@@ -83,19 +92,20 @@ export function leaveTalk(sp) {
 }
 
 // ask(prompt 上下文) 由 host 注入真实模型；没有模型时返回 null，走模板台词。
-export async function sayTo(sp, body, ask = null) {
+export async function sayTo(sp, body, ask = null, now = Date.now()) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   const text = String(body?.text ?? '').trim().slice(0, 240);
   const talk = s.talk;
   if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   if (!talk || talk.target !== target) return { ok: false, code: 'NO_TALK' };
-  if (!talkInRange(w, talk)) {
+  if (!talkInRange(w, talk) || talk.contact && Object.hasOwn(body,'from') &&
+      residentContact(w,{...talk.contact,from:body.from,to:body.to,room:body.room})) {
     s.talk = null;
     return { ok: false, code: 'NOT_TOGETHER' };
   }
   const npc = w.agents[target];
   if (!text) return { ok: false, code: 'EMPTY_TEXT' };
-  if (Date.now() - talk.openAt > talk.patienceMs) {
+  if (now - talk.openAt > talk.patienceMs) {
     return { ok: true, left: true, ...leaveTalk(sp) };
   }
   talk.count += 1;

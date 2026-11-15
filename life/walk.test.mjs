@@ -1,7 +1,10 @@
 // 点哪走哪寻路内核闸门：纯函数、可在 Node 直跑（不依赖浏览器可见与否）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { astar, isWalkable, stepWalker } from '../web/walk.mjs';
+import { astar, isWalkable, stepWalker, walkDirection } from '../web/walk.mjs';
+
+import { actorBoxes, rayBox } from '../web/camp-3d-render.mjs';
+import { moveMapFeet } from '../web/collision.mjs';
 
 const open = (tw, th) => ({ tw, th, walk: new Uint8Array(tw * th).fill(1) });
 const block = (w, x, y) => { w.walk[y * w.tw + x] = 0; return w; };
@@ -68,4 +71,32 @@ test('K5 stepWalker：沿路径匀速推进、置 moving、按横向翻面、到
   const s2 = { x: 0, y: 0, path: [[-1, 0]], pi: 0, moving: false, face: 1 };
   stepWalker(s2, 0.5);
   assert.equal(s2.face, -1, '向西走 face=-1');
+});
+
+test('八方向使用实际位移；斜走等速且受原碰撞约束', () => {
+  const offsets=[[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1]];
+  const names=['down','down-left','left','up-left','up','up-right','right','down-right'];
+  const w=open(10,10);
+  for (const [i,[dx,dz]] of offsets.entries()) {
+    const unit=Math.hypot(dx,dz);
+    const [x,z]=moveMapFeet(w,4,4,dx/unit*.2,dz/unit*.2);
+    assert.ok(Math.abs(Math.hypot(x-4,z-4)-.2)<1e-9);
+    assert.equal(walkDirection(x-4,z-4),names[i]);
+  }
+  const [x,z]=moveMapFeet(w,4,4,.2,.2,(ox,oz,nx)=>nx===ox);
+  assert.equal(walkDirection(x-4,z-4),'down');
+  assert.equal(walkDirection(0,0,'up-right'),'up-right');
+});
+
+test('斜向身体使用旋转后的几何命中，四种斜向分别绕脚下旋转', () => {
+  for (const [direction,turn] of [['down-left',1],['up-left',3],['up-right',5],['down-right',7]]) {
+    const boxes=actorBoxes({x:8,y:0,z:12,direction,color:'#FFF1E8',moving:true},1);
+    const nose=boxes.find(b=>b.color==='#D8B27C');
+    const yaw=turn*Math.PI/4;
+    assert.equal(nose.yaw,yaw);
+    const dx=nose.x+nose.w/2-8, dz=nose.z+nose.d/2-12;
+    const x=8+dx*Math.cos(yaw)-dz*Math.sin(yaw), z=12+dx*Math.sin(yaw)+dz*Math.cos(yaw);
+    assert.ok(rayBox([x,3,z],[0,-1,0],nose)>2);
+    assert.equal(rayBox([nose.x+nose.w/2,3,nose.z+nose.d/2],[0,-1,0],nose),null);
+  }
 });

@@ -1,3 +1,4 @@
+import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-produce.mjs';
 // 生产建设层（Phase B）。服务端权威：资源库存、建筑选址/材料/工时/功能/损坏/维修。
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
@@ -13,6 +14,15 @@ export const BUILDINGS = Object.freeze({
   wall: { label: '防护设施', cost: { wood: 3, stone: 6 }, labor: 8, desc: '减轻天气对建筑的损耗' },
 });
 export const GATHER_BY_LOC = Object.freeze({ yard: 'wood', garden: 'wood', watch: 'stone', well: 'stone' });
+export const gatherResource = (world,loc) => world.districts?.[loc]?.resource ?? GATHER_BY_LOC[loc];
+export const buildLot = (world,loc) => world.districts?.[loc]?.lot ?? constructionLot(loc,world.campLayout);
+
+export function gatherPlace(world, resource, here) {
+  const available=loc=>gatherResource(world,loc)===resource && (world.survival.resStock?.[loc]??0)>0;
+  if (world.districts && available(here)) return here;
+  return Object.keys(GATHER_BY_LOC).find(available) ?? Object.keys(world.districts??{}).find(available);
+}
+
 export const LABOR_PER_ACTION = 2;
 
 // P0-3 轻量资源储量：每个采集地点一份可耗尽的账，采集扣减、随世界时间再生。
@@ -42,10 +52,9 @@ export function effectiveMods(world) {
   };
 }
 
-export function doGather(world, agentId) {
+export function doGather(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const loc = world.loc[agentId];
-  const res = GATHER_BY_LOC[loc];
+  const res = gatherResource(world,loc);
   if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
   const stock = (s.resStock ??= { ...RES_STOCK });
   const have = stock[loc] ?? 0;
@@ -63,6 +72,8 @@ export function regenResources(world) {
   const s = world.survival;
   const stock = (s.resStock ??= { ...RES_STOCK });
   for (const loc of Object.keys(RES_STOCK)) stock[loc] = Math.min(RES_STOCK[loc], (stock[loc] ?? 0) + RES_REGEN);
+  for (const [loc,{capacity}] of Object.entries(world.districts??{}))
+    stock[loc] = Math.min(capacity, (stock[loc] ?? 0) + RES_REGEN);
   // 树木视觉与资源账同源：regrowAt 到期 ⇒ 树成熟并回补 2 木料（与 camp_chop 扣减对称），随后清零。
   const trees = s.campTrees;
   if (trees) {
@@ -81,20 +92,19 @@ export function regenResources(world) {
 export function coopPoolGather(world, agentId) {
   const r = doGather(world, agentId);
   const bag = world.pinv?.[agentId];
-  if (bag) { world.survival.inv[r.res] += bag[r.res]; bag[r.res] = 0; }
+  if (r.ok && bag) { world.survival.inv[r.res] += bag[r.res]; bag[r.res] = 0; }
   return r;
 }
 
-export function doPlan(world, agentId, type) {
+export function doPlan(world, agentId, type, loc = world.loc[agentId]) {
   const s = world.survival;
   const def = BUILDINGS[type];
   if (!def) return { ok: false, code: 'NO_TYPE' };
-  const loc = world.loc[agentId];
   if (!(world.outdoor ?? []).includes(loc)) return { ok: false, code: 'NOT_OUTDOOR' };
-  const lot=constructionLot(loc,world.campLayout);
+  const lot=buildLot(world,loc);
   if (!lot) return {ok:false,code:'NO_LOT'};
   if ([...s.sites,...s.buildings].some(b=>{
-    const occupied=b.lot??constructionLot(b.loc,world.campLayout);
+    const occupied=b.lot??buildLot(world,b.loc);
     return b.loc===loc || occupied && overlapsLot(lot,occupied,.35);
   })) return {ok:false,code:'OCCUPIED'};
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
@@ -103,26 +113,30 @@ export function doPlan(world, agentId, type) {
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
   world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
   world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
-  s.sites.push({ type, loc, at: siteOf(loc,world.campLayout), lot, progress: 0 });
+  s.sites.push({ type, loc, at: world.districts?.[loc]?.at ?? siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
 
-export function doBuild(world, agentId) {
+export function doBuild(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const site = atLoc(s.sites, world.loc[agentId]);
+  const site = atLoc(s.sites, loc);
   if (!site) return { ok: false, code: 'NO_SITE' };
+  if (s.settlementLife) {
+    const people=site.contributors??={};
+    people[agentId]=(people[agentId]??0)+1;
+  }
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= BUILDINGS[site.type].labor) {
     s.sites = s.sites.filter((x) => x !== site);
-    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??constructionLot(site.loc,world.campLayout), integrity: 1 });
+    s.buildings.push({ type: site.type, loc: site.loc, at: site.at, lot:site.lot??buildLot(world,site.loc), integrity: 1, ...(site.contributors?{contributors:site.contributors}:{}) });
     return { ok: true, code: 'OK', completed: site.type };
   }
   return { ok: true, code: 'OK', completed: null, progress: site.progress };
 }
 
-export function doRepair(world, agentId) {
+export function doRepair(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
-  const b = atLoc(s.buildings, world.loc[agentId]);
+  const b = atLoc(s.buildings, loc);
   if (!b || b.integrity >= 1) return { ok: false, code: 'NO_REPAIR' };
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
   if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
@@ -131,6 +145,8 @@ export function doRepair(world, agentId) {
   world.observeProduction?.('materialSpent', 'repairWood', 1);
   world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
+  const task=s.coop?.task;
+  if (s.settlementLife && task?.loc===loc && task.repair) (task.repairedBy??=[]).push(agentId);
   return { ok: true, code: 'OK' };
 }
 
@@ -165,16 +181,20 @@ export function regrowWildBerries(world, day) {
   const weather = s.disasterToday === 'coldsnap' ? 0 : world.weather === 'cold' ? .3 : 1;
   const water = s.drought ? .12 * s.water : .3 + .7 * s.water;
   for (const [loc, cap] of Object.entries(WILD_BERRIES)) {
-    s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + season * weather * water * .85);
+    const regen = season * weather * water * .85, patches = s.berryPatches?.[loc];
+    if (patches) {
+      for (let i = 0; i < patches.length; i += 1) patches[i] = Math.min(cap / patches.length, patches[i] + regen / patches.length);
+      s.wildBerries[loc] = patches.reduce((total, count) => total + count, 0);
+    } else s.wildBerries[loc] = Math.min(cap, (s.wildBerries[loc] ?? 0) + regen);
   }
 }
 
-export function forageRule(world, id) {
+export function forageRule(world, id, site = world.loc?.[id], target) {
   const s = world.survival;
   if (!s) return { ok: false, code: 'NO_SURVIVAL' };
-  if (!(world.outdoor ?? []).includes(world.loc?.[id])) return { ok: false, code: 'NOT_OUTDOOR' };
+  if (!(world.outdoor ?? []).includes(site)) return { ok: false, code: 'NOT_OUTDOOR' };
   if ((s.forageCd ?? 0) > world.t) return { ok: false, code: 'FORAGE_COOLDOWN' };
-  if (s.wildBerries && (s.wildBerries[world.loc[id]] ?? 0) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
+  if (s.wildBerries && berryAmount(s, site, target) < 1) return { ok: false, code: 'NO_WILD_FOOD' };
   if ((s.produce?.berry ?? 0) >= PRODUCE_CAP) return { ok: false, code: 'PRODUCE_FULL' };
   return { ok: true, code: 'OK' };
 }
@@ -203,11 +223,11 @@ export const PRODUCE_LABEL = Object.freeze({ berry: '浆果', fruit: '果', egg:
 export const LIVESTOCK_CAP = 12;
 export const FORAGE_COOLDOWN = 2;
 
-export function doForage(world, id) {
+export function doForage(world, id, site = world.loc[id], target) {
   const s = world.survival;
-  const gate = forageRule(world,id);
+  const gate = forageRule(world,id,site,target);
   if (!gate.ok) return gate;
-  if (s.wildBerries) s.wildBerries[world.loc[id]] -= 1;
+  if (s.wildBerries) takeBerry(s, site, target);
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
   world.observeProduction?.('gross', 'berry', 1);
@@ -224,7 +244,7 @@ export function doExchange(world, id, kind) {
   const cap = effectiveMods(world).storeCap;
   // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
-  s.produce[kind] -= 1;
+  takeProduce(s, kind, 1);
   let gained;
   if (rate.store) {
     const before = s.store;
@@ -255,5 +275,6 @@ export function doExpand(world, id, type) {
     const prefix = type === 'chickens' ? 'ch' : 'or';
     s.ecoPop[type].push({ id: `${prefix}${++s.ecoSeq[prefix]}`, born: world.t, health: 1 }); // P1-5 扩建个体从幼体成长
   }
+  restoreSources(world);
   return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
 }

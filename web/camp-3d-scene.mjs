@@ -1,14 +1,25 @@
+import { beam, cyl, modelBounds } from './camp-3d-render.mjs';
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
 import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
+import { facilityGate, facilityId } from './camp-facility.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
 
+function addModel(boxes,model,occluder) {
+  if (!model) return null;
+  const entry={...model,occluder};
+  if (entry.rot || entry.shape) entry.bounds=modelBounds(entry);
+  boxes.push(entry);
+  return entry;
+}
+
 function stage(width, depth) {
-  const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [];
+  const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [], parts=new Map();
   let occluder = null;
   return {
-    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, entrances: {},
+    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, parts, entrances: {},
     group(id, build) {
       const previous=occluder;
       occluder=id;
@@ -16,11 +27,14 @@ function stage(width, depth) {
       occluder=previous;
     },
     // fxKind 非空 ⇒ 这块几何不进静态网格，改由渲染器按动画帧逐帧生成（呼吸感）。
-    box(x, y, z, w, h, d, color, solid = false, glow = false, fxKind = null) {
-      const item = { x,y,z,w,h,d,color,solid,glow,occluder };
+    box(x, y, z, w, h, d, color, solid = false, glow = false, fxKind = null, transform) {
+      const item=addModel(boxes,{x,y,z,w,h,d,color,solid,glow,...transform},occluder);
       if (fxKind) { item.fx = fxKind; fxs.push(item); }
-      boxes.push(item);
+      if (item.part) parts.set(occluder+':'+item.part,item);
       return item;
+    },
+    beam(...args) { return addModel(boxes,beam(...args),occluder); },
+    cyl(...args) { return addModel(boxes,cyl(...args),occluder);
     },
     floor(x, z, w, d, y, color, axis, end = y) { floors.push({ x,z,w,d,y,color,axis,end }); },
     heightAt(x, z) {
@@ -62,7 +76,6 @@ function hall(s, x, z) {
   const left = x - 3.55, right = x + 3.55, back = z - 6.8, front = z - 1.1, y = .48;
   s.floor(left, back, right-left, front-back, y, WOOD);
   s.floor(x-1, front, 2, 1.45, y, LIGHT, 'z', 0);
-  s.entrances.hall = { x:x-1, z:front-.25, w:2, d:2.25 };
   rail(s,left,front-.14,x-1-left,.15,y);
   rail(s,x+1,front-.14,right-x-1,.15,y);
   rail(s,left,back,right-left,.15,y);
@@ -115,7 +128,6 @@ function house(s, id, x, z, seed) {
   cladding(s,left,0,back,width,.27,depth,true);
   roof(s,left,back,width,depth,3.08,color,variant===2?3:variant===3?4:5);
   const front = back + depth;
-  s.entrances[id] = { x:x-1.15, z:front-.55, w:2.3, d:1.5 };
   s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
   s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
   s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
@@ -152,11 +164,9 @@ function watchTower(s,x,z) {
   s.group('roof:watch',()=>roof(s,left,back,width,depth,5.32,'#526464'));
   s.box(x-.1,deck+.64,back+.6,.2,1.0,.2,'#6F685F');
   s.box(x-.22,deck+1.42,back-.18,.44,.37,1.35,'#837C69');
-  s.entrances.watch={x:x-.95,z:front+2.19,w:1.9,d:1.35};
 }
 
 function outdoorFixture(s, id, x, z) {
-  s.entrances[id] = { x:x-1.1, z:z-1.35, w:2.2, d:1.5 };
   if (id === 'well') {
     s.box(x+.2,0,z-4,2.6,.72,2.65,'#67675E',true);
     cladding(s,x+.2,0,z-4,2.6,.72,2.65,true);
@@ -201,75 +211,107 @@ const SHRUBS = [
 function plantBox(s, phase, weight, rooted, ...args) {
   s.box(...args).wind={phase,weight,rooted};
 }
-function tree(s, x, z, variant) {
+function tree(s, x, z, variant, ground=0, scale=1) {
   const shades = LEAF_RAMPS[variant];
-  s.box(x-.2,0,z-.21,.4,1.88,.42,DARK,true);
-  s.box(x-.21,.11,z+.211,.07,1.42,.016,WOOD);
+  s.box(x-.2*scale,ground,z-.21*scale,.4*scale,1.88*scale,.42*scale,DARK,true);
+  s.box(x-.21*scale,ground+.11*scale,z+.211*scale,.07*scale,1.42*scale,.016*scale,WOOD);
   CANOPIES[variant].forEach(([dx,y,dz,w,h,d],i) =>
-    plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx,y,z+dz,w,h,d,shades[i]));
+    plantBox(s,x*.37+z*.81,.08+i*.032,false,x+dx*scale,ground+y*scale,z+dz*scale,w*scale,h*scale,d*scale,shades[i]));
+}
+function meadowPlant(s,x,y,z,variant,kind) {
+  if (kind==='grass') {
+    grass3d(s,[[x,z,y]]);
+  } else if (kind==='shrub') {
+    for (const [i,[dx,h,dz,w,height,d]] of SHRUBS[variant].entries()) {
+      plantBox(s,x+z,.09,true,x+dx,y+h+.02,z+dz,w,height,d,LEAF_RAMPS[variant][Math.min(i+1,3)]);
+    }
+  } else {
+    const color=['#FFEC27','#FF77A8','#FFF0CC','#68ADD4'][variant];
+    for (const [dx,h,dz] of [[-.16,.25,.08],[.07,.39,-.11],[.26,.19,.13]]) {
+      const phase=x+z+dx;
+      plantBox(s,phase,.08,true,x+dx-.025,y,z+dz-.025,.05,h,.05,'#315431');
+      plantBox(s,phase,.08,false,x+dx-.082,y+h-.03,z+dz-.079,.164,.078,.158,color);
+      plantBox(s,phase,.08,false,x+dx-.025,y+h+.048,z+dz-.025,.05,.026,.05,'#FFA300');
+    }
+  }
+}
+export function wildVegetation(trees, undergrowth) {
+  const s=stage(0,0);
+  for (const {x,y,z,variant,scale} of trees) {
+    s.group(`wildtree:${x}:${z}`,()=>tree(s,x,z,variant,y,scale));
+  }
+  for (const {x,y,z,variant,kind} of undergrowth) meadowPlant(s,x,y,z,variant,kind);
+  return s;
 }
 function flora3d(s, world) {
-  const orchards=world.livestock?.orchards ?? 3;
-  // 果实数量读真实世界状态：冬季不挂果；野果存量分档决定灌木上红果数。
-  // 这些都是派生量，不改任何资源规则，也不写存档。
-  const winter=(world.season??'')==='冬';
-  const berryStock=Object.values(world.wildBerries??{}).reduce((a,b)=>a+(Number(b)||0),0);
-  const berryCount=berryStock<=0?0:berryStock<12?2:3;
-  const fruitCount=winter?0:3;
-  (world.flora ?? []).forEach(([tx,tz,seed],index) => {
-    const x=tx+.5, z=tz+.5, v=(tx*7+tz*13)%4, shades=LEAF_RAMPS[v];
-    if (index < orchards) {
-      s.gatherables.push({x,z,item:'fruit'});
-      s.group(`fruit:${tx}:${tz}`, () => {
-        s.box(x-.16,0,z-.16,.32,1.45,.32,DARK);
-        plantBox(s,x+z,.12,false,x-.82,1.28,z-.76,1.64,.96,1.52,shades[1]);
-        plantBox(s,x+z,.12,false,x-.52,2.16,z-.48,1.04,.66,1.0,shades[2]);
-        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,fruitCount))
-          plantBox(s,x+z,.12,false,x+dx,y,z+dz,.17,.17,.17,'#CF4E53');
-      });
-    } else if (seed < .052) {
-      if (seed < .022) s.gatherables.push({x,z,item:'berry'});
-      for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
-        plantBox(s,x+z,.09,true,x+dx,y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
-      if (seed < .022) for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,berryCount))
-        plantBox(s,x+z,.08,false,x+dx,y,z+dz,.11,.11,.11,'#CE6274');
-    } else {
-      const color=['#FFEC27','#FF77A8','#FFF0CC','#68ADD4'][v];
-      for (const [dx,h,dz] of [[-.16,.25,.08],[.07,.39,-.11],[.26,.19,.13]]) {
-        const phase=x+z+dx;
-        plantBox(s,phase,.08,true,x+dx-.025,0,z+dz-.025,.05,h,.05,'#315431');
-        plantBox(s,phase,.08,false,x+dx-.082,h-.03,z+dz-.079,.164,.078,.158,color);
-        plantBox(s,phase,.08,false,x+dx-.025,h+.048,z+dz-.025,.05,.026,.05,'#FFA300');
+  const nodes=campPlants(world.layout,world.livestock?.orchards,world.mapSeed,world.layoutVersion,world.ecoSources);
+  producePlants(s,nodes,world);
+  for (const [tx,tz,seed] of world.flora??[]) {
+    const x=tx+.5,z=tz+.5,v=(tx*7+tz*13)%4;
+    if (nodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) continue;
+    meadowPlant(s,x,world.landscape?.height(x,z)??0,z,v,seed<.052?'shrub':'flower');
+  }
+}
+function producePlants(s,nodes,world) {
+  for (const plant of nodes) {
+    const {x,z,item,id,site}=plant, v=((Math.floor(x*7+z*13)%4)+4)%4, shades=LEAF_RAMPS[v];
+    const ready=plant.ready ?? (item==='fruit' ? world.season==='冬'?0:world.produce?.fruit??0
+      : Math.floor(world.berryPatches?.[site]?.[Number(id.split(':').at(-1))] ?? world.wildBerries?.[site] ?? 3));
+    const ground=plant.y??0;
+    s.gatherables.push({...plant,ready});
+    s.group(id,()=>{
+      if (item==='fruit') {
+        const scale=plant.mature===false?.46:1;
+        s.box(x-.16*scale,ground,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
+        plantBox(s,x+z,.12,false,x-.82*scale,ground+1.28*scale,z-.76*scale,1.64*scale,.96*scale,1.52*scale,shades[1]);
+        plantBox(s,x+z,.12,false,x-.52*scale,ground+2.16*scale,z-.48*scale,1.04*scale,.66*scale,1.0*scale,shades[2]);
+        const count=Math.min(3,ready);
+        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
+          plantBox(s,x+z,.12,false,x+dx,ground+y,z+dz,.17,.17,.17,'#CF4E53');
+      } else {
+        for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
+          plantBox(s,x+z,.09,true,x+dx,ground+y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
+        const count=Math.min(3,ready);
+        for (const [dx,y,dz] of [[-.22,.28,.28],[.07,.46,.35],[.29,.29,.13]].slice(0,count))
+          plantBox(s,x+z,.08,false,x+dx,ground+y,z+dz,.11,.11,.11,'#CE6274');
       }
-    }
-  });
+    });
+  }
+}
+export function regionLife(plants,animals) {
+  const s=stage(0,0);
+  producePlants(s,plants,{});
+  wildlife3d(s,animals);
+  return s;
 }
 
 function grass3d(s, sites) {
-  for (const [x,z] of sites ?? []) {
+  for (const [x,z,y=0] of sites ?? []) {
     const phase=x*.89+z*.62;
     for (const [dx,dz,h] of [[-.12,0,.19],[.03,-.1,.3],[.16,.06,.23]])
-      plantBox(s,phase+dx,.085,true,x+dx,0,z+dz,.043,h,.045,'#6B994D');
+      plantBox(s,phase+dx,.085,true,x+dx,y,z+dz,.043,h,.045,'#6B994D');
   }
 }
 function crops3d(s, world) {
-  const plots = world.plots ?? [], beds = world.beds ?? [];
-  for (const b of beds) {
+  for (const b of world.beds ?? []) {
     const bx=b.x/16, bz=b.y/16, bw=b.w/16, bh=b.h/16;
-    const growth = plots[b.row*4+b.col]?.growth ?? 0;
-    if (growth <= 0) continue;
-    for(let r=0;r<2;r+=1) for(let c=0;c<4;c+=1){
-      const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1), hh=.18+growth*.6;
-      s.box(x-.05,.06,z-.05,.1,hh,.1,'#315431');
-      s.box(x-.22,.06+hh*.42,z-.12,.44,.16,.24,growth>=1?'#FFEC27':'#73A747');
-      if(growth>=.65)s.box(x-.12,.06+hh,z-.12,.24,.22,.24,growth>=1?'#FFA300':'#98BD51');
-    }
+    const { growth } = b;
+    s.group('plot:'+b.id, () => {
+      s.box(bx,.012,bz,bw,.04,bh,b.moisture?'#594032':'#8C6648');
+      for (const row of [.15, .65]) s.box(bx+.13,.052,bz+bh*row,bw-.26,.022,.27,b.moisture?'#463024':'#694932');
+      if (growth <= 0) return;
+      for(let r=0;r<2;r+=1) for(let c=0;c<4;c+=1){
+        const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1), hh=.18+growth*.6;
+        s.box(x-.05,.06,z-.05,.1,hh,.1,'#315431');
+        s.box(x-.22,.06+hh*.42,z-.12,.44,.16,.24,growth>=1?'#FFEC27':'#73A747');
+        if(growth>=.65)s.box(x-.12,.06+hh,z-.12,.24,.22,.24,growth>=1?'#FFA300':'#98BD51');
+      }
+    });
   }
 }
 
 export function penLayout(sites) {
-  const yard=sites.yard;
-  return yard ? {x:yard[0]-9,z:yard[1]-4,w:7,d:6.4,gate:2.75,opening:1.5} : null;
+  return campPen(sites.yard);
 }
 function livestockPen(s, sites) {
   const p=penLayout(sites);
@@ -290,51 +332,55 @@ function livestock3d(s, world) {
   if (!pen) return;
   const stock=world.livestock ?? {};
   const specs=[
-    ['chickens',stock.chickens??3,4,.38,1.11,2.82,.98],
-    ['cows',stock.cows??2,3,.59,1.16,1.06,1.43],
-    ['sheep',stock.sheep??2,3,.52,2.97,4.91,1.29],
+    ['chickens',stock.chickens??3,ANIMAL_LIMITS.chickens,.38,1.11,2.82,.98],
+    ['cows',stock.cows??2,ANIMAL_LIMITS.cows,.59,1.16,1.06,1.43],
+    ['sheep',stock.sheep??2,ANIMAL_LIMITS.sheep,.52,2.97,4.91,1.29],
   ];
-  for (const [kind,count,limit,r,x,z,spacing] of specs) for (let i=0;i<Math.min(count,limit);i+=1) {
-    const px=pen.x+x+i*spacing, pz=pen.z+z+(i%2)*.11;
-    const boxes=[];
-    s.animals.push({id:`${kind}:${i}`,x:px,z:pz,r,kind,boxes,speed:kind==='chickens'?1.0:.63,
-      habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
-    const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x,y,z,w,h,d,color,fx});
-    if (kind==='chickens') {
-      const feathers=i%2?'#B67554':'#E8D7B3';
-      b(-.16,.14,-.19,.32,.31,.38,feathers);
-      b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
-      b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
-      b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
-      for (const dx of [-.083,.05]) {
-        b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
-        b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
-        b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
+  for (const [kind,count,limit,r,x,z,spacing] of specs) {
+    const herd=world.ecoSources?.[ANIMAL_ITEMS[kind]] ??
+      Array.from({length:Math.min(count,limit)},(_,slot)=>({id:`${kind}:${slot}`,slot,mature:true}));
+    for (const [i, animal] of herd.entries()) {
+      const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(i/limit)%3*.34;
+      const boxes=[], size=animal.mature ? 1 : .65;
+      s.animals.push({id:animal.id,afraid:animal.afraid,ready:animal.ready,x:px,z:pz,r:r*size,kind,boxes,speed:kind==='chickens'?1.0:.63,
+        habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
+      const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x:x*size,y:y*size,z:z*size,w:w*size,h:h*size,d:d*size,color,fx});
+      if (kind==='chickens') {
+        const feathers=i%2?'#B67554':'#E8D7B3';
+        b(-.16,.14,-.19,.32,.31,.38,feathers);
+        b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
+        b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
+        b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
+        for (const dx of [-.083,.05]) {
+          b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
+          b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
+          b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
+        }
+        b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
+        continue;
       }
-      b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
-      continue;
+      const cow=kind==='cows', coat=cow?'#DFD5BC':'#DCD3B7', face=cow?'#A07F73':'#5F5348';
+      const w=cow?.74:.67, d=cow?.81:.69, y=cow?.42:.32;
+      b(-w/2,y,-d/2,w,.49,d,coat);
+      for (const dx of [-w*.39,w*.22]) for (const dz of [-d*.36,d*.18]) {
+        b(dx,0,dz,.13,y+.08,.135,face,'leg');
+        b(dx-.015,0,dz-.012,.16,.105,.17,'#3F3A33','leg');
+      }
+      if (cow) {
+        b(-w/2-.015,y+.13,-.18,.042,.23,.39,'#57514A');
+        b(.02,y+.49,-.28,.28,.012,.36,'#57514A');
+        b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
+        b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
+      } else {
+        b(-.29,y+.45,-.26,.57,.12,.53,'#F0E4C7');
+        b(-.32,y+.44,.105,.29,.11,.26,'#E8DCBE');
+      }
+      b(-.18,y+.22,d*.29,.36,.32,.29,face);
+      b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748');
+      for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722');
+      for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face);
+      b(-.044,y+.36,-d*.63,.08,.1,.16,face);
     }
-    const cow=kind==='cows', coat=cow?'#DFD5BC':'#DCD3B7', face=cow?'#A07F73':'#5F5348';
-    const w=cow?.74:.67, d=cow?.81:.69, y=cow?.42:.32;
-    b(-w/2,y,-d/2,w,.49,d,coat);
-    for (const dx of [-w*.39,w*.22]) for (const dz of [-d*.36,d*.18]) {
-      b(dx,0,dz,.13,y+.08,.135,face,'leg');
-      b(dx-.015,0,dz-.012,.16,.105,.17,'#3F3A33','leg');
-    }
-    if (cow) {
-      b(-w/2-.015,y+.13,-.18,.042,.23,.39,'#57514A');
-      b(.02,y+.49,-.28,.28,.012,.36,'#57514A');
-      b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
-      b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
-    } else {
-      b(-.29,y+.45,-.26,.57,.12,.53,'#F0E4C7');
-      b(-.32,y+.44,.105,.29,.11,.26,'#E8DCBE');
-    }
-    b(-.18,y+.22,d*.29,.36,.32,.29,face);
-    b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748');
-    for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722');
-    for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face);
-    b(-.044,y+.36,-d*.63,.08,.1,.16,face);
   }
 }
 
@@ -351,28 +397,43 @@ export function outdoorStage(world, bridges, rocks) {
   }
   for (const [id,[sx,sy]] of Object.entries(world.sites)) {
     const x = sx+.5, z = sy+.5;
-    if (id==='hall') hall(s,x,z);
-    else if (id==='watch') watchTower(s,x,z);
-    else if (['garden','well','yard'].includes(id)) outdoorFixture(s,id,x,z);
-    else if (!residentialSite(id)) s.group(`site:${id}`,()=>house(s,id,x,z,world.layoutSeed));
+    if (residentialSite(id)) continue;
+    s.group(`site:${id}`,()=>{
+      if (id==='hall') hall(s,x,z);
+      else if (id==='watch') watchTower(s,x,z);
+      else if (['garden','well','yard'].includes(id)) outdoorFixture(s,id,x,z);
+      else house(s,id,x,z,world.layoutSeed);
+    });
+    s.entrances[id]=campEntrance(id,[sx,sy]);
   }
   for (const [tx,tz] of world.trees) {
-    s.group(`tree:${tx}:${tz}`,() => tree(s,tx+.5,tz+.5,(tx*3+tz*7)%4));
+    const x=tx+.5,z=tz+.5;
+    s.group(`tree:${tx}:${tz}`,() => tree(s,x,z,(tx*3+tz*7)%4,world.height?.(x,z)??0));
   }
   for (const [tx,tz] of rocks) {
     s.group(`rock:${tx}:${tz}`,() => {
-      s.box(tx+.12,0,tz+.12,.76,.48,.71,'#6D7165',true);
-      s.box(tx+.24,.48,tz+.22,.52,.16,.47,'#939584');
+      const y=world.height?.(tx+.5,tz+.5)??0;
+      s.box(tx+.12,y,tz+.12,.76,.48,.71,'#6D7165',true);
+      s.box(tx+.24,y+.48,tz+.22,.52,.16,.47,'#939584');
     });
   }
-  grass3d(s,world.grass);
+  grass3d(s,world.height?world.grass.map(([x,z])=>[x,z,world.height(x,z)]):world.grass);
   livestockPen(s, world.sites);
   return s;
 }
 
 function wildlife3d(s, places) {
-  for (const [i,{x,z,kind}] of (places??[]).entries()) {
+  for (const {id,x,z,kind} of places??[]) {
     const boxes=[], b=(x,y,z,w,h,d,color,fx)=>boxes.push({x,y,z,w,h,d,color,fx});
+    if (kind==='bird') {
+      b(-.09,0,-.21,.18,.17,.41,'#737E84');
+      b(-.085,.08,.1,.17,.15,.19,'#435762');
+      b(-.035,.105,.25,.07,.055,.13,'#C39C5E');
+      b(-.26,.04,-.12,.18,.05,.23,'#536875','wing');
+      b(.08,.04,-.12,.18,.05,.23,'#536875','wing');
+      s.animals.push({id,x,z,r:0,kind,boxes,wild:true,speed:2.4,habitat:{x:x-7,z:z-7,w:14,d:14}});
+      continue;
+    }
     const rabbit=kind==='rabbit', deer=kind==='deer';
     const coat=rabbit?'#8D8273':deer?'#AE835A':'#B2663F';
     const leg=deer?.69:rabbit?.15:.28, length=deer?.85:rabbit?.37:.56;
@@ -392,7 +453,7 @@ function wildlife3d(s, places) {
     b(-.105,leg+.15,-length/2-tail+.025,.21,.16,tail,rabbit?'#E0D4B6':coat);
     if (!rabbit && !deer) b(-.107,leg+.16,-length/2-tail,.215,.155,.13,'#E3CCAA');
     const radius=deer?.63:rabbit?.36:.57;
-    s.animals.push({id:`wild:${i}`,x,z,r:radius,kind,boxes,wild:true,speed:rabbit?1.65:1.2,
+    s.animals.push({id,x,z,r:radius,kind,boxes,wild:true,speed:rabbit?1.65:1.2,
       habitat:{x:x-4,z:z-4,w:8,d:8}});
   }
 }
@@ -414,6 +475,11 @@ function prop3d(s, kind, x, z, y) {
     for(const dx of [.22,1.42]) for(const dz of [.18,1.06]) b(dx,0,dz,.16,top,.16,DARK);
   };
   switch (kind) {
+    case 'grain':
+      b(.05,0,.05,1.62,.68,1.07,'#9A7044',true);
+      b(.14,.68,.14,1.44,.12,.89,'#C79B61');
+      for (const x of [.13,1.44]) b(x,0,.025,.12,.74,.12,DARK);
+      break;
     case 'bed':
       b(.1,0,.15,1.72,.36,1.28,DARK,true);
       b(.18,.36,.23,1.56,.12,1.12,'#FFF0CC');
@@ -577,13 +643,22 @@ function outdoorRoom(s,site,width,depth,back) {
 
 export function roomStage(site, props, front, width, depth) {
   const s = stage(width, depth);
+  const facility=site.startsWith('facility:') ? site.split(':')[2] : null;
   const outside = ['garden','well','yard'].includes(site);
   const back=outside?2.75:site==='watch'?1.76:1.65, wallWidth=2;
   s.walkBounds={left:wallWidth,right:width-wallWidth,top:back,bottom:depth};
-  const color = outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD;
+  const color = facility==='workshop'?'#77766E':facility==='granary'?'#9C7750':outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD;
   s.floor(0,0,width,depth,0,color);
   if (outside) outdoorRoom(s,site,width,depth,back);
-  if (site==='watch') {
+  if (facility) {
+    s.box(2,0,back-.22,width-4,facility==='workshop'?1.05:2.2,.22,WOOD,true);
+    for (const x of [1.77,width-2]) {
+      s.box(x,0,back,.23,1.1,depth-back,DARK,true);
+      for (const z of [back,depth-1]) s.box(x,0,z,.23,2.22,.23,LIGHT,true);
+    }
+    if (facility==='granary') for (const z of [8.4,9.1,9.8,10.5]) s.floor(6,z,4,.36,.026,LIGHT);
+    if (facility==='workshop') s.floor(2,depth-1.5,width-4,1.5,.01,'#9C8C73');
+  } else if (site==='watch') {
     const rear=back-.24;
     s.box(1.9,0,rear,12.2,.78,.24,DARK,true);
     s.box(1.9,2.28,rear,12.2,.21,.24,WOOD);
@@ -801,6 +876,10 @@ function granary3d(s, lot, record, world) {
 
   // 储粮量分档：0 / 少量 / 部分 / 明显增多。store=0 时一个容器都不画。
   const count = granaryGoods(world);
+  const scaleX=X+W-.65, scaleZ=front+.12;
+  s.box(scaleX,.89,scaleZ,.42,.7,.05,'#514134',false,false,{part:'stock-scale'});
+  const level=count===0?0:count===1?1:count===3?2:3;
+  s.box(scaleX+.06,.94+level*.17,scaleZ+.06,.30,.08,.055,'#FFEC27',false,false,{part:'stock-marker'});
   const slots = [
     ['sack', X + .35, front + .34], ['barrel', X + 1.05, front + .38],
     ['crate', X + W - .85, front + .34], ['sack', X + W - .45, front + .62],
@@ -843,7 +922,7 @@ function worksRatio(record, world, laborDefault) {
 }
 
 // 住所：落地木屋 + 尖顶 + 门廊 + 侧窗 + 烟囱。与架空粮仓轮廓完全不同。
-function shelter3d(s, lot, record, world) {
+function shelter3d(s, lot, record, world, state) {
   const { x, z, w, d } = lot;
   const X = x + .3, Z = z + .28, W = w - .6, D = d - .85;
   const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
@@ -874,16 +953,28 @@ function shelter3d(s, lot, record, world) {
   s.box(X + W / 2 - .4, .24, front + .05, .8, 1.3, .04, '#AB5236');
   s.box(X - .2, 2.06, front + .2, W + .4, .12, .9, DARK);           // 门廊挑檐
   grGable(s, X - .1, 2.06, Z - .1, W + .2, D + .2, damaged ? '#5F574F' : '#8D593F', damaged ? 2 : 0);
+  const drainX=X+.42, drainZ=front+1.11;
+  s.beam([drainX,2.08,drainZ],[X+W+.17,2.14,drainZ],.076,'#458996',8);
+  s.beam([drainX,2.08,drainZ],[drainX,1.91,front+.53],.052,'#458996');
+  s.cyl(drainX,.35,front+.53,.054,1.56,'#458996');
+  s.beam([drainX,.35,front+.53],[drainX,.25,front+.87],.055,'#458996');
+  if (state.sheltered) {
+    for (const [i,dx] of [-1.45,1].entries()) {
+      s.box(X+W/2+dx,1.05,front+.12,.58,.61,.055,'#976A45',false,false,{part:'storm-shutter-'+i});
+    }
+  }
+  if (state.occupied && !damaged) {
+    s.box(X+W-.44,3.47,Z+.62,.23,.19,.23,'#C2C3C7',false,false,{part:'hearth-smoke',fx:'smoke'});
+  }
   if (!damaged) {
     s.box(X + W - .75, 2.4, Z + .5, .38, .9, .38, '#5F574F');         // 烟囱
     s.box(X + W - .8, 3.3, Z + .45, .48, .12, .48, '#939584');
-    s.chimneys?.push?.([X + W - .55, 3.42, Z + .7]);
   }
   for (let i = 0; i < 2; i++) s.box(X + W / 2 - .65, .16 + i * .18, front + .3 + i * .18, 1.3, .18, .22, i ? LIGHT : WOOD);
 }
 
 // 生产设施：三面矮墙 + 高挑平坡屋顶 + 正面完全敞开，内部可见工作台/工具架/木料堆。
-function workshop3d(s, lot, record, world) {
+function workshop3d(s, lot, record, world, state) {
   const { x, z, w, d } = lot;
   const X = x + .22, Z = z + .22, W = w - .44, D = d - .44;
   const phase = constructionStage(record), damaged = Boolean(buildingDamage(record));
@@ -899,9 +990,10 @@ function workshop3d(s, lot, record, world) {
     return;
   }
   // 三面矮墙（正面敞开）
-  for (const pz of [Z, Z + D - .12]) s.box(X, .16, pz, W, 1.15, .12, '#72513B');
+  s.box(X, .16, Z, W, 1.15, .12, '#72513B');
+  if (!world.settlementLife) s.box(X,.16,Z+D-.12,W,1.15,.12,'#72513B');
   for (const px of [X, X + W - .12]) s.box(px, .16, Z, .12, 1.15, D, '#72513B');
-  grPlanks(s, X, .16, Z, W, 1.14, D, false);
+  grPlanks(s, X, .16, Z, W, 1.14, D, Boolean(world.settlementLife));
   // 高挑平坡顶：两侧外挑大檐，与尖顶住所区分
   s.box(X - .42, 2.5, Z - .3, W + .84, .16, D + .6, damaged ? '#5F574F' : '#6B7468');
   for (let i = 0; i < 3; i++) s.box(X - .3 + i * .12, 2.66 + i * .2, Z - .18 + i * .12, W + .6 - i * .24, .14, D + .36 - i * .24, i % 2 ? '#5F574F' : '#837C69');
@@ -916,7 +1008,21 @@ function workshop3d(s, lot, record, world) {
   // 储物聚合模型：与背包图标共用 camp-items.mjs 定义，不另写一份几何
   worldItem(s, 'crate', X + W - 1.9, front - 1.35, .72, .16);
   worldItem(s, 'sack', X + W - 1.25, front - 1.35, .68, .16);
-  if (!damaged) s.box(X + W - 1.5, .16, front - .62, .42, .34, .42, '#FFA300', false, 'fire');
+  if (!damaged) {
+    s.box(X+W-1.5,.16,front-.62,.42,.34,.42,'#514134',false,false,{part:'forge-bed'});
+    if (state.occupied) {
+      s.box(X+W-1.47,.49,front-.59,.36,.19,.36,'#FFA300',false,false,{part:'forge-embers',fx:'fire',glow:true});
+      s.box(X+W-1.40,3.74,front-.52,.22,.18,.22,'#C2C3C7',false,false,{part:'forge-smoke',fx:'smoke'});
+    }
+  }
+  // The exhaust joins the forge to the roof, with a rain cap on three supports.
+  const px=X+W-1.29,pz=front-.41;
+  s.cyl(px,.52,pz,.16,2.86,'#5F574F',8);
+  s.cyl(px,3.29,pz,.23,.14,'#939584',8);
+  for (const [dx,dz] of [[-.13,0],[.13,0],[0,.13]]) s.cyl(px+dx,3.43,pz+dz,.026,.17,'#939584',6);
+  s.cyl(px,3.60,pz,.25,.085,'#6D7165',8);
+  s.beam([X+.12,1.86,front-.1],[X+.78,2.43,front-.1],.066,'#72513B');
+  s.beam([X+W-.12,1.86,front-.1],[X+W-.78,2.43,front-.1],.066,'#72513B');
 }
 
 // 防护设施：沿地块长边的线性木墙，不是实心盒子；石基 + 木桩 + 横板 + 斜撑。
@@ -954,7 +1060,9 @@ function wall3d(s, lot, record, world) {
     for (let i = 0; i < 3; i++) {
       const px = x + .7 + i * (w - 1.5) / 2;
       const fallen = damage >= 2 && i === 1;        // 重损：中间斜撑倒地
-      s.box(px, fallen ? .2 : .4, Z - (fallen ? .75 : .38), fallen ? .55 : .16, fallen ? .16 : .95, fallen ? .16 : .16, DARK);
+      const heel=[px,.46,Z-.59];
+      const head=fallen?[px+.55,.22,Z-.75]:[px,1.52,Z+.09];
+      s.beam(heel,head,.093,'#514134').part='wall-brace-'+i;
       s.box(px, .34, Z - .6, .5, .14, .3, GR_STONE[1]);
     }
   }
@@ -991,34 +1099,51 @@ function home3d(s, lot, record, seed) {
   // 烟囱是房屋的一部分。烟、暖窗和柴堆由住户状态决定。
   s.box(X + W - .62, 2.35, Z + .45, .34, .92, .34, '#5F574F');
   s.box(X + W - .66, 3.27, Z + .41, .42, .11, .42, '#939584');
+  // A rain hood protects the threshold and is fixed back into the façade.
+  const pivot=[doorX,1.82,front+.16];
+  s.box(doorX-.72,1.78,front+.06,1.44,.09,.67,'#976A45',false,false,
+    {rot:[.25,0,0],pivot});
+  for (const side of [-1,1]) {
+    const px=doorX+side*.55;
+    s.beam([px,1.49,front+.08],[px,1.72,front+.51],.044,'#514134');
+  }
+  s.cyl(doorX+.26,.93,front+.088,.052,.08,'#D8A667',8,'z');
 }
 
 const HOME_LABOR = 3;
 
 function homeLot(world, room) {
-  const at = world.layout?.sites[room] ?? residentialSite(room);
+  const at = world.layout?.sites[room] ?? residentialSite(room,world.peripheralHomes);
   return at && { x: at[0] - 2.3, z: at[1] - 6.05, w: 4.6, d: 3.7 };
 }
 
 export function homeAppearance(world, sites = world.rooms ?? {}) {
-  const rooms = Object.keys(world.households?.deeds ?? sites).filter(room => residentialSite(room)).sort();
+  const rooms = Object.keys(world.households?.deeds ?? sites).filter(room => residentialSite(room,world.peripheralHomes)).sort();
   const occupied = new Set();
   for (const [id, room] of Object.entries(world.housing ?? {})) {
     const agent = world.agents?.[id];
     if (agent && !agent.dead) occupied.add(room);
   }
-  return rooms.map(room => [room, occupied.has(room)]);
+  return rooms.map(room => [room, occupied.has(room), ...(world.homeAccess ? [world.homeAccess[room]?.damage??0] : [])]);
 }
 
 export function outdoorHomes(world, appearance) {
   const s = stage(0, 0);
-  for (const [room, occupied] of appearance) {
+  for (const [room, occupied, damage] of appearance) {
     const lot = homeLot(world, room);
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
-    s.entrances[room] = { x: x - 1.15, z: front + .05, w: 2.3, d: 1.6 };
+    s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room,world.peripheralHomes),world.peripheralHomes);
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
-        s.box(x + dx, 1.12, front + .075, .42, .44, .03, occupied ? '#EDC787' : '#2E3B3A', false, occupied);
+        const side=dx<0?'left':'right';
+        s.box(x+dx,1.12,front+.075,.42,.44,.03,occupied?'#EDC787':'#2E3B3A',false,occupied,null,{part:'window-'+side});
+        const shutter=occupied?(dx<0?x+dx-.2:x+dx+.44):x+dx;
+        s.box(shutter,1.1,front+.115,occupied?.17:.42,.48,.045,'#976A45',false,false,null,{part:'shutter-'+side});
+      }
+      if (damage>0) {
+        s.box(x-.34,.27,front+.105,.68,1.17,.055,'#342923');
+        s.box(x-.33,.44,front+.17,.46,.13,.07,'#B58656');
+        s.box(x-.2,.94,front+.17,.5,.12,.07,'#B58656');
       }
       if (occupied) {
         s.chimneys.push([lot.x + lot.w - .70, 3.4, lot.z + .87]);
@@ -1027,6 +1152,17 @@ export function outdoorHomes(world, appearance) {
     });
   }
   return s;
+}
+
+export function districtResources(districts) {
+  const boxes=[];
+  for (const [loc,{source:[x,z],resource}] of Object.entries(districts??{})) {
+    const s={box(x,y,z,w,h,d,color) {
+      boxes.push({x,y,z,w,h,d,color,occluder:'resource:'+loc});
+    }};
+    worldItem(s,resource,x-.32,z-.24,.88,.015);
+  }
+  return boxes;
 }
 
 export function buildingDamage(record) {
@@ -1042,11 +1178,26 @@ export function granaryGoods(world) {
   return store === 0 ? 0 : level < .15 ? 1 : level < .6 ? 3 : 5;
 }
 
+function facilityParts(world,building) {
+  const type=building.type;
+  const canBeOccupied=['shelter','workshop'].includes(type) && (building.integrity??1)>=1;
+  const inside=world.campPlayerRoom===facilityId(building) && !world.agents?.p1?.dead;
+  const active=['shelter','workshop'].includes(type) && (world.occupancy?.[building.loc]??[]).some(id=>{
+    const a=world.agents?.[id];
+    return a && !a.isPlayer && !a.dead && !world.districtTravel?.[id] &&
+      a.loc===building.loc && (type==='shelter'?a.act==='rest':['work','repair'].includes(a.act));
+  });
+  return {
+    occupied:canBeOccupied && (inside || active),
+    sheltered:type==='shelter' && ['rain','cold'].includes(world.weather),
+  };
+}
+
 export function workModelKey(world, appearance, treeSignature) {
   const placement = b => [b.type, b.loc, b.lot?.x, b.lot?.z, b.lot?.w, b.lot?.d];
   const buildings = world.buildings ?? [];
   return JSON.stringify([
-    buildings.map(b => [...placement(b), buildingDamage(b)]),
+    buildings.map(b => [...placement(b), buildingDamage(b), ...(world.settlementLife?[b.integrity>0]:[]), facilityParts(world,b)]),
     (world.sites ?? []).map(b => [...placement(b), b.progress, world.buildingsDef?.[b.type]?.labor]),
     appearance.map(([room]) => room),
     Object.entries(world.households?.projects ?? {}).map(([room, p]) => [room, p.progress]),
@@ -1069,40 +1220,60 @@ export function addCampWork(boxes, world, appearance = homeAppearance(world)) {
     const {x,z,w,d}=lot, X=x+.24,Z=z+.24,W=w-.48,D=d-.48;
     const id=`work:${record.loc}:${record.type}`, labor=record.type === 'house' ? HOME_LABOR : world.buildingsDef?.[record.type]?.labor??6;
     const phase=constructionStage(record);
-    projects.push({id,phase,record,lot,labor});
-    const s={box(x,y,z,w,h,d,color,solid=false,rise=false) {
-      boxes.push({x,y,z,w,h,d,color,solid,occluder:id,rise});
-    }};
-    // 第一阶段：四种建筑各走专属轮廓，保留已验收的 granary3d 不动。
-    if (record.type === 'granary') { granary3d(s, lot, record, world); return; }
-    if (record.type === 'shelter') { shelter3d(s, lot, record, world); return; }
-    if (record.type === 'workshop') { workshop3d(s, lot, record, world); return; }
-    if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
-    if (record.type === 'house') { home3d(s, lot, record, world.layout ? world.mapSeed : 0); return; }
-    const baseRise=phase==='foundation'?'ground':false;
-    s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
-    for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])
-      s.box(px,.16,pz,.09,.21,.09,DARK,false,baseRise);
-    if (phase==='foundation') {
-      for (let i=0;i<4;i++) s.box(X+.1,.16+i*.08,Z+.14,1.05,.07,.25,WOOD,false,baseRise);
-      return;
-    }
-    if (phase==='frame') {
-      const ratio=Math.max(.25,Math.min(1,record.progress/labor));
-      const top=.88+ratio*.78;
-      for (const px of [X,X+W-.16]) for (const pz of [Z,Z+D-.16])
-        s.box(px,.16,pz,.16,top,.16,DARK,false,true);
-      for (const pz of [Z,Z+D-.16]) {
-        s.box(X,top+.12,pz,W,.15,.16,WOOD,false,true);
-        s.box(X+.02,.26,pz,W-.04,.16,.16,LIGHT,false,true);
+    const first=boxes.length;
+    const project={id,phase,record,lot,labor,gate:facilityGate(record,world.layout),parts:new Map()};
+    projects.push(project);
+    const state=facilityParts(world,record);
+    const build=()=>{
+      const s={
+        box(x,y,z,w,h,d,color,solid=false,rise=false,transform) {
+          addModel(boxes,{x,y,z,w,h,d,color,solid,rise,...transform},id);
+        },
+        beam(...args) { return addModel(boxes,beam(...args),id); },
+        cyl(...args) { return addModel(boxes,cyl(...args),id); },
+      };
+      // 第一阶段：四种建筑各走专属轮廓，保留已验收的 granary3d 不动。
+      if (record.type === 'granary') {
+        granary3d(s,lot,record,world);
+        if (phase==='complete') {
+          // Loading handrail sits beside the existing stairs.
+          const railX=x+w/2-.72, front=z+d-.17;
+          for (const [y,pz] of [[.22,front+.47],[.8,front-.36]]) s.cyl(railX,y,pz,.042,.55,'#514134',6);
+          s.beam([railX,.77,front+.47],[railX,1.35,front-.36],.053,'#976A45');
+        }
+        return;
       }
-      for (const px of [X,X+W-.16]) s.box(px,top+.12,Z,.16,.15,D,WOOD,false,true);
-      return;
-    }
-    s.box(X,.16,Z,W,1.41,D,record.type==='granary'?'#696861':'#72513B',false,true);
-    const canopy={box:(x,y,z,w,h,d,color)=>s.box(x,y,z,w,h,d,color,false,true)};
-    cladding(canopy,X,.16,Z,W,1.41,D,record.type==='granary');
-    roof(canopy,X,Z,W,D,1.57,record.integrity<1?'#5F574F':'#976A45');
+      if (record.type === 'shelter') { shelter3d(s, lot, record, world,state); return; }
+      if (record.type === 'workshop') { workshop3d(s, lot, record, world,state); return; }
+      if (record.type === 'wall') { wall3d(s, lot, record, world); return; }
+      if (record.type === 'house') { home3d(s, lot, record, world.layout ? world.mapSeed : 0); return; }
+      const baseRise=phase==='foundation'?'ground':false;
+      s.box(x+.02,0,z+.02,w-.04,.16,d-.04,'#7A7667',true,baseRise);
+      for (const px of [x+.13,x+w-.22]) for (const pz of [z+.13,z+d-.22])
+        s.box(px,.16,pz,.09,.21,.09,DARK,false,baseRise);
+      if (phase==='foundation') {
+        for (let i=0;i<4;i++) s.box(X+.1,.16+i*.08,Z+.14,1.05,.07,.25,WOOD,false,baseRise);
+        return;
+      }
+      if (phase==='frame') {
+        const ratio=Math.max(.25,Math.min(1,record.progress/labor));
+        const top=.88+ratio*.78;
+        for (const px of [X,X+W-.16]) for (const pz of [Z,Z+D-.16])
+          s.box(px,.16,pz,.16,top,.16,DARK,false,true);
+        for (const pz of [Z,Z+D-.16]) {
+          s.box(X,top+.12,pz,W,.15,.16,WOOD,false,true);
+          s.box(X+.02,.26,pz,W-.04,.16,.16,LIGHT,false,true);
+        }
+        for (const px of [X,X+W-.16]) s.box(px,top+.12,Z,.16,.15,D,WOOD,false,true);
+        return;
+      }
+      s.box(X,.16,Z,W,1.41,D,record.type==='granary'?'#696861':'#72513B',false,true);
+      const canopy={box:(x,y,z,w,h,d,color)=>s.box(x,y,z,w,h,d,color,false,true)};
+      cladding(canopy,X,.16,Z,W,1.41,D,record.type==='granary');
+      roof(canopy,X,Z,W,D,1.57,record.integrity<1?'#5F574F':'#976A45');
+    };
+    build();
+    for (let i=first;i<boxes.length;i++) if (boxes[i].part) project.parts.set(boxes[i].part,boxes[i]);
   };
   for (const building of world.buildings??[]) add(building);
   for (const site of world.sites??[]) add(site);

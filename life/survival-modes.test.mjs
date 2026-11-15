@@ -173,7 +173,9 @@ test('靠近角色才可空手交谈，重工具损伤存续与信任且随档�
   assert.equal(use('basket').code,'RESIDENT_NEED_HAND');
   assert.equal(npc.viab.v,1);
   assert.equal(use('hand').code,'RESIDENT_TALKED');
-  assert.ok(use('hand',{from:[10.1,10],to:[10,10]}).line, '行走中的居民也可交谈');
+  assert.equal(use('hand',{from:[10.1,10],to:[10,10]}).code,'RESIDENT_OUT_OF_REACH');
+  w.residentTravel={a1:{from:'hall',to:'home',t:w.t}};
+  assert.ok(use('hand',{from:[26,24.5],to:[26.8,24.5]}).line, '行走中的居民也可交谈');
   assert.equal(npc.relations.get('p1').trust,34);
   assert.equal(use('hammer').code,'RESIDENT_HURT');
   assert.equal(npc.viab.v,.86);
@@ -233,7 +235,7 @@ test('宿主生存审议有独立在场闸门，重开保留对照且新地图�
     const second=await host.ctl({action:'survival_reset',confirm:true});
     assert.ok(first.ok && second.ok);
     assert.notEqual(first.mapSeed,second.mapSeed);
-    assert.equal(host.snapshot().survival.layoutVersion,1);
+    assert.equal(host.snapshot().survival.layoutVersion,2);
     assert.equal(host.snapshot().A.t,before.A.t);
     assert.equal(host.snapshot().B.t,before.B.t);
     assert.equal(host.snapshot().survival.t,0);

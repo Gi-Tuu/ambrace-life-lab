@@ -160,7 +160,7 @@ async function handle(req, res) {
   // /healthz 也不算（平台探活会让"有观众"恒真）。/chat 同理。
   if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
   const viewMode = url.searchParams.get('mode');
-  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode);
+  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode);
 
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
@@ -176,7 +176,7 @@ async function handle(req, res) {
     });
   }
 
-  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot());
+  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode));
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
     const denied = mutatingDenied(req, CTL_TOKEN);

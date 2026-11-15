@@ -38,10 +38,15 @@ export class Relations {
   // 重复经历提升熟悉度；熟悉度决定同样一次对话值多少社交满足
   meet(otherId, t, { delta = {}, why = '' } = {}) {
     const r = this.get(otherId);
+    const before=r.trust;
     if (delta.familiarity) r.familiarity = Math.min(1, r.familiarity + delta.familiarity);
     if (delta.trust) r.trust = Math.max(0, Math.min(this.ceiling, r.trust + delta.trust));
     if (delta.debt) r.debt = Math.max(0, Math.min(100, r.debt + delta.debt));
     r.lastAt = t;
+    if (this.history && (Math.abs(r.trust-before)>=8 || delta.debt || why)) {
+      this.history.push({t,to:otherId,trust:r.trust,delta:r.trust-before,debt:r.debt,why});
+      if (this.history.length>48) this.history.shift();
+    }
     return { otherId, ...r, why };
   }
 

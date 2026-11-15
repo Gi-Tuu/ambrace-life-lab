@@ -1,6 +1,14 @@
 // 点哪走哪的寻路内核：纯函数、零 DOM、零引擎时钟。
 // 只依赖 world 上的可行走栅格 { walk: Uint8Array, tw, th }（1=可走，0=挡）。
 // 单独成模块是为了能在 Node 里直接单测（浏览器标签页 hidden 时动画循环会停，靠肉眼验不了）。
+export const WALK_DIRECTIONS = Object.freeze(['down','down-left','left','up-left','up','up-right','right','down-right']);
+
+export function walkDirection(dx, dz, previous = 'down') {
+  if (Math.hypot(dx,dz) < .00001) return previous;
+  const octant = Math.round(Math.atan2(-dx,dz) / (Math.PI / 4));
+  return WALK_DIRECTIONS[(octant + 8) % 8];
+}
+
 export const isWalkable = (world, tx, ty) => {
   tx = Math.floor(tx); ty = Math.floor(ty);
   if (tx < 0 || ty < 0 || tx >= world.tw || ty >= world.th) return false;
