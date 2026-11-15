@@ -41,11 +41,18 @@ const TICK_MS = Number(process.env.TICK_MS ?? 7500); // §14 统一游戏时间�
 const GAME_MODE = process.env.GAME_MODE === 'game' ? 'game' : 'research';
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SURV_CATCHUP_CAP = Number(process.env.SURV_CATCHUP_CAP ?? 120); // P1-8 生存离线补时刻上限（默认 120 刻＝5 游戏日），超长截断
+// 存档格式版本。旧档没有这个键 ⇒ 视为 1，照旧 tolerant 载入（线上部署不能因为加版本号而起不来）。
+// 更高版本也不拒载，只留一条警告：否则回滚到旧程序会把正在跑的实例卡死。
+const ARCHIVE_VERSION = 1;
+// 动作落盘合并窗口（毫秒）。默认 0 ＝ 每个成功动作立即整档落盘（当前行为，逐位不变）。
+const ACT_SAVE_COALESCE_MS = Number(process.env.ACT_SAVE_COALESCE_MS ?? 0) || 0;
 const SAVE_EVERY = 10;
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 // BUG-14：每个角色保留多少条 trace。实测 4.19 KB/行、6.49 行/刻 ⇒ 生产 TICK_MS=6000 时
 // 无上限约 628 MB/天。2000 行 ≈ 8 MB/角色，足够页面/装置读取，又不会把容器撑爆。
-const TRACE_CAP = Number(process.env.TRACE_CAP ?? 2000);
+// 默认从 2000 → 400（2026-11-15 压测）：trace 只用于诊断、不落盘也不参与决策，
+// 实测把 heap 从 ~166MB 压到 ~118MB、RSS 从 ~433MB 压到 ~373MB，存档体积不变。
+const TRACE_CAP = Number(process.env.TRACE_CAP ?? 400);
 // 单拍模型调用上限。默认 **0 = 不设上限 = 现行为逐位不变**。
 // 为什么需要它：真实模型链路实测一拍最多发 8 次调用（3 角色 × 2 侧 + 2 次驳回重问），
 // 每次约 600 ms ⇒ 单拍最坏 ~4.7 s；而线上 TICK_MS=6000，已经贴着边界。
@@ -173,6 +180,15 @@ const packsFrom = (raw, opts = {}) => {
 // "载入存档 t=0"——那会让 note 谎报、原档又被下一次 save 覆盖。这里显式判成 ARCHIVE_SHAPE。
 function loadArchive(text, opts = {}) {
   const raw = JSON.parse(text);
+  // schemaVersion：缺失＝旧档（视为 1）；更高＝兼容模式 + 警告，绝不拒载。
+  if (raw && typeof raw === 'object') {
+    const v = raw.schemaVersion;
+    if (typeof v === 'number' && Number.isFinite(v) && v > ARCHIVE_VERSION) {
+      S.schemaWarning = `存档版本 ${v} 高于本程序 ${ARCHIVE_VERSION}，已按兼容模式载入`;
+    } else if (v !== undefined && (typeof v !== 'number' || !Number.isFinite(v))) {
+      S.schemaWarning = '存档的 schemaVersion 不是数字，已忽略该字段';
+    }
+  }
   // H-25：parse 成功但结构不完整（实测出现过 `{}`）不能被当成"载入成功 t=0"
   // H-33：t 的类型也必须校验。`t = undefined` 会让 t+1 = NaN，而 NaN%10===0 恒假
   // ⇒ 世界照跑但从此**永不存盘**（静默数据丢失），并且 series.t 会变成 JSON null。
@@ -711,7 +727,7 @@ async function catchUpSurvival(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })), ...(WORK_CAP === undefined ? {} : { workLog: { ...(p.world.workLog ?? {}) } }),
+    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), ...(p.world.flags && Object.keys(p.world.flags).length ? { flags: p.world.flags } : {}), secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })), ...(WORK_CAP === undefined ? {} : { workLog: { ...(p.world.workLog ?? {}) } }),
       // H-23 / D13：喊住是 3 刻的短命世界事实、normSeen 是"播报到第几条"的游标。
       // 两者原先都不入档 ⇒ 重启后喊住静默失效、且最后 20 条规范事件被当成新事件**重播**一遍。
       hail: p.world.hail ?? null, normSeen: p._normSeen ?? 0 },
@@ -729,7 +745,7 @@ function serialize() {
       ]),
     ),
   });
-  return { savedAt: Date.now(), seed: CFG.seed, brain: CFG.brain, missed: S.missed, model: S.model, A: pack(S.packs.A), B: pack(S.packs.B), ...(S.surv ? { survival: dumpSurv(S.surv) } : {}) };
+  return { schemaVersion: ARCHIVE_VERSION, savedAt: Date.now(), seed: CFG.seed, brain: CFG.brain, missed: S.missed, model: S.model, A: pack(S.packs.A), B: pack(S.packs.B), ...(S.surv ? { survival: dumpSurv(S.surv) } : {}) };
 }
 
 let saveChain = Promise.resolve();
@@ -756,6 +772,7 @@ function save() {
       await rename(tmp, f);
       S.primaryValid = true;
       S.savedAt = Date.now();
+      S.saveWrites = (S.saveWrites ?? 0) + 1;
       S.saveError = null;
       return true;
     } catch (e) {
@@ -769,6 +786,26 @@ function save() {
   });
   saveChain = run.catch(() => {});
   return run;
+}
+
+// 动作落盘：默认立即写；只有配了 ACT_SAVE_COALESCE_MS 才合并（窗口内多次动作只写一次）。
+// 合并时仍返回 persisted=true（动作已受理）；真正的失败照旧经 /world.saveError 暴露，
+// 与「立即写」失败时同一条通道，前端不会看不见。
+let actFlushTimer = null;
+async function persistAfterAction() {
+  if (!ACT_SAVE_COALESCE_MS) return save();
+  if (!actFlushTimer) {
+    actFlushTimer = setTimeout(() => { actFlushTimer = null; void save(); }, ACT_SAVE_COALESCE_MS);
+    actFlushTimer.unref?.(); // 待落盘不拖住进程退出
+  }
+  return true;
+}
+// stop() 保持同步（20+ 处调用不带 await）；有待刷的写盘时把它踢起来。
+function takePendingFlush() {
+  if (!actFlushTimer) return;
+  clearTimeout(actFlushTimer);
+  actFlushTimer = null;
+  void save();
 }
 
 // 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
@@ -810,15 +847,28 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
   // 存档带了 occupancy 且与 loc 一致就沿用；否则重建。
   const rebuiltOcc = {};
   for (const [id2, loc2] of Object.entries(d.world.loc)) (rebuiltOcc[loc2] ??= []).push(id2);
-  let occUsable = Boolean(d.world.occupancy) && typeof d.world.occupancy === 'object'
-    && Object.keys(d.world.occupancy).length === Object.keys(rebuiltOcc).length;
+  // BUG-12（修）：判据从"键数相等"改为"**逐房间成员集合**一致"。
+  // 引擎会为"去过又离开"的房间保留空数组（body.mjs 的 move 只 filter、不删键），
+  // 所以键数几乎永远与 rebuilt 不等 ⇒ 以前每一份真实存档都走重建分支：
+  // 顺序保留形同虚设（实测 home ['a2','a1'] → ['a1','a2']），且 save→load→save 不幂等。
+  // 现在的语义：每个"有人"的房间，存档成员必须与 loc 完全一致；空房间键留不留都行（不携带顺序）。
+  const savedOcc = d.world.occupancy;
+  let occUsable = Boolean(savedOcc) && typeof savedOcc === 'object';
   if (occUsable) {
-    for (const [loc2, arr] of Object.entries(d.world.occupancy)) {
-      if (!Array.isArray(arr) || arr.length !== (rebuiltOcc[loc2] ?? []).length || new Set(arr).size !== arr.length || !arr.every((x) => d.world.loc[x] === loc2)) { occUsable = false; break; }
+    for (const [loc2, ids] of Object.entries(rebuiltOcc)) {
+      const arr = savedOcc[loc2];
+      if (!Array.isArray(arr) || arr.length !== ids.length || new Set(arr).size !== arr.length
+        || !arr.every((x) => d.world.loc[x] === loc2)) { occUsable = false; break; }
+    }
+  }
+  if (occUsable) {
+    for (const [loc2, arr] of Object.entries(savedOcc)) {
+      if (!Array.isArray(arr) || new Set(arr).size !== arr.length
+        || arr.some((x) => d.world.loc[x] !== loc2)) { occUsable = false; break; }
     }
   }
   pack.world.occupancy = occUsable
-    ? Object.fromEntries(Object.entries(d.world.occupancy).map(([loc2, arr]) => [loc2, arr.slice()]))
+    ? Object.fromEntries(Object.entries(savedOcc).map(([loc2, arr]) => [loc2, arr.slice()]))
     : rebuiltOcc;
   // 只为 loc 里出现但不属于 ROSTER 的 id 补占位对象（旧档/花名册变更）。
   // 注意：occupancy 已经在上面**整体赋值**过了，这里绝不能再 push —— 否则一场重放下来
@@ -974,6 +1024,7 @@ export const host = {
   },
   // 常驻循环必须能关掉：测试里 import 过 host 之后若不 stop，node --test 会因为计时器还活着而不退出
   stop() {
+    takePendingFlush();
     if (S.timer) clearInterval(S.timer);
     S.timer = null;
     // H-10：不再强行复位在途标志。复位等于把锁打开，老 tick 还在跑、新 interval 又起一拍。
@@ -1023,7 +1074,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, watching: observerActive(S.lastVisitor, Date.now()) }, saveError: S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: S.surv ? { ...survView(S.surv), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body) {
     return queueWorldWrite(async () => {
@@ -1034,7 +1085,7 @@ export const host = {
         if (!S.surv) return {ok:false,error:'NO_SURV'};
         if (body.kind === 'camp_sleep') return sleepSurvival(S.surv);
         const result = await actInSurvival(S.surv, body, modelTalk);
-        if (result.ok || result.settled) return {...result, persisted: await save()};
+        if (result.ok || result.settled) return {...result, persisted: await persistAfterAction()};
         return result;
       }
       const kind = String(body?.kind ?? '');

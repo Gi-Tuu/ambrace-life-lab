@@ -24,6 +24,67 @@
 
 - README/创作手记/CHANGELOG 同源刷新：测试 556 项/82 文件、模块 180、覆盖率行 90.24%/分支 88.35%/函数 92.10%（2026-11-15 实测）。
 
+## [0.1.3] - 2026-11-15
+
+### 性能（2026-11-15，按压测结论）
+- `TRACE_CAP` 默认 **2000 → 400**（只影响诊断轨迹，不落盘、不参与决策）：
+  实测 heap ~166→118 MB、RSS ~433→373 MB，存档体积不变。
+- 地形构建加**显式加载态**：首帧不在绘制任务里同步建世界，先让浏览器画出「正在生成地形…」，
+  下一个任务再同步构建，构建完强制重绘一帧。
+  实测（longtask 观测器）：那一次构建仍是 **967 ms 的长任务**（`paintTerrain` 约 600 ms，
+  且它的产物 `terrain` 同时喂碰撞与 3D 可行走性，不能只延后贴图）；加载文案在 250 ms 出现、
+  1215 ms 收起 ⇒ 这 967 ms 现在**是可见的加载态**，不再是"画面卡死"。
+  彻底的异步化（构建与碰撞解耦 / 移入 Worker）留到功能冻结后，因为需要同时给移动加门禁。
+### 清理（性能与一致性）
+- 删掉 `buildWorld` 里已无消费者的 2D 对象登记（`objects` 列表与两段 house 登记，约 11 行）：
+  2D 视口删除后它仍每轮缓存未命中时构建一次，但没有读取方。实机复测 `renderer="3d"` 正常。
+
+### 压测结论（2026-11-15，本机）
+- 服务端：3500 刻后 heap **~191 MB**（t≈3000 起进入平台期，不是泄漏）、RSS ~443 MB、`world.json` **1.5–1.7 MB**
+  （占最大的是 15 个角色的记忆各行 400 条 ≈1.6 MB）。`TRACE_CAP=400` 可省约 **48 MB heap / 60 MB RSS**，存档不变。
+- 客户端：帧耗时 p50/p95 = **16.7/16.7 ms**，但有 **一次 ~1.0 s 的启动卡顿**（`buildWorld` 同步画地形贴图 + 建场景）；
+  页面 JS heap ~123 MB。headless 是软件渲染，真机会更快，但这 1 s 是 CPU 侧工作，真机同样存在。
+## [0.1.2] - 2026-11-15
+
+### 重构（web/app.js 阶段 3/4）
+- `web/player-move.mjs`：行走几何（`TILE` / `rectGap` / `campBodyWorld` / `exteriorAllows` /
+  `detourAroundBodies` / `routeForWalker`）从 `app.js` 抽出。都是纯函数，不读 DOM、不读模块级状态、不消费随机。
+  `exteriorAllows` 的返回值由 `undefined` 收紧为真布尔（调用点都在布尔上下文，判定不变）。
+- `web/net.mjs`：`postJson()` + `persistNotices()`。后者把"存档失败要不要提示"变成可单测的纯函数，
+  DOM 提示留在 `app.js` 的薄包装里。
+- `life/player-move.test.mjs`：8 条闸门（矩形距离、身体半径挖边、外部可走性、通路/封死寻路、
+  绕人不改写栅格、存档提示判定、POST 形状与非 2xx 抛错），每条都写了变红法。
+- `scripts/check.mjs`：新增**具名导出检查**——`node --check` 只查语法，抓不到
+  "does not provide an export named"。检查支持 `export const A=1, B=2;` 的多声明符（首版只取第一个，
+  造成过 `WORLD_TH` 假阳性，已修）。
+
+### 已知边界
+- 未搬的 7 个函数（`stepCampWalker`/`syncPlayerPos`/`savedOuting`/`peripheralStepCap`/`playAct`/
+  `comparisonContact`）都抓着 `S`、`life3d`、`sessionStorage` 或 DOM；搬它们要拉一个很宽的上下文对象，
+  收益是行数、代价是回归面，冻结前不做。
+- **本版本只做 3D（2026-11-15 决定）**：2D 游戏视口与 2D 碰撞工作台已删除，仓库里不再有第二套俯视渲染。
+  没有 WebGL 的设备会看到明确说明，入口按钮一并禁用。
+  *保留*：`paintTerrain` / `terrainPixels` / `paintForestFloor` / `outskirtsAtlas` / `campOutskirts` 与
+  `buildWorld` 的离屏画布——它们产出的正是 3D 着色器采样的 `uGround` 贴图与 `uWater` 掩码，删了就掉地面与水面。
+  *受影响*：手工碰撞覆盖（原本只在 localhost 生效、存在浏览器 localStorage）不再参与判定；线上行为不变。
+### 修复（审计 2026-11-15）
+- **occupancy 存档往返**：判据从"键数相等"改为"逐房间成员集合一致"。引擎会为"去过又离开"的房间保留空数组，
+  所以旧判据让真实存档永远走重建分支 —— 同屋顺序被按 `loc` 键序重排（实测 `a2,a1 → a1,a2`），
+  且 `save→load→save` 不幂等。现在顺序与空键都保留；存档与 `loc` 冲突时仍然重建。
+- **空 `flags` 不落盘**：避免重载后被 `applyInto` 补成 `{}` 从而在第二次落盘时多出一个键。
+- 新增 `life/archive-roundtrip.test.mjs` 三条闸门（顺序保留 / 往返幂等 / 冲突必须重建），均已验红。
+- **菜单主题不再被世界场景音频接管**：`syncAudioScene` 加 `ui.menu` 守卫（旧实现里 `audio.scene()` 会无条件把
+  `state.menu` 置 false，点「主菜单」后菜单曲最多活一次轮询就被营地音乐顶掉）；首次手势解锁后补起菜单主题；
+  离开菜单时显式交还。闸门 `frontend.test.mjs` F8（已验红）。
+- **渲染连续失败不再每帧刷日志**：加连续失败计数与上限 5；只在第一次 `console.warn`，到上限停试并换成
+  「已停止重试」文案；故障提示改为持续可见（此前会被 `renderPlayMode` 每轮重置隐藏，实测截图完全看不到）。
+  实测：注入"每帧渲染失败"后日志从 **26 条降到 1 条**。闸门 `frontend.test.mjs` F9（已验红）。
+- **存档版本号 `schemaVersion`（默认不改变旧档行为）**：新档写入 1；**旧档没有该键 ⇒ 视为 1 照旧载入**；
+  更高版本**只警告不拒载**（否则回滚到旧程序会把线上实例卡死）；非数字则忽略并警告。
+  闸门 `life/archive-schema.test.mjs` 四条，均已验红。
+- **动作落盘可合并（`ACT_SAVE_COALESCE_MS`，默认 0＝逐位不变）**：开启后窗口内的连点只写一次，
+  `stop()` 会把待写盘踢起来。实测每次成功动作整档落盘约 454 KB（加 `.bak` ≈908 KB），
+  这是给"点太快导致卡顿"留的开关，默认关。闸门 `life/act-save-coalesce.test.mjs` 两条，均已验红。
 ## [0.1.1] - 2026-11-13
 
 ### 生存机制整合

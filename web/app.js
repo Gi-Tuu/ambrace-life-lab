@@ -13,6 +13,10 @@ import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignatur
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
+import { TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
+import { postJson, persistNotices } from './net.mjs';
+
+
 import {
   COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
   overrideWalk, pathFromWalker, roomAllows,
@@ -22,7 +26,18 @@ import { districtResources, addCampWork, homeAppearance, outdoorHomes, outdoorLi
 import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer, modelBounds, rayBox } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
-import { createCollisionEditor } from './collision-editor.mjs';
+
+async function api(path, body) {
+  const result = await postJson(path, body);
+  const notice = persistNotices(result, path);
+  if (notice) {
+    const warning = $('saveNotice');
+    warning.hidden = notice === 'ok';
+    if (notice === 'lost') warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
+  }
+  return result;
+}
+
 // 验收/调试钩子：占位碰撞与寻路可在浏览器内断言（drive6 用）
 window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf, talk: (target) => openTalkWith(target) };
 const ROOMS = ['home', 'hall', 'watch', 'store'];
@@ -129,25 +144,13 @@ function comparisonContact(body) {
   return {from, to:person?[person.x,person.z]:null};
 }
 
-async function api(path, body) {
-  const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const result = await res.json();
-  if (result.persisted === false) {
-    const warning = $('saveNotice');
-    warning.hidden = false;
-    warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
-  } else if (result.persisted === true || path.startsWith('/world') && !result.saveError) {
-    $('saveNotice').hidden = true;
-  }
-  return result;
-}
+
 
 // ── 自然世界地图 ──────────────────────────────────────────────────────────────
 // 引擎仍是「地点制」：w.rooms 是地点表、w.loc.p1 是玩家所在地点、w.occupancy 是各地点的人。
 // 载荷字段一个不动；这里只在表现层把地点摆进一张连续的自然地形，用相机视口取局部放大画面。
 // 世界地图与视口分开；旧地形坐标保持原位，住宅区向东南扩展。
-const TILE = 16; // 寻路与布局单位；美术原生 32px，通过独立密度映射，避免改动世界坐标。
+
 const ART = 2;
 const WORLD_TW=TOWN_SIZE.width, WORLD_TH=TOWN_SIZE.depth;
 const WORLD_W=WORLD_TW*TILE, WORLD_H=WORLD_TH*TILE;
@@ -524,7 +527,7 @@ function buildWorld(w) {
   const trees = [];
   const chimneys = [];
   // 高个可遮挡物（树 / 屋舍）不再烘进静态底图，而是各自记录为对象，交给 drawViewport 按脚底 Y 深度排序绘制。
-  const objects = [], bridges = [], rocks = [];
+  const bridges = [], rocks = [];
 
   // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
   const roads=[],bins=new Map(),binSize=64;
@@ -706,7 +709,7 @@ function buildWorld(w) {
     if (mask) masks.push(mask);
     occupy(tx, ty, mask);
     trees.push([tx, ty]);
-    objects.push({ kind: 'tree', tx, ty });
+
   }
 
   // 世界植被：果树棵数与服务器 livestock.orchards 同源绑定（改量#12 遗项⑤），其余植被确定性哈希。
@@ -749,16 +752,16 @@ function buildWorld(w) {
       for (const [px,py] of [[-4,-4],[3,-4],[-4,-1],[3,-1]]) occupy(sx + px, sy + py, mask); // 四柱
     }
     const chimney = r === 'workshop';
-    if (r === 'hall') {
-      // 两段绘制：背段（屋顶/后柱/后棍）先画，前段（前柱/前棍）后画 ⇒ 站上站台被前柱/前棍遮挡
-      objects.push({ kind:'house', part:'back', site:r, sx, sy, foot: sy-4, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
-      objects.push({ kind:'house', part:'front', site:r, sx, sy, foot: sy-1, roof: ROOF[i%ROOF.length], thing: SITE_THING[r], fence:false, chimney });
-    } else {
-      objects.push({
-        kind: 'house', site: r, sx, sy, roof: ROOF[i % ROOF.length],
-        thing: SITE_THING[r], fence: r === 'yard' || r === 'well', chimney,
-      });
-    }
+
+
+
+
+
+
+
+
+
+
     if (chimney) chimneys.push([sx + 1, sy - 6]);
   });
 
@@ -798,27 +801,14 @@ function buildWorld(w) {
   const waterMask=scene3d ? {width:WORLD_W,height:WORLD_H,bytes:terrain.map(k=>k===GROUND.water?255:0)} : null;
   const terrainWalk3d=scene3d ? terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE))))) : null;
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, objects, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
 }
 
 // 玩家真实视野：从玩家 tile 出发，光半径 + Bresenham 光线投射，树/岩/屋舍挡视线。
-function losClear(blockers, ax, ay, bx, by) {
-  let x = ax, y = ay;
-  const dx = Math.abs(bx - ax), dy = Math.abs(by - ay);
-  const sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1;
-  let err = dx - dy;
-  while (!(x === bx && y === by)) {
-    const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x += sx; }
-    if (e2 < dx) { err += dx; y += sy; }
-    if (x === bx && y === by) break;
-    if (blockers.has(tileKey(x, y))) return false;
-  }
-  return true;
-}
+
 function lightRadius(phase) {
   return phase === '夜' ? 5 : phase === '昼' ? 11 : 8;
 }
@@ -827,16 +817,7 @@ let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
 // 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
 // 全屏＝原样放大：取景逻辑像素不变，只把整数倍放大到屏幕能容纳的最大值（不裁切、不拉伸）。
 const fullZoom = (lw, lh) => Math.max(1, Math.min(Math.floor((window.innerWidth - 8) / lw), Math.floor((window.innerHeight - 64) / lh)));
-function cameraOf(w, sites, slots, container, follow) {
-  const manual = ui.camRoom && sites[ui.camRoom];
-  const anchor = manual || follow || sites[w.loc?.p1] || slots.p1 || Object.values(sites)[0] || [48, 32];
-  const p = anchor;
-  const x = Math.round(Math.max(0, Math.min(WORLD_W - VIEW_W, p[0] * TILE - VIEW_W / 2)));
-  // 屋舍在地点上方 3–5 tile，镜头再上抬 2 tile，保证屋顶不被视口上沿裁掉。
-  const y = Math.round(Math.max(0, Math.min(WORLD_H - VIEW_H, p[1] * TILE - VIEW_H / 2 - ((ui.camRoom??w.loc?.p1)==='garden'?1:3) * TILE)));
-  const zoom = ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(2, Math.floor(((container || VIEW_W * 2) - 20) / VIEW_W)));
-  return { x, y, zoom };
-}
+
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 // 接触阴影读取精灵底部的实际不透明轮廓；透明留白不是地面锚点。
@@ -852,184 +833,15 @@ function contactProfile(image){
   }
   CONTACT_PROFILES.set(image,edge);return edge;
 }
-function groundShadowLayer(g){
-  const width=g.canvas.width,height=g.canvas.height,zoom=g.getTransform().a;
-  const mask=new Uint8Array(width*height);
-  const mark=(x,y,w,h,level)=>{
-    const left=Math.max(0,Math.floor(x*zoom)),right=Math.min(width,Math.ceil((x+w)*zoom));
-    const top=Math.max(0,Math.floor(y*zoom)),bottom=Math.min(height,Math.ceil((y+h)*zoom));
-    for(let py=top;py<bottom;py++)for(let px=left;px<right;px++){const i=py*width+px;if(mask[i]<level)mask[i]=level;}
-  };
-  return {
-    contact(image,x,y,scale,cast){
-      const edge=contactProfile(image);
-      for(let sx=0;sx<edge.length;sx++)if(edge[sx]>=0){
-        const px=x+sx*scale,py=y+edge[sx]*scale;
-        // 接触色与底座重叠半格，实体随后盖上；下沿没有亮地缝隙。
-        mark(px,py-.5,scale,1.5,3);mark(px,py+1,scale,1,2);
-        for(let d=1;d<=cast;d++)mark(px+d,py+d*.5,scale,1,1);
-      }
-    },
-    feet(x,y){
-      mark(x-3,y-.5,6,1.5,3);mark(x-2,y+1,4,.5,1);
-    },
-    finish(){
-      const image=g.getImageData(0,0,width,height),pixels=image.data;
-      const palette=ASSETS.palette.map(h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)));
-      if(!palette.length)return;
-      for(let i=0;i<mask.length;i++){
-        const level=mask[i];if(!level)continue;
-        const p=i*4,r=pixels[p],green=pixels[p+1],b=pixels[p+2],key=((r<<16)|(green<<8)|b)*4+level;
-        let shade=GROUND_SHADE_COLORS.get(key);
-        if(!shade){
-          const factor=[1,.84,.70,.54][level],target=[r*factor,green*factor,b*factor];let best=Infinity;
-          for(const color of palette){const d=(color[0]-target[0])**2+(color[1]-target[1])**2+(color[2]-target[2])**2;if(d<best){best=d;shade=color;}}
-          GROUND_SHADE_COLORS.set(key,shade);
-        }
-        pixels[p]=shade[0];pixels[p+1]=shade[1];pixels[p+2]=shade[2];
-      }
-      g.putImageData(image,0,0);
-    },
-  };
-}
-function drawGroundShadows(g,drawables,cam,phase){
-  const layer=groundShadowLayer(g),cast=phase==='夜'?0:4;
-  for(const d of drawables){
-    const o=d.o;
-    if(o?.kind==='house'){
-      const image=ASSETS.scenes[`house_${o.site}`];
-      if(image)layer.contact(image,(o.sx-4)*TILE-cam.x,(o.sy-9)*TILE-cam.y,1,cast);
-    }else if(o?.kind==='tree' && !o.sapling){
-      const image=ASSETS.scenes[`tree_oak${Math.floor(hash2(o.tx,o.ty,6)*3)}`];
-      if(image)layer.contact(image,o.tx*TILE-cam.x-24,o.ty*TILE-cam.y-64,.5,cast);
-    }else if(d.who){
-      const x=Math.round((d.wx*TILE-cam.x)*cam.zoom)/cam.zoom,y=Math.round((d.wy*TILE-cam.y)*cam.zoom)/cam.zoom;
-      layer.feet(x+8,y+15);
-    }
-  }
-  layer.finish();
-}
 const treeAsset = (x, y) => `tree_oak${Math.floor(hash2(x, y, 6) * 3)}`;
-function drawTreeObj(g, o, cam) {
-  const px = o.tx * TILE - cam.x, py = o.ty * TILE - cam.y;
-  if (o.sapling) {
-    g.fillStyle='#72513B';g.fillRect(px+3,py+11,5,4);g.fillRect(px+10,py+6,2,8);
-    g.fillStyle='#C29662';g.fillRect(px+3,py+10,5,2);
-    g.fillStyle='#6D9F4E';g.fillRect(px+8,py+3,4,5);g.fillRect(px+12,py+6,3,3);
-    return;
-  }
-  const image=ASSETS.scenes[treeAsset(o.tx,o.ty)];
-  if (image) g.drawImage(image,px-24,py-64,64,80);
-}
-function drawHouseObj(g, o, cam) {
-  const bx = (o.sx - 4) * TILE - cam.x, by = (o.sy - 9) * TILE - cam.y;
-  const image=ASSETS.scenes[`house_${o.site}`]??(residentialSite(o.site)?ASSETS.scenes.house_home:null);
-  if (image) {
-    if (o.part === 'back') g.drawImage(image, 0, 0, 128, 96, bx, by, 128, 96);
-    else if (o.part === 'front') g.drawImage(image, 0, 96, 128, 32, bx, by + 96, 128, 32);
-    else g.drawImage(image, bx, by, 128, 128);
-  }
-  if (o.fence && o.site==='yard') {
-    g.fillStyle = '#72513B';
-    for (let i = 0; i < 6; i++) { g.fillRect(bx - 6 + i * 13, by + 123, 2, 7); g.fillStyle = '#D8A667'; g.fillRect(bx - 6 + i * 13, by + 123, 1, 6); g.fillStyle = '#72513B'; }
-    g.fillRect(bx - 6, by + 126, 126, 1);
-  }
-}
 // 生存建筑实体：素材钩子 bld_<type> 优先（美术到货即生效），缺省程序化像素兜底（色板内）。
 const BLD_ROOF = { shelter: '#FF004D', granary: '#83769C', workshop: '#008751', wall: '#D8A667' };
-function drawBuildingObj(g, d, cam) {
-  const b = d.bld;
-  const bx=d.lot.x*TILE-cam.x, by=d.lot.z*TILE-cam.y;
-  const image = ASSETS.scenes[`bld_${b.type}`];
-  if (image) g.drawImage(image, bx, by, 64, 64);
-  else if (b.type === 'wall') {
-    g.fillStyle = '#72513B';
-    for (let i = 0; i < 8; i++) { g.fillRect(bx + i * 8, by + 16, 4, 32); g.fillStyle = '#D8A667'; g.fillRect(bx + i * 8, by + 12, 4, 4); g.fillStyle = '#72513B'; }
-    g.fillRect(bx, by + 28, 64, 2);
-  } else {
-    const roof = BLD_ROOF[b.type] ?? '#83769C';
-    g.fillStyle = roof;
-    g.fillRect(bx + 8, by, 48, 6); g.fillRect(bx + 4, by + 6, 56, 6);
-    g.fillStyle = b.type === 'workshop' ? '#5F574F' : '#AB5236';
-    g.fillRect(bx + 6, by + 12, 52, 32);
-    g.fillStyle = '#72513B';
-    g.fillRect(bx + 6, by + 22, 52, 2); g.fillRect(bx + 6, by + 34, 52, 2);
-    if (b.type === 'shelter') { g.fillStyle = '#1D2B53'; g.fillRect(bx + 26, by + 26, 12, 18); g.fillStyle = '#FFEC27'; g.fillRect(bx + 12, by + 16, 6, 6); }
-    if (b.type === 'granary') { g.fillStyle = '#FFA300'; for (let i = 0; i < 5; i++) g.fillRect(bx + 10 + i * 10, by + 26, 4, 4); }
-    if (b.type === 'workshop') { g.fillStyle = '#1D2B53'; g.fillRect(bx + 22, by + 28, 20, 8); g.fillRect(bx + 28, by + 36, 8, 8); g.fillStyle = '#FFA300'; g.fillRect(bx + 44, by + 26, 3, 3); }
-  }
-  if (b.integrity < 1) {
-    g.fillStyle = '#1D2B53';
-    g.fillRect(bx + 14, by + 14, 3, 10); g.fillRect(bx + 17, by + 24, 3, 8); g.fillRect(bx + 40, by + 18, 3, 12);
-    g.fillStyle = '#FF004D'; g.fillRect(bx + 46, by + 40, 6, 4);
-  }
 
-}
-function drawSiteObj(g, d, cam) {
-  const st = d.st;
-  const bx=d.lot.x*TILE-cam.x, by=d.lot.z*TILE-cam.y;
-  g.fillStyle = '#83769C';
-  for (let i = 0; i < 48; i += 6) { g.fillRect(bx + i, by, 3, 1); g.fillRect(bx + i, by + 31, 3, 1); }
-  for (let i = 0; i < 32; i += 6) { g.fillRect(bx, by + i, 1, 3); g.fillRect(bx + 47, by + i, 1, 3); }
-  const labor = BLD_LABOR[st.type] ?? 6;
-  g.fillStyle = '#1D2B53'; g.fillRect(bx, by + 36, 48, 4);
-  g.fillStyle = '#008751'; g.fillRect(bx, by + 36, Math.round(48 * Math.min(1, (st.progress ?? 0) / labor)), 4);
 
-}
 const BLD_LABEL = { shelter: '住所', granary: '储粮', workshop: '工坊', wall: '防护' };
 const BLD_LABOR = { shelter: 6, granary: 6, workshop: 8, wall: 8 };
 // 环境光由世界相位决定，过渡只使用共享渲染时钟；每一输出颜色仍在固定色板内。
 const TONE_CACHE=new Map();
-function toneScene(g,cv,phase,indoor=false){
-  const target=({'晨':.22,'昼':0,'暮':.58,'夜':1})[phase]??0,now=ACT.seconds??0;
-  const state=cv._light??{value:target,time:now};
-  const dt=Math.max(0,Math.min(.05,now-state.time));state.time=now;
-  state.value+=Math.sign(target-state.value)*Math.min(Math.abs(target-state.value),dt*.6);
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches)state.value=target;
-  cv._light=state;
-  const level=Math.round(state.value*(indoor?.72:1)*32);
-  if(!level)return state.value;
-  let map=TONE_CACHE.get(level);
-  if(!map){
-    const pal=ASSETS.palette.map(h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)));map=new Map();
-    for(const c of pal){
-      const t=level/32,desired=[c[0]*(1-.57*t)+3*t,c[1]*(1-.53*t)+5*t,c[2]*(1-.35*t)+8*t];
-      let best=Infinity,color=c;
-      for(const v of pal){const d=(v[0]-desired[0])**2*.8+(v[1]-desired[1])**2*1.2+(v[2]-desired[2])**2;if(d<best){best=d;color=v;}}
-      map.set((c[0]<<16)|(c[1]<<8)|c[2],color);
-    }TONE_CACHE.set(level,map);
-  }
-  const image=g.getImageData(0,0,cv.width,cv.height),px=image.data;
-  for(let i=0;i<px.length;i+=4){const c=map.get((px[i]<<16)|(px[i+1]<<8)|px[i+2]);if(c){px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];}}
-  g.putImageData(image,0,0);return state.value;
-}
-function warmLamp(g,x,y,w,h,strength){
-  if(strength<.3)return;
-  g.fillStyle=strength>.7?'#EDC787':'#D6AE69';g.fillRect(Math.round(x),Math.round(y),w,h);
-  g.fillStyle='#FFF0CC';g.fillRect(Math.round(x),Math.round(y),Math.max(1,w-2),1);
-  g.fillStyle='#72513B';g.fillRect(Math.round(x+w/2),Math.round(y),1,h);
-}
-function houseLights(g,o,cam,strength){
-  if(strength<.3)return;
-  const bx=(o.sx-4)*TILE-cam.x,by=(o.sy-9)*TILE-cam.y;
-  const windows=o.site==='hall'?[[18,68,4,7],[103,68,4,7]]:o.site==='store'?[[24,68,11,14],[94,68,11,14]]:['well','yard'].includes(o.site)?[]:o.site==='garden'?[[75,67,20,6]]:[[60,33,14,13],[30,68,16,19],[87,68,14,19]];
-  for(const [x,y,w,h] of windows)warmLamp(g,bx+x,by+y,w,h,strength);
-  // 门灯的落光止于门前小片地面，保持硬像素边缘，不覆盖远处角色。
-  if(!windows.length)return;
-  const [doorX,groundY]=o.site==='garden'?[90,109]:o.site==='store'?[64,118]:[64,119];
-  g.fillStyle=strength>.7?'#D6AE69':'#B58A4C';
-  for(let y=0;y<7;y++)for(let x=-12;x<=12;x++)if(Math.abs(x)<12-y&&(x+2*y)%5===0)g.fillRect(Math.round(bx+doorX+x),Math.round(by+groundY+y),1,1);
-}
-function drawResident(g, who, action, x, y, facing = 'down', stage) {
-  const descendant = /^c\d+$/.test(who), child = stage==='child' || (stage==null && descendant);
-  const sheet = ACT.chars[who] ?? (descendant ? ACT.chars.a1 : null), size = ACT.size ?? [16, 24], directions = ACT.directions ?? ['down'];
-  const exact = directions.indexOf(facing);
-  const direction = exact >= 0 ? exact : Math.max(0, directions.indexOf(facing.split('-')[0]));
-  const row = action * directions.length + direction;
-  const dw = child ? 12 : 16, dh = child ? 18 : 24;
-  if (ACT.ready && sheet) g.drawImage(sheet, ACT.frame * size[0], row * size[1], size[0], size[1], x, y - 8, dw, dh);
-  else if (ASSETS.chars[who]) g.drawImage(ASSETS.chars[who].frames[ACT.frame % 4], x, y, 16, 16);
-}
 // ── 点哪走哪（纯表现层）───────────────────────────────────────────────────────
 // 引擎是「地点制」：w.occupancy 决定 p1 在哪个地点，/act move 也只把人挪到某个地点。
 // 这里不改世界状态、不发请求、不消费 rng —— 只是把「角色此刻画在哪」从「瞬移到地点」
@@ -1047,54 +859,9 @@ function roomPlayerPosition(pos, site) {
 }
 let roomRoute=null;
 // isWalkable / astar / stepWalker 都在 web/walk.mjs（纯函数、可单测）。这里只保留行走器状态表与接线。
-function campBodyWorld(world,openEdge=false) {
-  return { ...world, collisionGrid:bodyGrid(world.collisionGrid,TILE,openEdge) };
-}
-function exteriorAllows(world,x,z) {
-  return world.landscape?.walkable(x,z) &&
-    !(world.outsideSolids??[]).some(b=>rectGap(x,z,b.x,b.z,b.w,b.d)<CAMP_BODY_RADIUS);
-}
-function routeForWalker(world, walker, goal, bodies=[]) {
-  const from=[walker.x+.5,walker.y+.5], to=goal.map(v=>v+.5);
-  if (world.landscape && (!inCamp(...from) || !inCamp(...to))) {
-    const map=campBodyWorld(world,true);
-    const allows=(x,z)=>(inCamp(x,z)?mapAllows(map,x-.5,z-.5):exteriorAllows(world,x,z)) &&
-      bodies.every(b=>Math.hypot(x-b.x,z-b.z)>=b.r+CAMP_BODY_RADIUS+.05);
-    return joinedRoute(from,to,allows)
-      ?.map(p=>p.map(v=>v-.5))??null;
-  }
-  const path = pathFromWalker(world, walker, goal);
-  if (!world.scene3d) return path;
-  world=campBodyWorld(world);
-  if (!mapAllows(world,...goal)) return null;
-  // 快速路线在穿过窄栏杆时可能遗漏细格，逐段复核后再采用。
-  if (path) {
-    let x=walker.x, z=walker.y;
-    const complete=[...path,goal], smooth=[];
-    const clear=([nx,nz])=>{
-      const dx=nx-x, dz=nz-z, steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)*TILE*2));
-      for (let i=1;i<=steps;i++) {
-        const px=x+dx*i/steps, pz=z+dz*i/steps;
-        if (!mapAllows(world,px,pz) || !mapAllows(world,px,pz-dz/steps)) return false;
-      }
-      return true;
-    };
-    for (let i=0;i<complete.length;) {
-      let next=Math.min(i+2,complete.length-1);
-      while (next>i && !clear(complete[next])) next-=1;
-      if (!clear(complete[next])) break;
-      [x,z]=complete[next];
-      smooth.push(complete[next]);
-      i=next+1;
-      if (i===complete.length) return smooth;
-    }
-  }
-  const pixel = v=>Math.floor((v+.5)*TILE);
-  const start = [pixel(walker.x),pixel(walker.y)];
-  const exact = pixelPath(world.collisionGrid,start,goal.map(pixel));
-  if (!exact?.length) return exact;
-  return [start,...exact].map(cell=>cell.map(v=>(v+.5)/TILE-.5));
-}
+
+
+
 
 function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   const distance=Math.hypot(dx,dz);
@@ -1140,20 +907,7 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   }
 }
 
-function detourAroundBodies(world,walker,neighbours) {
-  const nearby=neighbours.filter(o=>Math.hypot(o.x-walker.x-.5,o.z-walker.y-.5)<2.5);
-  if (!nearby.length) return null;
-  const grid=world.collisionGrid, walk=grid.walk.slice();
-  for (const o of nearby) {
-    const r=o.r+CAMP_BODY_RADIUS+.08;
-    const x=Math.floor((o.x-r)*TILE), z=Math.floor((o.z-r)*TILE);
-    fillCollisionRect(walk,grid.tw,grid.th,x,z,Math.ceil((o.x+r)*TILE)-x,Math.ceil((o.z+r)*TILE)-z,0);
-  }
-  const pixel=coordinate=>Math.floor((coordinate+.5)*TILE);
-  const [goalX,goalZ]=walker.path.at(-1);
-  const path=pixelPath({...grid,walk},[pixel(walker.x),pixel(walker.y)],[pixel(goalX),pixel(goalZ)]);
-  return path?.length ? path.map(cell=>cell.map(v=>(v+.5)/TILE-.5)) : null;
-}
+
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
 // 允许速度＝PLAYER_UNITS_PER_TICK×1000/tickMs（单位/秒），换算每帧 tile 数；村内不限（保留冲刺）。
@@ -1286,253 +1040,11 @@ function drawFogTerrain(g, world, cam, visible, night, tx0, ty0) {
   }
 }
 
-function drawViewport(cv, w) {
-  // 按容器选择完整的原生像素格，桌面横向取景；窄屏缩小取景范围而非压缩精灵。
-  VIEW_TW = Math.max(20, Math.min(28, Math.floor(((canvasHostWidth(cv) || 916) - 20) / (TILE * ART))));
-  const gardenView=(ui.camRoom??w.loc?.p1)==='garden';
-  VIEW_TH = gardenView?Math.min(20,Math.max(12,Math.round(VIEW_TW*.72))):Math.min(14,Math.max(10,Math.round(VIEW_TW*.6)));
-  VIEW_W = VIEW_TW * TILE; VIEW_H = VIEW_TH * TILE;
-  const world = buildWorld(w);
-  const slots = slotsOf(w, world.sites);
-  for (const who of Object.keys(slots)) ensureWalker(cv.id, who, world, slots);
-  const pw = WALK[walkKey(cv.id, 'p1')];
-  const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
-  const cam = cameraOf(w, world.sites, slots, canvasHostWidth(cv), pTile);
-  lastCam = { ...cam, mode: 'view' };
-  cv._cam = lastCam;
-  const CW = VIEW_W * cam.zoom, CH = VIEW_H * cam.zoom;
-  if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; }
-  const fitW = Math.min(CW, canvasHostWidth(cv) || CW);   // 窄屏缩到容器宽，避免溢出或过度放大
-  cv.style.width = `${fitW}px`; cv.style.height = `${Math.round(CH * fitW / CW)}px`;
-  const g = cv.getContext('2d');
-  g.setTransform(cam.zoom, 0, 0, cam.zoom, 0, 0);
-  g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, VIEW_W, VIEW_H);
-  // 一整片世界只在离屏画一次，这里只取相机窗口 —— 全局始终完整在运行。
-  g.drawImage(world.canvas, cam.x * ART, cam.y * ART, VIEW_W * ART, VIEW_H * ART, 0, 0, VIEW_W, VIEW_H);
-  g.font = '6px fusion-pixel, monospace';
-  const t0x = Math.floor(cam.x / TILE), t0y = Math.floor(cam.y / TILE);
 
-  const pt = pTile ?? [Math.round((cam.x + VIEW_W / 2) / TILE), Math.round((cam.y + VIEW_H / 2) / TILE)];
-  const oTile = [Math.round(pt[0]), Math.round(pt[1])];   // LOS 原点取整，保证 Bresenham 一定终止
-  const radius = lightRadius(w.phase);
-  const visible = new Set();
-  for (let y = t0y - 1; y <= t0y + VIEW_TH + 1; y += 1) for (let x = t0x - 1; x <= t0x + VIEW_TW + 1; x += 1) {
-    if (Math.hypot(x - oTile[0], y - oTile[1]) <= radius && losClear(world.blockers, oTile[0], oTile[1], x, y)) visible.add(tileKey(x, y));
-  }
-  const night = w.phase === '夜';
-  // 地表可见性保留 LOS；暗化只作用于地表，在房屋/人物之前画，不会给屋顶盖棋盘格。
-  drawFogTerrain(g, world, cam, visible, night, t0x, t0y);
-
-  // 场景细节小动画：草摆动 / 水波 / 树冠 / 炊烟，按当前帧号只叠加「会动的像素」。
-  // 静止部分由离屏底图提供，fx 是 98.6% 透明的动态增量层，不会盖住地形或出现补丁方块。
-  // 锚点来自 buildWorld 记录的真实树/烟囱坐标与河面判定，不随机撒点。
-  if (ACT.ready && ACT.fx) {
-    const col = ACT.frame * 32;
-    const inView = (x, y) => x >= t0x - 2 && x <= t0x + VIEW_TW + 2 && y >= t0y - 2 && y <= t0y + VIEW_TH + 2;
-    const cell = (row, tx, ty) => { if (visible.has(tileKey(tx, ty))) g.drawImage(ACT.fx, col, row * 32, 32, 32, tx * TILE - cam.x - 8, ty * TILE - cam.y - 8, 32, 32); };
-    const nearRoad = (tx, ty) => world.roads.some((r) => distSeg(tx * TILE + 8, ty * TILE + 8, r[0], r[1], r[2], r[3]) < 20);
-    const nearRiver = (tx, ty) => Math.abs((tx + 0.5) * TILE - (world.river??riverX)(ty) * TILE) < 22;
-    const nearSite = (tx, ty) => Object.values(world.sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && Math.abs(ty - sy) < 7);
-    const treeSet = new Set(world.trees.map(([x, y]) => tileKey(x, y)));
-    // 草：每 2 tile 一个候选，稀疏撒在草地上（避开路/河/树/屋/岩）
-    for (let ty = Math.floor(t0y / 2) * 2 - 2; ty <= t0y + VIEW_TH + 2; ty += 2) {
-      for (let tx = Math.floor(t0x / 2) * 2 - 2; tx <= t0x + VIEW_TW + 2; tx += 2) {
-        if (!inView(tx, ty) || nearRiver(tx, ty) || nearRoad(tx, ty) || nearSite(tx, ty) || treeSet.has(tileKey(tx, ty))) continue;
-        if (hash2(tx, ty, 9) > 0.62) cell(ACT.rows.grass ?? 0, tx, ty);
-      }
-    }
-    // 水波：河面每 2 tile 一段
-    for (let ty = Math.floor(t0y / 2) * 2 - 2; ty <= t0y + VIEW_TH + 2; ty += 2) {
-      for (let tx = Math.floor(t0x / 2) * 2 - 2; tx <= t0x + VIEW_TW + 2; tx += 2) {
-        if (!inView(tx, ty) || !nearRiver(tx, ty) || hash2(tx, ty, 10) < 0.45) continue;
-        cell(ACT.rows.water ?? 1, tx, ty);
-      }
-    }
-    // 树冠高光 / 炊烟：贴在真实锚点
-    for (const [tx, ty] of world.trees) if (inView(tx, ty)) cell(ACT.rows.tree ?? 2, tx, ty);
-    for (const [tx, ty] of world.chimneys) if (inView(tx, ty)) cell(ACT.rows.smoke ?? 3, tx, ty);
-  }
-
-  // §11 R5：灾害日在菜园上方画 8×8 像素图标（风暴红/寒潮蓝），反馈长在变化处。
-  if (w.disasterToday && world.sites.garden) {
-    const [gx, gy] = world.sites.garden;
-    const ix = gx * TILE - cam.x, iy = (gy - 10) * TILE - cam.y;
-    if (ix > -8 && ix < VIEW_W && iy > -8 && iy < VIEW_H) {
-      g.fillStyle = w.disasterToday === 'storm' ? '#FF004D' : '#29ADFF';
-      g.fillRect(ix, iy, 8, 2); g.fillRect(ix + 2, iy + 2, 4, 2); g.fillRect(ix + 3, iy + 4, 2, 4);
-    }
-  }
-  // 昼夜色温：视口外框按相位换色板映射（不新画资产、不叠半透明）。
-  g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
-  g.fillRect(0, 0, VIEW_W, 1); g.fillRect(0, VIEW_H - 1, VIEW_W, 1);
-  g.fillRect(0, 0, 1, VIEW_H); g.fillRect(VIEW_W - 1, 0, 1, VIEW_H);
-  // 玩家脚下 1px 虚线高亮圈（跟随相机坐标）。
-  const hx = pt[0] * TILE - cam.x, hy = pt[1] * TILE - cam.y;
-  g.fillStyle = '#FFEC27';
-  for (let i = 0; i < TILE; i += 4) {
-    g.fillRect(hx + i, hy, 2, 1); g.fillRect(hx + i, hy + TILE - 1, 2, 1);
-    g.fillRect(hx, hy + i, 1, 2); g.fillRect(hx + TILE - 1, hy + i, 1, 2);
-  }
-  // 事件 emote：最近日志里该角色的驳回/发现/传话/规范，头顶画 8×8 像素图标。
-  const recent = (w.log ?? []).slice(-12);
-  const emoteFor = (name) => {
-    for (let i = recent.length - 1; i >= 0; i -= 1) if (recent[i].who === name && EMOTE[recent[i].kind]) return EMOTE[recent[i].kind];
-    return null;
-  };
-  // 深度排序：树 / 屋舍 / 角色放进同一张列表，按脚底所在屏幕 Y 升序绘制 ⇒ 近处盖住远处、
-  // 屋后的人被屋挡住（2.5D 空间关系由此而来）。视野外（LOS 挡住）的整件不画，避免穿雾显形。
-  const drawables = [];
-  const grove=world.timber?world.grove.map(t=>({kind:'tree',tx:Math.floor(t.x),ty:Math.floor(t.z),
-    sapling:world.timber[t.id]?.stage==='sapling'})):[];
-  for (const o of [...world.objects,...grove]) {
-    const footTy = o.kind === 'house' ? (o.foot ?? o.sy - 1) : o.ty;
-    const footTx = o.kind === 'house' ? o.sx : o.tx;
-    const fy = (footTy + 1) * TILE - cam.y;
-    if (fy < -2 * TILE || fy > VIEW_H + 8 * TILE) continue;
-    const seen=o.kind==='house'?[-4,-3,-2,-1,0,1,2,3,4].some(dx=>visible.has(tileKey(footTx+dx,footTy))):visible.has(tileKey(footTx,footTy));
-    drawables.push({ sy: fy, o, faded: !seen });   // 视野外＝半透而非消失（避免"空气墙"观感）
-  }
-  for (const [records,key] of [[w.buildings,'bld'],[w.sites,'st']]) for (const record of records??[]) {
-    const lot=record.lot??constructionLot(record.loc,w.layout);
-    if (!lot) continue;
-    const fy=(lot.z+lot.d)*TILE-cam.y;
-    if (fy < -2*TILE || fy > VIEW_H+8*TILE) continue;
-    drawables.push({sy:fy,[key]:record,lot,faded:!visible.has(tileKey(Math.floor(lot.x+lot.w/2),Math.floor(lot.z+lot.d)))});
-  }
-  for (const who of Object.keys(slots)) {
-    const s = WALK[walkKey(cv.id, who)];
-    const wx = s ? s.x : slots[who][0], wy = s ? s.y : slots[who][1];
-    if (!visible.has(tileKey(Math.round(wx), Math.round(wy)))) continue;
-    drawables.push({ sy: (wy + 1) * TILE - cam.y, who, wx, wy, moving: s && s.moving, face: s ? s.face : 1 });
-  }
-  drawables.sort((a, b) => a.sy - b.sy);
-  drawGroundShadows(g, drawables.filter((d) => !d.faded && !(d.o && d.o.part === 'back')), cam, w.phase);
-  for (const d of drawables) {
-    g.globalAlpha = d.faded ? 0.35 : 1;
-    if (d.bld) { drawBuildingObj(g, d, cam); g.globalAlpha = 1; continue; }
-    if (d.st) { drawSiteObj(g, d, cam); g.globalAlpha = 1; continue; }
-    if (d.o) {
-      if (d.o.kind === 'tree') drawTreeObj(g, d.o, cam);
-      else drawHouseObj(g, d.o, cam);
-      g.globalAlpha = 1;
-      continue;
-    }
-    g.globalAlpha = 1;
-    const px = Math.round((d.wx * TILE - cam.x) * cam.zoom) / cam.zoom, py = Math.round((d.wy * TILE - cam.y) * cam.zoom) / cam.zoom;
-    const row = d.moving ? (ACT.index.move_to ?? ACT.index.walk ?? actionRow(w.agents?.[d.who])) : actionRow(w.agents?.[d.who]);
-    const walker = WALK[walkKey(cv.id, d.who)];
-    drawResident(g, d.who, row, px, py, walker?.direction ?? 'down', w.agents?.[d.who]?.stage);
-    const nm = d.who === 'p1' ? '你' : (w.agents?.[d.who]?.name ?? d.who);
-    g.fillStyle = '#FFF1E8';
-    g.fillText(nm, px, py + TILE + 6);
-    const em = emoteFor(nm);
-    if (em) {
-      const ey = py - 21;
-      g.fillStyle = '#000000'; g.fillRect(px + 4, ey, 8, 8);
-      g.fillStyle = em; g.fillRect(px + 5, ey + 1, 6, 6);
-      g.fillStyle = '#000000'; g.fillRect(px + 7, ey + 2, 2, 3); g.fillRect(px + 7, ey + 6, 2, 1);
-    }
-  }
-  // ── P4 环境特效（纯渲染层 · 确定性 · 锁色板 · LOS 门控）────────────────────
-  // 夜：萤火虫。贴草地/树缘，避开河与阻挡物；漂移与闪烁由 hash2 + ACT.frame 决定，不引随机、不动读数。
-  if (night) {
-    for (let y = t0y - 1; y <= t0y + VIEW_TH + 1; y += 1) for (let x = t0x - 1; x <= t0x + VIEW_TW + 1; x += 1) {
-      if (!visible.has(tileKey(x, y)) || world.blockers.has(tileKey(x, y))) continue;
-      if (Math.abs((x + 0.5) * TILE - (world.river??riverX)(y) * TILE) < 16) continue;
-      const seed = hash2(x, y, 21);
-      if (seed < 0.9) continue;
-      const fx = Math.round(x * TILE - cam.x + 8 + Math.sin((ACT.frame + x * 2 + y) * 0.7) * 3);
-      const fy = Math.round(y * TILE - cam.y + 6 + Math.cos((ACT.frame + x) * 0.5) * 2);
-      g.fillStyle = (ACT.frame + Math.floor(seed * 4)) % 4 < 2 ? '#FFEC27' : '#00E436';
-      g.fillRect(fx, fy, 1, 1);
-    }
-  }
-  // 脚步尘：移动角色脚下留下的瞬态小点，随 age 上飘、变稀、转暗（无 alpha，靠数量与色阶淡出）。
-  for (const p of DUST[cv.id] ?? []) {
-    if (!visible.has(tileKey(Math.floor(p.x), Math.floor(p.y)))) continue;
-    const dx = Math.round(p.x * TILE - cam.x), dy = Math.round(p.y * TILE - cam.y);
-    if (dx < -4 || dx > VIEW_W + 4 || dy < -4 || dy > VIEW_H + 4) continue;
-    g.fillStyle = p.age < 3 ? '#C2C3C7' : '#83769C';
-    const n = Math.max(1, 3 - Math.floor(p.age / 2));
-    for (let i = 0; i < n; i += 1) {
-      const ox = Math.round(hash2(Math.round(p.x * 16) + i, p.age, 30) * 5) - 2;
-      g.fillRect(dx + ox, dy - Math.round(p.age * 0.6), 1, 1);
-    }
-  }
-  paintResidentSpeech(cv, w, drawables, (p) => [
-    ((p.wx+.5)*TILE-cam.x)*cam.zoom, (p.wy*TILE-cam.y-8)*cam.zoom,
-  ]);
-  const light=toneScene(g,cv,w.phase);
-  for(const d of drawables)if(d.o?.kind==='house')houseLights(g,d.o,cam,light);
-  return cam;
-}
 
 // 世界全景：把完整地图压成微缩总览，证明「全局依旧是完整一大片在运行」；
 // 当前相机窗口用黄虚线框标出，玩家位置用金点标出。
-function drawOverview(cv, w) {
-  const world = buildWorld(w);
-  const slots = slotsOf(w, world.sites);
-  for (const who of Object.keys(slots)) ensureWalker(cv.id, who, world, slots);
-  const pw = WALK[walkKey(cv.id, 'p1')];
-  const pTile = pw ? [pw.x, pw.y] : (slots.p1 ?? null);
-  const cam = cameraOf(w, world.sites, slots, canvasHostWidth(cv), pTile);
-  lastCam = { ...cam, mode: 'overview' };
-  cv._cam = lastCam;
-  const zoom = ui.fullscreen ? fullZoom(OV_W, OV_H) : Math.max(1, Math.min(ZOOM, Math.floor(((canvasHostWidth(cv) || OV_W * ZOOM + 20) - 20) / OV_W)));
-  const CW = OV_W * zoom, CH = OV_H * zoom;
-  if (cv.width !== CW || cv.height !== CH) {
-    cv.width = CW; cv.height = CH;
-    cv.style.width = `${CW}px`; cv.style.height = `${CH}px`;
-  }
-  const g = cv.getContext('2d');
-  g.setTransform(zoom, 0, 0, zoom, 0, 0);
-  g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, OV_W, OV_H);
-  g.drawImage(world.canvas, 0, 0, WORLD_W * ART, WORLD_H * ART, 0, 0, OV_W, OV_H);
-  // 树 / 屋舍已改到视口层动态绘制，全景里用简化色块补上，保证总览仍看得出村落形状。
-  for (const o of world.objects) {
-    if (o.kind === 'tree') {
-      const mx = Math.round(o.tx * TILE * OV_SX), my = Math.round(o.ty * TILE * OV_SY);
-      g.fillStyle = '#008751'; g.fillRect(mx, my, 2, 2);
-    } else {
-      const mx = Math.round((o.sx - 1) * TILE * OV_SX), my = Math.round((o.sy - 5) * TILE * OV_SY);
-      const bw = Math.max(2, Math.round(3 * TILE * OV_SX)), bh = Math.max(2, Math.round(2 * TILE * OV_SY));
-      g.fillStyle = o.roof; g.fillRect(mx, my, bw, bh);
-    }
-  }
-  for (const record of [...(w.buildings??[]),...(w.sites??[])]) {
-    const lot=record.lot??constructionLot(record.loc,w.layout);
-    if (!lot) continue;
-    const mx=Math.round(lot.x*TILE*OV_SX), my=Math.round(lot.z*TILE*OV_SY);
-    g.fillStyle=record.integrity<1?'#FF004D':BLD_ROOF[record.type]??'#83769C';
-    g.fillRect(mx,my,3,Object.hasOwn(record,'progress')?1:2);
-  }
-  toneScene(g,cv,w.phase);
-  // 地点标记 / 相机取景框 / 玩家点，全部按世界→全景比例换算。
-  for (const [sx, sy] of Object.values(world.sites)) {
-    const mx = Math.round(sx * TILE * OV_SX), my = Math.round(sy * TILE * OV_SY);
-    g.fillStyle = '#000000'; g.fillRect(mx - 2, my - 2, 5, 5);
-    g.fillStyle = '#FFEC27'; g.fillRect(mx - 1, my - 1, 3, 3);
-  }
-  // 相机窗口（黄虚线 1px 段）
-  const vx = Math.round(cam.x * OV_SX), vy = Math.round(cam.y * OV_SY);
-  const vw = Math.round(VIEW_W * OV_SX), vh = Math.round(VIEW_H * OV_SY);
-  g.fillStyle = '#FFF1E8';
-  for (let i = 0; i < vw; i += 4) { g.fillRect(vx + i, vy, 2, 1); g.fillRect(vx + i, vy + vh - 1, 2, 1); }
-  for (let j = 0; j < vh; j += 4) { g.fillRect(vx, vy + j, 1, 2); g.fillRect(vx + vw - 1, vy + j, 1, 2); }
-  // 玩家金点（跟随行走位置）
-  if (pTile) {
-    const [px, py] = pTile;
-    const mx = Math.round(px * TILE * OV_SX), my = Math.round(py * TILE * OV_SY);
-    g.fillStyle = '#FF004D'; g.fillRect(mx - 1, my - 1, 4, 4);
-    g.fillStyle = '#FFF1E8'; g.fillRect(mx, my, 1, 1);
-  }
-  g.fillStyle = w.phase === '夜' ? '#1D2B53' : w.phase === '昼' ? '#29ADFF' : '#FFA300';
-  g.fillRect(0, 0, OV_W, 1); g.fillRect(0, OV_H - 1, OV_W, 1);
-  g.fillRect(0, 0, 1, OV_H); g.fillRect(OV_W - 1, 0, 1, OV_H);
-  return cam;
-}
+
 
 // ── 室内场景（独立画面 + 门转场，8 处全部可进）──────────────────────────────
 // 纯表现层：室内只是把「某地点 occupancy 里的人」搬进一间画好的屋子里展示。
@@ -1671,82 +1183,6 @@ function roomNavigation(g,w,site){
     g.fillStyle='#514134';g.fillRect(x,104,38,22);g.fillStyle='#EDC787';g.fillRect(x,104,38,1);g.fillStyle='#FFF0CC';g.fillText(label,x+4,118);
   }
 }
-function drawInterior(cv, w, site, preview = false) {
-  const { width: VIEW_W, height: VIEW_H } = ROOM_GRID;
-  const spec = INTERIORS[site] ?? INTERIORS.hall, outdoor=['garden','well','yard'].includes(site);
-  const zoom = preview ? 1 : ui.fullscreen ? fullZoom(VIEW_W, VIEW_H) : Math.max(1, Math.min(ZOOM, Math.floor(((canvasHostWidth(cv) || VIEW_W * ZOOM + 20) - 20) / VIEW_W)));
-  const CW = VIEW_W * zoom, CH = VIEW_H * zoom;
-  if (cv.width !== CW || cv.height !== CH) { cv.width = CW; cv.height = CH; cv.style.width = `${CW}px`; cv.style.height = `${CH}px`; }
-  const g = cv.getContext('2d');
-  g.setTransform(zoom, 0, 0, zoom, 0, 0); g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, VIEW_W, VIEW_H);
-  // 成套地板/墙裙/窗框：原生32px贴图以整数像素显示。
-  const stone = ['workshop', 'well', 'watch'].includes(site), texture = ASSETS.scenes[`terrain_${stone ? 'stone' : 'wood'}0`];
-  g.fillStyle = '#BA8752'; g.fillRect(0, 0, VIEW_W, VIEW_H);
-  if (texture) for (let y = 0; y < VIEW_H; y += 16) for (let x = 0; x < VIEW_W; x += 16) g.drawImage(texture, x, y, 16, 16);
-  g.fillStyle = '#514134'; g.fillRect(0, 0, VIEW_W, 34); g.fillRect(0, 0, 24, VIEW_H); g.fillRect(VIEW_W - 24, 0, 24, VIEW_H);
-  g.fillStyle = '#F6DDA8'; g.fillRect(3, 3, VIEW_W - 6, 25);
-  for (let x = 4; x < VIEW_W - 4; x += 8) { g.fillStyle = '#D8A667'; g.fillRect(x, 3, 1, 25); g.fillStyle = '#FFF0CC'; g.fillRect(x + 1, 4, 1, 23); }
-  g.fillStyle = '#976A45'; g.fillRect(2, 28, VIEW_W - 4, 4); g.fillStyle = '#EDC787'; g.fillRect(2, 28, VIEW_W - 4, 1);
-  for (const wx of [4, 10]) {
-    const x = wx * TILE;
-    g.fillStyle = '#72513B'; g.fillRect(x - 2, 7, 28, 20); g.fillStyle = '#D8A667'; g.fillRect(x - 1, 8, 26, 18);
-    g.fillStyle = '#458996'; g.fillRect(x + 1, 10, 22, 13); g.fillStyle = '#A0D2C6'; g.fillRect(x + 2, 10, 8, 4);
-    g.fillStyle = '#F6DDA8'; g.fillRect(x + 11, 10, 2, 13); g.fillRect(x + 1, 16, 22, 1);
-    g.fillStyle = '#72513B'; g.fillRect(x - 3, 25, 30, 2);
-    // 零 alpha 的窗光；夜间不伪造日光。
-    if (w.phase !== '夜') { g.fillStyle = '#EDC787'; for (let y = 36; y < 60; y++) for (let xx = 0; xx < 28; xx++) if ((xx + y) % 4 === 0) g.fillRect(x + xx + Math.floor((y - 36) / 3), y, 1, 1); }
-  }
-
-  if(site==='hall')corridorDetail(g);
-  if(outdoor)outdoorDetail(g,site);
-
-  // 门（底部中央 2 格）+ 提示
-  const [doorX, doorY, doorW, doorH] = site === 'hall' ? hallFront.door
-    : [VIEW_W / 2 - TILE, VIEW_H - TILE, TILE * 2, TILE];
-  g.fillStyle = '#514134'; g.fillRect(doorX, doorY, doorW, doorH);
-  g.fillStyle = '#BA8752'; g.fillRect(doorX + 2, doorY + 2, doorW - 4, doorH - 4);
-  g.fillStyle = '#000000'; g.fillRect(doorX + doorW / 2 - 1, doorY + 4, 2, 8);
-  g.font = '6px fusion-pixel, monospace';
-  // 房名
-  const label = (w.rooms ?? LOCS)[site] ?? site;
-  g.fillStyle = '#000000'; g.fillRect(VIEW_W / 2 - label.length * 3 - 4, 6, label.length * 6 + 8, 11);
-  g.fillStyle = '#FFF1E8'; g.fillText(label, VIEW_W / 2 - label.length * 3, 14);
-  // 家具与人按脚底深度排序，室内也遵守近遮远。
-  const occ = preview ? [] : w.occupancy?.[site] ?? [];
-  const pos = preview ? IPOS : roomPlayerPosition(cv.id==='cvB'?compareInterior:IPOS, site);
-  const spots = [[6,8],[9,8],[5,5],[9,5],[4,9],[11,9],[6,10],[8,10]];
-  const items = (outdoor?[]:spec.props).map(([kind, x, y]) => ({ kind, x, y, depth: kind === 'rug' ? -1 : y + 4 }));
-  occ.forEach((who, i) => {
-    if (who === 'p1') { items.push({ who, x: pos.x / TILE, y: pos.y / TILE, depth: pos.y / TILE + 1 }); return; }
-    const [x, y] = spots[i % spots.length]; items.push({ who, x, y, depth: y + 1 });
-  });
-  if (!preview && !occ.includes('p1')) items.push({ who: 'p1', x: pos.x / TILE, y: pos.y / TILE, depth: pos.y / TILE + 1 });
-  items.sort((a, b) => a.depth - b.depth);
-  drawGroundShadows(g,items.filter(item=>item.who).map(item=>({who:item.who,wx:item.x,wy:item.y})),{x:0,y:0,zoom},w.phase);
-  for (const item of items) {
-    const px = item.x * TILE, py = item.y * TILE;
-    if (item.kind) { drawProp(g, item.kind, px, py); continue; }
-    const isP1 = item.who === 'p1';
-    const act = isP1 && pos.moving ? (ACT.index?.move_to ?? ACT.index?.walk ?? actionRow(w.agents?.p1)) : actionRow(w.agents?.[item.who]);
-    drawResident(g, item.who, act, px, py, isP1 ? pos.direction : 'down', w.agents?.[item.who]?.stage);
-    g.fillStyle = '#FFF0CC'; g.fillText(isP1 ? '你' : (w.agents?.[item.who]?.name ?? item.who), px, py + TILE + 6);
-  }
-  const light=toneScene(g,cv,w.phase,!outdoor&&site!=='hall');
-  if(!outdoor){
-    for(const x of site==='hall'?[61,189]:[31,216]){
-      g.fillStyle='#514134';g.fillRect(x,37,7,12);warmLamp(g,x+1,40,5,7,light);
-    }
-  }
-  const exitLabel = site === 'hall' ? hallFront.label : [99, 174, 58, 15];
-  g.font = '6px fusion-pixel, monospace'; g.fillStyle = '#514134'; g.fillRect(...exitLabel);
-  g.fillStyle = '#FFF0CC'; g.fillText(outdoor ? '返回营地' : '点门离开', exitLabel[0] + 12, exitLabel[1] + 10);
-  g.fillStyle='#514134';g.fillRect(103,5,50,13);g.fillStyle='#FFF0CC';g.fillText(label,128-label.length*3,14);
-  if (!preview) paintResidentSpeech(cv, w, items, (p) => [(p.x+.5)*TILE*zoom, (p.y*TILE-8)*zoom]);
-  roomNavigation(g,w,site);
-  return { mode: 'interior', site };
-}
-
 let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
 const campFog=new WeakMap();
@@ -2021,19 +1457,8 @@ function drawTitleScene(now,reduced) {
       return;
     }
   }
-  const span=42*TILE, depth=span*height/width;
-  const cam={x:29*TILE-span/2,y:31*TILE-depth/2};
-  g.imageSmoothingEnabled=false;
-  g.setTransform(width/span,0,0,height/depth,0,0);
-  g.drawImage(titleWorld.canvas,cam.x*ART,cam.y*ART,span*ART,depth*ART,0,0,span,depth);
-  for (const object of titleWorld.objects) {
-    if (object.kind==='tree') drawTreeObj(g,object,cam);
-    else if (object.kind==='house') drawHouseObj(g,object,cam);
-  }
-  g.fillStyle='rgba(30,61,75,.33)';
-  g.fillRect(0,0,span,depth);
-  g.resetTransform();
-  canvas.dataset.renderer='2d';
+  if (!campRenderer) showGfxUnavailable(true);
+canvas.dataset.renderer='none';
 }
 
 // 拾取点：4 个角括号，不画整圈，避免和贴地光圈抢视觉。
@@ -2272,6 +1697,19 @@ function drawCamp(cv,w) {
       }
     }
   } else {
+    // 首帧不在绘制任务里同步建地形：paintTerrain 实测 ≈600ms 且是**纯计算**（2.46M 像素多趟扫描），
+    // 它的产物 terrain 同时喂碰撞与 3D 可行走性，所以不能只延后贴图。
+    // 这里让步一个任务：先让浏览器把「正在生成地形…」画出来，再同步构建。
+    // 600ms 的 CPU 仍在，但玩家看到的是加载态，而不是画面卡死。
+    if (!campWorlds.has(playerId) && !ui.terrainDeferred) {
+      // 一次性让步：只推迟一次，下个任务必定进入同步构建。
+      // （若在 timeout 里复位这个标志，就会"延迟→复位→再延迟"无限弹跳。）
+      ui.terrainDeferred = true;
+      showTerrainLoading(true);
+      setTimeout(() => { forceRepaint = true; }, 0);
+      return false;
+    }
+    showTerrainLoading(false);
     const world=buildWorld(w);
     exterior=world;
     campWorlds.set(playerId,world);
@@ -2424,29 +1862,66 @@ function campPoint(cv, ev) {
   return point;
 }
 
+// 本版本只提供 3D 世界：没有 WebGL 就明确告知并挡住入口，不再退到第二套 2D 画面。
+// hard=true 表示设备能力不足（按钮一并禁用）；false 表示这一帧渲染失败（可刷新重试）。
+let gfxNoticeShown = '';
+// 渲染失败策略（审计 2026-11-15 的 POTENTIAL #2）：
+// 旧实现每帧都 console.warn + 重试，注入一次"每帧抛错"实测 6 秒虚拟时间里打了 26 条，
+// 且永远不停。这里给一条连续失败计数：只记第一次、到上限就停试并换成明确文案。
+const GFX_FAILURE_LIMIT = 5;
+let gfxFailureRun = 0;
+let gfxGaveUp = false;
+let gfxFaultMessage = '';   // 非空＝渲染处于故障态，renderPlayMode 必须让提示持续可见
+let forceRepaint = false;   // 地形构建完/加载态切换时，强制下一帧重绘（静态场景否则不会重画）
+
+// 地形构建的加载态：只借用 #playNotice，且不覆盖渲染故障提示。
+function showTerrainLoading(on) {
+  if (gfxFaultMessage) return;
+  const box = $('playNotice');
+  const text = $('playNoticeText');
+  if (!box || !text) return;
+  if (on) { text.textContent = '正在生成地形…'; box.hidden = false; }
+  else if (text.textContent === '正在生成地形…') box.hidden = true;
+}
+
+function showGfxUnavailable(hard, custom) {
+  const msg = custom ?? (hard
+    ? '此设备或浏览器不支持 WebGL，无法显示 3D 世界。请改用较新的 Chrome / Edge / Firefox，或在浏览器设置里开启硬件加速后刷新。'
+    : '3D 渲染这一帧失败了，画面已暂停。刷新页面可重试。');
+  gfxFaultMessage = msg;
+  if (gfxNoticeShown === msg) return;
+  gfxNoticeShown = msg;
+  const box = $('playNotice');
+  const text = $('playNoticeText');
+  if (text) text.textContent = msg;
+  if (box) box.hidden = false;
+  if (!hard) return;
+  for (const id of ['startSurvival', 'startNew', 'startCompare']) {
+    const b = $(id);
+    if (b) { b.disabled = true; b.title = '需要 WebGL 才能进入'; }
+  }
+}
+
 function draw(cv, w) {
   cv._anim = ACT.frame;   // 渲染元数据：验收可核对 A/B 是否共用同一动画帧号
-  if (campRenderer) {
-    if (cv.id === 'cvB' && !ui.compare) return;
-    try {
-      if (drawCamp(cv,w)) return;
-    } catch(error) { console.warn('3D 绘制失败，使用像素视图',error); }
-    campRenderer=null;
-    for(const walker of Object.values(WALK)){walker.path=[];walker.pi=0;walker.moving=false;}
-    $('btnCampAngle').hidden=true;
+  if (!campRenderer || gfxGaveUp) { showGfxUnavailable(!campRenderer); return; }
+  if (cv.id === 'cvB' && !ui.compare) return;
+  try {
+    if (drawCamp(cv, w)) {
+      gfxFailureRun = 0;
+      gfxFaultMessage = ''; gfxNoticeShown = '';
+      return;
+    }
+  } catch (error) {
+    gfxFailureRun += 1;
+    if (gfxFailureRun === 1) console.warn('3D 绘制失败', error);   // 只记第一次，避免每帧刷日志
+    if (gfxFailureRun >= GFX_FAILURE_LIMIT) {
+      gfxGaveUp = true;
+      showGfxUnavailable(false, '3D 渲染连续失败，已停止重试。刷新页面可重试。');
+      return;
+    }
+    showGfxUnavailable(false);
   }
-  cv.dataset.renderer='2d';
-  // 全屏＝把"当前视角"原样放大（取景不变，只放开整数倍上限），不切换成别的视图。
-  const site=cv.id==='cvB'?(ui.surveyRoom?null:w.campPlayerRoom):ui.interior;
-  if (site) {
-    cv._cam = { mode: 'interior', site };
-    return drawInterior(cv, w, site);
-  }
-  if (ui.overview) {
-    paintResidentSpeech(cv, w, [], null, true);
-    return drawOverview(cv, w);
-  }
-  return drawViewport(cv, w);
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2636,9 +2111,7 @@ const ROOM_PROPS = {
   cart: ['手推车','整理随身材料。'],
   pen: ['养殖围栏','查看存栏、兑换收成或用公仓材料扩建。'],
 };
-function rectGap(x,z,left,top,w,d) {
-  return Math.hypot(Math.max(left-x,x-left-w,0),Math.max(top-z,z-top-d,0));
-}
+
 function atRoomDoor(site, walking=false) {
   const x=IPOS.x+8, z=IPOS.y+16;
   if (walking && site==='hall') return hallExitAt(hallFront,x,z,true);
@@ -3575,78 +3048,13 @@ const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true, masks
 
 const MAP_GRID={width:WORLD_W,height:WORLD_H,cell:COLLISION_CELL,legacy:[96*TILE,64*TILE]};
 const ROOM_LABELS = { ...LOCS, workshop: '工坊', garden: '菜园', well: '井台', yard: '院子' };
-function collisionScene(id) {
-  const w = S.view;
-  const background = document.createElement('canvas');
-  if (id !== 'map') {
-    drawInterior(background, w, id, true);
-    return { background, assetPixels: roomPixelWalk(id), roomBounds:roomBounds(id) };
-  }
-  const world = buildWorld(w);
-  background.width = WORLD_W;
-  background.height = WORLD_H;
-  const g = background.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  g.drawImage(world.canvas, 0, 0, WORLD_W, WORLD_H);
-  const origin = { x: 0, y: 0 };
-  const depth = o => o.kind === 'tree' ? o.ty : o.foot ?? o.sy - 1;
-  for (const o of [...world.objects].sort((a, b) => depth(a) - depth(b))) {
-    if (o.kind === 'tree') drawTreeObj(g, o, origin);
-    else drawHouseObj(g, o, origin);
-  }
-  g.font = '8px fusion-pixel, monospace';
-  for (const [key, render] of [['buildings', drawBuildingObj], ['sites', drawSiteObj]]) {
-    for (const item of w[key] ?? []) {
-      const lot=item.lot??constructionLot(item.loc,w.layout);
-      if (lot) render(g,{lot,bld:item,st:item},origin);
-    }
-  }
-  return { background, pixelWalk: world.pixelBase ?? terrainPixels(), assetPixels: world.assetPixels };
-}
-
-const collisionDialog = $('collisionEditor');
-const localCollisionEditor = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-// 调试入口关闭，继续读取本机已保存的碰撞。
-const COLLISION_EDITING_ENABLED = false;
-const canEditCollisions = COLLISION_EDITING_ENABLED && localCollisionEditor;
-$('btnCollision').hidden = !canEditCollisions;
-const collisionEditor = createCollisionEditor({
-  dialog: collisionDialog,
-  enabled: localCollisionEditor,
-  editable: canEditCollisions,
-  grids: { map: MAP_GRID, ...Object.fromEntries(Object.keys(INTERIORS).map(id => [id, ROOM_GRID])) },
-  labels: { map: '室外地图', ...ROOM_LABELS },
-  makeScene: collisionScene,
-  move(id, cells, point, dx, dy, spawn) {
-    const [x, y] = point;
-    if (id !== 'map') {
-      const mask=roomPixelWalk(id), bounds=roomBounds(id);
-      const fits=campRenderer?(_x,_y,nx,ny)=>roomBodyFits(id,cells,mask,bounds,nx,ny):undefined;
-      if (spawn) return (fits?fits(x,y,x,y):roomAllows(cells,x,y,mask,bounds))?point:null;
-      return moveRoomFeet(cells,x,y,dx,dy,mask,fits,bounds);
-    }
-    const world = buildWorld(S.view);
-    if (spawn) {
-      if (!mapAllows(world, x / TILE - 0.5, y / TILE - 0.5)) return null;
-      return [x, y].map(pixel => Math.floor(pixel) + 0.5);
-    }
-    const [nextX, nextY] = moveMapFeet(world, x / TILE - 0.5, y / TILE - 0.5, dx / TILE, dy / TILE);
-    return [(nextX + 0.5) * TILE, (nextY + 0.5) * TILE];
-  },
-  changed() {
-    // 修改通路后，丢弃按旧网格排好的路径。
-    for (const walker of Object.values(WALK)) {
-      walker.path = []; walker.pi = 0; walker.moving = false;
-    }
-  },
-});
-$('btnCollision').onclick = () => {
-  if (!canEditCollisions || !S.view || collisionDialog.open) return;
-  keys.clear();
-  collisionEditor.open();
-};
+// 2D 碰撞工作台已移除（本版本只做 3D）。玩法侧的碰撞栅格仍然通过这些调用点读"手工覆盖"，
+// 所以保留一个不渲染、不读 localStorage 的空实现：cells() 永远返回空集合，revision 恒为 0。
+const collisionEditor = { cells: () => new Map(), revision: 0 };
 
 function renderPlayMode(sv, comparison = S.comparison) {
+  // 离开菜单时交给世界场景音频（audio.scene 会在下一轮把菜单主题换成营地主题）。
+  if (!ui.menu) audio.menu(false);
   const hasSurvival=Boolean(sv);
   S.survivalView=sv;
   S.comparison=comparison;
@@ -3654,10 +3062,14 @@ function renderPlayMode(sv, comparison = S.comparison) {
   S.playing=!ui.menu && (ui.compare ? Boolean(comparison) : hasSurvival);
   document.body.classList.toggle('menu-mode',ui.menu);
   $('startMenu').hidden=!ui.menu;
-  $('startSurvival').disabled=!hasSurvival || resettingSurvival;
-  $('startNew').disabled=!hasSurvival || resettingSurvival;
-  $('startCompare').disabled=!hasSurvival || resettingSurvival;
-  if (!resettingSurvival && !startError)
+  $('startSurvival').disabled=!hasSurvival || resettingSurvival || !campRenderer;
+  $('startNew').disabled=!hasSurvival || resettingSurvival || !campRenderer;
+  $('startCompare').disabled=!hasSurvival || resettingSurvival || !campRenderer;
+  // 只做 3D：没有 WebGL 时把原因写在这里（菜单模式下 #playNotice 被 CSS 隐藏，写那边玩家看不到）。
+  $('startStatus').classList.toggle('gfx-bad', !campRenderer);
+  if (!campRenderer) {
+    $('startStatus').textContent='此设备或浏览器不支持 WebGL，无法进入 3D 世界。请换用较新的 Chrome / Edge / Firefox，或在浏览器设置里开启硬件加速后刷新。';
+  } else if (!resettingSurvival && !startError)
     $('startStatus').textContent=sv?`生存存档 · 第 ${sv.day+1} 天`:'当前服务没有生存存档。';
   S.campReady=Boolean((ui.compare?comparison?.A:sv)?.camp);
   document.body.classList.toggle('surv-mode',S.soloSurv);
@@ -3673,6 +3085,12 @@ function renderPlayMode(sv, comparison = S.comparison) {
       : !S.campReady ? '当前入口的生存服务版本较旧。新版入口支持家具存取、睡觉和采集工具。' : '';
   notice.hidden=!message;
   if ($('playNoticeText').textContent!==message) $('playNoticeText').textContent=message;
+  // 渲染故障是"持续态"：renderPlayMode 每轮轮询都会按上面的 message 重置可见性，
+  // 所以这里必须把故障提示重新压回去，否则它只会闪现一轮（实测截图里完全看不到）。
+  if (gfxFaultMessage) {
+    notice.hidden = false;
+    if ($('playNoticeText').textContent !== gfxFaultMessage) $('playNoticeText').textContent = gfxFaultMessage;
+  }
   const isLocal=['localhost','127.0.0.1','[::1]'].includes(location.hostname);
   preview.hidden=!isLocal || S.campReady || location.port==='17948';
   if (!preview.hidden) preview.href='http://127.0.0.1:17948/';
@@ -3691,6 +3109,11 @@ let audioWindowSig = null;
 let audioPrev = null;
 function syncAudioScene(sv) {
   if (!sv) return;
+  // 审计 2026-11-15 POTENTIAL #1：菜单用独立主题（audio.menu），世界场景音频不得接管。
+  // 旧实现没有这条守卫，而 audio.scene() 会无条件把 state.menu 置 false ⇒
+  // 点「主菜单」后菜单曲最多活一次轮询（≤900ms）就被营地音乐顶掉。
+  // 同时把签名清空：回到游玩时下一轮会重新应用世界场景。
+  if (ui.menu) { audioSceneSig = null; audioWindowSig = null; return; }
   const sig = sceneSignature(sv);
   // 播放窗口每轮都重算（纯函数，成本可忽略）：它比场景签名变得频繁，音乐该淡出时就淡出。
   const win = musicWindow(sv, { now: sv.t ?? 0 });
@@ -3811,7 +3234,6 @@ async function refresh() {
     const viewA = sv;
     S.view = viewA;
     syncAudioScene(viewA);
-    $('btnCollision').disabled = !canEditCollisions;
     if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
       else { draw($('cvA'), viewA); if (B) draw($('cvB'), B); }
@@ -4035,7 +3457,7 @@ function cycleAudio(){
 }
 $('btnAudio').onclick=cycleAudio;
 bindAudioDialogs();
-const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); } };
+const unlockAudio=()=>{ if(audio.unlock()){ audioSceneSig=null; paintAudioButton(); if (ui.menu) audio.menu(true); } };
 ['pointerdown','keydown'].forEach(type=>window.addEventListener(type,unlockAudio,{once:true,capture:true}));
 paintAudioButton();
 // 说明书 / 家庭与住房：局内屏幕中央新 UI
@@ -4539,7 +3961,7 @@ const KEY_DIR = { w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left
 window.addEventListener('keydown', (e) => {
   if (ui.menu) return;
   // 只让真正的输入控件吞按键；按钮/summary 焦点不吞（点过按钮后键盘仍可用）
-  if (collisionDialog.open || e.target.closest?.('input,textarea,select,[contenteditable]') ||
+  if (e.target.closest?.('input,textarea,select,[contenteditable]') ||
       e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if ($('campPropDialog').open) {
@@ -4612,7 +4034,7 @@ loadAssets().finally(() => {
       return;
     }
     if (titleFrame!==-Infinity) titleFrame=-Infinity;
-    if (document.hidden || $('worldMain').hidden || collisionDialog.open || !S.view) { lastPaint = null; return; }
+    if (document.hidden || $('worldMain').hidden || !S.view) { lastPaint = null; return; }
     const dt = lastPaint === null ? 0 : Math.min(0.05, (now - lastPaint) / 1000); lastPaint = now; elapsed += dt; ACT.seconds=elapsed;
     ACT.frame = reduced.matches ? 0 : Math.floor(elapsed * ACT.fps) % 4;
     const changed = ACT.frame !== lastSpriteFrame; lastSpriteFrame = ACT.frame;
@@ -4620,7 +4042,7 @@ loadAssets().finally(() => {
     const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
     ACT.motionTime=reduced.matches?0:elapsed;
     const mstep=SPEED*ACT.fps*dt, playerStep=mstep*(keys.has('sprint')?1.75:1);
-    const repaint3d=changed || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24)) ||
+    const repaint3d=forceRepaint || changed || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24)) ||
       mdx || mdy || roomRoute || Object.values(WALK).some(walker=>walker.pi<walker.path?.length);
     // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
@@ -4714,6 +4136,7 @@ loadAssets().finally(() => {
     }
     if (changed) for (const cvId in DUST) DUST[cvId] = DUST[cvId].map(p => ({ ...p, age: p.age + 1 })).filter(p => p.age < 6);
     if (campRenderer && !repaint3d) return;
+  forceRepaint = false;
     if (ui.fullscreen) {
       if (S.viewB) draw($('cvB'), S.viewB);
       draw($('cvFull'), S.view);
@@ -4722,6 +4145,7 @@ loadAssets().finally(() => {
   requestAnimationFrame(animate);
 });
 // 验收钩子补挂：WALK/ui 在模块后段声明，顶部对象字面量引用会 TDZ 炸掉整个模块
+if (!campRenderer) showGfxUnavailable(true);
 Object.assign(window.__lifeDebug, {
   WALK, ui, S,
   survFlash: () => survFlash,

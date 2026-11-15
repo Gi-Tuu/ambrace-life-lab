@@ -12,6 +12,10 @@ import { spawn } from 'node:child_process';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HTML = readFileSync('web/index.html', 'utf8');
+// 样式已从 index.html 抽到 web/app.css（2026-11-15）。闸门要断言的是"页面上存在这条故障样式"，
+// 不是"它写在哪个文件里"——所以两处合并后再匹配，否则搬一次样式就会让闸门变成噪音。
+const CSS = readFileSync('web/app.css', 'utf8');
+const STYLED = `${HTML}\n${CSS}`;
 
 test('F1 轮询必须串行且后台停轮询（否则请求叠加、且替世界打 touch 烧额度）', () => {
   assert.match(APP, /document\.hidden/, '没有 document.hidden 判断 ⇒ 后台标签页会一直轮询');
@@ -26,7 +30,7 @@ test('F2 重置必须带 confirm（服务端要求，缺了就 400）', () => {
 test('F3 存档失败与决策异常必须出现在页面上', () => {
   assert.match(APP, /j\.saveError/, '前端从不读 saveError ⇒ 存不上盘时页面无感');
   assert.match(APP, /j\.tickError/, '前端从不读 tickError ⇒ 世界静默冻结时页面无感');
-  assert.match(HTML, /\.backend\.bad/, '没有故障样式类');
+  assert.match(STYLED, /\.backend\.bad/, '没有故障样式类（index.html 或 app.css 里都必须能找到）');
 });
 
 test('F4 服务端字符串进 innerHTML 前必须过 esc（抽查所有插值点）', () => {
@@ -125,4 +129,19 @@ test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN
     child.kill();
     await new Promise((r) => setTimeout(r, 400));
   }
+});
+
+test('F8 菜单主题不得被世界场景音频接管（审计 POTENTIAL #1）', () => {
+  // 旧实现：syncAudioScene 无菜单守卫，而 audio.scene() 会无条件 state.menu=false
+  // ⇒ 点「主菜单」后菜单曲最多活一次轮询（≤900ms）就被营地音乐顶掉。
+  assert.match(APP, /function syncAudioScene\(sv\) \{[\s\S]{0,500}?if \(ui\.menu\)/, 'syncAudioScene 缺菜单守卫');
+  assert.match(APP, /if \(ui\.menu\) audio\.menu\(true\)/, '首次手势解锁后没有补起菜单主题（菜单会静音）');
+  assert.match(APP, /audio\.menu\(false\)/, '离开菜单时没有交还给世界场景音频');
+});
+
+test('F9 渲染连续失败必须只记一次日志、到上限停试、且提示持续可见（审计 POTENTIAL #2）', () => {
+  assert.match(APP, /const GFX_FAILURE_LIMIT = \d+;/, '没有连续失败上限');
+  assert.match(APP, /gfxFailureRun === 1\) console\.warn/, '日志不是只记第一次（实测旧实现 6 秒打了 26 条）');
+  assert.match(APP, /gfxGaveUp = true;/, '到上限没有停试，会每帧无限重试');
+  assert.match(APP, /if \(gfxFaultMessage\) \{[\s\S]{0,200}notice\.hidden = false/, '故障提示会被 renderPlayMode 每轮重置隐藏');
 });
