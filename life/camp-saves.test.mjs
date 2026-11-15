@@ -118,3 +118,15 @@ test('SA7 三态：表格逐格（有观众→watched；无人主营地→node�
   const b = modelLaneFor({ campKey: 'b', watched: false, unattendedOn: true });
   assert.deepEqual([a, b], ['idle', 'idle']);
 });
+
+test('SA9 按营地 tick：一份管理器里的每个常驻营地都各走一刻，互不代跑', async () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 4 });
+  const a = mgr.open('甲');
+  const b = mgr.open('乙');
+  assert.ok(a.ok && b.ok);
+  const t0a = a.sp.world.t, t0b = b.sp.world.t;
+  await mgr.tickAll({ budgetMs: 20000 });
+  assert.equal(a.sp.world.t, t0a + 1, '甲应当前进一刻');
+  assert.equal(b.sp.world.t, t0b + 1, '乙也应当前进一刻（只 tick 第一份就会红）');
+});

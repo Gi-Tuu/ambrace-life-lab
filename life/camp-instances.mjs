@@ -177,6 +177,19 @@ export class CampInstances {
     return { ok: true, code: 'OK', key: id.key, sp, created };
   }
 
+  // 按 key 取（cookie 路由用）：先 live，再磁盘；都没有返回 null。
+  openKey(key, { now = Date.now() } = {}) {
+    if (!key) return null;
+    const hit = this.live.get(key);
+    if (hit) { hit.lastUsed = now; return hit.sp; }
+    if (!existsSync(campFile(this.dataDir, key))) return null;
+    const sp = loadSurv(loadCamp(this.dataDir, key), this.options.seed ?? 7, this.options);
+    sp.world.campKey = key;
+    this.live.set(key, { sp, key, name: readIndex(this.dataDir).entries.find((e) => e.key === key)?.name ?? key, lastUsed: now });
+    this.evictIfNeeded();
+    return sp;
+  }
+
   evictIfNeeded() {
     while (this.live.size > this.limit) {
       let oldestKey = null, oldest = Infinity;

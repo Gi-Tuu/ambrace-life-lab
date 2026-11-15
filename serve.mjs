@@ -210,11 +210,13 @@ async function handle(req, res) {
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
     const opened = await openCamp(body?.name);
     if (!opened.ok) return json(res, 400, { error: opened.code });
+    res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
   const viewMode = url.searchParams.get('mode');
-  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode);
+  const campCookie = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || null;
+  if (req.method === 'GET' && p === '/world' && viewMode !== 'menu') host.touch(viewMode === 'compare' ? 'comparison' : viewMode, campCookie || undefined);
 
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
@@ -231,7 +233,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     });
   }
 
-  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode));
+  if (req.method === 'GET' && p === '/world') return json(res, 200, host.snapshot(viewMode, campCookie || undefined));
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
     const denied = mutatingDenied(req, CTL_TOKEN);
@@ -254,7 +256,8 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
-    return json(res, 200, await (p === '/act' ? host.act(body) : host.ctl(body)));
+    const campForAct = (req.headers.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('camp='))?.slice(5) || url.searchParams.get('camp') || undefined;
+    return json(res, 200, await (p === '/act' ? host.act(body, campForAct) : host.ctl(body)));
   }
 
   // BUG-8：鉴权 → 与 modelBrain 同一套预算/在场闸门 → 才转发。

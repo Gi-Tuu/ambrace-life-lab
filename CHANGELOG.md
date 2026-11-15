@@ -104,6 +104,14 @@
 - `docs/deploy-checklist.md` 顶部新增「0. 重新部署前必须先归档」一节，把这条从登记项升成交付步骤。
 - 闸门 `save-archive.test.mjs` A1（归档→清空→恢复，逐字节一致）/ A2（无数据目录必须失败且不留目录）；
   拆掉归档里复制 `saves/` 那行即红（已验，字节还原）。
+### 多营地并发（C3 补齐，2026-11-15）
+- `openCamp` 不再替换当前世界：装载后由每个请求按 `camp` cookie 选世界（`/saves/open` 下发，
+  `Path=/; Max-Age=30d; SameSite=Lax`），`/world` 与 `/act` 按 cookie 路由；无 cookie 即主营地。
+- 按营地 tick：每拍推进主世界与所有常驻分名字营地（同一套预算/熔断/两本账），单份异常不拖垮整拍。
+- 按营地落盘：主营地仍写 `world.json`；每个常驻营地各写 `saves/<key>.gz` + 索引。
+- `ctl` 的 `reset` / `survival_reset` 同步 `S.mainSurv`（修掉并发改动打红的 3 条既有测试）。
+- 闸门 SA9：`tickAll` 必须推进每个营地（只跑第一份即红）；实机两个 cookie 各自 960→963，
+  对甲 `move garden` 后甲变、乙不变。
 ### 测试隔离修复
 - `host.mjs` 的 `dir` 改为 getter：测试在同一进程里晚设 `DATA_DIR` 时，写入不再落回仓库 `./data`
   （覆盖率跑动时暴露的真实污染；清理后又跑一遍确认不再生成）。

@@ -135,8 +135,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 95 个测试文件 / 617 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 90.09% / 分支 87.77% / 函数 91.89%，92 个被加载模块；2026-11-15 实测）
+npm test          # 95 个测试文件 / 618 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 90.00% / 分支 87.62% / 函数 91.77%，92 个被加载模块；2026-11-15 实测）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
 npm run check     # lint + art:check + test
