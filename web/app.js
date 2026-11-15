@@ -3273,12 +3273,19 @@ async function refresh() {
     } else if (S.soloSurv && j.survival.model?.enabled && !j.survival.model.configured) {
       chip.textContent='生存：本地替身（模型未配置）'; chip.classList.remove('on');
     } else if (j.brain !== 'model') { chip.textContent = '后端：本地替身'; chip.classList.remove('on'); }
-    else if (!m.watching) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
-    else if ((m.calls ?? 0) >= (m.budget ?? 0)) { chip.textContent = `后端：替身（今日 ${m.budget} 次已用完）`; chip.classList.remove('on'); }
+    // 两把尺子分开判：钱＝m.budget 对 m.moneyCalls，电＝m.nodeBudget 对 m.nodeCalls。
+    // 用总量 calls 去比钱的额度，会在节点仍在一一答话时谎称"今日额度已用完"（无人模型权限上线后必然发生）。
+    else if (!m.watching && m.unattended === false) { chip.textContent = '后端：替身（无人观看，省额度）'; chip.classList.remove('on'); }
+    else if ((m.nodeBudget ?? 0) > 0 && (m.moneyCalls ?? 0) >= (m.budget ?? 0) && (m.nodeCalls ?? 0) >= (m.nodeBudget ?? 0)) {
+      chip.textContent = `后端：替身（今日两把额度都用完：额度 ${m.budget}／节点 ${m.nodeBudget}）`; chip.classList.remove('on');
+    }
+    else if ((m.nodeBudget ?? 0) === 0 && (m.budget ?? 0) > 0 && (m.moneyCalls ?? 0) >= (m.budget ?? 0)) {
+      chip.textContent = `后端：替身（今日 ${m.budget} 次额度已用完）`; chip.classList.remove('on');
+    }
     else {
       chip.textContent=S.soloSurv && j.survival.model
         ? `生存：模型已接入 · 今日有效选择 ${j.survival.model.choices}`
-        : `后端：真模型 ${m.calls ?? 0}/${m.budget ?? '?'}（今日额度）`;
+        : `后端：真模型 · 节点 ${m.nodeCalls ?? 0}${m.nodeBudget ? '/' + m.nodeBudget : ''} · 额度 ${m.moneyCalls ?? 0}/${m.budget ?? '?'}`;
       chip.classList.add('on');
     }
     // H-15 / BUG-18：存档失败与 tick 异常原先在页面上**完全不可见**（只有 /healthz 里埋着），
