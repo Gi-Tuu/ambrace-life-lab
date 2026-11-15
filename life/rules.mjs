@@ -9,7 +9,7 @@ import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
-import { BUILDINGS, gatherResource, forageRule } from './production.mjs';
+import { buildDef, gatherResource, forageRule } from './production.mjs';
 
 export function validate(world, agentId, intent, here = world.loc[agentId]) {
   const locs = world.locs ?? LOCS;
@@ -76,7 +76,7 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
   if (kind === 'plan') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里不能建造');
     if (!(world.outdoor ?? []).includes(here)) return fail('NOT_OUTDOOR', '只能在户外奠基');
-    const def = BUILDINGS[intent.type];
+    const def = buildDef(world, intent.type);
     if (!def) return fail('NO_TYPE', '未知建筑类型');
     if (world.survival.sites.some((s) => s.loc === here) || world.survival.buildings.some((b) => b.loc === here)) return fail('OCCUPIED', '这里已经有建筑或工地');
     const bagP = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包+公仓合计

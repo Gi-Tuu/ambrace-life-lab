@@ -18,6 +18,15 @@ const { host } = await import('./host.mjs');
 const worldFile = join(DIR, 'world.json');
 const writes = () => host.snapshot().saveWrites ?? 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 轮询等到条件成立或超时：固定 sleep 在覆盖率插桩/慢盘上会抖。
+const until = async (fn, deadlineMs) => {
+  const t0 = Date.now();
+  while (!fn()) {
+    if (Date.now() - t0 > deadlineMs) return false;
+    await sleep(25);
+  }
+  return true;
+};
 
 await host.start();
 host.stop();
@@ -34,9 +43,8 @@ test('C-1 开窗后连点只写一次，窗口到期补写 【变红法：把 pe
   const during = writes() - before;
   assert.ok(during <= 1, `窗口内写了 ${during} 次，应当 ≤1（合并没生效）`);
 
-  await sleep(900);
+  assert.ok(await until(() => writes() - before >= 1, 3000), '窗口到期后必须补写一次（3s 内未补写）');
   const after = writes() - before;
-  assert.ok(after >= 1, '窗口到期后必须补写一次');
   assert.ok(statSync(worldFile).mtimeMs >= mtimeBefore, '落盘时间应当前进了');
 });
 
@@ -46,6 +54,6 @@ test('C-2 stop() 必须把窗口内的待写盘踢起来 【变红法：删掉 s
   assert.ok(r.ok);
   assert.equal(writes() - before, 0, '这一刻还在窗口里，不应已经写盘');
   host.stop();
-  await sleep(200); // 远小于 600ms 窗口：只有 stop 主动补写才可能已经落地
-  assert.ok(writes() - before >= 1, 'stop() 之后没有补写 ⇒ 停服会丢这个窗口的动作');
+  // 截止 500ms（仍小于 600ms 窗口）：只有 stop 主动补写才可能在这个期限内落地。
+  assert.ok(await until(() => writes() - before >= 1, 500), 'stop() 之后没有补写 ⇒ 停服会丢这个窗口的动作');
 });

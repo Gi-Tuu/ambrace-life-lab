@@ -124,7 +124,9 @@ async function onSignal() {
   process.exit(0);
 }
 
-const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, dir: process.env.DATA_DIR ?? 'data', masks: { m3: false, coupling: false }, startRaw: null, surv: null };
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, attempts: [], dayKey: '' }, lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
+  // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
+  get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -251,7 +253,7 @@ function modelConfigured() {
 // 导出给离线工具（scripts/seed-ladder.mjs）复用：公开演示起点必须用运行时同一套生存配置生成，
 // 否则烘出来的营地在正式模式下装不回来。
 export function survivalOptions() {
-  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, gameRules: process.env.GAME_RULES === '1', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 // D3：Qwen3.8 才带关闭思考参数；端点不认（400/422）时同一次尝试内去掉参数重试。

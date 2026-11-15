@@ -3,7 +3,7 @@
 // 只作用于 world.survival.coop.enabled（默认关）；lab/town 无 survival ⇒ 逐位不变，
 // Phase A/B（coop 关）轨迹亦不变。配对闸门用同 seed「独建 vs 协作」比完工时间。
 // 确定性：不消费 Math.random；意愿/选址均由世界事实推导。
-import { BUILDINGS, gatherPlace, coopPoolGather, doPlan, doBuild } from './production.mjs';
+import { buildDef, gatherPlace, coopPoolGather, doPlan, doBuild } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 import { laborStage } from './households.mjs';
 // 位置只能经 body.move 改：它同时维护 world.occupancy。直接写 world.loc[id] 会让
@@ -71,7 +71,7 @@ export const assignWorkers = (world, task) => Object.keys(world.agents)
 
 // 单拍执行：每个工人做一个动作；失败重规划（换选址 / 记拒绝）。
 function execTick(world, t) {
-  const s = world.survival; const def = BUILDINGS[t.type];
+  const s = world.survival; const def = buildDef(world, t.type);
   const relocate = (id, loc) => {
     const changed = world.loc[id] !== loc;
     moveTo(world, id, loc);
@@ -168,7 +168,7 @@ export function cooperationCandidate(world, id) {
   if (task.repair ? !building || building.integrity >= 1 : building || (!site && (task.adopted || task.requester))) return null;
   const move = to => ({ kind: 'move_to', to, id: `move_to:${to}`, label: `去${world.locs[to] ?? to}` });
   let act;
-  const cost = task.repair ? { wood: 1, stone: 1 } : BUILDINGS[task.type].cost;
+  const cost = task.repair ? { wood: 1, stone: 1 } : buildDef(world, task.type).cost;
   const materials = Object.keys(cost);
   const missing = materials.find(res => (bag[res] ?? 0) + s.inv[res] < cost[res]);
   if (site || !missing) {
@@ -189,7 +189,7 @@ export function cooperationCandidate(world, id) {
   const base = BASE_KINDS[act.kind];
   const willingnessNow = willingness(world, id, task);
   const value = willingnessNow.score * (agent.drives.v.energy - 0.22) / 0.78;
-  return { ...act, label: `合作·${act.label ?? base.label}（${BUILDINGS[task.type].label}）`,
+  return { ...act, label: `合作·${act.label ?? base.label}（${buildDef(world, task.type).label}）`,
     cost: SURV_COST[act.kind], impulse: base.impulse, serves: { social: .15, stimulation: .3 },
     cooperationValue: value, cooperation: true };
 }

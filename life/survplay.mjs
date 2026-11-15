@@ -17,7 +17,7 @@ import { speechLine } from './speech.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { buildLot, doBuild, doRepair, effectiveMods, BUILDINGS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
@@ -46,7 +46,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -56,6 +56,7 @@ export function createSurvPlay(seed=7,{residentialDecisions=false,deliberator=nu
   world.eventRulesVersion = eventRulesVersion;
   world.unifiedCooperation = unifiedCooperation;
   world.independentWorld = independentWorld;
+  world.gameRules = gameRules;
   world.autonomousGoals = autonomousGoals;
   if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
@@ -772,7 +773,7 @@ export function survView(sp) {
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
     produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
     economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
-    buildingsDef: BUILDINGS,
+    buildingsDef: buildingsFor(w),
   };
 }
 
