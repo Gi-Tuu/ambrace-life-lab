@@ -59,15 +59,21 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
-│  ├─ *.test.mjs          #   70 个测试文件（闸门，含负向对照）
+│  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
+│  ├─ *.test.mjs          #   82 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
 │  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
 │  ├─ camp-3d-scene.mjs   #   3D 营地几何（代码定义的 box 模型，随 progress/integrity/季节重建）
+│  ├─ camp-lighting.mjs / camp-sun.mjs   # 受光与日照（接触阴影，纯表现）
+│  ├─ wild-landscape.mjs / camp-outskirts.mjs   # 野外地形 / 郊区（河流、岸线、植被）
+│  ├─ camp-districts.mjs / camp-region-entities.mjs   # 外围资源点（内环日常 + 外环远征）/ 区域实体
+│  ├─ camp-sight.mjs / camp-facility.mjs   # 视野 / 设施几何
+│  ├─ audio.mjs           #   程序化声音：状态驱动 SFX / 环境声 / BGM（离聚落越远越稀疏）
 │  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
-│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体
+│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体 + art-hashes 指纹
 ├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
 │  ├─ gen-pixel-assets.mjs / gen-actions.mjs / pack-assets.mjs
 │  ├─ editor-catalog.mjs / pixel-overrides.mjs
@@ -127,10 +133,14 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 70 个测试文件 / 475 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 88.8% / 分支 87.8% / 函数 91.1%，69 个被加载模块）
-npm run check     # lint + test
+npm test          # 82 个测试文件 / 556 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（行 90.24% / 分支 88.35% / 函数 92.10%，89 个被加载模块；2026-11-15 实测）
+npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
+npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
+npm run check     # lint + art:check + test
 ```
+
+**为什么美术也要指纹**：研究面早有"五份面 md5"钉死，但素材没有指纹时，"改图"只能靠肉眼发现——重生成、覆盖稿、别人提交一张图都可能在无人察觉时改变游戏外观。`art:check` 把外观也纳入"改了就必须在提交里承认"的纪律（与五份面同源思路）。哈希对 PNG 字节取，Node 大版本升级可能改变压缩输出（像素相同、字节不同）⇒ 那时 `--check` 会红，逼你显式重钉并在 CHANGELOG 说明"只是压缩器变了"。
 
 研究读数（五份面随仓库发布在 `evidence/`，md5 与复现方法见 [`EVIDENCE.md`](./EVIDENCE.md)）：
 
