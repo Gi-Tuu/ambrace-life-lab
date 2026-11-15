@@ -1,0 +1,87 @@
+// C1 闸门：实例隔离 / 往返不动点与对账 / 名字安全 / TTL 不删活跃 / 列表投影。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { CampInstances, normalizeName, listSaves, savesDir, sweepSaves, touchSave } from './camp-instances.mjs';
+import { dumpSurv, loadSurv } from './survplay.mjs';
+
+const SEED = JSON.parse(readFileSync(new URL('../seed/world.json', import.meta.url), 'utf8')).survival;
+const OPTIONS = { independentWorld: true, gameRules: true };
+const dir = () => mkdtempSync(join(tmpdir(), 'camps-'));
+
+test('SA1 隔离：两个名字是两个世界，改 A 不动 B', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 4 });
+  const a = mgr.open('阿禾');
+  const b = mgr.open('阿石');
+  assert.ok(a.ok && b.ok, a.code + '/' + b.code);
+  assert.notEqual(a.key, b.key);
+  assert.notEqual(a.sp, b.sp, '不能共享同一个 sp');
+  const beforeB = dumpSurv(b.sp);
+  a.sp.world.survival.store = 3;
+  a.sp.world.t += 5;
+  assert.equal(b.sp.world.survival.store, JSON.parse(JSON.stringify(beforeB)).survival.store, 'B 的公仓不该被 A 改动');
+  assert.equal(b.sp.world.t, beforeB.t, 'B 的刻数不该被 A 改动');
+});
+
+test('SA2 往返：dump→load 后进入不动点，且继承 Σfood===store 对账', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 2 });
+  const a = mgr.open('阿禾');
+  assert.ok(a.ok);
+  a.sp.world.survival.store = 12;
+  mgr.persist();
+  const reload = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 2 });
+  const b = reload.open('阿禾');
+  assert.ok(b.ok, b.code);
+  const s = b.sp.world.survival;
+  const sum = Object.values(s.food ?? {}).reduce((x, y) => x + y, 0);
+  assert.equal(sum, s.store, '往返后 Σfood 必须等于 store');
+  const d1 = dumpSurv(b.sp);
+  const d2 = dumpSurv(loadSurv(d1, OPTIONS.seed ?? 7, OPTIONS));
+  const d3 = dumpSurv(loadSurv(d2, OPTIONS.seed ?? 7, OPTIONS));
+  assert.deepEqual(d2, d3, '第二、三次 dump 必须逐位相同（进入不动点）');
+});
+
+test('SA5 名字安全：分隔符/.. /超长/控制符/零宽一律拒绝，且不产生文件', () => {
+  const dataDir = dir();
+  for (const bad of ['../x', 'a/b', 'a\\b', '..', '...', 'x'.repeat(40), 'a\u0000b', 'a\u200bb']) {
+    const r = normalizeName(bad);
+    assert.equal(r.ok, false, '应拒绝: ' + JSON.stringify(bad));
+    assert.ok(r.code, '拒绝必须给 code');
+  }
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 2 });
+  assert.equal(mgr.open('../x').ok, false);
+  const dirPath = savesDir(dataDir);
+  const files = existsSync(dirPath) ? readdirSync(dirPath) : [];
+  assert.equal(files.length, 0, '拒绝时不得产生任何文件，实测 ' + files.join(','));
+  // 合法名字里带空格与中文：接受，key 由归一化名字派生
+  const ok = normalizeName('  阿禾 ');
+  assert.equal(ok.ok, true);
+  assert.equal(ok.display, '阿禾');
+  assert.equal(ok.key.length, 32);
+  assert.equal(normalizeName('阿禾').key, ok.key, '大小写/空白归一化后同 key');
+});
+
+test('SA4 TTL：删 3 天无活跃的，正在被观看的绝不删', () => {
+  const dataDir = dir();
+  const now = Date.now();
+  touchSave(dataDir, { key: 'k-old', name: '旧', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
+  touchSave(dataDir, { key: 'k-watched', name: '看', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
+  touchSave(dataDir, { key: 'k-live', name: '新', day: 3, population: 2, status: 'active', lastSeenAt: now });
+  const r = sweepSaves(dataDir, { now, isWatched: (key) => key === 'k-watched' });
+  assert.deepEqual(r.removed, ['k-old']);
+  const left = listSaves(dataDir, now).map((e) => e.name).sort();
+  assert.deepEqual(left, ['新', '看'].sort());
+});
+
+test('SA6 列表投影：只给五项，不含背包/关系/对话', () => {
+  const dataDir = dir();
+  touchSave(dataDir, { key: 'k1', name: '<img onerror=alert(1)>', day: 9, population: 4, status: 'active', lastSeenAt: Date.now(), pinv: { crop: 9 }, relations: { a: 1 }, converseLog: [1] });
+  const row = listSaves(dataDir)[0];
+  assert.deepEqual(Object.keys(row).sort(), ['day', 'daysLeft', 'lastSeenAt', 'name', 'population', 'status'].sort());
+  assert.equal(row.name, '<img onerror=alert(1)>', '名字按原样返回，转义由渲染层负责');
+});
