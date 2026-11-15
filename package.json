@@ -16,6 +16,6 @@
     "check": "npm run lint && npm run art:check && npm test",
     "assets": "node scripts/gen-pixel-assets.mjs && node scripts/pack-assets.mjs && node scripts/gen-actions.mjs",
     "actions": "node scripts/gen-actions.mjs",
-    "serve": "node serve.mjs"
+    "serve": "node serve.mjs", "smoke:online": "node scripts/smoke-online.mjs"
   }
 }
