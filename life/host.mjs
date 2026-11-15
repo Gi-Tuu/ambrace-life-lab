@@ -711,7 +711,7 @@ async function catchUpSurvival(minutes) {
 function serialize() {
   const pack = (p) => ({
     condition: p.condition,
-    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), flags: p.world.flags, secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })), ...(WORK_CAP === undefined ? {} : { workLog: { ...(p.world.workLog ?? {}) } }),
+    world: { t: p.world.t, preset: p.world.preset, weather: p.world.weather, coins: { ...p.world.coins }, pantry: p.world.pantry, riskyPortion: p.world.riskyPortion, scheduleWeight: p.world.scheduleWeight, socialGossip: p.world.socialGossip, loc: { ...p.world.loc }, occupancy: p.world.occupancy, stash: { ...p.world.stash }, expect: { ...p.world.expect }, companions: (p.world.companions ?? []).map((x) => x.slice()), normLog: (p.world.normLog ?? []).slice(-20), ...(p.world.flags && Object.keys(p.world.flags).length ? { flags: p.world.flags } : {}), secrets: (p.world.secrets ?? []).map((s) => ({ ...s, known: [...s.known] })), ...(WORK_CAP === undefined ? {} : { workLog: { ...(p.world.workLog ?? {}) } }),
       // H-23 / D13：喊住是 3 刻的短命世界事实、normSeen 是"播报到第几条"的游标。
       // 两者原先都不入档 ⇒ 重启后喊住静默失效、且最后 20 条规范事件被当成新事件**重播**一遍。
       hail: p.world.hail ?? null, normSeen: p._normSeen ?? 0 },
@@ -810,15 +810,28 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
   // 存档带了 occupancy 且与 loc 一致就沿用；否则重建。
   const rebuiltOcc = {};
   for (const [id2, loc2] of Object.entries(d.world.loc)) (rebuiltOcc[loc2] ??= []).push(id2);
-  let occUsable = Boolean(d.world.occupancy) && typeof d.world.occupancy === 'object'
-    && Object.keys(d.world.occupancy).length === Object.keys(rebuiltOcc).length;
+  // BUG-12（修）：判据从"键数相等"改为"**逐房间成员集合**一致"。
+  // 引擎会为"去过又离开"的房间保留空数组（body.mjs 的 move 只 filter、不删键），
+  // 所以键数几乎永远与 rebuilt 不等 ⇒ 以前每一份真实存档都走重建分支：
+  // 顺序保留形同虚设（实测 home ['a2','a1'] → ['a1','a2']），且 save→load→save 不幂等。
+  // 现在的语义：每个"有人"的房间，存档成员必须与 loc 完全一致；空房间键留不留都行（不携带顺序）。
+  const savedOcc = d.world.occupancy;
+  let occUsable = Boolean(savedOcc) && typeof savedOcc === 'object';
   if (occUsable) {
-    for (const [loc2, arr] of Object.entries(d.world.occupancy)) {
-      if (!Array.isArray(arr) || arr.length !== (rebuiltOcc[loc2] ?? []).length || new Set(arr).size !== arr.length || !arr.every((x) => d.world.loc[x] === loc2)) { occUsable = false; break; }
+    for (const [loc2, ids] of Object.entries(rebuiltOcc)) {
+      const arr = savedOcc[loc2];
+      if (!Array.isArray(arr) || arr.length !== ids.length || new Set(arr).size !== arr.length
+        || !arr.every((x) => d.world.loc[x] === loc2)) { occUsable = false; break; }
+    }
+  }
+  if (occUsable) {
+    for (const [loc2, arr] of Object.entries(savedOcc)) {
+      if (!Array.isArray(arr) || new Set(arr).size !== arr.length
+        || arr.some((x) => d.world.loc[x] !== loc2)) { occUsable = false; break; }
     }
   }
   pack.world.occupancy = occUsable
-    ? Object.fromEntries(Object.entries(d.world.occupancy).map(([loc2, arr]) => [loc2, arr.slice()]))
+    ? Object.fromEntries(Object.entries(savedOcc).map(([loc2, arr]) => [loc2, arr.slice()]))
     : rebuiltOcc;
   // 只为 loc 里出现但不属于 ROSTER 的 id 补占位对象（旧档/花名册变更）。
   // 注意：occupancy 已经在上面**整体赋值**过了，这里绝不能再 push —— 否则一场重放下来

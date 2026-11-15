@@ -47,6 +47,12 @@
   *保留*：`paintTerrain` / `terrainPixels` / `paintForestFloor` / `outskirtsAtlas` / `campOutskirts` 与
   `buildWorld` 的离屏画布——它们产出的正是 3D 着色器采样的 `uGround` 贴图与 `uWater` 掩码，删了就掉地面与水面。
   *受影响*：手工碰撞覆盖（原本只在 localhost 生效、存在浏览器 localStorage）不再参与判定；线上行为不变。
+### 修复（审计 2026-11-15）
+- **occupancy 存档往返**：判据从"键数相等"改为"逐房间成员集合一致"。引擎会为"去过又离开"的房间保留空数组，
+  所以旧判据让真实存档永远走重建分支 —— 同屋顺序被按 `loc` 键序重排（实测 `a2,a1 → a1,a2`），
+  且 `save→load→save` 不幂等。现在顺序与空键都保留；存档与 `loc` 冲突时仍然重建。
+- **空 `flags` 不落盘**：避免重载后被 `applyInto` 补成 `{}` 从而在第二次落盘时多出一个键。
+- 新增 `life/archive-roundtrip.test.mjs` 三条闸门（顺序保留 / 往返幂等 / 冲突必须重建），均已验红。
 ## [0.1.1] - 2026-11-13
 
 ### 生存机制整合

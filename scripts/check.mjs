@@ -79,6 +79,25 @@ for (const f of sources) {
     }
   }
 }
+// 2c) 被 life/ 引用的 web/*.mjs 不得使用浏览器 API（服务端会 import 它们，Node 里没有这些全局）
+const serverShared = new Set();
+for (const f of walk(join(ROOT, 'life')).filter((x) => x.endsWith('.mjs') && !x.endsWith('.test.mjs'))) {
+  const t = readFileSync(f, 'utf8');
+  for (const m of t.matchAll(/from\s+'\.\.\/web\/[^']+'/g)) {
+    serverShared.add(resolve(dirname(f), m[0].slice(6, -1)));
+  }
+}
+const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+for (const f of serverShared) {
+  if (!existsSync(f)) { fail(`life/ 引用的 ${rel(f)} 不存在`); continue; }
+  const body = stripComments(readFileSync(f, 'utf8'));
+  for (const api of ['document', 'window', 'localStorage', 'sessionStorage', 'navigator']) {
+    if (new RegExp(`\\b${api}\\b`).test(body)) {
+      fail(`${rel(f).replace(rel(ROOT) + '/', '')} 被 life/ 引用，却用了浏览器 API '${api}'（服务端 import 时会炸）`);
+    }
+  }
+}
+
 // 3) JSON 可解析
 const jsons = [
   join(ROOT, 'package.json'),
