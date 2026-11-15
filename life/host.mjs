@@ -248,7 +248,9 @@ function modelConfigured() {
   return CFG.keys.length > 0 && CFG.providers.some((_, i) => CFG.models[i] || CFG.model);
 }
 
-function survivalOptions() {
+// 导出给离线工具（scripts/seed-ladder.mjs）复用：公开演示起点必须用运行时同一套生存配置生成，
+// 否则烘出来的营地在正式模式下装不回来。
+export function survivalOptions() {
   return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
