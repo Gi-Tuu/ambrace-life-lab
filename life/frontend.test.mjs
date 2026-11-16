@@ -166,6 +166,10 @@ test('F11 首次进入三步引导：只出现一次、可跳过、动作能推�
   assert.match(APP, /if \(result\.ok\) markFirstRun\(body\.kind\)/, '动作成功后没有推进步骤');
   assert.match(APP, /camp_eat'\]?\) return 1/, '吃饭这一步没接');
   assert.match(APP, /camp_sleep'\]?\) return 2/, '睡觉这一步没接');
+  // B-b：新手必须知道"自己弄饭"的四个要点；文案是静态 HTML，不经 innerHTML 拼装。
+  assert.match(HTML, /firstrun-tip/, '缺少"自己弄饭"引导段');
+  for (const word of ['托盘', '篮子', '饿了']) assert.ok(HTML.includes(word), '引导文案缺少关键词：' + word);
+  assert.doesNotMatch(APP, /firstRun[^\n]*innerHTML/, '引导卡不得用 innerHTML 拼字符串');
 });
 
 test('F14 后端 chip 按两把尺子分别判：不许在节点仍答话时谎称额度用完', () => {

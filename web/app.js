@@ -4056,6 +4056,11 @@ function inspectWorkSite(title,options) {
   if (!dialog.open) dialog.showModal();
 }
 
+function ecoPoint(item, target) {
+  const rows = S.view?.ecoSources?.[item];
+  const row = Array.isArray(rows) ? rows.find((r) => r.id === target) : null;
+  return row && Number.isFinite(row.x) && Number.isFinite(row.z) ? [row.x, row.z] : null;
+}
 async function useOutdoorEntity(e,from) {
   if (e.kind==='lot') {
     const s=S.view, bag=s.pinv.p1;
@@ -4150,7 +4155,7 @@ async function useOutdoorEntity(e,from) {
   }
   if (e.tool!==ui.tool) { toast(`需要${TOOL_ZH[e.tool]}。`); return; }
   if (e.kind==='timber') await performCamp({kind:'camp_chop',target:e.target,tool:ui.tool,from});
-  else await performCamp({kind:'camp_collect',target:e.target,type:e.item,tool:ui.tool,from,to:e.at});
+  else await performCamp({kind:'camp_collect',target:e.target,type:e.item,tool:ui.tool,from,to:ecoPoint(e.item,e.target) ?? e.at});
 }
 
 function approachEntity(world,walker,e) {

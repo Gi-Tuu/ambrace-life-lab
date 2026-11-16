@@ -75,7 +75,7 @@ const BUDGET = Number(process.env.MAX_CALLS ?? 120);
 const NODE_BUDGET = Number(process.env.NODE_CALLS_DAY ?? (GAME_MODE === 'game' ? 12000 : 0)); // 0 = 不限（research 默认）
 // 无人观看时是否仍上真模型：游戏默认开（世界要自洽），研究默认关（既有轨迹逐位不变）。
 const UNATTENDED_ON = String(process.env.MODEL_UNATTENDED ?? (GAME_MODE === 'game' ? '1' : '0')) === '1';
-const UNATTENDED_ASK_CAP = Number(process.env.UNATTENDED_CALLS_PER_TICK ?? 2);
+const UNATTENDED_ASK_CAP = Number(process.env.UNATTENDED_CALLS_PER_TICK ?? 1);
 // 无人时禁止付费回退：节点没答上来就退回确定性替身。宁可这一拍不用模型，也不在没人看的时候花魔粒。
 const PAID_WHEN_UNATTENDED = String(process.env.MODEL_PAID_UNATTENDED ?? '0') === '1';
 // 中继熔断：连续失败若干次就冷一段，避免每次询问都白等一个 TTL。
@@ -432,8 +432,9 @@ async function postChat(provider, key, body, mdl, ac) {
   return res;
 }
 
-async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
-  if (!CFG.providers.length || !CFG.keys.some(Boolean) || world.fastForward) return null;
+// 提示词构造单独成函数：影子对照（DM-1）要用**与生产逐字相同**的提示词问另外几台引擎，
+// 任何在测试脚本里重写一遍提示词的做法都会把对照变成两套问题，所以这里只有一份。
+export function buildDeliberationPrompt({ agent, scored, world, rejected, memories, trigger, daySummary }) {
   const here = world.loc[agent.id];
   const bands = preferenceBands(scored, agent.ch);
   const present = (world.occupancy[here] ?? []).filter((x) => x !== agent.id && (world.survival || x !== 'p1')).map((x) => world.agents[x]?.name ?? x);
@@ -454,6 +455,13 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   lines.push('如果此刻有在场的人、你想顺带说一句话，再加三个字段："act" 从 request/offer/warn/inform/greet/accuse/thank/decline/refuse 里选一个；"topic" 从 food/firewood/shelter/child/work/weather/boundary/trust 里选一个；"text" 不超过 28 字。不想说就省略这三项。');
+
+  return lines;
+}
+
+async function modelBrain(args) {
+  const { agent, scored, world, rejected, memories, trigger, daySummary } = args;
+  const lines = buildDeliberationPrompt(args);
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   // C3：按营地判车道。分名字营地在无人时直接走确定性替身，询问不发出。
   const campKey = world?.campKey ?? 'MAIN';

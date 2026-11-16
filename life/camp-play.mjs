@@ -6,7 +6,7 @@ import { worldSite, WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../web/camp-layout.mjs';
-import { doForage, doGather } from './production.mjs';
+import { doForage, doGather, takeFoodKind } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 
@@ -157,17 +157,33 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind==='camp_eat') {
+    // RES-02 余项（B-a）：人在公共粮仓里，允许直接吃一份公仓的粮——与居民日界一次配给同权。
+    // 与家里餐桌共用同一个"今日已吃"计数（上限 1），避免家里两餐＋谷仓一份变成三倍收益。
+    if (world.gameRules && world.loc.p1 === 'store') {
+      const pl0 = world.agents.p1;
+      const day = Math.floor(world.t / (world.dayTicks ?? 24));
+      if (s.mealsDay !== day) { s.mealsDay = day; s.mealsToday = 0; }
+      if ((s.mealsToday ?? 0) >= 1) return fail('MEAL_LIMIT');
+      if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
+      const kindEaten = takeFoodKind(s);
+      if (!kindEaten) return fail('EMPTY');
+      s.mealsToday = (s.mealsToday ?? 0) + 1;
+      s.mealsEaten = (s.mealsEaten ?? 0) + 1;
+      pl0?.viab?.regen?.(s.feedViab ?? 0.5);
+      pl0?.drives?.reward?.('energy', s.feedReward ?? 0.5);
+      return ok();
+    }
     if (!playerHome(world,site) || s.settlementLife && world.campPlayerRoom!==site) return fail('NOT_HOME');
     if (amount(bag,'tray')<1) return fail('NEED_TRAY'); // 托盘是餐具：没有它只能看着饭
     const meal=s.campContainers?.[`${site}:meal`];
     if (!FOOD.has(item) || !amount(meal,item)) return fail('EMPTY');
-    // AUD-05：同一游戏日最多两餐——居民只有日界一次配给，玩家不能连点把存续拉满。
+    // AUD-05 / B-a：同一游戏日只吃一份（与居民日界一次配给严格同权；家里与谷仓共用计数）。
     const pl0 = world.agents.p1;
-    // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
-    if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
     const day = Math.floor(world.t / (world.dayTicks ?? 24));
     if (s.mealsDay !== day) { s.mealsDay = day; s.mealsToday = 0; }
-    if ((s.mealsToday ?? 0) >= 2) return fail('MEAL_LIMIT');
+    if ((s.mealsToday ?? 0) >= (world.gameRules ? 1 : 2)) return fail('MEAL_LIMIT');
+    // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
+    if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
     setCount(meal,item,amount(meal,item)-1);
     s.mealsToday = (s.mealsToday ?? 0) + 1;
     const pl=world.agents.p1;
