@@ -7,6 +7,7 @@ import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
 import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
 import { mutatingDenied, isJson } from './life/request-guard.mjs';
+import { normalizeName } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
 const ROOT = resolve('.');
@@ -148,19 +149,40 @@ async function readJsonBody(req) {
 // 守卫本体在 life/request-guard.mjs（纯函数、可单测）；这里只读环境变量并调用。
 // 非 loopback 的写请求必须出示浏览器同源证据或 CTL_TOKEN，二者皆无一律拒（脚本无 Origin 也能 reset 的洞）。
 const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
-// 审计 SEC-03：/saves/open 会同步 fork + gzip + 全量索引重写；不限速会被用来打爆磁盘/事件循环。
-const OPEN_LIMIT = Number(process.env.OPEN_LIMIT ?? 5);
+// 守卫语义（审计 SEC-02 之后）：**配了 CTL_TOKEN 就只认令牌**，浏览器同源证据不再放行；
+// 不配时写路由靠浏览器同源证据。⇒ 生产**不设** CTL_TOKEN（所有者 2026-11-16 拍板）：
+// 公开前端发不出 Bearer，一设令牌全体访客的 /act、/ctl、/saves/open 都会 401——就是 11-16 早上那次线上全停的形态。
+// 下面 boot 时会把这件事显式警告出来，免得下次有人"顺手补个令牌"。
+// 审计 SEC-03：/saves/open 会同步 fork + gzip + 量索引重写；不限速会被用来打爆磁盘/事件循环。
+// 第七轮更正：**不能按 remoteAddress 分桶**——创空间网关把所有访客都送到同一个地址，
+// 按 IP 限等于给整站设一个"每分钟 5 人建档"的总闸（第 6 人起 429）。现在按**营地名**分桶，
+// 另设一个显式的全局桶当防滥用层；两层都是限速，回显的错误码不区分是哪一层挡的（不透露内部阈值）。
+const OPEN_LIMIT = Number(process.env.OPEN_LIMIT ?? 5);          // 同一个营地名，每分钟最多这么多次
+const OPEN_LIMIT_GLOBAL = Number(process.env.OPEN_LIMIT_GLOBAL ?? 60); // 整站每分钟总量（防刷名造营地）
 const OPEN_WINDOW_MS = 60_000;
 const CAMP_TOTAL_MAX = Number(process.env.CAMP_TOTAL_MAX ?? 50);
 const openBuckets = new Map();
-function openAllowed(req) {
-  const who = String(req?.socket?.remoteAddress ?? '?');
+function openAllowed(bucket, limit) {
   const now = Date.now();
-  const hits = (openBuckets.get(who) ?? []).filter((t) => now - t < OPEN_WINDOW_MS);
-  if (hits.length >= OPEN_LIMIT) { openBuckets.set(who, hits); return false; }
-  hits.push(now); openBuckets.set(who, hits);
+  const hits = (openBuckets.get(bucket) ?? []).filter((t) => now - t < OPEN_WINDOW_MS);
+  if (hits.length >= limit) {
+    if (hits.length) openBuckets.set(bucket, hits); else openBuckets.delete(bucket);
+    return false;
+  }
+  hits.push(now);
+  openBuckets.set(bucket, hits);
+  // 名字是外部输入，桶键必须自己有界：过期即删，超量整体回收。
+  if (openBuckets.size > 256) {
+    for (const [k, arr] of openBuckets) if (!arr.some((t) => now - t < OPEN_WINDOW_MS)) openBuckets.delete(k);
+  }
   return true;
 }
+// 桶键**复用营地名的正典归一化**（同一个营地 ⇒ 同一个桶，不另起一套大小写/空白规则）；
+// 非法名字全部并进同一个桶——这样"随机刷名字"既造不出营地，也撑不爆这张表。原始名字不进键、不回显、不落盘。
+const openBucketKey = (name) => {
+  const n = normalizeName(name);
+  return n.ok ? `n:${n.key}` : 'n:invalid';
+};
 
 async function chatProxy(req, res) {
   let charged = false;
@@ -244,10 +266,13 @@ async function handle(req, res) {
   if (p === '/saves/open' && req.method === 'POST') {
     const denied = mutatingDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
-    if (!openAllowed(req)) return json(res, 429, { error: 'RATE_LIMITED' });
     if (listCamps().length >= CAMP_TOTAL_MAX) return json(res, 429, { error: 'CAMP_LIMIT' });
     let body;
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
+    // 限速按**营地名**分桶（反代下 IP 恒等，见上方注释）+ 一层全局桶。
+    if (!openAllowed(openBucketKey(body?.name), OPEN_LIMIT) || !openAllowed('g:open', OPEN_LIMIT_GLOBAL)) {
+      return json(res, 429, { error: 'RATE_LIMITED' });
+    }
     const opened = await openCamp(body?.name);
     if (!opened.ok) return json(res,['CAMP_UNAVAILABLE','SAVE_FAILED'].includes(opened.code)?503:400,{error:opened.code});
     res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
@@ -416,6 +441,8 @@ host.setBackend({ providers: PROVIDERS, keys: KEYS, model: MODEL, models: MODELS
 }
 // 播报归应用层：host 是库，往 stdout 写日志会干扰测试 runner 的消息通道
 const boot = await host.start();
+// 决策口径（所有者 2026-11-16）：生产不设 CTL_TOKEN。这条警告必须排在"就绪"之前，便于启动日志与测试都看得到。
+if (CTL_TOKEN) console.error('[serve] 警告：CTL_TOKEN 已配置 ⇒ 写路由只认 Bearer 令牌，浏览器访客的 /act、/ctl、/saves/open 会一律 401。公开演示实例应保持不配置。');
 console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
