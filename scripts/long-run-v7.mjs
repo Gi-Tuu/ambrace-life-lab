@@ -3,11 +3,13 @@
 // 多种子 × 多周期跑正式游戏态，记录人口/年龄/家庭/房屋/食物/生产/行动分布/异常。
 // 只读世界、零联网、不写 data/。用法：node scripts/long-run-v7.mjs [seeds] [days...]
 import { execSync } from 'node:child_process';
+import { CURRENT_EVENT_RULES } from '../life/rng.mjs';
 import { createSurvPlay, tickSurvPlay, survView } from '../life/survplay.mjs';
 
 const HEAD = (() => { try { return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })();
 
 const GAME = {
+  eventRulesVersion: CURRENT_EVENT_RULES,
   independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true,
   settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true,
 };

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // V7.1 §6：代际因果链逐日统计（相遇 → 婚姻 → 住房 → 生育 → 成长 → 死亡）。
 // 只读世界、零联网、不写 data/。
+import { CURRENT_EVENT_RULES } from '../life/rng.mjs';
 import { createSurvPlay, tickSurvPlay } from '../life/survplay.mjs';
 import { birthHomeStatus, residentStage } from '../life/households.mjs';
 import { livingResidents } from '../life/viability.mjs';
 
-const GAME = { independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true, playerRation: true };
+const GAME = { eventRulesVersion: CURRENT_EVENT_RULES, independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true, playerRation: true };
 const seeds = (process.argv[2] ?? '7,13,29').split(',').map(Number);
 const days = Number(process.argv[3] ?? 100);
 const DAY = 24;
