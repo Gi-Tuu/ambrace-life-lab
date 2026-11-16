@@ -129,7 +129,9 @@ export function advanceSurvival(world) {
 
   // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。P0-1：死者不占配给。
   const pop = livingResidents(world).length;
-  const eaters = pop + (s.playerEats === true && isAlive(world.agents.p1) ? 1 : 0);
+  // 审计 LIFE-05：玩家"是否吃这一份"只能有一个判据；否则会出现扣粮不回补/回补不扣粮。
+  const playerShares = isAlive(world.agents.p1) && (world.gameRules ? s.playerRation === true : s.playerEats === true);
+  const eaters = pop + (playerShares ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
   const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
@@ -172,7 +174,7 @@ export function advanceSurvival(world) {
       // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
       // sweep 研究世界无 households ⇒ 不进入此支，§16 务农动机平衡与基线不受影响。
       // RES-01：游戏态玩家同样吃这一天的配给（研究/历史路径保持只给居民，维持基线）。
-    if (s.households && (!a.isPlayer || (world.gameRules && world.survival.playerRation === true))) a.viab?.regen(s.feedViab ?? 0.5);
+    if (s.households && (!a.isPlayer || (world.gameRules && s.playerRation === true))) a.viab?.regen(s.feedViab ?? 0.5);
     }
   }
 

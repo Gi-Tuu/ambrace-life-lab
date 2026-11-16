@@ -56,9 +56,12 @@ export const bearerOf = (req) => {
 // 返回 null 表示放行，否则返回拒因字符串。
 export function mutatingDenied(req, token = '') {
   if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
+  // 配了令牌就只认令牌：sec-fetch-site / Origin 都是任意脚本可伪造的头，
+  // 不能作为"已授权"的证据（审计 SEC-02）。
+  if (token) return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
   if (!sameOrigin(req)) return 'CROSS_SITE';
-  const authed = token ? tokenMatches(bearerOf(req), token) : false;
-  if (browserEvidence(req) || authed) return null;
-  if (isLoopback(req) && !token) return null;
+  if (browserEvidence(req)) return null;
+  // 反向代理下 remoteAddress 恒为 loopback，不能再把 loopback 当"本机开发者"。
+  if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
   return 'UNAUTHORIZED';
 }

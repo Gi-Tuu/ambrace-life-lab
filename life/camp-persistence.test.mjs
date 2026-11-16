@@ -183,7 +183,7 @@ test('真模型对话只认本营地的访客，模型空位仍归各自供应�
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   const base='http://127.0.0.1:'+server.address().port;
-  host.setBackend({providers:[base+'/primary',base+'/secondary'],keys:['local-key'],
+  host.setBackend({providers:[base+'/primary',base+'/secondary'],keys:['local-key','local-key'],
     model:'default-model',models:['','backup-model'],brain:'model'});
   await host.start();
   t.after(()=>host.stop());

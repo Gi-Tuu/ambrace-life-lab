@@ -7,7 +7,7 @@
 //  · 名字只作为字段进索引，**永不进路径**；路径由 sha256(归一化名字) 派生。
 //  · 只在 saves/ 目录内读写；拒绝一切越界名字，且拒绝时不得产生任何文件写入。
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
@@ -24,8 +24,15 @@ export function validCampArchive(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
   if (!Number.isSafeInteger(raw.t) || raw.t < 0) return false;
   // dumpSurv 没有 agents 键（只有 minds）：以 minds.p1 作为'这是一个生存世界'的最小证据。
-  if (!raw.minds || typeof raw.minds !== 'object' || !raw.minds.p1) return false;
-  if (!raw.survival || typeof raw.survival !== 'object' || Array.isArray(raw.survival)) return false;
+  if (!raw.minds || typeof raw.minds !== 'object' || Array.isArray(raw.minds)) return false;
+  const p1 = raw.minds.p1;
+  if (!p1 || typeof p1 !== 'object' || Array.isArray(p1)) return false;
+  // 审计 DATA-06：只有"像一个人"的 p1 才可信；空对象会让 loadSurv 生成默认世界并覆盖唯一副本。
+  if (!p1.m || typeof p1.m !== 'object' || !p1.drives || typeof p1.drives !== 'object' || !p1.viab || typeof p1.viab !== 'object') return false;
+  const sv = raw.survival;
+  if (!sv || typeof sv !== 'object' || Array.isArray(sv)) return false;
+  if (!Number.isFinite(sv.store) || sv.store < 0) return false;
+  if (!Array.isArray(sv.plots) || !sv.buildings || typeof sv.buildings !== 'object' || !sv.inv || typeof sv.inv !== 'object') return false;
   return true;
 }
 
@@ -62,7 +69,9 @@ export function readIndex(dataDir) {
     return { entries: raw.entries };
   } catch (error) {
     if (error.code === 'ENOENT') return { entries: [] };
-    throw error;
+    // 审计 DATA-04：索引坏掉时先保留现场，再以空索引继续服务（否则 /saves、open、sweep 全部 500）。
+    try { renameSync(indexFile(dataDir), indexFile(dataDir) + '.corrupt-' + Date.now()); } catch { /* 备份失败也不阻塞启动 */ }
+    return { entries: [], recovered: false, indexError: String(error?.message ?? error).slice(0, 80) };
   }
 }
 
@@ -122,13 +131,25 @@ export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, las
   const index = readIndex(dataDir);
   const removed = [];
   const kept = [];
+  const known = new Set();
   for (const entry of index.entries) {
+    known.add(entry.key);
+    const file = campFile(dataDir, entry.key);
     const stale = now - Math.max(entry.lastSeenAt ?? 0, lastSeenAt(entry.key) ?? 0) > ttlMs;
     if (!stale || isWatched(entry.key)) { kept.push(entry); continue; }
-    const file = campFile(dataDir, entry.key);
+    // 过期才清：新鲜但暂时没有文件的条目（首次落盘前/索引恢复中）保留，避免误删正在使用的营地。
     if (existsSync(file)) rmSync(file);
     removed.push(entry.key);
   }
+  // 审计 DATA-05：没有索引的孤儿营地文件（崩溃/索引重建后遗留）按文件时间清掉。
+  try {
+    for (const name of readdirSync(dir)) {
+      const m = /^([0-9a-f]{32})\.json\.gz$/.exec(name);
+      if (!m || known.has(m[1])) continue;
+      const file = join(dir, name);
+      if (now - statSync(file).mtimeMs > ttlMs) { rmSync(file); removed.push(m[1]); }
+    }
+  } catch { /* 清扫尽力而为 */ }
   if (removed.length) writeIndex(dataDir, { entries: kept });
   return { removed, kept: kept.length };
 }
