@@ -327,6 +327,56 @@ function livestockPen(s, sites) {
     s.box(x+5.53,.1,z+1.8,.5,.66,.06,'#1D2B53');
   });
 }
+const CHICKEN_FORM = {
+  juvenile: {radius:.23, stepRate:14, stride:.046},
+  adult: {radius:.38, stepRate:10, stride:.08},
+  elder: {radius:.36, stepRate:7, stride:.05},
+};
+
+function chicken3d(b, stage, dark) {
+  const feathers=dark?'#B67554':'#E8D7B3';
+  if (stage==='juvenile') {
+    const down=dark?'#DEA36C':'#F5D997';
+    b(-.117,.075,-.134,.234,.195,.24,down);
+    b(-.096,.204,.048,.192,.174,.174,down,'nod');
+    b(-.034,.252,.217,.068,.039,.052,'#C7874A','nod');
+    b(-.126,.131,-.10,.032,.083,.13,feathers);
+    b(.094,.131,-.10,.032,.083,.13,feathers);
+    for (const dx of [-.062,.037]) {
+      b(dx,0,.004,.026,.089,.071,'#B87F47','leg');
+      b(dx,.30,.216,.026,.031,.011,'#2C2822','nod');
+    }
+    return;
+  }
+  if (stage==='elder') {
+    const plume=dark?'#AB836E':'#CFC3AD', wing=dark?'#8B6F60':'#ACA08D';
+    b(-.165,.12,-.193,.33,.275,.378,plume);
+    b(-.182,.181,-.164,.061,.136,.258,wing);
+    b(.121,.181,-.164,.061,.136,.258,wing);
+    b(-.104,.243,.106,.208,.199,.211,feathers,'nod');
+    b(-.082,.284,.278,.164,.085,.052,'#B5A592','nod');
+    b(-.056,.432,.137,.112,.055,.105,'#945A50','nod');
+    b(-.053,.296,.325,.106,.043,.072,'#C39261','nod');
+    for (const dx of [-.083,.05]) {
+      b(dx,0,-.025,.037,.135,.053,'#A27F63','leg');
+      b(dx-.015,0,.014,.067,.04,.085,'#A27F63','leg');
+      b(dx,.365,.319,.037,.033,.014,'#2C2822','nod');
+    }
+    b(-.09,.22,-.285,.18,.08,.133,wing);
+    return;
+  }
+  b(-.16,.14,-.19,.32,.31,.38,feathers);
+  b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
+  b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
+  b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
+  for (const dx of [-.083,.05]) {
+    b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
+    b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
+    b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
+  }
+  b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
+}
+
 function livestock3d(s, world) {
   const pen=penLayout(world.sites);
   if (!pen) return;
@@ -341,22 +391,16 @@ function livestock3d(s, world) {
       Array.from({length:Math.min(count,limit)},(_,slot)=>({id:`${kind}:${slot}`,slot,mature:true}));
     for (const [i, animal] of herd.entries()) {
       const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(i/limit)%3*.34;
-      const boxes=[], size=animal.mature ? 1 : .65;
-      s.animals.push({id:animal.id,afraid:animal.afraid,ready:animal.ready,x:px,z:pz,r:r*size,kind,boxes,speed:kind==='chickens'?1.0:.63,
+      const boxes=[], isChicken=kind==='chickens';
+      const stage=isChicken ? animal.stage ?? (animal.mature===false?'juvenile':'adult') : undefined;
+      const form=CHICKEN_FORM[stage];
+      const size=isChicken || animal.mature ? 1 : .65;
+      s.animals.push({id:animal.id,afraid:animal.afraid,ready:animal.ready,x:px,z:pz,r:form?.radius??r*size,kind,boxes,speed:isChicken?1.0:.63,
+        ...(form ? {stage, stepRate:form.stepRate, stride:form.stride} : {}),
         habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
       const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x:x*size,y:y*size,z:z*size,w:w*size,h:h*size,d:d*size,color,fx});
-      if (kind==='chickens') {
-        const feathers=i%2?'#B67554':'#E8D7B3';
-        b(-.16,.14,-.19,.32,.31,.38,feathers);
-        b(-.117,.29,.09,.23,.23,.21,feathers,'nod');
-        b(-.073,.49,.127,.15,.09,.11,'#B74C3E','nod');
-        b(-.061,.339,.292,.12,.064,.082,'#EAB25E','nod');
-        for (const dx of [-.083,.05]) {
-          b(dx,0,-.015,.035,.16,.048,'#BE8753','leg');
-          b(dx-.015,0,.015,.066,.045,.087,'#BE8753','leg');
-          b(dx,.432,.301,.041,.041,.011,'#2C2822','nod');
-        }
-        b(-.13,.3,-.28,.26,.12,.13,'#8A5A47');
+      if (isChicken) {
+        chicken3d(b,stage,animal.slot%2===1);
         continue;
       }
       const cow=kind==='cows', coat=cow?'#DFD5BC':'#DCD3B7', face=cow?'#A07F73':'#5F5348';

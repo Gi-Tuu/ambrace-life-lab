@@ -3,15 +3,21 @@ import { DAY_TICKS } from './clock.mjs';
 
 const GROUPS = { fruit: 'orchards', egg: 'chickens', milk: 'cows', wool: 'sheep' };
 export const MATURE_DAYS = Object.freeze({ orchards: 6, chickens: 4 });
+// 仅用于外观。老鸡的产蛋、繁殖和寿命继续由生态规则裁决。
+const CHICKEN_ELDER_DAYS = 30;
 
 function sources(w, item) {
   const s = w.survival, group = GROUPS[item];
   if (!group) return [];
   const population = s.ecosystem && s.ecoPop?.[group];
-  if (population) return population.map(row => ({
-    id: item === 'fruit' ? `fruit:${row.id}` : `${group}:${row.id}`, slot: row.slot,
-    mature: w.t - row.born >= MATURE_DAYS[group] * DAY_TICKS,
-  }));
+  if (population) return population.map(row => {
+    const age = (w.t - row.born) / DAY_TICKS;
+    const mature = age >= MATURE_DAYS[group];
+    return {
+      id: item === 'fruit' ? `fruit:${row.id}` : `${group}:${row.id}`, slot: row.slot, mature,
+      ...(item === 'egg' ? { stage: !mature ? 'juvenile' : age >= CHICKEN_ELDER_DAYS ? 'elder' : 'adult' } : {}),
+    };
+  });
   const dead=Object.keys(s.culledAnimals??{}).filter(id=>id.startsWith(group+':')).length;
   return Array.from({ length: (s.livestock?.[group] ?? 0)+dead }, (_, slot) => ({
     id: `${ANIMAL_ITEMS[group] ? group : item}:${slot}`, slot, mature: true,

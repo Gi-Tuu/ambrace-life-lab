@@ -1,4 +1,5 @@
 import { itemBoxes } from './camp-items.mjs';
+import { CAMP_BODY_RADIUS } from './camp-3d-physics.mjs';
 import { WALK_DIRECTIONS } from './walk.mjs';
 import { contactShadowMesh, materialGrain } from './camp-lighting.mjs';
 
@@ -292,7 +293,8 @@ function animalMesh(data,animals,time) {
   }
 }
 export function animalBoxes(a,time) {
-  const turn=a.direction??0, gait=a.moving?Math.sin(time*10+a.phase)*.08:0;
+  const turn=a.direction??0;
+  const gait=a.moving?Math.sin(time*(a.stepRate??10)+a.phase)*(a.stride??.08):0;
   return a.boxes.map(b=>{
     const stride=b.fx==='leg'?gait*(b.x<0?1:-1)*(b.z<0?1:-1):0;
     const nod=b.fx==='nod'?.015*Math.sin(time*3+a.phase):0;
@@ -308,10 +310,35 @@ export function actorBoxes(p,frame) {
   actorGeometry(p,frame,box=>boxes.push(box));
   return boxes;
 }
+const RESIDENT_FORM = {
+  infant: {height:.73, radius:.26, stride:0},
+  child: {height:.56+(1.45-.88)*.81, radius:.27, stride:.15},
+  adult: {height:1.45, radius:CAMP_BODY_RADIUS, stride:.15},
+  elder: {height:.44+(1.45-.44)*.87, radius:CAMP_BODY_RADIUS, stride:.09},
+};
+const residentForm = stage => RESIDENT_FORM[stage] ?? RESIDENT_FORM.adult;
+export const actorLabelHeight = stage => residentForm(stage).height+.09;
+export const residentCollisionRadius = stage => residentForm(stage).radius;
+
+function infantGeometry(draw,shirt,hair,rock) {
+  // 襁褓落地，脸与发梢跟着上身轻摆。
+  draw(-.188,0,-.155,.376,.09,.31,'#A28A6E');
+  draw(-.21,.065,-.165,.42,.28,.34,'#D5BE94');
+  draw(-.166,.29,-.125,.332,.17,.27,'#E5D1A7');
+  draw(-.206,.20,.173,.41,.085,.027,shirt);
+  draw(-.13,.285,.181,.26,.045,.023,shirt);
+  draw(-.151+rock,.435,-.121,.302,.236,.26,'#EDC787');
+  draw(-.135+rock,.639,-.121,.27,.065,.21,hair);
+  draw(-.043+rock,.677,-.022,.09,.043,.11,hair);
+  for (const dx of [-.083,.054]) draw(dx+rock,.56,.141,.032,.039,.016,'#18251E');
+  draw(-.027+rock,.499,.142,.054,.023,.016,'#AB6B56');
+}
+
 function actorGeometry(p,frame,emit) {
-  const {x,y,z}=p, t=frame%4, gait=p.moving ? [0,.15,0,-.15][t] : 0;
+  const {x,y,z}=p, t=frame%4, form=residentForm(p.stage);
+  const gait=p.moving ? [0,form.stride,0,-form.stride][t] : 0;
   const turn=Math.max(0,WALK_DIRECTIONS.indexOf(p.direction));
-  const child=p.stage==='child';
+  const child=p.stage==='child', elder=p.stage==='elder';
   const feminine=p.sex==='F', hair=p.hair??(feminine?'#573B31':'#403631');
   const act=String(p.act??'idle');
   const build=/^(build|plan|repair|work|till)$/.test(act);
@@ -327,6 +354,10 @@ function actorGeometry(p,frame,emit) {
       dx*=horizontal; dz*=horizontal; w*=horizontal; d*=horizontal;
       dy=head?.56+(dy-.88)*.81:dy*.63;
       h*=head?.81:.63;
+    } else if (elder && dy>=.44) {
+      dz+=(dy-.44)*.17;
+      dy=.44+(dy-.44)*.87;
+      h*=.87;
     }
     if (p.pose==='sleep') {
       emit({x:x-dy-h+.74,y:y+dz+.23,z:z+dx,w:h,h:d,d:w,color});
@@ -344,6 +375,10 @@ function actorGeometry(p,frame,emit) {
       emit({x:x+px,y:y+dy+bob,z:z+pz,w:pw,h,d:pd,color});
     }
   };
+  if (p.stage==='infant') {
+    infantGeometry(draw,p.color,hair,[0,.022,0,-.022][t]);
+    return;
+  }
   if (!p.pose) draw(-.27,.004,-.20,.54,0,.45,'#72513B');
   draw(-.20,0,-.12+gait,.15,.46,.25,'#324D59');
   draw(.04,0,-.12-gait,.15,.46,.25,'#324D59');
@@ -365,7 +400,14 @@ function actorGeometry(p,frame,emit) {
   if(food) for (const [dx,dy,dz,w,h,d,c] of itemBoxes('fruit'))
     draw(.16+dx*.31,ay+ah*.6+dy*.31,.02+dz*.31,w*.31,h*.31,d*.31,c);
   draw(-.22,.92,-.17+(talk?swing*.2:0),.44,.37,.34,'#EDC787');
-  draw(-.26,1.22,-.21,.52,.23,.41,hair);
+  const crown=elder?'#BEB8AA':hair;
+  draw(-.26,1.22,-.21,.52,.23,.41,crown);
+  if (elder) {
+    draw(-.26,1.08,-.16,.05,.17,.20,crown);
+    draw(.21,1.08,-.16,.05,.17,.20,crown);
+    draw(-.18,1.229,.20,.26,.065,.035,hair);
+    for (const dx of [-.154,.105]) draw(dx,1.092,.199,.045,.017,.01,'#BC9573');
+  }
   if (feminine) {
     draw(-.255,1.03,-.232,.51,.25,.125,hair);
     draw(-.238,1.04,-.105,.072,.24,.25,hair);

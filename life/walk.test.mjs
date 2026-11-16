@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { astar, isWalkable, stepWalker, walkDirection } from '../web/walk.mjs';
 
-import { actorBoxes, rayBox } from '../web/camp-3d-render.mjs';
+import { actorBoxes, actorLabelHeight, rayBox, residentCollisionRadius } from '../web/camp-3d-render.mjs';
 import { moveMapFeet } from '../web/collision.mjs';
 
 const open = (tw, th) => ({ tw, th, walk: new Uint8Array(tw * th).fill(1) });
@@ -99,4 +99,25 @@ test('斜向身体使用旋转后的几何命中，四种斜向分别绕脚下�
     assert.ok(rayBox([x,3,z],[0,-1,0],nose)>2);
     assert.equal(rayBox([nose.x+nose.w/2,3,nose.z+nose.d/2],[0,-1,0],nose),null);
   }
+});
+
+test('居民年龄段改变实际立体轮廓、步态、命中与头顶高度', () => {
+  const person={x:8,y:0,z:12,direction:'down',who:'c1',sex:'F',color:'#875147'};
+  const stages=['infant','child','adult','elder'];
+  const shapes=stages.map(stage => actorBoxes({...person,stage},0));
+  const heights=shapes.map(boxes => Math.max(...boxes.map(box=>box.y+box.h)));
+  assert.ok(heights[0]<heights[1] && heights[1]<heights[3] && heights[3]<heights[2]);
+  assert.deepEqual(actorBoxes(person,0),shapes[2],'旧数据沿用成年造型');
+  for (const [i,stage] of stages.entries()) {
+    assert.equal(Math.min(...shapes[i].map(b=>b.y)),0);
+    assert.ok(shapes[i].some(b=>b.color===person.color),'跨年龄保留衣服主色');
+    assert.ok(actorLabelHeight(stage)>heights[i] && actorLabelHeight(stage)-heights[i]<.15);
+    const head=shapes[i].reduce((top,b)=>b.y+b.h>top.y+top.h?b:top);
+    assert.ok(Math.abs(rayBox([head.x+head.w/2,2,head.z+head.d/2],[0,-1,0],head)-(2-head.y-head.h))<1e-9);
+  }
+  assert.ok(residentCollisionRadius('infant')<residentCollisionRadius('child'));
+  assert.ok(residentCollisionRadius('child')<residentCollisionRadius('adult'));
+  assert.deepEqual(residentCollisionRadius('elder'),residentCollisionRadius('adult'));
+  const movingLeg=stage=>actorBoxes({...person,stage,moving:true},1).find(b=>b.color==='#324D59');
+  assert.ok(movingLeg('adult').z>movingLeg('elder').z,'老年步幅较短');
 });

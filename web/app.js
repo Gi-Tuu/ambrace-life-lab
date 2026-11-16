@@ -23,7 +23,8 @@ import {
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
 import { districtResources, addCampWork, homeAppearance, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
-import { actorBoxes, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer, modelBounds, rayBox } from './camp-3d-render.mjs';
+import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
+  modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
 
@@ -891,7 +892,7 @@ let roomRoute=null;
 
 
 
-function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
+function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
   const distance=Math.hypot(dx,dz);
   if (distance<.0001) {
     walker.moving=false;
@@ -901,9 +902,10 @@ function stepCampWalker(world,walker,cvId,snapshot,dx,dz,speed,manual) {
   const neighbours=(campHerds.get(cvId)??world.life3d?.animals??[]).filter(a=>a.kind!=='bird');
   for (const who of Object.values(snapshot.occupancy??{}).flat()) {
     const other=WALK[walkKey(cvId,who)];
-    if (other && other!==walker) neighbours.push({x:other.x+.5,z:other.y+.5,r:CAMP_BODY_RADIUS});
+    if (other && other!==walker) neighbours.push({x:other.x+.5,z:other.y+.5,r:residentCollisionRadius(snapshot.agents?.[who]?.stage)});
   }
-  const fits=(x,z,nx,nz)=>separates(x+.5,z+.5,nx+.5,nz+.5,neighbours);
+  const radius=residentCollisionRadius(snapshot.agents?.[who]?.stage);
+  const fits=(x,z,nx,nz)=>separates(x+.5,z+.5,nx+.5,nz+.5,neighbours,radius);
   const step=manual?speed:Math.min(speed,distance);
   const connected=Boolean(snapshot.camp);
   const map=campBodyWorld(world,connected);
@@ -1295,7 +1297,7 @@ function campRatio(cv) {
 const labelPx = (size, ratio) => Math.round(size * ratio);
 
 function campRing(g,camera,p,ratio,color,frame=0) {
-  const y=p.y+.025, r=.34+[0,.02,0,-.02][frame%4], c=camera.project(p.x,y,p.z);
+  const y=p.y+.025, r=residentCollisionRadius(p.stage)+.01+[0,.02,0,-.02][frame%4], c=camera.project(p.x,y,p.z);
   const ax=camera.project(p.x+r,y,p.z), az=camera.project(p.x,y,p.z+r);
   const vx=[ax[0]-c[0],ax[1]-c[1]], vz=[az[0]-c[0],az[1]-c[1]];
   const dot=Math.max(2,Math.round(2*ratio));
@@ -1565,7 +1567,7 @@ function roomCrowd(w,site) {
   const slots=[[6,9],[9.6,9],[5.65,5.4],[9.45,5.4],[4,9],[11.7,9],[6.7,7.3],[9.6,7.3]];
   const pixels=roomPixelWalk(site), cells=collisionEditor.cells(site), bounds=roomBounds(site);
   return slots.filter(([x,z])=>roomBodyFits(site,cells,pixels,bounds,x*TILE,z*TILE)).slice(0,ids.length)
-    .map(([x,z],i)=>({who:ids[i],x,z,r:CAMP_BODY_RADIUS,moving:false,direction:'down'}));
+    .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
 }
 function roomBodyFits(site,cells,pixels,bounds,x,z) {
   const [doorX,,doorW]=roomDoor(site), r=CAMP_BODY_RADIUS*TILE;
@@ -1587,11 +1589,11 @@ function animalGround(world,a,x,z) {
   if (!inCamp(x,z)) return Boolean(world.landscape?.walkable(x,z));
   return [[0,0],[-r,0],[r,0],[0,-r],[0,r]].every(([dx,dz])=>mapAllows(world,x+dx-.5,z+dz-.5));
 }
-function drawHerd(world,id,time,roster,trust,regional=[]) {
+function drawHerd(world,id,time,roster,w,regional=[]) {
   const previous=campHerds.get(id)??[], blockers=[];
   for (const who of Object.keys(roster)) {
     const person=WALK[walkKey(id,who)];
-    if (person) blockers.push({id:who,x:person.x+.5,z:person.y+.5,r:CAMP_BODY_RADIUS});
+    if (person) blockers.push({id:who,x:person.x+.5,z:person.y+.5,r:residentCollisionRadius(w.agents?.[who]?.stage)});
   }
   const animals=[], bases=[...(world.life3d?.animals??[]),...regional];
   for (const [i,base] of bases.entries()) {
@@ -1601,7 +1603,7 @@ function drawHerd(world,id,time,roster,trust,regional=[]) {
       moving:false,time};
     const neighbors=a.kind==='bird'?[]:[...blockers,...animals,...bases.slice(i+1).map(b=>previous.find(p=>p.id===b.id)??b)].filter(b=>b.kind!=='bird');
     const alert=a.wild && a.kind!=='bird' && blockers.find(p=>{
-      const bond=p.id==='p1'?trust?.[a.id]?.trust??0:0;
+      const bond=p.id==='p1'?w.wildTrust?.[a.id]?.trust??0:0;
       const distance=Math.hypot(p.x-a.x,p.z-a.z);
       return distance<(bond>=4?.7:2.7) && !(p.id==='p1' && id==='cvA' && ui.tool==='basket' && distance>=1.15);
     });
@@ -1796,7 +1798,7 @@ function drawCamp(cv,w) {
           extended.height(playerX,playerZ))+.55;
       }
     }
-    animals=drawHerd(world,playerId,ACT.motionTime??0,slots,w.wildTrust,exterior.regional?.animals);
+    animals=drawHerd(world,playerId,ACT.motionTime??0,slots,w,exterior.regional?.animals);
     if (extended) for (const animal of animals) animal.groundY=extended.height(animal.x,animal.z);
     if (!overview && pTile) {
       visibility=campVisibility(world,playerId,playerX,playerZ,w.phase,extended,exterior.regional,regions??[]);
@@ -1865,10 +1867,10 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   if(overview)campMapFrame(g,camera,stage,ratio,extended?WILDS:undefined);
   // 贴地光圈：p1 黄、AI 绿抖动环；常驻，不穿屋顶。
   for(const p of people)campRing(g,camera,p,ratio,p.who==='p1'?'#FFEC27':'#C2C3C7',ACT.frame);
-  const speaking = paintResidentSpeech(cv, w, people, (p) => camera.project(p.x, p.y+(p.stage==='child'?1.08:1.52), p.z), overview);
+  const speaking = paintResidentSpeech(cv, w, people, (p) => camera.project(p.x, p.y+actorLabelHeight(p.stage), p.z), overview);
   if (residentHint && residentHint.target !== speaking) {
     const [nx,nz]=residentHint.to, npc=w.agents[residentHint.target];
-    const ny=Math.max(stage.heightAt(nx,nz),extended?.height(nx,nz)??0)+(npc.stage==='child'?1.12:1.58);
+    const ny=Math.max(stage.heightAt(nx,nz),extended?.height(nx,nz)??0)+actorLabelHeight(npc.stage)+.04;
     const heavy=HEAVY_CAMP_TOOLS.includes(ui.tool);
     const hint=ui.tool==='hand'?'F 交谈':heavy?'F 会击伤':'收起工具';
     campBadge(g,camera,[nx,ny,nz],`${npc.name} · ${hint}`,heavy?'build':'talk',16,ratio);
@@ -3872,6 +3874,7 @@ function roomWaypoint() {
 const SITE_NAMES={home:'居所',hall:'连廊',store:'公仓',workshop:'工坊',watch:'瞭望台',well:'井台',yard:'院子',garden:'菜园'};
 const BUILDING_NAMES={granary:'储粮设施',workshop:'生产设施',shelter:'住所',wall:'防护设施'};
 const ANIMAL_NAMES={bird:'林鸟',chickens:'鸡',cows:'牛',sheep:'羊',rabbit:'野兔',deer:'鹿',fox:'狐狸'};
+const ANIMAL_STAGE_NAMES={juvenile:'雏鸡',elder:'老鸡'};
 
 function outdoorEntities(world,w,people,animals) {
   const entrances={...world.scene3d?.entrances,...world.homes3d?.entrances};
@@ -3905,9 +3908,9 @@ function outdoorEntities(world,w,people,animals) {
   }));
   return [...doors,...facilities,...timber,...plants,...fields,...works,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
-      tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
+      labelHeight:p.y+actorLabelHeight(p.stage),tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.kind==='bird'?'scenery':a.wild?'wildAnimal':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
-      tool:a.wild?'basket':CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:ANIMAL_NAMES[a.kind]+(a.afraid?' · 受惊':a.wild && a.kind!=='bird'?` · 信任 ${w.wildTrust?.[a.id]?.trust??0}/4`:
+      tool:a.wild?'basket':CAMP_TOOL[CAMP_ANIMAL_ITEM[a.kind]],item:CAMP_ANIMAL_ITEM[a.kind],name:(ANIMAL_STAGE_NAMES[a.stage]??ANIMAL_NAMES[a.kind])+(a.afraid?' · 受惊':a.wild && a.kind!=='bird'?` · 信任 ${w.wildTrust?.[a.id]?.trust??0}/4`:
         a.ready===undefined?'':` · 可收集 ${a.ready}`),labelHeight:a.kind==='bird'?3.9:undefined,animal:a}))];
 }
 const entityGap=(p,e)=>e.rect?distanceToRect(p,e.rect):distanceTo(p,e.at);
@@ -3943,7 +3946,8 @@ function pointedEntity(cv,ev) {
     for (const prop of roomProps(view.site)) push(prop.boxes,{...prop,kind:'prop',at:[prop.x+prop.w/2,prop.z+prop.d/2],
       name:ROOM_PROPS[prop.kind]?.[0]??prop.kind,prop});
     for (const p of view.people.filter(p=>p.who!=='p1')) push(actorBoxes(p,ACT.frame),{id:'resident:'+p.who,
-      kind:'resident',target:p.who,at:[p.x,p.z],room:view.site,name:S.view.agents?.[p.who]?.name??p.who});
+      kind:'resident',target:p.who,at:[p.x,p.z],room:view.site,labelHeight:p.y+actorLabelHeight(p.stage),
+      name:(cv.id==='cvB'?S.viewB:S.view).agents?.[p.who]?.name??p.who});
     const assigned=new Set(surfaces.map(([b])=>b));
     for (const box of view.stage.boxes) if (!assigned.has(box) && !view.covered.has(box.occluder)) surfaces.push([box,null]);
   } else if (view.exterior) {
@@ -4388,7 +4392,7 @@ loadAssets().finally(() => {
         let step=manual?playerStep:rate;
         // 要求2：玩家出村钳到世界时允许速度（禁冲刺）；村内保留冲刺
         if (player && manual && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
-        stepCampWalker(world,walker,cvId,snapshot,dx,dy,step,manual);
+        stepCampWalker(world,walker,cvId,snapshot,who,dx,dy,step,manual);
         if (player && cvId==='cvA') syncPlayerPos(walker, snapshot); // 要求3：节流上报＋被拒钳位
       } else if (manual) {
         const n=Math.hypot(dx,dy);

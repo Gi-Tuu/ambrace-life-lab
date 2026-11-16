@@ -142,3 +142,34 @@ test('来源产量与总库存共用一账，幼体、采空和重新生产都�
   assert.equal(winter.world.survival.produce.fruit, 0);
   assert.equal(winter.world.survival.produce.wool, 0);
 });
+
+test('同一只鸡随真实年龄切换雏鸡、成鸡与老鸡模型，存档恢复后保留阶段', () => {
+  const sp=make(), w=sp.world, row=w.survival.ecoPop.chickens[0], id='chickens:'+row.id;
+  const read=play=>{
+    const view=survView(play);
+    const source=view.ecoSources.egg.find(source=>source.id===id);
+    const animal=outdoorLife({...view,sites:{yard:campSite('yard',view.layout)},tw:120,th:80}).animals.find(animal=>animal.id===id);
+    return {source,animal};
+  };
+  w.t=40*DAY_TICKS;
+  row.born=w.t-4*DAY_TICKS+1;
+  const chick=read(sp);
+  w.t+=1;
+  const adult=read(sp);
+  w.t=row.born+30*DAY_TICKS-1;
+  assert.deepEqual(read(sp),adult,'同一外观档内读数不变，可复用动态层');
+  w.t+=1;
+  const elder=read(sp);
+  assert.deepEqual([chick.source.stage,adult.source.stage,elder.source.stage],['juvenile','adult','elder']);
+  assert.deepEqual([chick.source.mature,adult.source.mature,elder.source.mature],[false,true,true]);
+  const forms=[chick,adult,elder].map(({source,animal})=>{
+    assert.equal(animal.stage,source.stage);
+    return animal;
+  });
+  assert.ok(forms[0].r<forms[2].r && forms[2].r<forms[1].r);
+  assert.ok(forms[0].stepRate>forms[1].stepRate && forms[1].stepRate>forms[2].stepRate);
+  const height=animal=>Math.max(...animal.boxes.map(b=>b.y+b.h));
+  assert.ok(height(forms[0])<height(forms[2]) && height(forms[2])<height(forms[1]));
+  assert.ok(forms[0].boxes.length!==forms[1].boxes.length && forms[1].boxes.length!==forms[2].boxes.length);
+  assert.deepEqual(read(restore(sp)),elder);
+});
