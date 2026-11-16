@@ -2,7 +2,10 @@
 // 阶段 D：长期世界逻辑检验（V7 §8）。
 // 多种子 × 多周期跑正式游戏态，记录人口/年龄/家庭/房屋/食物/生产/行动分布/异常。
 // 只读世界、零联网、不写 data/。用法：node scripts/long-run-v7.mjs [seeds] [days...]
+import { execSync } from 'node:child_process';
 import { createSurvPlay, tickSurvPlay, survView } from '../life/survplay.mjs';
+
+const HEAD = (() => { try { return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })();
 
 const GAME = {
   independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true,
@@ -20,6 +23,7 @@ function census(w, sp) {
   const view = survView(sp);
   for (const a of living) stages[view.agents[a.id]?.stage ?? '?'] = (stages[view.agents[a.id]?.stage ?? '?'] ?? 0) + 1;
   const h = w.survival.households ?? {};
+  const ledger = w.survival.actionLedger ?? null;
   return {
     t: w.t,
     day: Math.floor(w.t / DAY_TICKS),
@@ -60,7 +64,17 @@ for (const seed of seeds) {
       for (const rec of a.trace ?? []) if (rec.action) actions[rec.action] = (actions[rec.action] ?? 0) + 1;
     }
     const top = Object.entries(actions).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    out.push({ seed, targetDays: dayTarget, wallMs: Date.now() - started, ...census(w, sp), topActions: top });
+    const ledger = w.survival.actionLedger ?? null;
+    out.push({
+      seed, targetDays: dayTarget, wallMs: Date.now() - started, ...census(w, sp), topActions: top,
+      ledgerTopResident: ledger ? Object.entries(ledger.resident.attempt).sort((a, b) => b[1] - a[1]).slice(0, 10) : null,
+      ledgerTopPlayer: ledger ? Object.entries(ledger.player.attempt).sort((a, b) => b[1] - a[1]).slice(0, 10) : null,
+      ledgerLayers: ledger ? Object.entries(ledger.resident.byLayer).sort((a, b) => b[1] - a[1]).slice(0, 10) : null,
+      ledgerRefused: ledger ? Object.entries(ledger.resident.refused).sort((a, b) => b[1] - a[1]).slice(0, 10) : null,
+      head: HEAD,
+      playerRation: w.survival.playerRation === true,
+      gameRules: !!w.gameRules,
+    });
   }
 }
 

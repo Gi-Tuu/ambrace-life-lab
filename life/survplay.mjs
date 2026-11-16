@@ -16,6 +16,7 @@ import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
 import { maybeResidentRequest, respondRequest } from './resident-requests.mjs';
+import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -529,6 +530,8 @@ export function survAct(sp, body) {
   const r = survActInner(sp, body);
   if (w.independentWorld && r.ok) settleSurvival(sp);
   if (!r.ok && cost > 0) { budgetLeft(w); w.survival.p1BudgetLeft += cost; } // 失败退还，避免误点吃掉整刻
+  noteAction(sp.world, 'player', body?.kind, !!r?.ok);
+  if (r && !r.ok) noteRefusal(sp.world, 'player', body?.kind);
   return r;
 }
 
