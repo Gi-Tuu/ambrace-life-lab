@@ -4,6 +4,7 @@
 // 逐项记录 合法性/成功/失败码/产出/材料/存续，并给出差异结论。只读世界、不联网、不写 data/。
 import { createSurvPlay, survAct } from '../life/survplay.mjs';
 import { validate } from '../life/rules.mjs';
+import { nextFarmBed } from '../life/farmland.mjs';
 
 const GAME = { independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true };
 const seed = Number(process.argv[2] ?? 7);
@@ -39,11 +40,13 @@ function runScenario({ name, setup, player, resident }) {
   };
   const sameCode = codeOf(rA) === codeOf(rB);
   const sameDelta = JSON.stringify(dA) === JSON.stringify(dB);
+  // 居民侧根本没执行（validate 就失败/NULL）⇒ 这是样本无效，不是"规则不同"。
+  const invalidSample = codeOf(rB) === 'NO_ATTEMPT' || codeOf(rA) === 'NO_ATTEMPT';
   return {
     scenario: name,
     player: { result: rA, code: codeOf(rA), delta: dA },
     resident: { result: rB, code: codeOf(rB), delta: dB },
-    verdict: sameCode && sameDelta ? 'SAME' : 'DIFF',
+    verdict: invalidSample ? 'INVALID_SAMPLE' : (sameCode && sameDelta ? 'SAME' : 'DIFF'),
   };
 }
 
@@ -56,9 +59,14 @@ const scenarios = [
   },
   {
     name: '开垦农田',
-    setup: (w, id) => { w.loc[id] = 'garden'; w.pinv[id] = { ...(w.pinv[id] ?? {}), wood: 2 }; },
+    setup: (w, id) => {
+      w.loc[id] = 'garden';
+      w.pinv[id] = { ...(w.pinv[id] ?? {}), wood: 2 };
+      const s0 = w.survival;
+      s0.soil = 1; s0.water = 1; s0.drought = false; s0.disasterToday = false; s0.lastTilledDay = -1; w.weather = 'clear';
+    },
     player: (sp) => survAct(sp, { kind: 'till', plot: 4 }),
-    resident: (w, id) => ({ gate: validate(w, id, { kind: 'till' }), executed: Boolean(w.agents[id].execute(w, { kind: 'till' }, 'deliberation', w.t, true)) }),
+    resident: (w, id) => { const bed = nextFarmBed(w); const gate = validate(w, id, { kind: 'till', plot: bed?.id }); return { gate, executed: Boolean(w.agents[id].execute(w, { kind: 'till', plot: bed?.id }, 'deliberation', w.t, true)) }; },
   },
   {
     name: '奠基（庇护所）',
@@ -69,7 +77,7 @@ const scenarios = [
   {
     name: '进食（玩家营地 vs 居民日界）',
     setup: (w, id) => {
-      if (id === 'p1') { w.loc.p1 = 'home'; w.campPlayerRoom = 'home'; w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1 }; w.survival.campContainers = { 'home:meal': { crop: 4 } }; w.agents.p1.viab.v = 0.3; }
+      if (id === 'p1') { w.loc.p1 = 'home'; w.campPlayerRoom = 'home'; w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1 }; w.survival.campContainers = { 'home:meal': { crop: 4 } }; w.agents.p1.viab.v = 0.3; w.agents.p1.drives.v.energy = 0.2; }
       else { w.agents[id].viab.v = 0.3; }
     },
     player: (sp) => survAct(sp, { kind: 'camp_eat', type: 'crop' }),
