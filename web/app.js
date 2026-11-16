@@ -2095,11 +2095,7 @@ function fillOcc(el, pack) {
 let survFlash = null, toastTimer = null;
 // 首次进入引导（2026-11-15）：只出现一次，可跳过；进度存 localStorage。
 const FIRST_RUN_KEY = 'ambrace.firstRun.v1';
-const FIRST_RUN_STEPS = [
-  { kind: 'gather', label: '走近树或石头，按 F 采集一次' },
-  { kind: 'eat', label: '回屋，对着桌子按 F 吃一份饭' },
-  { kind: 'sleep', label: '天黑前回屋，对着床按 F 睡一觉' },
-];
+const FIRST_RUN_STEPS = [...$('firstRun').querySelectorAll('li')];
 let firstRunStep = (() => { try { return Math.max(0, Number(localStorage.getItem(FIRST_RUN_KEY) ?? 0) || 0); } catch { return 0; } })();
 function firstRunStepOf(kind) {
   if (['gather', 'harvest', 'forage', 'camp_chop', 'camp_collect', 'plant', 'camp_plant'].includes(kind)) return 0;
@@ -2108,19 +2104,17 @@ function firstRunStepOf(kind) {
   return -1;
 }
 function renderFirstRun() {
-  const box = $('firstRun'); if (!box) return;
-  if (!S.playing || firstRunStep >= FIRST_RUN_STEPS.length) { box.hidden = true; return; }
-  box.hidden = false;
-  box.innerHTML = '<b>第一次来？三步上手</b><ol>'
-    + FIRST_RUN_STEPS.map((s, i) => `<li class="${i < firstRunStep ? 'done' : ''}">${esc(s.label)}</li>`).join('')
-    + '</ol><button type="button" data-firstrun="skip">知道了，先自己逛</button>';
-  const skip = box.querySelector('[data-firstrun="skip"]');
-  if (skip) skip.onclick = () => {
-    firstRunStep = FIRST_RUN_STEPS.length;
-    try { localStorage.setItem(FIRST_RUN_KEY, String(firstRunStep)); } catch { /* 隐私模式 */ }
-    renderFirstRun();
-  };
+  const box = $('firstRun');
+  box.hidden = !S.playing || firstRunStep >= FIRST_RUN_STEPS.length;
+  if (!box.hidden) FIRST_RUN_STEPS.forEach((step,i)=>step.classList.toggle('done',i<firstRunStep));
 }
+
+$('firstRun').querySelector('[data-firstrun="skip"]').onclick = () => {
+  firstRunStep = FIRST_RUN_STEPS.length;
+  try { localStorage.setItem(FIRST_RUN_KEY,String(firstRunStep)); } catch { /* 隐私模式 */ }
+  renderFirstRun();
+};
+
 function markFirstRun(kind) {
   const step = firstRunStepOf(kind);
   if (step < 0 || step !== firstRunStep) return;
@@ -2244,7 +2238,8 @@ function useRoom() {
   const prop=nearbyProp(site);
   if (prop) { inspectRoomProp(prop); return; }
   const side=hallSideAtFeet(site);
-  if (side) enterRoom(side);
+  if (side) return enterRoom(side);
+  toast(SURV_CODE_ZH.NOTHING_HERE);
 }
 function hallSideAtFeet(site) {
   if (site!=='hall' || IPOS.y+16<99 || IPOS.y+16>133) return null;
@@ -2648,6 +2643,12 @@ function closeTalkDlg(notify=true){
   if(t && notify!==false)playAct({kind:'talk_close'}).catch(()=>{});
 }
 
+function requestInteraction() {
+  void survInteract().catch(error => {
+    toast(error.code==='CAMP_UNAVAILABLE'?'当前名字营地暂时无法加载。':'交互未完成，请重试。');
+  });
+}
+
 async function survInteract() {
   if (campBusy || !S.playing) return;
   if (ui.surveyRoom) { returnFromSurvey(); return; }
@@ -2657,12 +2658,13 @@ async function survInteract() {
       const person=residentInReach(s,[(IPOS.x+8)/TILE,(IPOS.y+16)/TILE],roomCrowd(s,ui.interior),ui.interior);
       if (person) { await useResident(person); return; }
     }
-    useRoom(); return;
+    return useRoom();
   }
-  if (!s?.loc) return;
+  if (!s?.loc) { toast('营地还在加载，请稍后再试。'); return; }
   const world=buildWorld(s), walker=WALK[walkKey('cvA','p1')];
   const view=$(ui.fullscreen?'cvFull':'cvA')._cam;
-  if (campRenderer && (ui.overview || !view?.exterior || !view.visibility)) return;
+  if (campRenderer && ui.overview) { toast('回到跟随视角后即可交互。'); return; }
+  if (campRenderer && (!view?.exterior || !view.visibility)) { toast('场景还在加载，请稍后再试。'); return; }
   const active=view?.exterior??world;
   if (walker) {
     const x=walker.x+.5,z=walker.y+.5;
@@ -2697,7 +2699,7 @@ async function survInteract() {
   if (ctx && campRenderer) {
     // In 3D, construction and crop work have actual targets. Only abstract
     // village gathering actions may use the location fallback.
-    if (!['gather','forage'].includes(ctx.kind)) return;
+    if (!['gather','forage'].includes(ctx.kind)) { toast(SURV_CODE_ZH.NOTHING_HERE); return; }
     const [x,z]=world.sites[here];
     if (!view.visibility.sees(x+.5,z+.5)) {
       toast('视线被挡住了，请换个位置。');
@@ -2705,9 +2707,13 @@ async function survInteract() {
     }
   }
   if (ctx) {
-    if (ctx.tool===ui.tool && s.loc.p1!==here && !(await playAct({kind:'move',room:here})).ok) return;
-    runSurvAction(ctx);
-  } else { survFlash={kind:'interact',ok:false,code:'NOTHING_HERE'}; refresh(); }
+    if (ctx.tool===ui.tool && s.loc.p1!==here) {
+      const move=await playAct({kind:'move',room:here});
+      if (!move.ok) { toast(SURV_CODE_ZH[move.code]??'无法到达交互地点。'); return; }
+    }
+    return runSurvAction(ctx);
+  }
+  toast(SURV_CODE_ZH.NOTHING_HERE);
 }
 let enteringRoom=false;
 async function enterRoom(room,force=false) {
@@ -2764,7 +2770,7 @@ function returnFromSurvey() {
 }
 function runSurvAction(ctx) {
   if (ctx.tool && ui.tool !== ctx.tool) { survFlash = { kind: ctx.kind, ok: false, code: 'NEED_TOOL', tool: ctx.tool }; refresh(); return; }
-  playAct({ kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
+  return playAct({ kind: ctx.kind, type: ctx.type }).then((r) => { survFlash = { kind: ctx.kind, ok: !!r.ok, code: r.code ?? r.error ?? 'OK' }; refresh(); });
 }
 const ACT_ZH = { discuss_open:'发起讨论',discuss_join:'参加讨论',discuss_share:'交换意见',discuss_decline:'谢绝讨论',discuss_leave:'离开讨论', gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
 const STAGE_ZH = { infant: '婴幼儿', child: '儿童', adult: '成年', elder: '老年' };
@@ -2838,7 +2844,7 @@ $('hotbar').addEventListener('click', (e) => {
   const slot = e.target.closest('.slot[data-tool]');
   if (slot && !slot.disabled) { ui.tool=slot.dataset.tool; updateHotbar(); return; }
   if (e.target.closest('#btnBag')) openBackpack();
-  if (e.target.closest('#btnUse')) survInteract();
+  if (e.target.closest('#btnUse')) requestInteraction();
 });
 $('bpClose').onclick=closeBackpack;
 $('btnBagTop').onclick=openBackpack;
@@ -4173,15 +4179,16 @@ function entrySiteAt(sites, tx, ty) {
     return tx >= left && tx <= sx + 3.4 && ty >= top && ty <= sy + 2;
   }) || null;
 }
-// 键盘：WASD / 方向键走路，E / Enter 进出建筑。输入框聚焦或带修饰键时不抢键。
+// 键盘：WASD / 方向键走路，E 打开背包，F / Enter 交互。
 const keys = new Set();
 const KEY_DIR = { w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right' };
 window.addEventListener('keydown', (e) => {
   if (ui.menu) return;
   // 只让真正的输入控件吞按键；按钮/summary 焦点不吞（点过按钮后键盘仍可用）
-  if (e.target.closest?.('input,textarea,select,[contenteditable]') ||
+  if (e.isComposing || e.target.closest?.('input,textarea,select,[contenteditable]') ||
       e.metaKey || e.ctrlKey || e.altKey) return;
-  const k = e.key.toLowerCase();
+  const k = e.code==='KeyF' ? 'f' : e.key.toLowerCase();
+  if (k==='enter' && e.target.closest?.('button,a[href],summary,[role="button"]')) return;
   if ($('campPropDialog').open) {
     if (k==='e' && !e.repeat) { e.preventDefault(); $('campPropDialog').close(); openBackpack(); }
     return;
@@ -4201,7 +4208,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.repeat) return;
   if (k==='e') { e.preventDefault(); $('backpack').open?closeBackpack():openBackpack(); return; }
-  if (k === 'f' || k === 'enter') { e.preventDefault(); if (S.playing) survInteract(); }
+  if (S.playing && (k === 'f' || k === 'enter')) { e.preventDefault(); requestInteraction(); }
 });
 window.addEventListener('keyup',e=>{
   const key=e.key.toLowerCase();

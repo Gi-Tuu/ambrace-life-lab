@@ -623,7 +623,7 @@
   #firstRun ol { margin:0 0 6px; padding-left:18px; }
   #firstRun li { margin:2px 0; }
   #firstRun li.done { color:var(--gold); text-decoration:line-through; opacity:.75; }
-  #firstRun button { font-size:12px; padding:2px 8px; }
+  #firstRun button { pointer-events:auto; font-size:12px; padding:2px 8px; }
 
   /* 主 HUD：当前目标（可玩性急救，2026-11-15） */
   #objHud {
