@@ -10,7 +10,7 @@ const GAME = { eventRulesVersion: CURRENT_EVENT_RULES, independentWorld: true, g
 function fixture() {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
-  w.loc.p1 = 'home'; w.loc.a1 = 'home';
+  w.loc.p1 = 'home'; w.loc.a1 = 'home'; w.campPlayerRoom = 'home'; // 食物交付要求玩家在私宅内
   for (const id of ['a2', 'a3']) if (w.agents[id]) w.loc[id] = 'yard';
   w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1, wood: 2 };
   w.survival.campContainers = { 'home:meal': { crop: 2 } };

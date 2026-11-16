@@ -51,6 +51,28 @@ test('R3 排队中的活过期也会被结算，且队列满时立刻失败不�
   assert.equal(rel.claim(), null, '过期后不该再被取走');
 });
 
+test('节点取活后仍占容量，交活和超时各自释放容量', async () => {
+  const rel = createRelay({ maxPending: 1, ttlMs: 500 });
+  const first = rel.submit({ model: 'a' });
+  assert.equal(rel.claim().id, first.id);
+  assert.equal(rel.view().pending, 0);
+  assert.equal(rel.view().claimed, 1);
+  assert.equal(rel.submit({ model: 'blocked' }), null);
+  assert.equal(rel.view().dropped, 1);
+  assert.equal(rel.complete(first.id, { content: 'ok' }), true);
+  assert.equal((await first.promise).ok, true);
+
+  const next = rel.submit({ model: 'b' });
+  assert.equal(rel.claim().id, next.id);
+  assert.deepEqual(await next.promise, { ok: false, code: 'RELAY_TIMEOUT' });
+  assert.equal(rel.view().claimed, 0);
+
+  const last = rel.submit({ model: 'c' });
+  assert.equal(rel.claim().id, last.id);
+  assert.equal(rel.complete(last.id, { content: 'ok' }), true);
+  assert.equal((await last.promise).ok, true);
+});
+
 test('R4 未知 id 与令牌比较', () => {
   const rel = createRelay({ maxPending: 1, ttlMs: 1000 });
   assert.equal(rel.complete('nope', { content: 'x' }), false);

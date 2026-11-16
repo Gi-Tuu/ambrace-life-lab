@@ -21,9 +21,9 @@ export function createRelay({ maxPending = 8, ttlMs = 9000 } = {}) {
   const waiters = new Map(); // id -> finish(res)
   const stat = { served: 0, failed: 0, expired: 0, late: 0, dropped: 0 };
 
-  // 挂一次请求。队列满时返回 null——宁可立刻失败让引擎走回退，也不堆积等待。
+  // 容量覆盖提交至结算的整个窗口，节点取活后调用方仍在等结果。
   function submit(body) {
-    if (pending.size >= maxPending) { stat.dropped += 1; return null; }
+    if (waiters.size >= maxPending) { stat.dropped += 1; return null; }
     const id = randomUUID();
     let settled = false;
     let settle;

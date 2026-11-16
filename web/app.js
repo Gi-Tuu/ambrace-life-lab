@@ -56,14 +56,18 @@ window.addEventListener('unhandledrejection', (event) => {
   toast('操作没有送达，请重试。');
 });
 
-async function api(path, body) {
-  const result = await postJson(path, body);
+function showPersistNotice(result, path) {
   const notice = persistNotices(result, path);
   if (notice) {
     const warning = $('saveNotice');
     warning.hidden = notice === 'ok';
     if (notice === 'lost') warning.textContent = '本次操作已执行，存档失败。重启后可能丢失这段进度。';
   }
+}
+
+async function api(path, body) {
+  const result = await postJson(path, body);
+  showPersistNotice(result, path);
   return result;
 }
 
@@ -163,14 +167,17 @@ function playAct(body) {
 
 function comparisonContact(body) {
   const snapshot=S.viewB;
-  if (!snapshot) return null;
+  if (!snapshot) return {from:null, to:null};
   const site=snapshot.campPlayerRoom, camera=$('cvB')._cam;
   const walker=WALK['cvB:p1'];
   const pos=site ? roomPlayerPosition(compareInterior,site) : null;
-  const from=pos ? [(pos.x+8)/TILE,(pos.y+16)/TILE] : walker ? [walker.x+.5,walker.y+.5] : body.from;
-  const person=body.to && (site ? roomCrowd(snapshot,site) : camera?.people ?? [])
-    .find(p => p.who===body.target);
-  return {from, to:person?[person.x,person.z]:null};
+  const from=pos ? [(pos.x+8)/TILE,(pos.y+16)/TILE] : walker ? [walker.x+.5,walker.y+.5] : null;
+  const animalAction=body.kind==='animal_feed' || body.kind==='animal_slaughter' ||
+    body.kind==='camp_collect' && Object.values(CAMP_ANIMAL_ITEM).includes(body.type);
+  const target=body.to && (animalAction
+    ? camera?.animals?.find(a => a.id===body.target)
+    : (site ? roomCrowd(snapshot,site) : camera?.people ?? []).find(p => p.who===body.target));
+  return {from, to:target?[target.x,target.z]:null};
 }
 
 
@@ -2148,8 +2155,11 @@ const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPT
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
 const CAMP_FOOD=['meat','berry','fruit','crop','egg','milk'];
-const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助'};
-const campCodes={ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
+const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助',respond_request:'回应居民'};
+const campCodes={
+  ACCEPTED:'已答应', DECLINED:'已拒绝', NO_REQUEST:'该请求已经结束', REQUESTER_GONE:'提出请求的居民已离开',
+  NO_FOOD:'当前餐桌没有食物可分', NO_WOOD:'背包里没有可借出的木料', CAMP_INVALID:'营地已回收，请从菜单返回主营地',
+  ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
   FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
@@ -2793,6 +2803,7 @@ function runSurvAction(ctx) {
 }
 const ACT_ZH = { discuss_open:'发起讨论',discuss_join:'参加讨论',discuss_share:'交换意见',discuss_decline:'谢绝讨论',discuss_leave:'离开讨论', gather: '采集', harvest: '收获', plant: '播种', build: '施工', repair: '维修', plan: '奠基', forage: '采野果', exchange: '兑换', expand: '扩建', move_to: '移动', walk: '走路', rest: '休息', idle: '待机', talk: '交谈', eat: '进食', look_out: '瞭望', work: '做工', coop_request: '请求协助', death: '死亡', birth: '出生', adult: '成年', elder: '老年' };
 const STAGE_ZH = { infant: '婴幼儿', child: '儿童', adult: '成年', elder: '老年' };
+const canInviteWorker=a=>!a.isPlayer && !a.dead && (a.viab??1)>0 && ['adult','elder'].includes(a.stage??'adult');
 function updateHotbar() {
   ui.tool ??= 'hand';
   const s = S.view;
@@ -2936,7 +2947,7 @@ function familyPanel(s) {
     <p>子女 ${h.adultDays} 个游戏日成年。成年后会根据床位、家人意愿和个人物资选择住处。</p>
     <ul>${Object.entries(s.agents).filter(([id])=>id!=='p1').map(([id,a])=>{
       const r=h.residents[id], state={seeking:'正在攒建房物资',stayed:'成年后留家',building:'正在建房',built:'已建新房',bought:'已买房'}[r?.decision];
-      return `<li>${name(id)} · ${a.stage==='child'?'未成年':'成年'} · ${title(s.housing[id])}
+      return `<li>${name(id)} · ${STAGE_ZH[a.stage]??STAGE_ZH.adult} · ${title(s.housing[id])}
         ${h.spouses[id]?` · 配偶 ${name(h.spouses[id])}`:''}
         ${r?.parents.length?` · 双亲 ${r.parents.map(name).join('、')}`:''}
         ${state?` · ${state}`:''}
@@ -2958,7 +2969,7 @@ function coopPanel(s) {
   const here = s.loc?.p1;
   const site = (s.sites ?? []).find((x) => x.loc === here);
   const task = s.coop.task;
-  const residents = Object.values(s.agents ?? {}).filter((a) => !a.isPlayer && !a.dead && (a.viab ?? 1) > 0);
+  const residents = Object.values(s.agents ?? {}).filter(canInviteWorker);
   const reqBtns = site ? residents.map((a) => `<button data-coop="${esc(a.id)}">请${esc(a.name)}协助</button>`).join('') : '';
   return `<details class="survdetail"><summary>合作施工</summary>
     <div class="survrow">${task ? `当前任务 ${esc(task.type)}·${esc(task.phase)}·${task.workers.length}人` : '暂无任务'} ｜ 完工 ${s.coop.completions.length} ｜ 拒绝 ${s.coop.refusals} ｜ 退出 ${s.coop.exits ?? 0}</div>
@@ -3262,11 +3273,20 @@ function bindAudioDialogs() {
   }
 }
 
+let refreshIssued=0, refreshApplied=0;
+const refreshMode=()=>ui.menu?'menu':ui.compare?'compare':'survival';
+function discardPendingRefreshes() {
+  refreshApplied=++refreshIssued;
+}
 async function refresh() {
+  const id=++refreshIssued, mode=refreshMode(), camp=campKeyNow;
+  const path='/world?mode='+mode;
+  const current=()=>id>=refreshApplied && mode===refreshMode() && camp===campKeyNow && !resettingSurvival;
   try {
-    const requestedMode=ui.menu?'menu':ui.compare?'compare':'survival';
-    const j = await api('/world?mode='+requestedMode);
-    if (requestedMode!==(ui.menu?'menu':ui.compare?'compare':'survival') || resettingSurvival) return;
+    const j=await postJson(path);
+    if (!current()) return;
+    refreshApplied=id;
+    showPersistNotice(j,path);
     const pair=j.comparison;
     const selected=ui.compare?pair?.A:j.survival;
     if (ui.compare && pair && S.compareRevision!==pair.revision) {
@@ -3280,6 +3300,7 @@ async function refresh() {
       campHerds.clear();
       worldCaches.clear();
       $('compareAction').textContent='';
+      renderRequests(null);
       S.compareRevision=pair.revision;
     }
     renderPlayMode(j.survival,pair??S.comparison);
@@ -3360,11 +3381,14 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
-    // SAV-05：失效营地（被回收/文件丢失）——view 已回落主营地，这里只提示一次。
-    if (viewA?.camp?.invalid) {
-      if (!S.campInvalidNotified) { toast('该营地已回收，当前显示主营地。'); S.campInvalidNotified = true; }
-    } else { S.campInvalidNotified = false; }
-    renderRequests(viewA);
+    // 营地路由状态在信封中，生存快照里的 camp 是家具与物资数据。
+    if (!ui.compare && j.camp?.invalid) {
+      if (!S.campInvalidNotified) {
+        toast('该营地已回收，当前显示主营地。请从菜单选择「回主营地」后继续交互。');
+        S.campInvalidNotified=true;
+      }
+    } else S.campInvalidNotified=false;
+    renderRequests(!ui.compare && j.camp?.invalid ? null : viewA);
     syncAudioScene(viewA);
     if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
@@ -3434,6 +3458,8 @@ async function refresh() {
       btn.title = `${btn.dataset.base}｜${on ? `已叠在 A 侧（${hint(S.layer?.[key === 'm3' ? 'commitment' : 'tau'] ?? '?')}）` : '未叠'}·点击切换：两个世界都回到本次会话起点重放`;
     }
   } catch (e) {
+    if (!current()) return;
+    refreshApplied=id;
     $('log').innerHTML=`<div class="rej">与服务端断开：${esc(e.message)}</div>`;
     const message=e.code==='CAMP_UNAVAILABLE'
       ? '当前名字营地暂时无法加载，正在重试。' : '无法连接生存服务，正在重试。';
@@ -3501,6 +3527,8 @@ function selectWorld(compare) {
   if (campBusy || enteringRoom || leavingRoom) return;
   if (ui.talk) closeTalkDlg();
   rememberSurvivalPosition();
+  discardPendingRefreshes();
+  renderRequests(null);
   ui.menu=false;
   startError=false;
   if (ui.compare!==compare) {
@@ -3585,12 +3613,29 @@ function currentCamp() {
   return { key: campKeyNow, name };
 }
 // SOC-01：居民会主动请求（食物/木料）。这里只渲染与发动作，后果全部由服务端结算。
+let requestBarKey;
+async function answerRequest(id, accept, buttons) {
+  for (const button of buttons) button.disabled=true;
+  try {
+    const result=await playAct({kind:'respond_request', id, accept});
+    const code=result.code ?? result.error ?? (result.ok?'OK':'UNKNOWN_KIND');
+    toast(campCodes[code] ?? SURV_CODE_ZH[code] ?? '未能回应居民。');
+    survFlash={kind:'respond_request', ok:result.ok, code};
+    await refresh();
+  } catch {
+    toast('未能发送回应，请重试。');
+  } finally {
+    for (const button of buttons) button.disabled=false;
+  }
+}
 function renderRequests(sv) {
   const bar = $('requestBar'); if (!bar) return;
   const list = sv?.requests ?? [];
+  const key=JSON.stringify(list.map(({id,kind,text})=>[id,kind,text]));
+  if (key===requestBarKey) return;
+  requestBarKey=key;
   bar.replaceChildren();
-  if (!list.length) { bar.hidden = true; return; }
-  bar.hidden = false;
+  bar.hidden=!list.length;
   for (const req of list) {
     const row = document.createElement('div');
     row.className = 'request-row';
@@ -3599,11 +3644,11 @@ function renderRequests(sv) {
     const yes = document.createElement('button');
     yes.type = 'button';
     yes.textContent = req.kind === 'material' ? '借给他' : '分给他';
-    yes.onclick = () => { api('/act', { kind: 'respond_request', id: req.id, accept: true }).then((r) => { survFlash = { kind: 'respond_request', ok: !!r.ok, code: r.code ?? 'OK' }; refresh(); }); };
+    yes.onclick = () => answerRequest(req.id,true,[yes,no]);
     const no = document.createElement('button');
     no.type = 'button';
     no.textContent = '拒绝';
-    no.onclick = () => { api('/act', { kind: 'respond_request', id: req.id, accept: false }).then((r) => { survFlash = { kind: 'respond_request', ok: !!r.ok, code: r.code ?? 'OK' }; refresh(); }); };
+    no.onclick = () => answerRequest(req.id,false,[yes,no]);
     row.append(text, yes, no);
     bar.appendChild(row);
   }
@@ -3655,6 +3700,8 @@ function showStart() {
   if (campBusy || enteringRoom || leavingRoom) return;
   if (ui.talk) closeTalkDlg();
   rememberSurvivalPosition();
+  discardPendingRefreshes();
+  renderRequests(null);
   if (ui.fullscreen) {
     setFull(false,false);
   }
@@ -3674,6 +3721,8 @@ function showStart() {
 async function newSurvival() {
   if (resettingSurvival || !window.confirm('新开一局会替换当前营地的生存存档。继续吗？')) return;
   resettingSurvival=true;
+  discardPendingRefreshes();
+  renderRequests(null);
   startError=false;
   $('startStatus').textContent='正在生成新的生存地图…';
   $('startNew').disabled=$('startSurvival').disabled=$('startCompare').disabled=true;
@@ -4066,7 +4115,7 @@ async function useOutdoorEntity(e,from) {
       if (site && S.view.coop?.enabled) {
         inspectWorkSite(e.name,[
           ['施工','',()=>performCamp({kind:'build',target:e.target,from})],
-          ...Object.values(S.view.agents??{}).filter(a=>!a.isPlayer && !a.dead && a.stage!=='child')
+          ...Object.values(S.view.agents??{}).filter(canInviteWorker)
             .map(a=>['请'+a.name+'协助','',()=>performCamp({kind:'coop_request',target:a.id,site:e.target,from})]),
         ]);
       } else await performCamp({kind:site?'build':'repair',target:e.target,from});

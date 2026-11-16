@@ -65,3 +65,21 @@ test('SOC-01 接受木料请求：玩家背包少 1、居民背包多 1', () => 
   assert.equal(w.pinv.p1.wood, 0);
   assert.equal(w.pinv.a1.wood, 1);
 });
+
+test('SOC-01 分食需要实际在可使用的居所餐台，失败保留请求和食物', () => {
+  const { sp, w } = fixture();
+  const req = maybeResidentRequest(w);
+  const accept = () => survAct(sp, { kind: 'respond_request', id: req.id, accept: true });
+  assert.equal(survAct(sp, { kind: 'camp_exit' }).ok, true);
+  assert.equal(w.loc.p1, 'home', '退出后逻辑地点保留，室内状态已清空');
+  assert.equal(accept().code, 'NOT_HOME');
+  assert.equal(w.survival.campContainers['home:meal'].crop, 2);
+  assert.equal(w.survival.requests.length, 1);
+
+  const guestRoom = w.housing.a1;
+  w.loc.p1 = w.campPlayerRoom = guestRoom;
+  w.survival.campContainers[guestRoom + ':meal'] = { crop: 2 };
+  assert.equal(accept().code, 'NOT_HOME');
+  assert.equal(w.survival.campContainers[guestRoom + ':meal'].crop, 2);
+  assert.equal(w.survival.requests.length, 1);
+});

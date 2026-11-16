@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
@@ -50,7 +50,7 @@ function bootServerOnce(env = {}) {
     const timer = setTimeout(() => { child.kill(); finish(reject, new Error(`服务器 15s 内没起来：${out}`)); }, 15000);
     const onData = (d) => {
       out += d.toString();
-      if (out.includes('就绪')) finish(resolve, { child, port, base: `http://127.0.0.1:${port}` });
+      if (out.includes('就绪')) finish(resolve, { child, dir, port, base: `http://127.0.0.1:${port}` });
     };
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
@@ -239,4 +239,41 @@ test('H-30 超长 body 映射成 413（不是 400）【变红法：把 readBody 
     assert.equal(r.status, 413, `70KB body 返回 ${r.status}`);
     assert.equal((await r.json()).error, 'BODY_TOO_LARGE');
   } finally { await stopServer(child); }
+});
+
+test('存档故障通过 GET 和 HEAD 探活报告 503，恢复写入后返回 200', async () => {
+  const {child,base,dir}=await bootServer({GAME_MODE:'game',CTL_TOKEN:'',ACT_SAVE_COALESCE_MS:'0',TICK_MS:'1000000'});
+  try {
+    const camp=await (await post(base,'/saves/open',{name:'探活回归'})).json();
+    assert.ok(camp.ok);
+    const tempPath=join(dir,'saves',camp.key+'.json.gz.tmp');
+    mkdirSync(tempPath);
+    const act=room=>post(base,'/act?camp='+camp.key,{mode:'survival',kind:'move',room}).then(r=>r.json());
+    assert.equal((await act('yard')).persisted,false);
+    const health=await get(base,'/healthz');
+    assert.equal(health.status,503);
+    assert.equal((await health.json()).ok,false);
+    assert.equal((await fetch(base+'/healthz',{method:'HEAD'})).status,503);
+    rmdirSync(tempPath);
+    assert.equal((await act('hall')).persisted,true);
+    assert.equal((await get(base,'/healthz')).status,200);
+  } finally {
+    await stopServer(child);
+  }
+});
+
+test('已授权的正常对话请求遇到未配置供应商时返还预留额度', async () => {
+  const {child,base}=await bootServer({CHAT_TOKEN:'local-audit-chat',MAX_CALLS:'1',TICK_MS:'1000000'});
+  try {
+    await get(base,'/world?mode=survival');
+    for (let i=0;i<2;i++) {
+      const reply=await post(base,'/chat',{messages:[{role:'user',content:'你好'}]},
+        {authorization:'Bearer local-audit-chat'});
+      assert.equal(reply.status,503);
+      assert.equal((await reply.json()).error,'NO_BACKEND');
+    }
+    assert.equal((await (await get(base,'/healthz')).json()).world.modelCalls,0);
+  } finally {
+    await stopServer(child);
+  }
 });

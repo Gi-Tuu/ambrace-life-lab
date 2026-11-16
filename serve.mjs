@@ -18,10 +18,11 @@ const PROVIDERS = (process.env.MODEL_PROVIDERS ?? process.env.MODEL_BASE_URL ?? 
   .split(',')
   .map((s) => s.trim().replace(/\/+$/, ''))
   .filter(Boolean);
-const KEYS = (process.env.MODEL_KEYS ?? process.env.MODEL_KEY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const KEYS = (process.env.MODEL_KEYS ?? process.env.MODEL_KEY ?? '').split(',').map((s) => s.trim());
+const providerKey = i => KEYS[i] || KEYS[0];
 const MODEL = process.env.MODEL_NAME ?? '';
 // 每家供应商的模型 id 前缀可能不同（魔搭 deepseek-ai/ vs 第三方 deepseek/）：按位对应，缺位退回 MODEL
-const MODELS = (process.env.MODEL_NAMES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const MODELS = (process.env.MODEL_NAMES ?? '').split(',').map((s) => s.trim());
 const UP_TIMEOUT_MS = Number(process.env.UP_TIMEOUT_MS ?? 25000);
 const MAX_BODY = 64 * 1024;
 
@@ -149,35 +150,50 @@ async function readJsonBody(req) {
 const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
 
 async function chatProxy(req, res) {
-  if (!PROVIDERS.length || !KEYS.some(Boolean)) return json(res, 503, { error: 'NO_BACKEND', note: '未配置模型端点，世界自动退回本地替身' });
-  const body = JSON.parse(await readBody(req));
-  const messages = Array.isArray(body.messages) ? body.messages.slice(0, 8) : [];
-  const attempts = [];
-  for (let i = 0; i < PROVIDERS.length; i++) {
-    const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), UP_TIMEOUT_MS);
-    try {
-      const up = await fetch(`${PROVIDERS[i]}/chat/completions`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${KEYS[i] ?? KEYS[0]}` },
-        body: JSON.stringify({ model: MODELS[i] ?? MODEL, temperature: Math.min(1.2, Math.max(0, Number(body.temperature) || 0.85)), messages, response_format: { type: 'json_object' }, max_tokens: 120 }),
-        signal: ac.signal,
-      });
-      const text = await up.text();
-      if (!up.ok) { attempts.push(`${PROVIDERS[i].replace(/^https:\/\//, '')} → HTTP ${up.status}`); continue; }
-      const j = JSON.parse(text);
-      modelCharged(j.usage?.total_tokens ?? 0); // 预扣转正式消费（calls 已在 gate 里扣过）
-      // 只回内容和用量：不透传上游原始响应，也不回端点/尝试明细（那等于告诉对方配了哪些供应商）
-      return json(res, 200, { content: j.choices?.[0]?.message?.content ?? '', usage: j.usage ?? {} });
-    } catch (e) {
-      attempts.push(`${PROVIDERS[i].replace(/^https:\/\//, '')} → ${String(e.message).slice(0, 50)}`);
-    } finally {
-      clearTimeout(to);
+  let charged = false;
+  try {
+    if (!PROVIDERS.some((_, i) => providerKey(i))) return json(res, 503, { error: 'NO_BACKEND', note: '未配置模型端点，世界自动退回本地替身' });
+    let body;
+    try { body = JSON.parse(await readBody(req)); }
+    catch (error) {
+      const tooLarge = error.code === 'BODY_TOO_LARGE';
+      return json(res, tooLarge ? 413 : 400, { error: tooLarge ? 'BODY_TOO_LARGE' : 'BAD_JSON' });
     }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
+    const messages = Array.isArray(body.messages) ? body.messages.slice(0, 8) : [];
+    const attempts = [];
+    for (let i = 0; i < PROVIDERS.length; i++) {
+      const key = providerKey(i), model = MODELS[i] || MODEL;
+      if (!key || !model) continue;
+      const ac = new AbortController();
+      const to = setTimeout(() => ac.abort(), UP_TIMEOUT_MS);
+      try {
+        const up = await fetch(`${PROVIDERS[i]}/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify({ model, temperature: Math.min(1.2, Math.max(0, Number(body.temperature) || 0.85)), messages, response_format: { type: 'json_object' }, max_tokens: 120 }),
+          signal: ac.signal,
+        });
+        const text = await up.text();
+        if (!up.ok) { attempts.push(`${PROVIDERS[i].replace(/^https:\/\//, '')} → HTTP ${up.status}`); continue; }
+        const j = JSON.parse(text);
+        modelCharged(j.usage?.total_tokens ?? 0);
+        charged = true;
+        // 只回内容和用量：不透传上游原始响应，也不回端点/尝试明细（那等于告诉对方配了哪些供应商）
+        return json(res, 200, { content: j.choices?.[0]?.message?.content ?? '', usage: j.usage ?? {} });
+      } catch (e) {
+        attempts.push(`${PROVIDERS[i].replace(/^https:\/\//, '')} → ${String(e.message).slice(0, 50)}`);
+      } finally {
+        clearTimeout(to);
+      }
+    }
+    return json(res, 502, { error: 'ALL_PROVIDERS_FAILED', tries: attempts.length });
+  } finally {
+    if (!charged) modelRelease();
   }
-  modelRelease(); // H-04：全供应商失败 ⇒ 把 gate 预扣的额度退回去，不能白吃
-  return json(res, 502, { error: 'ALL_PROVIDERS_FAILED', tries: attempts.length });
 }
+
+const healthStatus = ({ saveError, tickError }) => saveError || tickError ? 503 : 200;
 
 async function handle(req, res) {
   // H-01：new URL 在旧版位于 try 之外。一条 `GET http://[ HTTP/1.1` 就会抛 ERR_INVALID_URL，
@@ -193,7 +209,8 @@ async function handle(req, res) {
   // 否则一个 30 秒一次的 uptime 探针就能把 watching 顶成恒真。
   if (req.method === 'HEAD') {
     if (p === '/' || p === '/index.html' || p === '/world' || p === '/healthz') {
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      const status = p === '/healthz' ? healthStatus(host.status()) : 200;
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       return res.end();
     }
     return json(res, 404, { error: 'NOT_FOUND' });
@@ -246,10 +263,11 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
     // H-16：不再回显每个供应商的完整 base URL 与 DATA_DIR 绝对路径（实测曾回显内网地址）。
-    return json(res, 200, {
-      ok: !st.saveError && !st.tickError, // 存档失败或 tick 抛错时探活必须是红的，否则平台重启策略形同虚设
+    const status = healthStatus(st);
+    return json(res, status, {
+      ok: status === 200,
       model: MODEL,
-      providers: PROVIDERS.map((_b, i) => ({ configured: Boolean(KEYS[i] ?? KEYS[0]), model: MODELS[i] ?? MODEL })),
+      providers: PROVIDERS.map((_b, i) => ({ configured: Boolean(providerKey(i)), model: MODELS[i] || MODEL })),
       relay: RELAY_TOKEN ? { ...brainRelay.view(), limits: brainRelay.limits } : { off: true },
       engine: 'life-architecture',
       listen: `${HOST}:${PORT}`,
@@ -283,6 +301,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     } catch {
       return json(res, 400, { error: 'BAD_JSON' });
     }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
     // H-02c：reset 是唯一会把整段历史丢掉的动作，必须显式确认，避免误点与 CSRF 成功。
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });

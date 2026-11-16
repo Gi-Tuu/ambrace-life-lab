@@ -2,6 +2,8 @@
 // 只在游戏态生效（world.gameRules），研究/历史路径不受影响。
 // 请求是对世界真实资源的索取：食物来自玩家所在私宅餐台，木料来自玩家背包。
 
+import { householdAccess } from './home-access.mjs';
+
 export const REQUEST_KINDS = Object.freeze(['food', 'material']);
 export const REQUEST_TTL = 48; // 两个游戏日；过期请求不能再兑现
 
@@ -65,14 +67,21 @@ export function respondRequest(world, body) {
     s.requestsResolved = (s.requestsResolved ?? 0) + 1;
     return { ok: false, code: 'REQUEST_EXPIRED', request: req };
   }
+  const accept = body?.accept === true;
+  // V7.1：分食先查"本人是否在可用的餐台"（比距离更具体），材料则先查距离。
+  if (accept && req.kind === 'food' && s.settlementLife) {
+    const home = world.campPlayerRoom;
+    if (!home || (home !== 'home' && !householdAccess(world, 'p1', home))) {
+      return { ok: false, code: 'NOT_HOME' };
+    }
+  }
   // V7.1 P1：交付要当面。远距离只能算"传话"，不能把资源直接送到对方手里。
   if (world.loc.p1 !== world.loc[req.from]) {
     return { ok: false, code: 'TOO_FAR', request: req };
   }
-  const accept = body?.accept === true;
   if (accept) {
     if (req.kind === 'food') {
-      const home = s.settlementLife ? (world.campPlayerRoom ?? world.loc.p1) : world.loc.p1;
+      const home = s.settlementLife ? world.campPlayerRoom : world.loc.p1;
       const bin = s.campContainers?.[`${home}:meal`];
       const item = bin && FOOD_KINDS.find((k) => (bin[k] ?? 0) > 0);
       if (!item) return { ok: false, code: 'NO_FOOD' };

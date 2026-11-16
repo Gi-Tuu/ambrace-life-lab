@@ -2,7 +2,7 @@
 // DATA_DIR 必须在 import host 之前设好——host 在模块加载时就把它读成常量。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, statSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, statSync, rmSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -119,4 +119,26 @@ test('容器重建无存档时载入内置种子；连种子也没有才新建�
   await host.start();
   host.stop();
   assert.equal(host.status().t, 0, '种子缺失时没回到新建世界 ⇒ 兜底路径坏了');
+});
+
+test('主档缺失生存居民状态时隔离主档，从完整备份恢复', async () => {
+  const file=join(DIR,'world.json');
+  await host.start();
+  host.stop();
+  assert.equal(await host.save(),true);
+  const backup=JSON.parse(readFileSync(file,'utf8'));
+  backup.survival.t=24;
+  writeFileSync(file+'.bak',JSON.stringify(backup));
+  const broken=structuredClone(backup);
+  broken.survival.t=48;
+  delete broken.survival.minds;
+  writeFileSync(file,JSON.stringify(broken));
+  try {
+    const {note}=await host.start();
+    assert.match(note,/已隔离.*备份存档/);
+    assert.equal(host.snapshot().survival.t,24);
+    assert.ok(readdirSync(DIR).some(name=>name.startsWith('world.corrupt-')));
+  } finally {
+    host.stop();
+  }
 });

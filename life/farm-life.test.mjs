@@ -4,7 +4,7 @@ import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } f
 import { DAY_TICKS, SEASON_DAYS } from './clock.mjs';
 import { move } from './body.mjs';
 import { goalCandidates } from './goals.mjs';
-import { doExchange, doExpand, regrowWildBerries } from './production.mjs';
+import { doExchange, doExpand, regrowWildBerries, takeFood } from './production.mjs';
 import { tillRule } from './farmland.mjs';
 import { campPen, campPlants, campSite } from '../web/camp-interaction.mjs';
 import { outdoorLife } from '../web/camp-3d-scene.mjs';
@@ -172,4 +172,17 @@ test('同一只鸡随真实年龄切换雏鸡、成鸡与老鸡模型，存档�
   assert.ok(height(forms[0])<height(forms[2]) && height(forms[2])<height(forms[1]));
   assert.ok(forms[0].boxes.length!==forms[1].boxes.length && forms[1].boxes.length!==forms[2].boxes.length);
   assert.deepEqual(read(restore(sp)),elder);
+});
+
+test('粮仓恢复能扣掉超过作物分档的差额，缺项也保持数值化', () => {
+  const flags={...options,gameRules:true};
+  const raw=structuredClone(dumpSurv(createSurvPlay(7,flags)));
+  raw.survival.store=2;
+  raw.survival.food={crop:0,fruit:4,egg:3};
+  const restored=loadSurv(raw,7,flags).world.survival;
+  assert.equal(restored.store,2);
+  assert.deepEqual(restored.food,{crop:0,berry:0,fruit:0,egg:2,milk:0,meat:0});
+  assert.equal(takeFood(restored,'crop',5),2);
+  assert.equal(restored.store,0);
+  assert.ok(Object.values(restored.food).every(n=>n===0));
 });

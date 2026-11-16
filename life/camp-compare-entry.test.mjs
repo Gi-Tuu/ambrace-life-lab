@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -149,6 +149,30 @@ test('A 侧默认通道与相同生存快照的本地运行轨迹完全一致', 
     assert.equal(A.t, B.t);
     assert.notDeepEqual(record.branches.A.world.survival.aiActions, record.branches.B.world.survival.aiActions,
       '同初始随机序列下，通道切断需表现为行为差异');
+  } finally {
+    host.stop();
+  }
+});
+
+test('一侧对照档缺失居民状态时提示重开，正式生存档照常恢复', async () => {
+  await host.start();
+  try {
+    await host.ctl({action:'reset',confirm:true});
+    assert.ok((await host.ctl({mode:'compare',action:'compare_reset',confirm:true,fromSurvival:true})).ok);
+    await host.ctl({mode:'compare',action:'step'});
+    const file=join(process.env.DATA_DIR,'comparison.json');
+    const main=join(process.env.DATA_DIR,'world.json');
+    const before=readFileSync(main,'utf8');
+    const partial=JSON.parse(readFileSync(file,'utf8'));
+    delete partial.branches.B.world.minds;
+    host.stop();
+    writeFileSync(file,JSON.stringify(partial));
+    await host.start();
+    const restored=host.snapshot('compare');
+    assert.match(restored.compareSaveError,/对照档状态无效/);
+    assert.equal(restored.comparison.A.t,restored.comparison.B.t);
+    assert.equal(restored.comparison.A.t,restored.survival.t);
+    assert.equal(readFileSync(main,'utf8'),before);
   } finally {
     host.stop();
   }

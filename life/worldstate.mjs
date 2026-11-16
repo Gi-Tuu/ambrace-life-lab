@@ -4,7 +4,7 @@
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
-import { initProduction, effectiveMods, addFood, takeFood, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
+import { initProduction, effectiveMods, addFood, takeFood, FOOD_KINDS, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 
 export const SURV = Object.freeze({
@@ -65,7 +65,8 @@ export function forecastDisasters(world) {
 }
 
 // 每日推进：生长→消耗→压力→胜负。返回当日摘要（供事件/日志）。
-const PANTRY_FOOD = ['berry', 'fruit', 'crop', 'egg', 'milk'];
+const PANTRY_FIRST = ['berry', 'fruit'];
+const PANTRY_FOOD = [...PANTRY_FIRST, ...FOOD_KINDS.filter(item => !PANTRY_FIRST.includes(item))];
 // 家里容器是公仓缺口的第一层缓冲（玩家与居民同享）：按容器键序确定性地吃掉食物。
 function drainCampPantry(world, need) {
   const all = world.survival.campContainers ?? {};

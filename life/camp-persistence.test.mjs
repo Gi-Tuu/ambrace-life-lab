@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
+import { move } from './body.mjs';
 
 const dir=mkdtempSync(join(tmpdir(),'camp-persistence-'));
 Object.assign(process.env,{DATA_DIR:dir,SEED_FILE:join(dir,'missing'),GAME_MODE:'game',TICK_MS:'1000000',ACT_SAVE_COALESCE_MS:'0'});
@@ -167,4 +169,41 @@ test('复审：名字营地休眠只推进当前营地', async t=>{
   assert.equal(result.catchup.applied,1);
   assert.equal(loadCamp(dir,key).t,before+1);
   assert.equal(host.snapshot().survival.t,main);
+});
+test('真模型对话只认本营地的访客，模型空位仍归各自供应商', async t => {
+  const calls=[];
+  const server=createServer(async (req,res) => {
+    let body='';
+    for await (const chunk of req) body+=chunk;
+    calls.push([req.url,JSON.parse(body).model]);
+    if (req.url.startsWith('/primary/')) { res.writeHead(503).end(); return; }
+    res.writeHead(200,{'content-type':'application/json'});
+    res.end(JSON.stringify({choices:[{message:{content:'欢迎来到营地。'}}],usage:{total_tokens:3}}));
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const base='http://127.0.0.1:'+server.address().port;
+  host.setBackend({providers:[base+'/primary',base+'/secondary'],keys:['local-key'],
+    model:'default-model',models:['','backup-model'],brain:'model'});
+  await host.start();
+  t.after(()=>host.stop());
+  const {key}=await openCamp('对话分路');
+  for (const camp of ['MAIN',key]) {
+    const w=campSurv(camp).world;
+    move(w,'a1',w.loc.p1);
+    w.agents.a1.drives.v.social=.5;
+    w.agents.a1.drives.v.energy=.9;
+    assert.ok((await host.act({mode:'survival',kind:'talk_open',target:'a1'},camp)).ok);
+  }
+  const command={mode:'survival',kind:'talk_say',target:'a1',text:'你好'};
+  await host.readWorld('survival',key);
+  assert.equal((await host.readWorld('menu','MAIN')).survival.model.watching,false);
+  assert.ok((await host.act(command,'MAIN')).ok);
+  assert.equal(calls.length,0);
+  assert.equal((await host.act(command,key)).line,'欢迎来到营地。');
+  assert.deepEqual(calls,[['/primary/chat/completions','default-model'],['/secondary/chat/completions','backup-model']]);
+  calls.length=0;
+  host.setBackend({keys:['','local-backup-key']});
+  assert.equal((await host.act(command,key)).line,'欢迎来到营地。');
+  assert.deepEqual(calls,[['/secondary/chat/completions','backup-model']]);
 });

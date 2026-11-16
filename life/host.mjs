@@ -24,7 +24,7 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
-import { CampInstances, listSaves, normalizeName, sweepSaves } from './camp-instances.mjs';
+import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
@@ -186,9 +186,9 @@ const S = { comparison: null, compareView: null, compareSaveError: null, compare
 
 export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
-  if (keys.length) CFG.keys = keys.map((s) => s.trim()).filter(Boolean);
+  if (keys.length) CFG.keys = keys.map(s => String(s ?? '').trim());
   if (model) CFG.model = model;
-  if (models.length) CFG.models = models.map((s) => String(s).trim()).filter(Boolean);
+  if (models.length) CFG.models = models.map((s) => String(s ?? '').trim());
   if (seed) CFG.seed = seed;
   if (brain) CFG.brain = brain;
 }
@@ -272,8 +272,7 @@ async function readArchive(path) {
     loaded = loadArchive(source, { skipM5: true });
   }
   const survival = loaded.raw.survival;
-  if (survival != null && (!Number.isSafeInteger(survival.t) || survival.t < 0 ||
-    !survival.survival || typeof survival.survival !== 'object' || Array.isArray(survival.survival))) {
+  if (survival != null && !validCampArchive(survival)) {
     throw new Error('生存存档结构不完整');
   }
   const surv = loadSurv(survival, CFG.seed, survivalOptions());
@@ -302,8 +301,10 @@ function buildPacks() {
   S.packs = packsFrom(S.startRaw);
 }
 
+const providerKey = i => CFG.keys[i] || CFG.keys[0];
+
 function modelConfigured() {
-  return CFG.keys.length > 0 && CFG.providers.some((_, i) => CFG.models[i] || CFG.model);
+  return CFG.providers.some((_, i) => providerKey(i) && (CFG.models[i] || CFG.model));
 }
 
 // 导出给离线工具（scripts/seed-ladder.mjs）复用：公开演示起点必须用运行时同一套生存配置生成，
@@ -423,7 +424,7 @@ async function postChat(provider, key, body, mdl, ac) {
 }
 
 async function modelBrain({ agent, scored, world, rejected, memories, trigger, daySummary }) {
-  if (!CFG.providers.length || !CFG.keys.length || world.fastForward) return null;
+  if (!CFG.providers.length || !CFG.keys.some(Boolean) || world.fastForward) return null;
   const here = world.loc[agent.id];
   const bands = preferenceBands(scored, agent.ch);
   const present = (world.occupancy[here] ?? []).filter((x) => x !== agent.id && (world.survival || x !== 'p1')).map((x) => world.agents[x]?.name ?? x);
@@ -474,8 +475,10 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
   let refusal = null;
   for (let i = 0; i < CFG.providers.length; i++) {
     // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
-    const mdl = CFG.models[i] ?? CFG.model;
+    const mdl = CFG.models[i] || CFG.model;
     if (!mdl) { note('NO_MODEL'); continue; }
+    const key = providerKey(i);
+    if (!key) { note('NO_KEY'); continue; }
     const lane = laneOf(CFG.providers[i]);
     if (!lane.go) { refusal = lane.why; continue; } // 这条路不该走（无人时的付费路／熔断／该本账用完）：换下一条，世界照跑
     const free = lane.kind === 'node';
@@ -484,7 +487,7 @@ async function modelBrain({ agent, scored, world, rejected, memories, trigger, d
     if (waitMs <= 0) return null;
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
-      const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
+      const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
       if (!res.ok) { note(`HTTP ${res.status}`); breakerSee(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
@@ -519,7 +522,9 @@ async function modelTalk({ npc, world, history, text, trust }) {
   if (!CFG.providers.length || !CFG.keys.some(Boolean)) return null;
   if (CFG.brain !== 'model') return null;
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
-  if (!observerActive(S.viewers.survival, Date.now())) return null;
+  const campKey = world.campKey ?? 'MAIN';
+  const lastVisitor = campKey === 'MAIN' ? S.viewers.survival : S.campViewers[campKey];
+  if (!observerActive(lastVisitor, Date.now())) return null;
   if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
   const here = (world.locs ?? LOCS)[world.loc[npc.id]] ?? world.loc[npc.id];
@@ -533,8 +538,9 @@ async function modelTalk({ npc, world, history, text, trust }) {
     '只回一句中文台词，不超过 40 字。可以冷淡、敷衍、不耐烦或发火；不要旁白，不要解释设定，不要加引号。',
   ].filter(Boolean).join('\n');
   for (let i = 0; i < CFG.providers.length; i++) {
-    const mdl = CFG.models[i] ?? CFG.model;
-    if (!mdl) continue;
+    const mdl = CFG.models[i] || CFG.model;
+    const key = providerKey(i);
+    if (!mdl || !key) continue;
     const free = isFreeProvider(CFG.providers[i]);
     const lane = modelChannel({
       watched: true, free,
@@ -545,7 +551,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), MODEL_TIMEOUT_MS);
     try {
-      const res = await postChat(CFG.providers[i], CFG.keys[i] ?? CFG.keys[0], { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
+      const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
       if (!res.ok) { breakerSee(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
@@ -595,8 +601,7 @@ function comparisonFromSave(saved) {
   if (!saved) return makeComparison(structuredClone(dumpSurv(S.surv)));
   try {
     const {origin, branches, revision} = saved;
-    const valid = (world) => Number.isSafeInteger(world?.t) && world.t >= 0 && world.survival;
-    if (!valid(origin) || !valid(branches?.A?.world) || !valid(branches?.B?.world) ||
+    if (!validCampArchive(origin) || !validCampArchive(branches?.A?.world) || !validCampArchive(branches?.B?.world) ||
         branches.A.world.t !== branches.B.world.t ||
         [branches.A.world, branches.B.world].some(w => w.seed !== origin.seed || w.mapSeed !== origin.mapSeed) ||
         !Number.isSafeInteger(revision) || revision < 0) throw new Error('对照存档结构无效');
