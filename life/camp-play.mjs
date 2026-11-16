@@ -162,6 +162,9 @@ export function campAction(world,body) {
     const meal=s.campContainers?.[`${site}:meal`];
     if (!FOOD.has(item) || !amount(meal,item)) return fail('EMPTY');
     // AUD-05：同一游戏日最多两餐——居民只有日界一次配给，玩家不能连点把存续拉满。
+    const pl0 = world.agents.p1;
+    // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
+    if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
     const day = Math.floor(world.t / (world.dayTicks ?? 24));
     if (s.mealsDay !== day) { s.mealsDay = day; s.mealsToday = 0; }
     if ((s.mealsToday ?? 0) >= 2) return fail('MEAL_LIMIT');

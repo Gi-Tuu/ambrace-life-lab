@@ -33,7 +33,7 @@ test('工具、来源和菜畦一一对应，餐桌吃饭实际扣食物',()=>{
   assert.equal(act('camp_craft',{type:'tray'}).ok,true);
   assert.equal(w.pinv.p1.tray,1);
   act('move',{room:'home'});
-  w.agents.p1.viab.v=0.5;
+  w.agents.p1.viab.v=0.5; w.agents.p1.drives.v.energy=0.2; // 吃饭现在要求饥饿（RES-02）
   assert.equal(act('camp_eat',{type:'egg'}).ok,true);
   assert.ok(w.agents.p1.viab.v>0.5, '吃饭必须实际回补存续');
   assert.equal(act('camp_eat',{type:'egg'}).ok,false);
