@@ -91,3 +91,56 @@ export function respondRequest(world, body) {
   if (accept) s.requestsGranted = (s.requestsGranted ?? 0) + 1;
   return { ok: true, code: accept ? 'ACCEPTED' : 'DECLINED', request: req };
 }
+// V7.1 §5.10：居民之间也能借资源（当前只做木料，同屋 + 双向信任 + 每日一次）。
+export const PEER_REQUEST_TTL = 24;
+
+export function maybePeerRequest(world) {
+  const s = world.survival;
+  if (!world.gameRules || !s) return null;
+  s.peerRequests ??= [];
+  const day = Math.floor((world.t ?? 0) / (world.dayTicks ?? 24));
+  if (s.peerRequestsDay !== day) { s.peerRequestsDay = day; s.peerAsked = {}; }
+  s.peerAsked ??= {};
+  for (const a of Object.values(world.agents)) {
+    if (a.isPlayer || a.dead) continue;
+    if (s.peerAsked[a.id] === day) continue;
+    if ((world.pinv?.[a.id]?.wood ?? 0) >= 1) continue;
+    const mate = Object.values(world.agents).find((b) => !b.isPlayer && !b.dead && b.id !== a.id &&
+      world.loc[b.id] === world.loc[a.id] && (world.pinv?.[b.id]?.wood ?? 0) >= 2 &&
+      (a.relations?.get?.(b.id)?.trust ?? 0) >= 40);
+    if (!mate) continue;
+    const req = { id: `p${world.t}:${a.id}:${mate.id}`, t: world.t, from: a.id, to: mate.id, kind: 'wood', text: `${a.name}：能借我一根木头吗？` };
+    s.peerRequests.push(req);
+    if (s.peerRequests.length > 8) s.peerRequests.shift();
+    s.peerAsked[a.id] = day;
+    return req;
+  }
+  return null;
+}
+
+// 被请求者按信任裁决：≥35 就借并互加信任；否则拒绝并扣一点信任。过期或走散都不交付。
+export function stepPeerRequests(world) {
+  const s = world.survival;
+  const list = s?.peerRequests ?? [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const r = list[i];
+    const from = world.agents[r.from], to = world.agents[r.to];
+    if (!from || !to || from.dead || to.dead) { list.splice(i, 1); continue; }
+    if ((world.t ?? 0) - (r.t ?? 0) > PEER_REQUEST_TTL) { list.splice(i, 1); s.peerRequestsExpired = (s.peerRequestsExpired ?? 0) + 1; continue; }
+    if (world.loc[from.id] !== world.loc[to.id]) continue; // 走散了：等重聚或过期，不隔空交付
+    const willing = (to.relations?.get?.(from.id)?.trust ?? 0) >= 35 && (world.pinv?.[to.id]?.wood ?? 0) >= 1;
+    if (!willing) {
+      from.relations?.meet?.(to.id, world.t, { delta: { trust: -1 } });
+      list.splice(i, 1);
+      s.peerRequestsRefused = (s.peerRequestsRefused ?? 0) + 1;
+      continue;
+    }
+    world.pinv[to.id].wood -= 1;
+    world.pinv[from.id] ??= { wood: 0, stone: 0 };
+    world.pinv[from.id].wood += 1;
+    from.relations?.meet?.(to.id, world.t, { delta: { trust: 2, familiarity: 0.02 } });
+    to.relations?.meet?.(from.id, world.t, { delta: { trust: 1, familiarity: 0.02 } });
+    list.splice(i, 1);
+    s.peerRequestsGranted = (s.peerRequestsGranted ?? 0) + 1;
+  }
+}

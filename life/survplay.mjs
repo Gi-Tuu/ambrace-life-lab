@@ -15,7 +15,7 @@ import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
-import { maybeResidentRequest, respondRequest } from './resident-requests.mjs';
+import { maybeResidentRequest, respondRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
 import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
@@ -363,7 +363,7 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
-  try { maybeResidentRequest(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  try { maybeResidentRequest(w); maybePeerRequest(w); stepPeerRequests(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理）。
   if (w.independentWorld && w.survival.households && w.agents.p1 && isAlive(w.agents.p1) && residentStage(w, 'p1') === 'elder') {
     w.agents.p1.viab.v = Math.max(0, w.agents.p1.viab.v - ELDER_DECAY);

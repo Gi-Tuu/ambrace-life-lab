@@ -67,27 +67,35 @@ for (const seed of SEEDS) {
     };
   }
 
-  // D：计划失败——在建工地活跃时清零材料，观察重规划/退出计数
+  // D：资源为零且断供——居民不能凭空开工；记录被拒原因与行动转向
   const spD = createSurvPlay(seed, GAME);
   const wD = spD.world;
-  for (let i = 0; i < 72; i += 1) await tickSurvPlay(spD, { now: Date.now() }); // 先让工地出现
-  const replans0 = wD.survival.coop?.replans ?? 0;
-  const exits0 = wD.survival.coop?.exits ?? 0;
+  const refused0 = { ...(wD.survival.actionLedger?.resident?.refused ?? {}) };
   const sites0 = (wD.survival.sites ?? []).length;
+  const buildings0 = Object.keys(wD.survival.buildings ?? {}).length;
   wD.survival.store = 0;
   wD.survival.inv = { ...(wD.survival.inv ?? {}), wood: 0, stone: 0 };
-  for (const id of Object.keys(wD.pinv ?? {})) wD.pinv[id] = { wood: 0, stone: 0 };
-  for (let i = 0; i < 72; i += 1) await tickSurvPlay(spD, { now: Date.now() });
+  wD.survival.resStock = Object.fromEntries(Object.keys(wD.districts ?? {}).map((k) => [k, 0]));
+  if (wD.survival.campTrees) for (const k of Object.keys(wD.survival.campTrees)) wD.survival.campTrees[k] = wD.t + 9999;
+  for (let i = 0; i < 72; i += 1) {
+    for (const id of Object.keys(wD.pinv ?? {})) wD.pinv[id] = { wood: 0, stone: 0 };
+    wD.survival.inv.wood = 0; wD.survival.inv.stone = 0;
+    await tickSurvPlay(spD, { now: Date.now() });
+  }
+  const refused1 = wD.survival.actionLedger?.resident?.refused ?? {};
+  const refusedDelta = {};
+  for (const k of new Set([...Object.keys(refused0), ...Object.keys(refused1)])) {
+    const d = (refused1[k] ?? 0) - (refused0[k] ?? 0);
+    if (d > 0) refusedDelta[k] = d;
+  }
   const caseD = {
     sitesBefore: sites0,
     sitesAfter: (wD.survival.sites ?? []).length,
-    replans: (wD.survival.coop?.replans ?? 0) - replans0,
-    exits: (wD.survival.coop?.exits ?? 0) - exits0,
-    task: wD.survival.coop?.task?.type ?? null,
-    goals: Object.values(wD.agents).filter((a) => !a.isPlayer && !a.dead).map((a) => a.m3Last?.goal ?? null).filter(Boolean).slice(0, 5),
+    buildingsBefore: buildings0,
+    buildingsAfter: Object.keys(wD.survival.buildings ?? {}).length,
+    refused: refusedDelta,
     store: wD.survival.store,
   };
-
   out.push({ seed, days: Math.floor(w.t / 24), ended: !!w.survival.ended, caseA: caseA.slice(0, 5), caseB, caseC: caseC.slice(0, 5), caseD, buildings: Object.keys(w.survival.buildings ?? {}).length, living: Object.values(w.agents).filter((a) => !a.dead && !a.isPlayer).length });
 }
 
