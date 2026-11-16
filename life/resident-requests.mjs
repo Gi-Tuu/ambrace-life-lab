@@ -17,10 +17,12 @@ function dayOf(w) {
 export function maybeResidentRequest(world) {
   const s = world.survival;
   if (!world.gameRules || !s?.households) return null;
+  if (world.agents?.p1?.dead) return null; // 玩家死后不再生成"请你分我一份"的请求
   const day = dayOf(world);
   s.requests ??= [];
   // V7.1：过期请求自动清理（此前只有"回应时"才判过期，请求条会堆同一个人的多条）。
   s.requests = s.requests.filter((r) => (world.t ?? 0) - (r.t ?? 0) <= REQUEST_TTL);
+  s.requests = s.requests.filter((r) => world.agents[r.from] && !world.agents[r.from].dead); // 死者请求不再占 HUD
   if (s.requestsDay !== day) {
     s.requestsDay = day;
     s.requestsAsked = {};
@@ -61,6 +63,8 @@ export function respondRequest(world, body) {
   const req = list[at];
   const npc = world.agents[req.from];
   if (!npc || npc.dead) { list.splice(at, 1); return { ok: false, code: 'REQUESTER_GONE' }; }
+  // 在途（跨区行走）的人不能隔空收东西：等他到达或过期。
+  if (s.districtTravel?.[req.from]) return { ok: false, code: 'REQUESTER_AWAY', request: req };
   // V7.1 P1：过期请求不可兑现（请求是当时的缺口，不是长期欠条）。
   if ((world.t ?? 0) - (req.t ?? 0) > REQUEST_TTL) {
     list.splice(at, 1);
@@ -117,7 +121,8 @@ export function maybePeerRequest(world) {
     if (a.isPlayer || a.dead) continue;
     if (s.peerAsked[a.id] === day) continue;
     if ((world.pinv?.[a.id]?.wood ?? 0) >= 1) continue;
-    const mate = Object.values(world.agents).find((b) => !b.isPlayer && !b.dead && b.id !== a.id &&
+    if (s.districtTravel?.[a.id]) continue; // 在途不开口
+    const mate = Object.values(world.agents).find((b) => !b.isPlayer && !b.dead && b.id !== a.id && !s.districtTravel?.[b.id] &&
       world.loc[b.id] === world.loc[a.id] && (world.pinv?.[b.id]?.wood ?? 0) >= 2 &&
       (a.relations?.get?.(b.id)?.trust ?? 0) >= 40);
     if (!mate) continue;
@@ -140,6 +145,7 @@ export function stepPeerRequests(world) {
     if (!from || !to || from.dead || to.dead) { list.splice(i, 1); continue; }
     if ((world.t ?? 0) - (r.t ?? 0) > PEER_REQUEST_TTL) { list.splice(i, 1); s.peerRequestsExpired = (s.peerRequestsExpired ?? 0) + 1; continue; }
     if (world.loc[from.id] !== world.loc[to.id]) continue; // 走散了：等重聚或过期，不隔空交付
+    if (s.districtTravel?.[from.id] || s.districtTravel?.[to.id]) continue; // 在途不交付
     const willing = (to.relations?.get?.(from.id)?.trust ?? 0) >= 35 && (world.pinv?.[to.id]?.wood ?? 0) >= 1;
     if (!willing) {
       from.relations?.meet?.(to.id, world.t, { delta: { trust: -1 } });

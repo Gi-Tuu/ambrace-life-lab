@@ -159,6 +159,10 @@ export function modelRelease() {
   S.model.calls = Math.max(0, S.model.calls - 1);
 }
 // 调用成功：预扣转正式消费，只追加 token（calls 已在 gate 里扣过，不能重复计）
+export function modelChargeLane(free) {
+  if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1;
+  else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
+}
 export function modelCharged(tokens = 0) {
   if (S.model.reserved > 0) S.model.reserved -= 1;
   S.model.tokens += Number(tokens) || 0;
@@ -275,7 +279,7 @@ async function readArchive(path) {
   if (survival != null && !validCampArchive(survival)) {
     throw new Error('生存存档结构不完整');
   }
-  const surv = loadSurv(survival, CFG.seed, survivalOptions());
+  const surv = loadSurv(survival, CFG.seed, { ...survivalOptions(), adoptArchivedRules: true, upgradeLegacyEventRules: true });
   survView(surv); // 同时验证首个读请求依赖的生存结构
   return { ...loaded, surv, warning };
 }
@@ -301,7 +305,12 @@ function buildPacks() {
   S.packs = packsFrom(S.startRaw);
 }
 
-const providerKey = i => CFG.keys[i] || CFG.keys[0];
+export function pickProviderKey(keys, i, providerCount = (keys ?? []).length) {
+  const list = keys ?? [];
+  if (providerCount <= 1) return list[0] || '';
+  return list[i] || '';
+}
+const providerKey = i => pickProviderKey(CFG.keys, i, CFG.providers.length);
 
 function modelConfigured() {
   return CFG.providers.some((_, i) => providerKey(i) && (CFG.models[i] || CFG.model));
@@ -1308,7 +1317,7 @@ export const host = {
   backToMainCamp,
   readWorld(mode, campKey) {
     return queueWorldWrite(() => {
-      if (mode !== 'menu') this.touch(mode === 'compare' ? 'comparison' : mode, campKey);
+      if (mode !== 'menu') this.touch(mode, campKey); // 审计 ARCH-03
       return structuredClone(this.snapshot(mode,campKey));
     });
   },
@@ -1512,6 +1521,9 @@ export const host = {
         if (body.action === 'reset') {
       S.surv=createSurvPlay(CFG.seed,survivalOptions());
       S.mainSurv=S.surv;
+      // 审计 ARCH-07：重置后的新世界才是后续营地的 fork 起点。
+      S.seedSurv = structuredClone(dumpSurv(S.surv));
+      if (S.camps) S.camps.seedSurvival = structuredClone(dumpSurv(S.surv));
     }
         S.startRaw = structuredClone(serialize());
         // 补时记账属于被丢掉的那个世界：不清零的话，重置后的页面还会挂着「休眠 9.3 分钟后醒来」这句话，
@@ -1525,6 +1537,7 @@ export const host = {
         // 负数被照收；无限次 360 分钟补时能把三个人的 drives 压到 0。
         const m = Number(body.minutes ?? 30);
         if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
+      if (m > 720) return { ...this.status(), ok: false, error: 'TOO_MANY_MINUTES' }; // 审计 SEC-05
         if (campKey && campKey !== 'MAIN') {
           const target=campSurv(campKey);
           if (!target) return {...this.status(),ok:false,error:'NO_SURV'};

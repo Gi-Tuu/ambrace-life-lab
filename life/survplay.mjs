@@ -127,6 +127,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.endFreeze = true; // §11 裁决①
   s.droughts = false; // §13 K2 负 ⇒ 默认关、R3 撤回
   s.ecosystem = !!ecosystem; // P1-4/5/6 动态生态（果树＋鸡种群）；host 游戏开启，sweep 默认关⇒基线不变
+  s.regionalWork = !!regionalWork; // 审计 DATA-01：规则要能随档写回，不能只留在 create 参数里
   if (s.ecosystem) initEcoPop(s);
   restoreSources(world);
   s.forageStats = { harvest: 0, plant: 0 };
@@ -848,11 +849,11 @@ export function dumpSurv(sp) {
     rng: a.rng?.state?.() ?? null, setpoint: { ...a.drives.setpoint }, aloneTicks: a.drives.aloneTicks,
     bankPending: { ...a.bank.pending }, bankM5: a.bank.dumpM5?.() ?? null, counters: { ...a.counters }, dayTally: structuredClone(a.dayTally),
     m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null,
-    m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
+    m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null, mealDay: a.mealDay ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
-  const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.regionalWork, settlementLife: !!w.settlementLife, farmLife: !!w.farmLife, ecosystem: !!w.ecosystem, playerRation: !!w.survival.playerRation };
+  const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
@@ -952,6 +953,7 @@ export function loadSurv(raw,seed=7,options) {
       if (!a || !a.drives || !st) continue;
       Object.assign(a.drives.v, st.drives ?? {});
       if (st.setpoint) Object.assign(a.drives.setpoint, st.setpoint);
+      if (Number.isFinite(st.mealDay)) a.mealDay = st.mealDay;
       if (Number.isFinite(st.aloneTicks)) a.drives.aloneTicks = st.aloneTicks;
       if (st.bankPending) Object.assign(a.bank.pending, st.bankPending);
       if (st.bankM5 !== undefined && typeof a.bank.loadM5 === 'function') a.bank.loadM5(st.bankM5, st.m);

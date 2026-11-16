@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
-import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease } from './life/host.mjs';
+import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
 import { mutatingDenied, isJson } from './life/request-guard.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -19,7 +19,7 @@ const PROVIDERS = (process.env.MODEL_PROVIDERS ?? process.env.MODEL_BASE_URL ?? 
   .map((s) => s.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 const KEYS = (process.env.MODEL_KEYS ?? process.env.MODEL_KEY ?? '').split(',').map((s) => s.trim());
-const providerKey = i => KEYS[i] || KEYS[0];
+const providerKey = i => pickProviderKey(KEYS, i, PROVIDERS.length);
 const MODEL = process.env.MODEL_NAME ?? '';
 // 每家供应商的模型 id 前缀可能不同（魔搭 deepseek-ai/ vs 第三方 deepseek/）：按位对应，缺位退回 MODEL
 const MODELS = (process.env.MODEL_NAMES ?? '').split(',').map((s) => s.trim());
@@ -148,6 +148,19 @@ async function readJsonBody(req) {
 // 守卫本体在 life/request-guard.mjs（纯函数、可单测）；这里只读环境变量并调用。
 // 非 loopback 的写请求必须出示浏览器同源证据或 CTL_TOKEN，二者皆无一律拒（脚本无 Origin 也能 reset 的洞）。
 const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
+// 审计 SEC-03：/saves/open 会同步 fork + gzip + 全量索引重写；不限速会被用来打爆磁盘/事件循环。
+const OPEN_LIMIT = Number(process.env.OPEN_LIMIT ?? 5);
+const OPEN_WINDOW_MS = 60_000;
+const CAMP_TOTAL_MAX = Number(process.env.CAMP_TOTAL_MAX ?? 50);
+const openBuckets = new Map();
+function openAllowed(req) {
+  const who = String(req?.socket?.remoteAddress ?? '?');
+  const now = Date.now();
+  const hits = (openBuckets.get(who) ?? []).filter((t) => now - t < OPEN_WINDOW_MS);
+  if (hits.length >= OPEN_LIMIT) { openBuckets.set(who, hits); return false; }
+  hits.push(now); openBuckets.set(who, hits);
+  return true;
+}
 
 async function chatProxy(req, res) {
   let charged = false;
@@ -178,6 +191,7 @@ async function chatProxy(req, res) {
         if (!up.ok) { attempts.push(`${PROVIDERS[i].replace(/^https:\/\//, '')} → HTTP ${up.status}`); continue; }
         const j = JSON.parse(text);
         modelCharged(j.usage?.total_tokens ?? 0);
+        modelChargeLane(isFreeProvider(PROVIDERS[i]));
         charged = true;
         // 只回内容和用量：不透传上游原始响应，也不回端点/尝试明细（那等于告诉对方配了哪些供应商）
         return json(res, 200, { content: j.choices?.[0]?.message?.content ?? '', usage: j.usage ?? {} });
@@ -230,6 +244,8 @@ async function handle(req, res) {
   if (p === '/saves/open' && req.method === 'POST') {
     const denied = mutatingDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
+    if (!openAllowed(req)) return json(res, 429, { error: 'RATE_LIMITED' });
+    if (listCamps().length >= CAMP_TOTAL_MAX) return json(res, 429, { error: 'CAMP_LIMIT' });
     let body;
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
     const opened = await openCamp(body?.name);

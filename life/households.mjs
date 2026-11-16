@@ -106,13 +106,18 @@ function unite(w, a, b) {
 }
 
 // Reconcile after all deaths in a tick have been recorded, including when loading an old V2 archive.
+export function pruneCourtship(w, h = w.survival?.households) {
+  if (!h?.courtship) return;
+  for (const [from, to] of Object.entries(h.courtship)) {
+    if (!w.agents[from] || w.agents[from].dead || !w.agents[to] || w.agents[to].dead || h.spouses[from]) delete h.courtship[from];
+  }
+}
+
 export function settleMarriages(w) {
   const h = w.survival.households;
   if (!h || marriageMode(w) === 'legacy') return;
   h.offers = h.offers.filter(({ from, to }) => !w.agents[from]?.dead && !w.agents[to]?.dead);
-  for (const [from, to] of Object.entries(h.courtship ?? {})) {
-    if (!w.agents[from] || w.agents[from].dead || !w.agents[to] || w.agents[to].dead || h.spouses[from]) delete h.courtship[from];
-  }
+  pruneCourtship(w, h);
   for (const [a, b] of Object.entries(h.spouses)) {
     if (h.spouses[a] !== b || h.spouses[b] !== a) continue;
     const deaths = [a, b].filter(id => w.agents[id]?.dead);
@@ -239,6 +244,7 @@ const mark = (person, decision, w) => {
 
 export function stepRelationships(w, log) {
   const h = w.survival.households;
+  if (h) pruneCourtship(w, h);
   const day = dayOf(w.t);
   h.offers = h.offers.filter(o => day - dayOf(o.t) <= 2);
   const adults = Object.keys(w.agents).filter(id => adult(w, id));

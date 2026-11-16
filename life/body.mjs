@@ -260,32 +260,32 @@ export function affordancesFor(world, agentId) {
 
   // V7.1：想社交又一个人待着 ⇒ 去人多的公共地点（真实移动，增加相遇机会）。
   {
-    const self = world.agents[me];
+    const self = world.agents[agentId];
     const socialNeed = (self?.drives?.setpoint?.social ?? 0.5) - (self?.drives?.v?.social ?? 0.5);
-    if (!present.length && socialNeed > 0.08) {
+    if (world.independentWorld && world.gameRules && !present.length && socialNeed > 0.08) {
       const counts = {};
       for (const [loc, ids] of Object.entries(world.occupancy ?? {})) {
         if (!['hall', 'yard', 'store', 'garden', 'workshop'].includes(loc) || loc === here) continue;
-        const n = (ids ?? []).filter((id) => id !== me && world.agents[id] && !world.agents[id].dead).length;
+        const n = (ids ?? []).filter((id) => id !== agentId && world.agents[id] && !world.agents[id].dead).length;
         if (n) counts[loc] = n;
       }
       const pick = Object.entries(counts).sort((a, b2) => b2[1] - a[1])[0];
-      if (pick && !world.survival?.districtTravel?.[me]) {
+      if (pick && !world.survival?.districtTravel?.[agentId]) {
         out.push({ id: `move_to:${pick[0]}`, kind: 'move_to', to: pick[0], label: '去人多的地方', cost: 0.06, impulse: 0.24, serves: { social: 1 } });
       }
     }
   }
   // V7.1 求偶：双方愿意但不同屋 ⇒ 走到对方所在地（由 move_to 的正常移动/行程机制执行）。
   {
-    const court = world.survival?.households?.courtship?.[me];
+    const court = world.gameRules ? world.survival?.households?.courtship?.[agentId] : null;
     const to = court ? world.loc[court] : null;
-    if (to && to !== here && !world.survival?.districtTravel?.[me]) {
+    if (to && to !== here && !world.survival?.districtTravel?.[agentId]) {
       out.push({ id: `move_to:${to}`, kind: 'move_to', to, label: `去找${world.agents[court]?.name ?? '对方'}`, cost: 0.06, impulse: 0.3, serves: { social: 1 } });
     }
   }
   // V7.1：生存模式也给居民一条"自己去公仓吃"的路（饿 + 有粮 + 今天还没吃过）。
-  if (world.survival && here === 'store') {
-    const self = world.agents[me];
+  if (world.gameRules && world.survival && here === 'store') {
+    const self = world.agents[agentId];
     const day = Math.floor(world.t / (world.dayTicks ?? 24));
     if ((world.survival.store ?? 0) >= 1 && self?.mealDay !== day && (self?.drives?.v?.energy ?? 1) < 0.45) {
       out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
@@ -540,7 +540,7 @@ function actuateInner(world, agentId, action, actionLoc) {
         // V7.1：居民可以自己去公仓吃（饿 + 有粮 + 每日一次），每次消费一份真实库存。
         const s = world.survival;
         const day = Math.floor(world.t / (world.dayTicks ?? 24));
-        const self = world.agents[me];
+        const self = world.agents[agentId];
         if (world.loc[me] !== 'store') return { action, ok: false, code: 'NOT_PRESENT', observation: '要去公仓才能取粮' };
         if ((s.store ?? 0) < 1) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
         if (self?.mealDay === day) return { action, ok: false, code: 'ALREADY_ATE', observation: '今天已经吃过一份了' };
