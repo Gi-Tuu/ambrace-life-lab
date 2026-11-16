@@ -116,7 +116,8 @@ const RELAY_TOKEN = process.env.BRAIN_RELAY_TOKEN ?? '';
 const ENGINE_KEY = String(KEYS[0] ?? '');
 const brainRelay = createRelay({
   maxPending: Number(process.env.BRAIN_RELAY_PENDING ?? 8) || 8,
-  ttlMs: Number(process.env.BRAIN_RELAY_TTL_MS ?? 4500) || 4500 // 必须小于 MODEL_TIMEOUT_MS，否则引擎先放弃、答案回来也没人要
+  ttlMs: Number(process.env.BRAIN_RELAY_TTL_MS ?? 4500) || 4500 // 名义上要小于 MODEL_TIMEOUT_MS，但游戏态默认 MODEL_TIMEOUT_MS=4000 < 4500：引擎先走、agent 跑完再交回来只会被记 late。
+  // 实测（2026-11-17，60 条同题、并发 2）27B 审议 P95 8798ms ⇒ 38% 注定落不了地；把车道挪到 :9027 才是解法，不是把这个数往上抬（抬了就要付世界变慢的代价）。
 });
 
 const relayAuthorized = (req) => constantTimeEqual(relayPresented(req), RELAY_TOKEN);
@@ -428,7 +429,9 @@ server.on('error', (e) => {
 process.on('unhandledRejection', (e) => { console.error('[serve] unhandledRejection:', e?.message ?? e); });
 process.on('uncaughtException', (e) => { console.error('[serve] uncaughtException:', e?.message ?? e); });
 
-host.setBackend({ providers: PROVIDERS, keys: KEYS, model: MODEL, models: MODELS, brain: process.env.BRAIN ?? 'local' });
+const DELIBERATION_MODEL = (process.env.DELIBERATION_MODEL ?? '').trim();
+host.setBackend({ providers: PROVIDERS, keys: KEYS, model: MODEL, models: MODELS, deliberationModel: DELIBERATION_MODEL, brain: process.env.BRAIN ?? 'local' });
+if (DELIBERATION_MODEL) console.error(`[serve] 审议车道指到 ${DELIBERATION_MODEL}（只在只花电的节点路上生效；节点 agent 需要 UPSTREAM_MAP 里有这个名字）`);
 // PRESENCE_MS 的单位是**毫秒**（host.mjs 默认 180000）。内部部署记录曾写"设 45~60 秒"，
 // 实际配成 PRESENCE_MS=60 ⇒ 在场窗口只有 60 毫秒 ⇒ 页面每 900ms 轮询、tick 每 6000ms，
 // observerActive 几乎恒假 ⇒ 真模型实际上从未被调用过。不擅自改语义（可能真有人要 60ms），

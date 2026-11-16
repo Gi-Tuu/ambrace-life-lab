@@ -65,7 +65,7 @@ const PER_TICK_CAP = Number(process.env.MAX_CALLS_PER_TICK ?? (GAME_MODE === 'ga
 const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS ?? (GAME_MODE === 'game' ? 4000 : 20000));
 const MODEL_TICK_BUDGET_MS = Number(process.env.MODEL_TICK_BUDGET_MS ?? (GAME_MODE === 'game' ? 3000 : 0));
 
-const CFG = { providers: [], keys: [], model: '', models: [], seed: Number(process.env.SEED ?? 7), brain: 'local' };
+const CFG = { providers: [], keys: [], model: '', models: [], deliberationModel: '', seed: Number(process.env.SEED ?? 7), brain: 'local' };
 // 调用预算闸门：线上审议路径必须与离线脚本同源受控，否则"MAX_CALLS"只是文档里的装饰（真实风险：无上限烧第三方余额）
 // 语义是**每日**额度：魔粒按天回血（签到 250），预算跟着按天归零，否则 60 次烧完整段剩余时间都是替身
 const BUDGET = Number(process.env.MAX_CALLS ?? 120);
@@ -188,11 +188,13 @@ const S = { comparison: null, compareView: null, compareSaveError: null, compare
   // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
-export function configure({ providers = [], keys = [], model = '', models = [], seed, brain } = {}) {
+export function configure({ providers = [], keys = [], model = '', models = [], deliberationModel, seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
   if (keys.length) CFG.keys = keys.map(s => String(s ?? '').trim());
   if (model) CFG.model = model;
   if (models.length) CFG.models = models.map((s) => String(s ?? '').trim());
+  // 审议车道单独指引擎：只在只花电的节点路上生效。显式传空串就是要关掉，所以判 undefined 而不是判真假。
+  if (deliberationModel !== undefined) CFG.deliberationModel = String(deliberationModel ?? '').trim();
   if (seed) CFG.seed = seed;
   if (brain) CFG.brain = brain;
 }
@@ -493,13 +495,16 @@ async function modelBrain(args) {
   let refusal = null;
   for (let i = 0; i < CFG.providers.length; i++) {
     // 空 model 会让上游 400、calls 恒 0（真实踩过：MODEL_NAME 改名成 MODEL_NAMES 后审议层静默失效）——显式记账而不是让它哑着
-    const mdl = CFG.models[i] || CFG.model;
-    if (!mdl) { note('NO_MODEL'); continue; }
+    const mdlBase = CFG.models[i] || CFG.model;
+    if (!mdlBase) { note('NO_MODEL'); continue; }
     const key = providerKey(i);
     if (!key) { note('NO_KEY'); continue; }
     const lane = laneOf(CFG.providers[i]);
     if (!lane.go) { refusal = lane.why; continue; } // 这条路不该走（无人时的付费路／熔断／该本账用完）：换下一条，世界照跑
     const free = lane.kind === 'node';
+    // DM-3′：审议问的是"选哪个 id"，与另一台引擎同题实测一致率不降、尾部短一截；
+    // 只在节点路上改名，付费路上这个名字上游不认识，换了就是白烧一次 400。
+    const mdl = free && CFG.deliberationModel ? CFG.deliberationModel : mdlBase;
     const ac = new AbortController();
     const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
     if (waitMs <= 0) return null;
