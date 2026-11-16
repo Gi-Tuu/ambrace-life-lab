@@ -188,3 +188,10 @@ test('F13 回看面板：只读 converse、全部 textContent、替身有徽章�
   assert.match(APP, /served === 'standin' \? '本地替身'/, '替身句子必须有中文徽章');
   assert.match(APP, /loadConverse\(\)/, '开始页没有加载对话');
 });
+
+test('F15 玩家动作链失败必须有可见反馈：全局 rejection 兜底存在且只提示"没送达"类错误（SAV-06）', () => {
+  assert.match(APP, /unhandledrejection/, '缺少全局 rejection 兜底');
+  assert.match(APP, /操作没有送达，请重试/, '缺少可见提示文案');
+  assert.match(APP, /\^HTTP \|Failed to fetch\|NetworkError\|Load failed/, '提示范围过宽（会把规则拒绝也当网络错误）');
+  assert.match(APP, /lastActErrorAt < 3000/, '缺少节流，轮询失败会刷屏');
+});

@@ -42,6 +42,19 @@ function setCampKey(key) {
   try { if (key) localStorage.setItem('ambrace.camp.v1', key); } catch { /* 隐私模式：内存里仍有 */ }
   try { if (!key) { localStorage.removeItem('ambrace.camp.v1'); localStorage.removeItem('ambrace.campName.v1'); } } catch { /* 同上 */ }
 }
+// SAV-06：玩家动作链（背包/快捷键/合作/技能）历史上没有 catch，服务端非 2xx 时页面零反馈。
+// 这里统一兜底：只对"请求没送达"类错误提示，3 秒节流，避免轮询失败刷屏。
+let lastActErrorAt = 0;
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = String(event.reason?.message ?? event.reason ?? '');
+  if (!/^HTTP |Failed to fetch|NetworkError|Load failed/i.test(msg)) return;
+  event.preventDefault?.();
+  const now = Date.now();
+  if (now - lastActErrorAt < 3000) return;
+  lastActErrorAt = now;
+  toast('操作没有送达，请重试。');
+});
+
 async function api(path, body) {
   const result = await postJson(path, body);
   const notice = persistNotices(result, path);
