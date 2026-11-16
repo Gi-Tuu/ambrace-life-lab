@@ -1,4 +1,4 @@
-import { ANIMAL_ITEMS, BERRY_PATCHES } from '../web/camp-interaction.mjs';
+import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../web/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
 
 const GROUPS = { fruit: 'orchards', egg: 'chickens', milk: 'cows', wool: 'sheep' };
@@ -51,8 +51,19 @@ export function restoreSources(w) {
 export function sourceView(w) {
   const s = w.survival;
   if (!s.farmLife) return undefined;
+  // §3：坐标是服务端的权威值，同时给离线 harness 用（客户端不再自己推 from/to）。
+  const layout = w.layout;
+  const garden = campSite('garden', layout);
+  const bed = campBeds(garden, w.mapSeed ?? 0, w.layoutVersion ?? 0)[0];
+  const pen = campPen(campSite('yard', layout));
+  const animalAt = (slot) => pen ? {
+    x: pen.x + pen.gate + 0.6 + (slot % 3) * 0.25,
+    z: pen.z + pen.d - 0.8 - Math.floor(slot / 3) * 0.25,
+  } : null;
   return Object.fromEntries(Object.keys(GROUPS).map(item => [item, sources(w, item).map(row => ({
     ...row, afraid:(s.frightenedAnimals?.[row.id]??0)>w.t, ready: s.standing[item][row.id] ?? 0,
+    ...(item === 'fruit' && bed ? { x: bed.x + 1 + row.slot % 6 * 2.95, z: bed.z + 9.5 + Math.floor(row.slot / 6) * 3 } : {}),
+    ...(item !== 'fruit' && animalAt(row.slot) ? animalAt(row.slot) : {}),
   }))]));
 }
 

@@ -50,7 +50,7 @@ function bootServerOnce(env = {}) {
     const timer = setTimeout(() => { child.kill(); finish(reject, new Error(`服务器 15s 内没起来：${out}`)); }, 15000);
     const onData = (d) => {
       out += d.toString();
-      if (out.includes('就绪')) finish(resolve, { child, dir, port, base: `http://127.0.0.1:${port}` });
+      if (out.includes('就绪')) finish(resolve, { child, dir, port, out, base: `http://127.0.0.1:${port}` });
     };
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
@@ -276,4 +276,43 @@ test('已授权的正常对话请求遇到未配置供应商时返还预留额�
   } finally {
     await stopServer(child);
   }
+});
+
+test('SEC-03b 建档限速必须按营地名分桶，不是按 IP（反代下 IP 恒等 ⇒ 会变成整站总闸）【变红法：把桶键改回 req.socket.remoteAddress】', async () => {
+  const { child, base } = await bootServer({ CTL_TOKEN: '', OPEN_LIMIT: '2', OPEN_LIMIT_GLOBAL: '50' });
+  try {
+    const codes = [];
+    for (let i = 0; i < 3; i += 1) codes.push((await post(base, '/saves/open', { name: '阿禾' })).status);
+    assert.deepEqual(codes, [200, 200, 429], `同一个名字应撞上限：${codes}`);
+    const other = await post(base, '/saves/open', { name: '林三' });
+    assert.equal(other.status, 200, '换了名字就该放行——来源地址与上面完全相同，按 IP 分桶做不到这件事');
+    // 前后空白会被正典归一化吃掉 ⇒ 同一个名字、同一个桶
+    const same = await post(base, '/saves/open', { name: ' 阿禾 ' });
+    assert.equal(same.status, 429, '归一化后同名必须共用一个桶');
+    // 非法名字（分隔符/..）全部落到同一个桶：刷随机名字蹭不到新额度，也撑不爆桶表
+    const junk = [];
+    for (const nm of ['a/b', 'c\\d', '..', 'e'.repeat(40)]) junk.push((await post(base, '/saves/open', { name: nm })).status);
+    assert.ok(junk.filter((c) => c === 429).length >= 2, `非法名字应共用一个桶并很快撞上限：${junk}`);
+  } finally { await stopServer(child); }
+});
+
+test('SEC-03c 全局桶兜住"刷名字造营地"：不同名字也要被总量挡住【变红法：把全局桶判定删掉】', async () => {
+  const { child, base } = await bootServer({ CTL_TOKEN: '', OPEN_LIMIT: '9', OPEN_LIMIT_GLOBAL: '3' });
+  try {
+    const codes = [];
+    for (let i = 0; i < 5; i += 1) codes.push((await post(base, '/saves/open', { name: `刷档${i}` })).status);
+    assert.deepEqual(codes.slice(0, 3), [200, 200, 200], `前 3 次应在全局额度内：${codes}`);
+    assert.ok(codes.slice(3).every((c) => c === 429), `第 4 次起必须被全局桶挡住：${codes}`);
+  } finally { await stopServer(child); }
+});
+
+test('SEC-02b 配了 CTL_TOKEN 就只认令牌：浏览器访客必被拒，且 boot 要警告出来【变红法：把 boot 警告删掉或让同源证据重新放行】', async () => {
+  const { child, base, out } = await bootServer({ CTL_TOKEN: 'top-secret', OPEN_LIMIT: '50' });
+  try {
+    const r = await post(base, '/saves/open', { name: '令牌下访客' });
+    assert.ok(r.status === 401 || r.status === 403, `无令牌的浏览器式请求必须被拒，实测 ${r.status}`);
+    const withToken = await post(base, '/saves/open', { name: '持令牌脚本' }, { authorization: 'Bearer top-secret' });
+    assert.equal(withToken.status, 200, '带正确令牌的脚本仍要能建档');
+    assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把"设了令牌会锁死访客"这条警告打出来');
+  } finally { await stopServer(child); }
 });
