@@ -1,120 +1,87 @@
 #!/usr/bin/env node
-// 阶段 B：角色互换实验装置（V7 §5）。
-// 同一份种子、同样的身体/资源/位置，把同一意图分别交给玩家路径与居民路径，
-// 记录 合法性 / 成功 / 失败原因 / 产出 / 材料 / 时间 / 存续 / 关系 / 事件，并给出差异。
-// 只读世界、不联网、不写 data/；输出 JSON + Markdown 表。
-import { createSurvPlay, survAct, survView, tickSurvPlay } from '../life/survplay.mjs';
+// 阶段 B：角色互换对拍（V7 §5）。
+// 同一 seed、同一地点/资源/工具，同一意图分别走 玩家路径（survAct）与 居民路径（agent.execute），
+// 逐项记录 合法性/成功/失败码/产出/材料/存续，并给出差异结论。只读世界、不联网、不写 data/。
+import { createSurvPlay, survAct } from '../life/survplay.mjs';
+import { validate } from '../life/rules.mjs';
 
 const GAME = { independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true };
-
 const seed = Number(process.argv[2] ?? 7);
-const out = [];
+const RESIDENT = 'a1';
 
-function summary(sp, agentId = 'p1') {
-  const w = sp.world;
-  const a = w.agents[agentId];
+const woodDistrict = (w) => Object.keys(w.districts).find((k) => w.districts[k].resource === 'wood') ?? Object.keys(w.districts)[0];
+const snap = (w, id) => ({
+  wood: w.pinv?.[id]?.wood ?? 0,
+  stone: w.pinv?.[id]?.stone ?? 0,
+  store: w.survival.store,
+  viab: Number((w.agents[id]?.viab?.v ?? 0).toFixed(4)),
+  plots: Object.keys(w.survival.plots ?? {}).length,
+  buildings: Object.keys(w.survival.buildings ?? {}).length,
+});
+
+function runScenario({ name, setup, player, resident }) {
+  const spA = createSurvPlay(seed, GAME); setup(spA.world, 'p1');
+  const bA = snap(spA.world, 'p1');
+  const rA = player(spA) ?? null;
+  const aA = snap(spA.world, 'p1');
+
+  const spB = createSurvPlay(seed, GAME); setup(spB.world, RESIDENT);
+  const bB = snap(spB.world, RESIDENT);
+  const rB = resident(spB.world, RESIDENT) ?? null;
+  const aB = snap(spB.world, RESIDENT);
+
+  const delta = (a, b) => ({ wood: a.wood - b.wood, stone: a.stone - b.stone, store: a.store - b.store, viab: Number((a.viab - b.viab).toFixed(4)), plots: a.plots - b.plots, buildings: a.buildings - b.buildings });
+  const dA = delta(aA, bA), dB = delta(aB, bB);
+  const codeOf = (r) => {
+    if (!r) return 'NO_ATTEMPT';
+    if (r.ok) return 'OK';
+    return r.code ?? r.error ?? (r.gate ? (r.gate.ok ? 'OK' : r.gate.code) : 'FAIL');
+  };
+  const sameCode = codeOf(rA) === codeOf(rB);
+  const sameDelta = JSON.stringify(dA) === JSON.stringify(dB);
   return {
-    t: w.t,
-    loc: w.loc[agentId],
-    viab: Number(a?.viab?.v?.toFixed(4)),
-    energy: Number(a?.drives?.v?.energy?.toFixed(4)),
-    inv: { ...(w.pinv?.[agentId] ?? {}) },
-    store: w.survival?.store,
-    buildings: Object.keys(w.survival?.buildings ?? {}).length,
-    timeLeft: w.survival?.p1BudgetLeft,
+    scenario: name,
+    player: { result: rA, code: codeOf(rA), delta: dA },
+    resident: { result: rB, code: codeOf(rB), delta: dB },
+    verdict: sameCode && sameDelta ? 'SAME' : 'DIFF',
   };
 }
 
-const diff = (before, after, keys) => {
-  const d = {};
-  for (const k of keys) d[k] = { before: before[k], after: after[k] };
-  return d;
-};
+const scenarios = [
+  {
+    name: '采集木料',
+    setup: (w, id) => { const loc = woodDistrict(w); w.loc[id] = loc; w.pinv[id] = { ...(w.pinv[id] ?? {}), axe: 1 }; if (id === 'p1') { const src = w.districts[loc].source; w.survival.playerPos = { x: src[0], z: src[1], t: w.t }; } },
+    player: (sp) => { const w = sp.world; const src = w.districts[w.loc.p1].source; survAct(sp, { kind: 'player_sync', from: src }); return survAct(sp, { kind: 'gather', target: w.loc.p1, tool: 'axe', from: src }); },
+    resident: (w, id) => w.agents[id].execute(w, { kind: 'gather', target: w.loc[id], tool: 'axe' }, 'deliberation', w.t, true),
+  },
+  {
+    name: '开垦农田',
+    setup: (w, id) => { w.loc[id] = 'garden'; w.pinv[id] = { ...(w.pinv[id] ?? {}), wood: 2 }; },
+    player: (sp) => survAct(sp, { kind: 'till', plot: 4 }),
+    resident: (w, id) => ({ gate: validate(w, id, { kind: 'till' }), executed: Boolean(w.agents[id].execute(w, { kind: 'till' }, 'deliberation', w.t, true)) }),
+  },
+  {
+    name: '奠基（庇护所）',
+    setup: (w, id) => { w.loc[id] = 'yard'; w.pinv[id] = { ...(w.pinv[id] ?? {}), wood: 8, stone: 4 }; },
+    player: (sp) => survAct(sp, { kind: 'plan', type: 'shelter' }),
+    resident: (w, id) => w.agents[id].execute(w, { kind: 'plan', type: 'shelter' }, 'deliberation', w.t, true),
+  },
+  {
+    name: '进食（玩家营地 vs 居民日界）',
+    setup: (w, id) => {
+      if (id === 'p1') { w.loc.p1 = 'home'; w.campPlayerRoom = 'home'; w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1 }; w.survival.campContainers = { 'home:meal': { crop: 4 } }; w.agents.p1.viab.v = 0.3; }
+      else { w.agents[id].viab.v = 0.3; }
+    },
+    player: (sp) => survAct(sp, { kind: 'camp_eat', type: 'crop' }),
+    resident: () => ({ ok: false, code: 'NO_EAT_ENTRY', note: '生存模式居民没有 eat 动作；只有日界 regen' }),
+  },
+  {
+    name: '失败动作（无工地 build）',
+    setup: (w, id) => { w.loc[id] = 'hall'; },
+    player: (sp) => survAct(sp, { kind: 'build' }),
+    resident: (w, id) => w.agents[id].execute(w, { kind: 'build' }, 'deliberation', w.t, true),
+  },
+];
 
-// ── 1) 移动 + 重劳动同刻
-{
-  const sp = createSurvPlay(seed, GAME);
-  const w = sp.world;
-  w.loc.p1 = 'yard';
-  const b = summary(sp);
-  const move = survAct(sp, { kind: 'move', room: 'hall' });
-  const gather = survAct(sp, { kind: 'gather', resource: 'wood' });
-  out.push({
-    scenario: '移动+劳动同刻',
-    player: { move: move.ok, gather: gather.ok, spentTime: (b.timeLeft ?? 100) - summary(sp).timeLeft, after: summary(sp) },
-    resident: { note: '居民每刻只 execute 一次；跨区移动期间不能劳动（survplay.mjs 311-320）', sameTickActions: 1 },
-    verdict: move.ok && gather.ok ? 'DIFF：玩家可在同刻移动并完成重劳动' : 'SAME',
-  });
-}
-
-// ── 2) 失败动作的时间/存续成本
-{
-  const sp = createSurvPlay(seed, GAME);
-  const w = sp.world;
-  w.loc.p1 = 'hall';
-  const b = summary(sp);
-  const r = survAct(sp, { kind: 'build' }); // 无工地 ⇒ NO_SITE
-  const a = summary(sp);
-  out.push({
-    scenario: '失败动作成本（build 无工地）',
-    player: { ok: r.ok, code: r.code ?? r.error, viabBefore: b.viab, viabAfter: a.viab, timeBefore: b.timeLeft, timeAfter: a.timeLeft },
-    resident: { note: 'agent.execute 在 validate 通过后无条件 viab.spend(actionCost)，与 result.ok 无关（agent.mjs 475-480）' },
-    verdict: (b.timeLeft === a.timeLeft) ? 'DIFF：玩家失败全退时间且不扣存续；居民失败照扣' : 'SAME',
-  });
-}
-
-// ── 3) 进食：玩家 camp_eat 每刻次数 vs 居民日界回补
-{
-  const sp = createSurvPlay(seed, GAME);
-  const w = sp.world;
-  w.loc.p1 = 'home';
-  w.campPlayerRoom = 'home';
-  w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1 };
-  w.survival.campContainers = { 'home:meal': { crop: 6 } };
-  w.agents.p1.viab.v = 0.3;
-  const b = summary(sp);
-  let okCount = 0;
-  for (let i = 0; i < 4; i += 1) if (survAct(sp, { kind: 'camp_eat', type: 'crop' }).ok) okCount += 1;
-  const a = summary(sp);
-  out.push({
-    scenario: '进食恢复（同刻多次）',
-    player: { meals: okCount, viabBefore: b.viab, viabAfter: a.viab, timeLeftAfter: a.timeLeft, containerLeft: w.survival.campContainers['home:meal'] },
-    resident: { note: '生存模式无 eat 入口；日界 regen(0.5)×mealYield 0.18 = 0.09/日（worldstate.mjs 167-174）' },
-    verdict: okCount > 1 ? 'DIFF：玩家同刻多次进食、居民每日 1 次' : 'SAME',
-  });
-}
-
-// ── 4) 伤害动作成本（camp_resident）
-{
-  const sp = createSurvPlay(seed, { ...GAME });
-  const w = sp.world;
-  const target = Object.keys(w.agents).find((id) => id !== 'p1' && !w.agents[id].isPlayer);
-  w.loc.p1 = w.loc[target];
-  w.pinv.p1 = { ...(w.pinv.p1 ?? {}), axe: 1 };
-  const b = summary(sp);
-  const r = survAct(sp, { kind: 'camp_resident', target, tool: 'axe' });
-  const a = summary(sp);
-  out.push({
-    scenario: '伤害居民的成本',
-    player: { ok: r.ok, code: r.code ?? r.error, timeBefore: b.timeLeft, timeAfter: a.timeLeft, viabBefore: b.viab, viabAfter: a.viab, targetViab: w.agents[target]?.viab?.v },
-    resident: { note: '居民无对等动作；PLAYER_TIME 无 camp_resident ⇒ 时间成本 0（survplay.mjs 452-464）' },
-    verdict: a.timeLeft === b.timeLeft ? 'DIFF：玩家伤害零时间零存续' : 'SAME',
-  });
-}
-
-// ── 5) 采集产出（应对等）
-{
-  const run = (asPlayer) => {
-    const sp = createSurvPlay(seed, GAME);
-    const w = sp.world;
-    const id = asPlayer ? 'p1' : Object.keys(w.agents).find((x) => x !== 'p1' && !w.agents[x].isPlayer);
-    const site = Object.entries(w.survival.sites ?? {}).find(([, s]) => s.resource === 'wood')?.[0] ?? 'yard';
-    w.loc[id] = site;
-    const before = { wood: w.pinv[id]?.wood ?? 0, storeWood: w.survival.wood ?? 0 };
-    const r = asPlayer ? survAct(sp, { kind: 'gather', resource: 'wood' }) : null;
-    return { id, before, after: { wood: w.pinv[id]?.wood ?? 0 }, ok: r?.ok };
-  };
-  out.push({ scenario: '采集产出（玩家侧；居民侧需推进 tick，见阶段 B 补测）', player: run(true), verdict: '待补' });
-}
-
-console.log(JSON.stringify({ seed, scenarios: out }, null, 2));
+const scenariosOut = scenarios.map(runScenario);
+console.log(JSON.stringify({ seed, scenarios: scenariosOut }, null, 2));
