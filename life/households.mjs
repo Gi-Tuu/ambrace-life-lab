@@ -73,6 +73,9 @@ export const maritalStatus = (h, id) => h.spouses[id] ? 'married' : h.widowed?.[
 const canMarry = (w, a, b) => {
   const h = w.survival.households;
   if (!adult(w, a) || !adult(w, b) || a === b || h.spouses[a] || h.spouses[b]) return false;
+  // SOC-02：婚配性别规则对双方一致。居民自动婚配本来就是异性（见 settleMarriages），
+  // 玩家过去可以凭同一套 canMarry 绕过该限制——这里把规则收回规则层。
+  if (w.sex?.[a] && w.sex?.[b] && w.sex[a] === w.sex[b]) return false;
   if (marriageMode(w) === 'widowOnly' && (h.widowed?.[a] || h.widowed?.[b])) return false;
   const parents = h.residents[a]?.parents ?? [];
   const otherParents = h.residents[b]?.parents ?? [];
