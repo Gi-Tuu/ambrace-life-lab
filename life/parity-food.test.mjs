@@ -52,3 +52,25 @@ test('FOOD-02 不重复计粮：日界配给与主动进食各扣各的库存', 
   assert.equal(w.survival.store, storeAfterRation, '主动进食不应再扣公仓');
   assert.equal(w.survival.campContainers['home:meal'].crop, 0, '主动进食只扣餐台');
 });
+
+test('FOOD-03 居民能自己去公仓吃：一份 = 0.09 存续，每日一次，无粮不能吃', () => {
+  const sp = createSurvPlay(7, GAME);
+  const w = sp.world;
+  w.loc.a1 = 'store';
+  w.agents.a1.drives.v.energy = 0.2;
+  w.agents.a1.viab.v = 0.5;
+  w.survival.store = 10;
+  const v0 = w.agents.a1.viab.v;
+  w.agents.a1.execute(w, { kind: 'eat' }, 'deliberation', w.t, true);
+  assert.equal(w.survival.store, 9, '必须真实扣一份公仓');
+  assert.ok((w.agents.a1.viab.v - v0) > 0.08 && (w.agents.a1.viab.v - v0) < 0.10, '一份饭应 ≈ +0.09 存续（扣动作成本后），实测 ' + (w.agents.a1.viab.v - v0).toFixed(4));
+  // 当日第二次：不得再吃
+  w.agents.a1.execute(w, { kind: 'eat' }, 'deliberation', w.t, true);
+  assert.equal(w.survival.store, 9, '每日只能一次');
+  // 无粮：不能吃
+  const sp2 = createSurvPlay(7, GAME);
+  const w2 = sp2.world;
+  w2.loc.a2 = 'store'; w2.agents.a2.drives.v.energy = 0.2; w2.survival.store = 0;
+  w2.agents.a2.execute(w2, { kind: 'eat' }, 'deliberation', w2.t, true);
+  assert.equal(w2.agents.a2.mealDay, undefined, '无粮不得进食');
+});

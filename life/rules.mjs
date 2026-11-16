@@ -23,7 +23,12 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
     return fail('TOO_YOUNG', '未成年居民不能执行劳动');
   }
   if (kind === 'house_work' && !houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
-  if (kind === 'eat' && world.pantry <= 0) return fail('DEPLETED', '存粮缸已空，世界没有可消耗的食物');
+  if (kind === 'eat') {
+    if (world.survival) {
+      if ((world.survival.store ?? 0) < 1) return fail('DEPLETED', '公仓空了');
+      if (here !== 'store') return fail('NOT_PRESENT', '生存模式要去公仓才能取粮');
+    } else if (world.pantry <= 0) return fail('DEPLETED', '存粮缸已空，世界没有可消耗的食物');
+  }
   if (kind === 'eat' && here !== 'home' && here !== 'store') return fail('NOT_PRESENT', `取粮得在居所或公仓，你在 ${here}`);
   if (kind === 'talk' && !others.length) return fail('NO_TARGET', `${here} 没有可对话的对象`);
   if (kind === 'talk' && !others.includes(intent.target)) return fail('WRONG_TARGET', `${intent.target} 不在同一处`);

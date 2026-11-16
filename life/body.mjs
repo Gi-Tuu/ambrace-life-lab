@@ -15,7 +15,7 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -258,6 +258,14 @@ export function affordancesFor(world, agentId) {
 
   out.push({ id: 'rest', kind: 'rest', label: BASE_KINDS.rest.label, cost: 0.02, impulse: 0.02, serves: { energy: 0.15, stimulation: -0.35 } });
 
+  // V7.1：生存模式也给居民一条"自己去公仓吃"的路（饿 + 有粮 + 今天还没吃过）。
+  if (world.survival && here === 'store') {
+    const self = world.agents[me];
+    const day = Math.floor(world.t / (world.dayTicks ?? 24));
+    if ((world.survival.store ?? 0) >= 1 && self?.mealDay !== day && (self?.drives?.v?.energy ?? 1) < 0.45) {
+      out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
+    }
+  }
   if ((here === 'home' || here === 'store') && !world.survival) {
     out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
   }
@@ -503,7 +511,18 @@ function actuateInner(world, agentId, action, actionLoc) {
 
   switch (action.kind) {
     case 'eat': {
-      if (world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '生存模式靠公共粮仓每日分配，不单独吃公仓' };
+      if (world.survival) {
+        // V7.1：居民可以自己去公仓吃（饿 + 有粮 + 每日一次），每次消费一份真实库存。
+        const s = world.survival;
+        const day = Math.floor(world.t / (world.dayTicks ?? 24));
+        const self = world.agents[me];
+        if (world.loc[me] !== 'store') return { action, ok: false, code: 'NOT_PRESENT', observation: '要去公仓才能取粮' };
+        if ((s.store ?? 0) < 1) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        if (self?.mealDay === day) return { action, ok: false, code: 'ALREADY_ATE', observation: '今天已经吃过一份了' };
+        if (!takeFoodKind(s)) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        if (self) self.mealDay = day;
+        return { action, ok: true, code: 'OK', observation: `从公仓吃了一份（余 ${s.store}）`, satiated: 'energy', amount: s.feedViab ?? 0.5, evt: evt({ kind: 'eat', valence: 0.2, selfCaused: true, serves: 'energy' }) };
+      }
       if (world.pantry <= 0) return { action, ok: false, code: 'EMPTY', observation: '存粮缸空了', evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) };
       world.pantry -= 1;
       for (const x of Object.keys(world.agents)) if (x !== me && world.stash[x] <= 0) world.pending.push({ for: x, evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) });
