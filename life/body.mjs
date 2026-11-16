@@ -567,6 +567,8 @@ function actuateInner(world, agentId, action, actionLoc) {
     case 'look_out': {
       startMove(world, agentId, 'watch');
       if (world.survival?.districtTravel?.[agentId]) return { action, ok:true, code:'OK', observation:'出发前往瞭望台' };
+      // AUD-08：只有真的看一眼（look_out）才获得当日预报；讨论不再凭空读 forecast。
+      if (world.survival && world.gameRules) world.survival.forecastKnown = Math.floor(world.t / (world.dayTicks ?? 24));
       return { action, ok: true, code: 'OK', observation: '外面还是那片灰', satiated: 'social', amount: 0.12, novel: true, evt: evt({ kind: 'observed', valence: 0.35, serves: 'stimulation', novel: true }) };
     }
     case 'work': {

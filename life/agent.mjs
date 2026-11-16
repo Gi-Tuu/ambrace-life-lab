@@ -84,7 +84,17 @@ export class Organism {
       if (evt.violates) this.bumpRel(evt.about, -10 * this.traits.goals.order, 0);
     }
     if (evt.kind === 'shortfall' || evt.kind === 'witnessed') {
-      for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      if (this.world?.gameRules) {
+        // AUD-07（游戏态）：只惩罚当事人与同屋目击者——不在场的人不该因为别人的缺口掉信任。
+        const here = this.world?.loc?.[this.id];
+        const suspects = new Set();
+        if (evt.about) suspects.add(evt.about);
+        for (const id of this.world?.occupancy?.[here] ?? []) if (id !== this.id) suspects.add(id);
+        for (const id of suspects) if (id !== this.id && this.world?.agents?.[id]) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      } else {
+        // 研究/历史路径保持原样（逐位基线）：全体 agents。
+        for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      }
     }
     return a;
   }

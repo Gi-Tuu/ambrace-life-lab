@@ -92,7 +92,8 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   p1.isPlayer = true;
   world.agents.p1 = p1;
   spawn(world, 'p1', 'hall');
-  for (const id of Object.keys(world.stash ?? {})) world.stash[id] = 0; // §15.5 M3：生存无私藏（恒 on 语义 fix）
+  // §15.5 M3：生存无私藏；游戏态 AUD-07 把 expect 一起归零，研究/历史路径保留原值以维持基线。
+  for (const id of Object.keys(world.stash ?? {})) { world.stash[id] = 0; if (world.gameRules) world.expect[id] = 0; }
   world.pinv = {}; // §15 P2-C 背包：每角色个人木石
   for (const id of Object.keys(world.agents)) world.pinv[id] = { wood: 0, stone: 0 };
   const s=world.survival;

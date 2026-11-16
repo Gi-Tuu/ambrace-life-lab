@@ -18,10 +18,12 @@ const score = (a,other,severity) => {
   return severity*.4 + g.social*.22 + r.trust*.003 + r.familiarity*.1 +
     Math.max(0,a.drives.setpoint.social-v.social)*.25 - (1-v.energy)*.2;
 };
-function topicOf(w) {
+export function topicOf(w) {
   const s=w.survival;
   if (s.store < Math.max(1,livingResidents(w).length-1)) return ['famine',.9];
-  const forecast=forecastDisasters(w);
+  // AUD-08：预报是观测结果，不是免费事实。当天没 look_out 过就不该知道明日风暴。
+  const observed = !w.gameRules || s.forecastKnown === Math.floor(w.t / DAY_TICKS);
+  const forecast = observed ? forecastDisasters(w) : null;
   if (forecast?.stormTomorrow) return ['storm',.87];
   if (forecast?.coldsnapTomorrow) return ['cold',.83];
   if (s.coop?.task || s.sites.length) return ['build',.8];
