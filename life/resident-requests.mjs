@@ -3,6 +3,7 @@
 // 请求是对世界真实资源的索取：食物来自玩家所在私宅餐台，木料来自玩家背包。
 
 export const REQUEST_KINDS = Object.freeze(['food', 'material']);
+export const REQUEST_TTL = 48; // 两个游戏日；过期请求不能再兑现
 
 const FOOD_KINDS = ['crop', 'berry', 'fruit', 'egg', 'milk', 'meat'];
 
@@ -55,6 +56,16 @@ export function respondRequest(world, body) {
   const req = list[at];
   const npc = world.agents[req.from];
   if (!npc || npc.dead) { list.splice(at, 1); return { ok: false, code: 'REQUESTER_GONE' }; }
+  // V7.1 P1：过期请求不可兑现（请求是当时的缺口，不是长期欠条）。
+  if ((world.t ?? 0) - (req.t ?? 0) > REQUEST_TTL) {
+    list.splice(at, 1);
+    s.requestsResolved = (s.requestsResolved ?? 0) + 1;
+    return { ok: false, code: 'REQUEST_EXPIRED', request: req };
+  }
+  // V7.1 P1：交付要当面。远距离只能算"传话"，不能把资源直接送到对方手里。
+  if (world.loc.p1 !== world.loc[req.from]) {
+    return { ok: false, code: 'TOO_FAR', request: req };
+  }
   const accept = body?.accept === true;
   if (accept) {
     if (req.kind === 'food') {
