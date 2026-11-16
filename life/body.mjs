@@ -15,7 +15,7 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
-import { BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
@@ -258,6 +258,39 @@ export function affordancesFor(world, agentId) {
 
   out.push({ id: 'rest', kind: 'rest', label: BASE_KINDS.rest.label, cost: 0.02, impulse: 0.02, serves: { energy: 0.15, stimulation: -0.35 } });
 
+  // V7.1：想社交又一个人待着 ⇒ 去人多的公共地点（真实移动，增加相遇机会）。
+  {
+    const self = world.agents[me];
+    const socialNeed = (self?.drives?.setpoint?.social ?? 0.5) - (self?.drives?.v?.social ?? 0.5);
+    if (!present.length && socialNeed > 0.08) {
+      const counts = {};
+      for (const [loc, ids] of Object.entries(world.occupancy ?? {})) {
+        if (!['hall', 'yard', 'store', 'garden', 'workshop'].includes(loc) || loc === here) continue;
+        const n = (ids ?? []).filter((id) => id !== me && world.agents[id] && !world.agents[id].dead).length;
+        if (n) counts[loc] = n;
+      }
+      const pick = Object.entries(counts).sort((a, b2) => b2[1] - a[1])[0];
+      if (pick && !world.survival?.districtTravel?.[me]) {
+        out.push({ id: `move_to:${pick[0]}`, kind: 'move_to', to: pick[0], label: '去人多的地方', cost: 0.06, impulse: 0.24, serves: { social: 1 } });
+      }
+    }
+  }
+  // V7.1 求偶：双方愿意但不同屋 ⇒ 走到对方所在地（由 move_to 的正常移动/行程机制执行）。
+  {
+    const court = world.survival?.households?.courtship?.[me];
+    const to = court ? world.loc[court] : null;
+    if (to && to !== here && !world.survival?.districtTravel?.[me]) {
+      out.push({ id: `move_to:${to}`, kind: 'move_to', to, label: `去找${world.agents[court]?.name ?? '对方'}`, cost: 0.06, impulse: 0.3, serves: { social: 1 } });
+    }
+  }
+  // V7.1：生存模式也给居民一条"自己去公仓吃"的路（饿 + 有粮 + 今天还没吃过）。
+  if (world.survival && here === 'store') {
+    const self = world.agents[me];
+    const day = Math.floor(world.t / (world.dayTicks ?? 24));
+    if ((world.survival.store ?? 0) >= 1 && self?.mealDay !== day && (self?.drives?.v?.energy ?? 1) < 0.45) {
+      out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
+    }
+  }
   if ((here === 'home' || here === 'store') && !world.survival) {
     out.push({ id: 'eat', kind: 'eat', label: BASE_KINDS.eat.label, cost: 0.05, impulse: 0.1, serves: { energy: 1, stimulation: -0.15 } });
   }
@@ -503,7 +536,18 @@ function actuateInner(world, agentId, action, actionLoc) {
 
   switch (action.kind) {
     case 'eat': {
-      if (world.survival) return { action, ok: false, code: 'NOT_AVAILABLE', observation: '生存模式靠公共粮仓每日分配，不单独吃公仓' };
+      if (world.survival) {
+        // V7.1：居民可以自己去公仓吃（饿 + 有粮 + 每日一次），每次消费一份真实库存。
+        const s = world.survival;
+        const day = Math.floor(world.t / (world.dayTicks ?? 24));
+        const self = world.agents[me];
+        if (world.loc[me] !== 'store') return { action, ok: false, code: 'NOT_PRESENT', observation: '要去公仓才能取粮' };
+        if ((s.store ?? 0) < 1) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        if (self?.mealDay === day) return { action, ok: false, code: 'ALREADY_ATE', observation: '今天已经吃过一份了' };
+        if (!takeFoodKind(s)) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        if (self) self.mealDay = day;
+        return { action, ok: true, code: 'OK', observation: `从公仓吃了一份（余 ${s.store}）`, satiated: 'energy', amount: s.feedViab ?? 0.5, evt: evt({ kind: 'eat', valence: 0.2, selfCaused: true, serves: 'energy' }) };
+      }
       if (world.pantry <= 0) return { action, ok: false, code: 'EMPTY', observation: '存粮缸空了', evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) };
       world.pantry -= 1;
       for (const x of Object.keys(world.agents)) if (x !== me && world.stash[x] <= 0) world.pending.push({ for: x, evt: evt({ kind: 'shortfall', valence: -0.6, selfCaused: false, serves: 'energy' }) });
@@ -567,6 +611,8 @@ function actuateInner(world, agentId, action, actionLoc) {
     case 'look_out': {
       startMove(world, agentId, 'watch');
       if (world.survival?.districtTravel?.[agentId]) return { action, ok:true, code:'OK', observation:'出发前往瞭望台' };
+      // AUD-08：只有真的看一眼（look_out）才获得当日预报；讨论不再凭空读 forecast。
+      if (world.survival && world.gameRules) world.survival.forecastKnown = Math.floor(world.t / (world.dayTicks ?? 24));
       return { action, ok: true, code: 'OK', observation: '外面还是那片灰', satiated: 'social', amount: 0.12, novel: true, evt: evt({ kind: 'observed', valence: 0.35, serves: 'stimulation', novel: true }) };
     }
     case 'work': {

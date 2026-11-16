@@ -15,6 +15,8 @@ import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
+import { maybeResidentRequest, respondRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
+import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -47,7 +49,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -59,6 +61,9 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   world.independentWorld = independentWorld;
   world.gameRules = gameRules;
   if (gameRules) initFoodStore(world.survival);
+  // RES-01（所有者 2026-11-16 拍板：玩家 100 日内饿死是事故，不是设计）：游戏态玩家同样吃日界配给。
+  // 研究态不传这个开关 ⇒ `world.survival.playerRation` 恒假 ⇒ worldstate 的 `!a.isPlayer || …` 那条分支照旧，五份基线逐位不变。
+  if (playerRation) world.survival.playerRation = true;
   world.autonomousGoals = autonomousGoals;
   if (wildFood) world.survival.wildBerries = { ...WILD_BERRIES };
   world.mapSeed = mapSeed;
@@ -92,7 +97,8 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   p1.isPlayer = true;
   world.agents.p1 = p1;
   spawn(world, 'p1', 'hall');
-  for (const id of Object.keys(world.stash ?? {})) world.stash[id] = 0; // §15.5 M3：生存无私藏（恒 on 语义 fix）
+  // §15.5 M3：生存无私藏；游戏态 AUD-07 把 expect 一起归零，研究/历史路径保留原值以维持基线。
+  for (const id of Object.keys(world.stash ?? {})) { world.stash[id] = 0; if (world.gameRules) world.expect[id] = 0; }
   world.pinv = {}; // §15 P2-C 背包：每角色个人木石
   for (const id of Object.keys(world.agents)) world.pinv[id] = { wood: 0, stone: 0 };
   const s=world.survival;
@@ -104,6 +110,8 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     restoreHouseholds(world);
     // P1-1：创始居民也入生命周期（开局即 fresh 成年，随世界时间衰老）；玩家不衰老（死亡走存续）。
     for (const [id] of ROSTER) s.households.residents[id] ??= { born: -ADULT_DAYS * DAY_TICKS, parents: [], stage: 'adult' };
+    // V7.1：正式游戏里玩家也是会老的人。成年起点与居民相同（12 天），研究态不写。
+    if (world.independentWorld) s.households.residents.p1 ??= { born: -ADULT_DAYS * DAY_TICKS, parents: [], stage: 'adult' };
   }
 
   // 采集/蓄养：独立产出账，缺省 tolerant（旧档没有这些键也能补上）。
@@ -226,7 +234,8 @@ function stepLifecycle(w, log) {
   if (!s.households) return;
   const day = dayOf(w.t);
   for (const a of Object.values(w.agents)) {
-    if (a.isPlayer || !isAlive(a)) continue;
+    if (!isAlive(a)) continue;
+    if (a.isPlayer && !w.independentWorld) continue; // 研究态保持原行为
     const rec = s.households.residents[a.id];
     if (!rec) continue;
     const stage = residentStage(w, a.id);
@@ -353,6 +362,12 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
+  try { maybeResidentRequest(w); maybePeerRequest(w); stepPeerRequests(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理）。
+  if (w.independentWorld && w.survival.households && w.agents.p1 && isAlive(w.agents.p1) && residentStage(w, 'p1') === 'elder') {
+    w.agents.p1.viab.v = Math.max(0, w.agents.p1.viab.v - ELDER_DECAY);
+  }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
@@ -454,7 +469,7 @@ export const PLAYER_TIME = Object.freeze({
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
   animal_feed:25, animal_slaughter:75, road_lay:75, road_remove:50, home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
-  camp_store: 25, camp_take: 25, camp_eat: 25, coop_request: 25,
+  camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25, till: 75,
 });
 const PLAYER_BUDGET = 100;
 function playerTimeCost(w, kind) {
@@ -515,6 +530,8 @@ export function survAct(sp, body) {
   const r = survActInner(sp, body);
   if (w.independentWorld && r.ok) settleSurvival(sp);
   if (!r.ok && cost > 0) { budgetLeft(w); w.survival.p1BudgetLeft += cost; } // 失败退还，避免误点吃掉整刻
+  noteAction(sp.world, 'player', body?.kind, !!r?.ok);
+  if (r && !r.ok) noteRefusal(sp.world, 'player', body?.kind);
   return r;
 }
 
@@ -523,6 +540,7 @@ function survActInner(sp, body) {
   const kind = String(body?.kind ?? '');
   if (w.independentWorld && !isAlive(w.agents.p1)) return { ok: false, code: 'PLAYER_DEAD', error: 'GAME_OVER' };
   if (!w.independentWorld && (w.survival.failed || w.survival.ended)) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
+  if (kind === 'respond_request') return respondRequest(w, body); // SOC-01：免费的社交回应
   if (kind === 'camp_exit') {
     w.campPlayerRoom=null;
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
@@ -674,6 +692,9 @@ function survActInner(sp, body) {
     return result;
   }
   if (kind.startsWith('camp_')) {
+    // AUD-01/06：营地动作必须显式登记成本；未知或零成本（除明确免费的退出/睡觉）一律拒绝。
+    const free = kind === 'camp_exit' || kind === 'camp_sleep';
+    if (!free && !(kind in PLAYER_TIME)) return { ok: false, code: 'UNKNOWN_CAMP_ACTION' };
     const result=campAction(w,body);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     if (sp.log.length>40) sp.log.shift();
@@ -717,7 +738,7 @@ function survActInner(sp, body) {
   }
   // 同权：玩家与 AI 的这些动作都走 validate → actuate，规则层是唯一"能不能"的裁决者。
   // （旧实现只调 actuate，地点/材料门槛只作用于 AI，构造 POST 可在任意地点收种存取。）
-  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand', 'till'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
   let actionLoc=w.loc.p1;
   if ((kind==='plan' || kind==='gather') && (Object.hasOwn(body,'from') || w.districts?.[actionLoc])) {
     const district=w.districts?.[body.target];
@@ -731,13 +752,13 @@ function survActInner(sp, body) {
     actionLoc=body.target;
   }
   if ((kind==='build' || kind==='repair') && w.districts?.[actionLoc]) return {ok:false,code:'OUT_OF_REACH'};
-  const gate = validate(w, 'p1', { kind, type: body?.type }, actionLoc);
+  const gate = validate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc); // RES-03：till 需要 plot，不能只带 kind/type
   if (!gate.ok) {
     sp.log.push({ t: w.t, kind, ok: false, code: gate.code });
     if (sp.log.length > 40) sp.log.shift();
     return gate;
   }
-  const r = actuate(w, 'p1', { kind, type: body?.type }, actionLoc);
+  const r = actuate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc);
   if (r.ok) w.agents.p1?.viab?.spend(SURV_COST[kind]); // P0-2：与 AI execute 同表结算，成功才扣，不重复扣
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
@@ -783,7 +804,7 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
-    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
+    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, requests: (s.requests ?? []).slice(0, 4), requestsGranted: s.requestsGranted ?? 0, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
@@ -794,7 +815,7 @@ export function survView(sp) {
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
       ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
@@ -830,12 +851,14 @@ export function dumpSurv(sp) {
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
+  const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.regionalWork, settlementLife: !!w.settlementLife, farmLife: !!w.farmLife, ecosystem: !!w.ecosystem, playerRation: !!w.survival.playerRation };
+  return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
-    { ...options, regionalWork:options?.regionalWork ?? raw?.regionalWork, eventRulesVersion: raw ? raw.eventRulesVersion ?? LEGACY_EVENT_RULES : options?.eventRulesVersion,
+    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), regionalWork: (options?.adoptArchivedRules && raw?.rules?.regionalWork) ?? options?.regionalWork ?? raw?.regionalWork, eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
       mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
@@ -852,6 +875,19 @@ export function loadSurv(raw,seed=7,options) {
       }
     }
     restoreHouseholds(w, raw.housing);
+    // V7.1：旧档没有玩家年龄记录 ⇒ 按成年起点回填，绝不把玩家立即判老或触发死亡。
+    if (w.independentWorld && w.survival.households) {
+      const rec = w.survival.households.residents.p1;
+      if (!rec || !Number.isFinite(rec.born)) {
+        w.survival.households.residents.p1 = { ...(rec ?? {}), born: w.t - ADULT_DAYS * DAY_TICKS, parents: rec?.parents ?? [], stage: 'adult' };
+      }
+    }
+    // AUD-02：旧档 households 里缺 born 的创始居民不能判成 elder（NaN ⇒ 年龄 null、永久绝育、永不自然死亡）。
+    // 按 createSurvPlay 的成人起点回填，属兼容逻辑，不改默认常量、不写回磁盘。
+    for (const [id, rec] of Object.entries(w.survival.households?.residents ?? {})) {
+      if (!rec || Number.isFinite(rec.born)) continue;
+      w.survival.households.residents[id] = { ...rec, born: w.t - ADULT_DAYS * DAY_TICKS, parents: rec.parents ?? [], legacy: true };
+    }
     w.weather = weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.pending = structuredClone(raw.pending ?? []);

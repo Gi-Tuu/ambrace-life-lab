@@ -18,6 +18,17 @@ export const NAME_MAX = 16;
 export const SAVE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 天无活跃即删
 export const RESIDENT_LIMIT = 6; // 常驻上限（含主营地）
 
+// 存档形状：dumpSurv 的最小可辨认字段。缺任何一项都不能交给 loadSurv——
+// 它会把空对象当成"新世界"（t=0、4 个 minds），随后 persist 用这份空世界覆盖唯一副本（SAV-01）。
+export function validCampArchive(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  if (!Number.isSafeInteger(raw.t) || raw.t < 0) return false;
+  // dumpSurv 没有 agents 键（只有 minds）：以 minds.p1 作为'这是一个生存世界'的最小证据。
+  if (!raw.minds || typeof raw.minds !== 'object' || !raw.minds.p1) return false;
+  if (!raw.survival || typeof raw.survival !== 'object' || Array.isArray(raw.survival)) return false;
+  return true;
+}
+
 const CONTROL = /[\u0000-\u001f\u007f\u200b-\u200f\u2028\u2029\ufeff]/;
 const SEPARATORS = /[\\/]/;
 
@@ -160,8 +171,11 @@ export class CampInstances {
       return { ok: true, code: 'OK', key: id.key, sp: hit.sp, created: false };
     }
     let archive = null;
-    if (existsSync(campFile(this.dataDir,id.key))) archive=loadCamp(this.dataDir,id.key);
-    else if (readIndex(this.dataDir).entries.some(e=>e.key===id.key)) {
+    if (existsSync(campFile(this.dataDir,id.key))) {
+      try { archive = loadCamp(this.dataDir,id.key); }
+      catch { return { ok: false, code: 'CAMP_CORRUPT' }; } // 解压/JSON 坏：拒绝，不落盘
+      if (!validCampArchive(archive)) return { ok: false, code: 'CAMP_CORRUPT' }; // 语义坏档（如 {}）
+    } else if (readIndex(this.dataDir).entries.some(e=>e.key===id.key)) {
       return {ok:false,code:'CAMP_UNAVAILABLE'};
     }
     let sp;
@@ -188,7 +202,10 @@ export class CampInstances {
     if (hit) { hit.lastUsed = now; hit.lastSeenAt = now; return hit.sp; }
     const known = readIndex(this.dataDir).entries.find((e) => e.key === k);
     if (!known) return null;
-    const sp = loadSurv(loadCamp(this.dataDir, k), this.options.seed ?? 7, this.options);
+    let raw;
+    try { raw = loadCamp(this.dataDir, k); } catch { return null; }
+    if (!validCampArchive(raw)) return null; // 坏档不装进 live，避免被 save() 写回
+    const sp = loadSurv(raw, this.options.seed ?? 7, this.options);
     sp.world.campKey = k;
     if (!this.admit({sp, key:k, name:known.name, lastUsed:now, lastSeenAt:known.lastSeenAt ?? 0}, false)) {
       throw new Error('当前无法换入营地');

@@ -73,6 +73,9 @@ export const maritalStatus = (h, id) => h.spouses[id] ? 'married' : h.widowed?.[
 const canMarry = (w, a, b) => {
   const h = w.survival.households;
   if (!adult(w, a) || !adult(w, b) || a === b || h.spouses[a] || h.spouses[b]) return false;
+  // SOC-02：婚配性别规则对双方一致。居民自动婚配本来就是异性（见 settleMarriages），
+  // 玩家过去可以凭同一套 canMarry 绕过该限制——这里把规则收回规则层。
+  if (w.sex?.[a] && w.sex?.[b] && w.sex[a] === w.sex[b]) return false;
   if (marriageMode(w) === 'widowOnly' && (h.widowed?.[a] || h.widowed?.[b])) return false;
   const parents = h.residents[a]?.parents ?? [];
   const otherParents = h.residents[b]?.parents ?? [];
@@ -107,6 +110,9 @@ export function settleMarriages(w) {
   const h = w.survival.households;
   if (!h || marriageMode(w) === 'legacy') return;
   h.offers = h.offers.filter(({ from, to }) => !w.agents[from]?.dead && !w.agents[to]?.dead);
+  for (const [from, to] of Object.entries(h.courtship ?? {})) {
+    if (!w.agents[from] || w.agents[from].dead || !w.agents[to] || w.agents[to].dead || h.spouses[from]) delete h.courtship[from];
+  }
   for (const [a, b] of Object.entries(h.spouses)) {
     if (h.spouses[a] !== b || h.spouses[b] !== a) continue;
     const deaths = [a, b].filter(id => w.agents[id]?.dead);
@@ -243,6 +249,13 @@ export function stepRelationships(w, log) {
         w.sex[a] !== w.sex[b] && (w.agents[b].isPlayer || willing(w, b, a)));
       if (b && houseAction(w, a, { kind: 'family_marry', target: b }).ok && h.spouses[a]) {
         log.push({ t: w.t, kind: 'marriage', ok: true, code: `${w.agents[a].name}与${w.agents[b].name}结婚` });
+        if (h.courtship) delete h.courtship[a];
+      } else {
+        // V7.1：双方都愿意但不同屋 —— 不是"继续等"，而是去找对方（由身体层的 move_to 执行，不瞬移）。
+        const target = adults.find(b => b !== a && canMarry(w, a, b) && w.sex[a] !== w.sex[b] &&
+          willing(w, a, b) && (w.agents[b].isPlayer || willing(w, b, a)));
+        if (target && !sameRoom(w, a, target)) (h.courtship ??= {})[a] = target;
+        else if (h.courtship) delete h.courtship[a];
       }
     } else if (w.t - (h.marriedAt?.[a] ?? 0) >= DAY_TICKS) {
       const b = h.spouses[a];

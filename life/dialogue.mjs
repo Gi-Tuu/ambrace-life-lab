@@ -140,7 +140,19 @@ export async function sayTo(sp, body, ask = null, now = Date.now()) {
       ? `"${npc.name}":（停了一下）……${speechLine(npc, { world: w, kind: 'talk', actionId: 'talk:p1', t: w.t })}`
       : speechLine(npc, { world: w, kind: 'talk', actionId: 'talk:p1', t: w.t });
   }
-  npc.relations?.meet?.('p1', w.t, { delta: { trust: intent.trust, familiarity: 0.03 } });
+  // SOC-04：对话信任有上限。居民之间受每日发言上限约束，玩家不能靠逐句复读把信任刷满。
+  const TALK_TRUST_SESSION = 4, TALK_TRUST_DAY = 6;
+  const day = Math.floor(w.t / (w.dayTicks ?? 24));
+  const cap = s.talkTrust ??= { day, by: {} };
+  if (cap.day !== day) { cap.day = day; cap.by = {}; }
+  const spent = cap.by[target] ?? 0;
+  const gain = Math.max(0, intent.trust ?? 0);
+  const applied = intent.trust < 0
+    ? intent.trust
+    : Math.min(gain, Math.max(0, TALK_TRUST_SESSION - (talk.trustGained ?? 0)), Math.max(0, TALK_TRUST_DAY - spent));
+  talk.trustGained = (talk.trustGained ?? 0) + Math.max(0, applied);
+  cap.by[target] = spent + Math.max(0, applied);
+  npc.relations?.meet?.('p1', w.t, { delta: { trust: applied, familiarity: 0.03 } });
   talk.history.push({ who: target, text: line });
   return { ok: true, name: npc.name, line, engage: talk.engage, intent: intent.kind };
 }

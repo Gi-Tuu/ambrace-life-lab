@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -163,4 +164,23 @@ test('SA4b 常驻但 3 天无人：必须被扫掉（落盘不得刷新活跃时
   mgr.persist(); // 旧实现会在这里把 lastSeenAt 刷成 now ⇒ 永远删不掉
   const r = sweepSaves(dataDir, { now: Date.now() });
   assert.ok(r.removed.includes(key), '常驻不等于活跃：三天无人必须删，实测 removed=' + JSON.stringify(r.removed));
+});
+
+test('SAV-01 坏档拒绝载入：不得当成第 0 刻新营地，更不得覆盖唯一副本', () => {
+  const dataDir = dir();
+  const mgr = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 3 });
+  const a = mgr.open('阿禾');
+  assert.ok(a.ok);
+  const f = join(savesDir(dataDir), a.key + '.json.gz');
+  // 语义坏档：gzip 能解、JSON 能解析，但形状不完整（loadSurv 会当成新世界）
+  writeFileSync(f, gzipSync(Buffer.from('{}')));
+  const size = statSync(f).size, mtime = statSync(f).mtimeMs;
+  mgr.close();
+  const again = new CampInstances({ dataDir, options: OPTIONS, seedSurvival: SEED, limit: 3 });
+  const b = again.open('阿禾');
+  assert.equal(b.ok, false, '坏档必须拒绝载入');
+  assert.equal(b.code, 'CAMP_CORRUPT');
+  assert.equal(again.live.size, 0, '坏档不得进入常驻（避免被 save 写回）');
+  assert.equal(statSync(f).size, size, '唯一副本不得被改写');
+  assert.equal(statSync(f).mtimeMs, mtime, '唯一副本 mtime 不得变');
 });

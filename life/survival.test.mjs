@@ -39,11 +39,17 @@ test('S2 收获真实入仓并重置地块（主动行动改善处境）', () =>
   assert.equal(w.survival.plots[0].growth, 0);
 });
 
-test('S3 生存模式无无限粮：eat 被拒、公仓不自动补', () => {
+test('S3 生存模式无无限粮：吃公仓要去 store、要真有粮、且不自动补', () => {
   const w = survWorld();
   w.loc.a1 = 'home';
+  assert.equal(actuate(w, 'a1', { kind: 'eat' }).code, 'NOT_PRESENT', '不在公仓不能取粮');
+  w.loc.a1 = 'store';
+  w.survival.store = 0;
+  assert.equal(actuate(w, 'a1', { kind: 'eat' }).code, 'EMPTY', '公仓空时不能吃');
+  w.survival.store = 2;
   const r = actuate(w, 'a1', { kind: 'eat' });
-  assert.equal(r.ok, false, 'survival 不应允许单独吃公仓');
+  assert.equal(r.ok, true, '有粮可以吃一份');
+  assert.equal(w.survival.store, 1, '必须真实扣一份');
   const pantryBefore = w.pantry;
   for (let t = 1; t <= 120; t++) { w.t = t; scanSecrets(w); }
   assert.equal(w.pantry, pantryBefore, 'survival 公仓不应自动补粮');

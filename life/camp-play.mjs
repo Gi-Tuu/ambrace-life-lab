@@ -161,10 +161,19 @@ export function campAction(world,body) {
     if (amount(bag,'tray')<1) return fail('NEED_TRAY'); // 托盘是餐具：没有它只能看着饭
     const meal=s.campContainers?.[`${site}:meal`];
     if (!FOOD.has(item) || !amount(meal,item)) return fail('EMPTY');
+    // AUD-05：同一游戏日最多两餐——居民只有日界一次配给，玩家不能连点把存续拉满。
+    const pl0 = world.agents.p1;
+    // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
+    if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
+    const day = Math.floor(world.t / (world.dayTicks ?? 24));
+    if (s.mealsDay !== day) { s.mealsDay = day; s.mealsToday = 0; }
+    if ((s.mealsToday ?? 0) >= 2) return fail('MEAL_LIMIT');
     setCount(meal,item,amount(meal,item)-1);
+    s.mealsToday = (s.mealsToday ?? 0) + 1;
     const pl=world.agents.p1;
-    pl?.viab?.regen?.(1);              // 一份饭按 mealYield 折算；低于 mealMin 不算进食
-    pl?.drives?.reward?.('energy',0.35);
+    // V7.1：一份饭与居民日界配给同一折算（feedViab/feedReward），不是玩家专属的 1.0/0.35。
+    pl?.viab?.regen?.(s.feedViab ?? 0.5);
+    pl?.drives?.reward?.('energy', s.feedReward ?? 0.5);
     s.mealsEaten=(s.mealsEaten??0)+1;
     return ok();
   }

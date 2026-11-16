@@ -9,6 +9,7 @@ import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed, SURV_COST } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
+import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
@@ -84,7 +85,17 @@ export class Organism {
       if (evt.violates) this.bumpRel(evt.about, -10 * this.traits.goals.order, 0);
     }
     if (evt.kind === 'shortfall' || evt.kind === 'witnessed') {
-      for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      if (this.world?.gameRules) {
+        // AUD-07（游戏态）：只惩罚当事人与同屋目击者——不在场的人不该因为别人的缺口掉信任。
+        const here = this.world?.loc?.[this.id];
+        const suspects = new Set();
+        if (evt.about) suspects.add(evt.about);
+        for (const id of this.world?.occupancy?.[here] ?? []) if (id !== this.id) suspects.add(id);
+        for (const id of suspects) if (id !== this.id && this.world?.agents?.[id]) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      } else {
+        // 研究/历史路径保持原样（逐位基线）：全体 agents。
+        for (const id of Object.keys(this.world?.agents ?? {})) if (id !== this.id) this.bumpRel(id, -4 * this.traits.goals.order, 0);
+      }
     }
     return a;
   }
@@ -463,6 +474,7 @@ export class Organism {
     // 原因（习惯那条漏了三个月）。这里再验一次：非法就拒绝，并且**不消耗任何资源**。
     const gate = validate(world, this.id, action);
     if (!gate.ok) {
+      noteRefusal(world, 'resident', action?.kind);
       this.counters.refused = (this.counters.refused ?? 0) + 1;
       this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: gate.code, why: gate.why, m: this.bank.snapshot(), cond: this.condition });
       return null;
@@ -473,6 +485,7 @@ export class Organism {
       spent[this.id] = world.t;
     }
     const result = actuate(world, this.id, action);
+    noteAction(world, 'resident', action?.kind, !!result?.ok, layer);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
     const actionCost = (world.unifiedCooperation ? SURV_COST[action.kind] : undefined) ?? action.cost ?? 0.06;
     const eBeforeSpend = this.viab.v + this.viab.reserve;

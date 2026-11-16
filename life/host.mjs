@@ -312,7 +312,7 @@ function modelConfigured() {
 function campManager() {
   if (!S.camps) {
     if (!S.seedSurv) S.seedSurv = structuredClone(dumpSurv(S.mainSurv ?? S.surv));
-    S.camps = new CampInstances({ dataDir: S.dir, options: survivalOptions(), limit: 6, seedSurvival: S.seedSurv });
+    S.camps = new CampInstances({ dataDir: S.dir, options: { ...survivalOptions(), adoptArchivedRules: true, upgradeLegacyEventRules: true }, limit: 6, seedSurvival: S.seedSurv });
   }
   return S.camps;
 }
@@ -405,7 +405,7 @@ async function backToMainCampInQueue() {
 }
 
 export function survivalOptions() {
-  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, gameRules: process.env.GAME_RULES === '1', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, gameRules: process.env.GAME_RULES === '1', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 // D3：Qwen3.8 才带关闭思考参数；端点不认（400/422）时同一次尝试内去掉参数重试。
@@ -1166,7 +1166,8 @@ export const host = {
     // 第四轮 N4：观看打点只认请求自己带的 camp，绝不兜到 S.campKey（那是"最后一次被打开"的全局读数）。
     // 否则任何主营地访客的常规轮询都会把别人的分名字营地标成"有人看"，绕过三态调度。
     const requested = campKey ?? 'MAIN';
-    const key = validCampKey(requested) ? requested : null;
+    if (requested !== 'MAIN' && !validCampKey(requested)) return; // SAV-05：失效 key 不打点，避免污染观看判据
+    const key = requested;
     if (!mode || mode === 'survival') {
       const watched = key ?? 'MAIN';
       if (watched === 'MAIN') S.viewers.survival = S.lastVisitor;
@@ -1309,7 +1310,10 @@ export const host = {
   snapshot(mode, campKey) {
     // 第三轮 N1：请求里的 camp 不可用（格式错/未登记/过期）⇒ 按主营地服务。
     // 绝不把请求原语回显到 camp.name，也绝不让 survival 变 null（那是一个空世界）。
-    const key = campKey && campKey !== 'MAIN' && validCampKey(campKey) ? campKey : null;
+    const requested = campKey && campKey !== 'MAIN' ? String(campKey) : null;
+    const key = requested && validCampKey(requested) ? requested : null;
+    // SAV-05：格式合法但已失效（被 TTL 扫掉/文件丢失）的 key —— 明确告诉前端"该营地已回收"。
+    const invalidCamp = requested && !key && /^[0-9a-f]{32}$/.test(requested) ? requested : null;
     const survSel = campSurv(key);
     const sum = (p, k) => Object.values(p.agents).reduce((s, a) => s + (a.counters[k] ?? 0), 0);
     const view = (p, layered) => ({
@@ -1348,7 +1352,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : null, saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : (invalidCamp ? { key: invalidCamp, invalid: true } : null), saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
     return queueWorldWrite(async () => {
@@ -1356,7 +1360,9 @@ export const host = {
       // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
       if (body?.mode === 'survival' || body?.mode === 'compare') {
         if (body.mode === 'compare') return actInComparison(body);
-        const survSel = campSurv(campKey);
+        const reqCamp = campKey && campKey !== 'MAIN' ? String(campKey) : null;
+        if (reqCamp && !validCampKey(reqCamp)) return { ok: false, code: 'CAMP_INVALID' };
+        const survSel = campSurv(reqCamp);
         if (!survSel) return {ok:false,error:'NO_SURV'};
         if (body.kind === 'camp_sleep') return sleepSurvival(survSel);
         const result = await actInSurvival(survSel, body, modelTalk);
@@ -1450,6 +1456,7 @@ export const host = {
         // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
         configure({ brain: body.brain });
         if (S.surv) setSurvivalDeliberator(S.surv, survivalOptions().deliberator);
+    if (S.camps) for (const entry of S.camps.live.values()) setSurvivalDeliberator(entry.sp, survivalOptions().deliberator);
         for (const key of ['A', 'B']) {
           for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
           S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });

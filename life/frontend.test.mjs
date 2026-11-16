@@ -188,3 +188,23 @@ test('F13 回看面板：只读 converse、全部 textContent、替身有徽章�
   assert.match(APP, /served === 'standin' \? '本地替身'/, '替身句子必须有中文徽章');
   assert.match(APP, /loadConverse\(\)/, '开始页没有加载对话');
 });
+
+test('F18 玩家动作链失败必须有可见反馈：全局 rejection 兜底存在且只提示"没送达"类错误（SAV-06）', () => {
+  assert.match(APP, /unhandledrejection/, '缺少全局 rejection 兜底');
+  assert.match(APP, /操作没有送达，请重试/, '缺少可见提示文案');
+  assert.match(APP, /\^HTTP \|Failed to fetch\|NetworkError\|Load failed/, '提示范围过宽（会把规则拒绝也当网络错误）');
+  assert.match(APP, /lastActErrorAt < 3000/, '缺少节流，轮询失败会刷屏');
+});
+
+test('F19 失效营地有明确提示：view.camp.invalid ⇒ 提示"已回收"，且只提示一次（SAV-05）', () => {
+  assert.match(APP, /camp\?\.invalid/, '前端没有处理 invalid 营地');
+  assert.match(APP, /该营地已回收/, '缺少明确提示文案');
+  assert.match(APP, /campInvalidNotified/, '缺少去重标记（会每次轮询刷屏）');
+});
+
+test('F17 居民请求有可见入口：请求条渲染 + 接受/拒绝动作 + 文本走 textContent（SOC-01）', () => {
+  assert.match(HTML, /id="requestBar"/, '缺少请求条容器');
+  assert.match(APP, /respond_request/, '前端没有回应的动作');
+  assert.match(APP, /function renderRequests/, '缺少渲染函数');
+  assert.match(APP, /text\.textContent = req\.text/, '请求文本必须走 textContent');
+});
