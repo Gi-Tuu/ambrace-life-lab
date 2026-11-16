@@ -15,6 +15,8 @@ const PRICE = { wood: 3, stone: 2 };
 const WORK_DAYS = 3;
 const MARRIAGE_TRUST = 52;
 const COHABIT_TRUST = 46;
+// C 的剂量：婚配要熟度 0.45，天天同处一地约 23 天够（≈ 3–4 周熟络），比 talk 动作慢但不会被"在途"清零。
+export const CO_PRESENCE_FAM = 0.02;
 const ok = () => ({ ok: true, code: 'OK' });
 const fail = code => ({ ok: false, code });
 
@@ -248,6 +250,27 @@ export function stepRelationships(w, log) {
   const day = dayOf(w.t);
   h.offers = h.offers.filter(o => day - dayOf(o.t) <= 2);
   const adults = Object.keys(w.agents).filter(id => adult(w, id));
+  // C（所有者 2026-11-16 拍板"先做 C"）：同处一地的成年人当天点过头就积累一点熟度——**哪怕其中一方正在赶路**。
+  // 这不倒改 LIFE-02：这里不生成 talk 动作、不交付、不改行程，"在途不开口/不交付"照旧成立。
+  // 为什么必须有：实测玩家占公仓一口会让在途比例翻倍，把 talk 候选可得率从 90% 压到 48%，
+  // 于是熟度永远跨不过 `familiarity ≥ 0.45` 这条婚配门槛 ⇒ 100 日 0 婚 0 出生、全员老死。
+  // 社会可达性不该由"谁正好在路上"决定。只在 gameRules 下生效，研究态逐位不变。
+  if (w.gameRules && day !== (h.coFamiliarDay ?? -1)) {
+    h.coFamiliarDay = day;
+    const bySite = {};
+    for (const id of adults) {
+      const a = w.agents[id];
+      if (!a || a.isPlayer || a.dead) continue;
+      (bySite[w.loc[id]] ??= []).push(a);
+    }
+    for (const group of Object.values(bySite)) {
+      for (let i = 0; i < group.length; i += 1) for (let j = i + 1; j < group.length; j += 1) {
+        group[i].bumpRel(group[j].id, 0, CO_PRESENCE_FAM);
+        group[j].bumpRel(group[i].id, 0, CO_PRESENCE_FAM);
+      }
+    }
+  }
+
   for (const a of adults) {
     if (w.agents[a].isPlayer) continue;
     if (!h.spouses[a]) {
