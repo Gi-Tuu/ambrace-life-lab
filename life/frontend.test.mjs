@@ -9,6 +9,7 @@ import { readFileSync, existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HTML = readFileSync('web/index.html', 'utf8');
@@ -196,8 +197,9 @@ test('F18 玩家动作链失败必须有可见反馈：全局 rejection 兜底�
   assert.match(APP, /lastActErrorAt < 3000/, '缺少节流，轮询失败会刷屏');
 });
 
-test('F19 失效营地有明确提示：view.camp.invalid ⇒ 提示"已回收"，且只提示一次（SAV-05）', () => {
-  assert.match(APP, /camp\?\.invalid/, '前端没有处理 invalid 营地');
+test('F19 失效营地读取服务端信封的路由状态，并提示返回主营地（SAV-05）', () => {
+  assert.match(APP, /j\.camp\?\.invalid/, '前端必须读外层营地状态，生存快照中的 camp 表示设施数据');
+  assert.match(APP, /回主营地/, '缺少恢复入口指引');
   assert.match(APP, /该营地已回收/, '缺少明确提示文案');
   assert.match(APP, /campInvalidNotified/, '缺少去重标记（会每次轮询刷屏）');
 });
@@ -207,4 +209,111 @@ test('F17 居民请求有可见入口：请求条渲染 + 接受/拒绝动作 + 
   assert.match(APP, /respond_request/, '前端没有回应的动作');
   assert.match(APP, /function renderRequests/, '缺少渲染函数');
   assert.match(APP, /text\.textContent = req\.text/, '请求文本必须走 textContent');
+  assert.match(CSS, /\.request-row button\s*\{[^}]*pointer-events:auto/, 'HUD 按钮需要显式接收点击');
+  assert.match(CSS, /#requestBar\[hidden\]\s*\{[^}]*display:none/, '空请求条应遵循 hidden');
+});
+function appSection(start,end) {
+  return APP.slice(APP.indexOf(start),APP.indexOf(end,APP.indexOf(start)));
+}
+
+test('F20 同模式并发刷新按最新完成序号应用，旧响应与失败均不覆盖状态', async () => {
+  const pending=[], applied=[], notices=[], elements={log:{},startStatus:{},playNoticeText:{},playNotice:{}};
+  const ctx={
+    ui:{menu:true}, resettingSurvival:false, campKeyNow:null, S:{},
+    postJson:()=>new Promise((resolve,reject)=>pending.push({resolve,reject})),
+    showPersistNotice:j=>notices.push(j.survival.t), renderPlayMode:sv=>applied.push(sv.t),
+    $:id=>elements[id], esc:text=>text,
+  };
+  runInNewContext(appSection('let refreshIssued=','async function ctl('),ctx);
+  const old=ctx.refresh(), bad=ctx.refresh(), latest=ctx.refresh();
+  pending[2].resolve({survival:{t:13}});
+  await latest;
+  pending[1].reject(new Error('旧失败'));
+  pending[0].resolve({survival:{t:12}});
+  await Promise.all([old,bad]);
+  assert.deepEqual(applied,[13]);
+  assert.deepEqual(notices,[13]);
+  assert.equal(elements.log.innerHTML,undefined);
+  const next=ctx.refresh(), delayed=ctx.refresh();
+  pending[3].resolve({survival:{t:14}});
+  await next;
+  assert.deepEqual(applied,[13,14],'更新尚在途时，已完成的响应仍可推进画面');
+  ctx.discardPendingRefreshes();
+  pending[4].resolve({survival:{t:15}});
+  await delayed;
+  assert.deepEqual(applied,[13,14],'切换世界后废弃之前的响应');
+});
+
+test('F21 请求刷新保持按钮节点，回应沿当前模式和对照 revision 路由', async () => {
+  const element=()=>({
+    children:[], append(...nodes){this.children.push(...nodes);},
+    appendChild(node){this.children.push(node);}, replaceChildren(){this.children=[];},
+  });
+  const bar=element(), compareAction=element(), requests=[], messages=[];
+  const ui={compare:false};
+  const ctx={
+    ui, S:{compareRevision:12}, document:{createElement:element},
+    $:id=>id==='requestBar'?bar:compareAction, campCodes:{ACCEPTED:'已答应',NO_WOOD:'背包没有木料'},
+    SURV_CODE_ZH:{}, survFlash:null, toast:msg=>messages.push(msg), audio:{result(){}}, refresh:async()=>{},
+    api:async(path,body)=>{
+      requests.push({path,body:{...body}});
+      return body.accept ? {ok:true,code:'ACCEPTED'} : {ok:false,code:'NO_WOOD'};
+    },
+  };
+  runInNewContext(appSection('function playAct(', 'function comparisonContact(')
+    + appSection('let requestBarKey;', 'async function renderCampCurrent('),ctx);
+  const request={id:'r7:a1',kind:'material',text:'能借我木头吗？'};
+  ctx.renderRequests({requests:[request]});
+  const [,yes,no]=bar.children[0].children;
+  ctx.renderRequests({requests:[{...request}]});
+  assert.strictEqual(bar.children[0].children[1],yes);
+  const first=yes.onclick();
+  assert.equal(yes.disabled,true);
+  assert.equal(no.disabled,true);
+  await first;
+  assert.equal(yes.disabled,false);
+  ui.compare=true;
+  await no.onclick();
+  assert.deepEqual(requests,[
+    {path:'/act',body:{kind:'respond_request',id:request.id,accept:true,mode:'survival'}},
+    {path:'/act',body:{kind:'respond_request',id:request.id,accept:false,mode:'compare',revision:12}},
+  ]);
+  assert.deepEqual(messages,['已答应','背包没有木料']);
+  ctx.renderRequests(null);
+  assert.equal(bar.hidden,true);
+});
+
+test('F22 A/B 动物动作使用 B 当帧动物坐标，目标缺失时无坐标', () => {
+  const camera={animals:[{id:'chickens:ch2',x:16,z:21}],people:[{who:'a1',x:8,z:9}]};
+  const ctx={S:{viewB:{}},WALK:{'cvB:p1':{x:4,y:7}},CAMP_ANIMAL_ITEM:{chickens:'egg',sheep:'wool',cows:'milk'},$:()=>({_cam:camera})};
+  runInNewContext(appSection('function comparisonContact(', '// ── 自然世界地图'),ctx);
+  const contact=(kind,target,type)=>JSON.parse(JSON.stringify(ctx.comparisonContact({kind,target,type,from:[50,51],to:[52,53]})));
+  for (const kind of ['animal_feed','animal_slaughter']) {
+    assert.deepEqual(contact(kind,'chickens:ch2'),{from:[4.5,7.5],to:[16,21]});
+    assert.deepEqual(contact(kind,'gone'),{from:[4.5,7.5],to:null});
+  }
+  assert.deepEqual(contact('camp_collect','chickens:ch2','egg'),{from:[4.5,7.5],to:[16,21]});
+  assert.deepEqual(contact('camp_collect','plant:gone','fruit'),{from:[4.5,7.5],to:null});
+  assert.deepEqual(contact('camp_resident','a1'),{from:[4.5,7.5],to:[8,9]});
+  ctx.S.viewB=null;
+  assert.deepEqual(contact('animal_feed','chickens:ch2'),{from:null,to:null});
+});
+
+test('F23 住房面板显示四年龄阶段，两处施工邀请仅列可劳动居民', () => {
+  const ctx={esc:text=>text};
+  runInNewContext(appSection('const STAGE_ZH =', 'function updateHotbar(')
+    + appSection('function familyPanel(', '// P2 新玩家目标引导'),ctx);
+  const agents=Object.fromEntries(['infant','child','adult','elder'].map(stage=>[stage,{id:stage,stage,name:stage}]));
+  agents.deceased={id:'deceased',stage:'adult',name:'deceased',dead:true};
+  const view={
+    agents, households:{spouses:{},deeds:{},residents:{},offers:[],projects:{},adultDays:12},
+    housing:{}, loc:{p1:'yard'}, rooms:{}, sites:[{loc:'yard',type:'granary'}],
+    coop:{enabled:true,completions:[],refusals:0},
+  };
+  const family=ctx.familyPanel(view), coop=ctx.coopPanel(view);
+  for (const [stage,label] of [['infant','婴幼儿'],['child','儿童'],['adult','成年'],['elder','老年']]) {
+    assert.ok(family.includes(stage+' · '+label));
+  }
+  assert.deepEqual([...coop.matchAll(/data-coop="([^"]+)"/g)].map(m=>m[1]),['adult','elder']);
+  assert.match(APP,/Object\.values\(S\.view\.agents\?\?\{\}\)\.filter\(canInviteWorker\)/);
 });

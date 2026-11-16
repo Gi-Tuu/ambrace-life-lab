@@ -57,6 +57,7 @@ export function takeFood(s, kind = null, n = 1) {
   const order = kind ? [kind, ...FOOD_KINDS.filter((k) => k !== kind)] : [...FOOD_KINDS].sort((a, b) => (s.food[b] ?? 0) - (s.food[a] ?? 0));
   for (const k of order) {
     const t = Math.min(left, s.food[k] ?? 0);
+    if (!t) continue;
     s.food[k] -= t; left -= t;
     if (!left) break;
   }

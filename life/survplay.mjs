@@ -913,11 +913,20 @@ export function loadSurv(raw,seed=7,options) {
     if (sp.world.gameRules && sp.world.survival) {
       const s = sp.world.survival;
       // 旧档没有分档：先按载入后的 store 建账（全部记作物，不凭空猜品类）。
-      if (!s.food) initFoodStore(s);
-      // 任何载入路径都要保证 Σ分档 === store：差多少就补/扣作物，不动其它品类。
-      const sum = FOOD_KINDS.reduce((n, k) => n + (s.food[k] ?? 0), 0);
-      const diff = (s.store ?? 0) - sum;
-      if (diff !== 0) s.food.crop = Math.max(0, (s.food.crop ?? 0) + diff);
+      if (!s.food || typeof s.food !== 'object' || Array.isArray(s.food)) {
+        s.store = Number.isFinite(s.store) ? Math.max(0, s.store) : 0;
+        initFoodStore(s);
+      } else {
+        s.food = Object.fromEntries(FOOD_KINDS.map(kind => [
+          kind, Number.isFinite(s.food[kind]) ? Math.max(0, s.food[kind]) : 0,
+        ]));
+        const sum = FOOD_KINDS.reduce((total, kind) => total + s.food[kind], 0);
+        const stored = Number.isFinite(s.store) ? Math.max(0, s.store) : sum;
+        // 保留历史记录的总量，先用作物消差，作物不足时再扣其他分档。
+        s.store = sum;
+        if (stored > sum) addFood(s, 'crop', stored - sum);
+        if (stored < sum) takeFood(s, 'crop', sum - stored);
+      }
     }
     restoreDistricts(w);
     restoreFarmPlots(w);

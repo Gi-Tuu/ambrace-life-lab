@@ -183,14 +183,16 @@ test('D13 玩家同等生存：有存续、会因归零死亡，尸检后动作�
   assert.equal(survAct(sp, { kind: 'move', room: 'garden' }).ok, false);
 });
 
-test('D14 家里容器是日耗缓冲：公仓空时先吃它，不立刻记饥荒', async () => {
-  const sp = createSurvPlay(7);
-  const w = sp.world, s = w.survival;
-  s.store = 0;
-  s.campContainers = { 'home:meal': { berry: 4 } };
-  for (const a of Object.values(w.agents)) a.viab.v = 1;
-  w.t = 23;
-  await tickSurvPlay(sp);
-  assert.equal(s.starveDays, 0, '容器食物应先抵缺口');
-  assert.equal(s.campContainers['home:meal'].berry, 0, '缓冲应被吃掉');
+test('D14 家里容器是日耗缓冲：公仓空时浆果或肉均可抵掉当日饥荒', async () => {
+  for (const item of ['berry', 'meat']) {
+    const sp = createSurvPlay(7);
+    const w = sp.world, s = w.survival;
+    s.store = 0;
+    s.campContainers = { 'home:meal': { [item]: 4 } };
+    for (const a of Object.values(w.agents)) a.viab.v = 1;
+    w.t = 23;
+    await tickSurvPlay(sp);
+    assert.equal(s.starveDays, 0, item);
+    assert.equal(s.campContainers['home:meal'][item], 0, item);
+  }
 });
