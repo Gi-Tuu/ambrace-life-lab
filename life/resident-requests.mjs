@@ -17,6 +17,8 @@ export function maybeResidentRequest(world) {
   if (!world.gameRules || !s?.households) return null;
   const day = dayOf(world);
   s.requests ??= [];
+  // V7.1：过期请求自动清理（此前只有"回应时"才判过期，请求条会堆同一个人的多条）。
+  s.requests = s.requests.filter((r) => (world.t ?? 0) - (r.t ?? 0) <= REQUEST_TTL);
   if (s.requestsDay !== day) {
     s.requestsDay = day;
     s.requestsAsked = {};
@@ -27,6 +29,7 @@ export function maybeResidentRequest(world) {
     if (a.isPlayer || a.dead) continue;
     if (world.loc[a.id] !== here) continue;
     if (s.requestsAsked[a.id] === day) continue;
+    if (s.requests.some((r) => r.from === a.id)) continue; // 同一居民只保留一条未回应请求
     const hungry = (a.drives?.v?.energy ?? 1) < 0.4;
     const noWood = (world.pinv?.[a.id]?.wood ?? 0) < 1;
     if (!hungry && !noWood) continue;

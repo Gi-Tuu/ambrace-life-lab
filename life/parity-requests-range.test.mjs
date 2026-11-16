@@ -57,3 +57,19 @@ test('REQ-03 存档恢复后请求仍在，并可正常回应', () => {
   assert.equal(r.code, 'DECLINED');
   assert.equal(w2.survival.requests.length, 0);
 });
+
+test('REQ-04 未回应请求：每人只留一条，过期自动清理（请求条不堆重复）', () => {
+  const { w } = fixture();
+  // 让 a1/a2/a3 都需要木料且同屋，连续 3 天各问一次
+  for (const id of ['a2', 'a3']) if (w.agents[id]) { w.loc[id] = 'home'; w.pinv[id] = { wood: 0, stone: 0 }; w.pinv.p1.wood = 0; }
+  for (let d = 0; d < 3; d += 1) {
+    maybeResidentRequest(w);
+    w.t += 24;
+  }
+  const froms = w.survival.requests.map((r) => r.from);
+  assert.equal(new Set(froms).size, froms.length, '同一居民只应有一条未回应请求，实测 ' + JSON.stringify(froms));
+  // 再过 49 刻（> TTL）：旧请求应被自动清掉
+  w.t += 49;
+  maybeResidentRequest(w);
+  assert.ok(w.survival.requests.every((r) => w.t - r.t <= REQUEST_TTL), '过期请求必须被清理');
+});
