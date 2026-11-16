@@ -455,7 +455,7 @@ export const PLAYER_TIME = Object.freeze({
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
   animal_feed:25, animal_slaughter:75, road_lay:75, road_remove:50, home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
-  camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25,
+  camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25, till: 75,
 });
 const PLAYER_BUDGET = 100;
 function playerTimeCost(w, kind) {
@@ -721,7 +721,7 @@ function survActInner(sp, body) {
   }
   // 同权：玩家与 AI 的这些动作都走 validate → actuate，规则层是唯一"能不能"的裁决者。
   // （旧实现只调 actuate，地点/材料门槛只作用于 AI，构造 POST 可在任意地点收种存取。）
-  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
+  if (!['harvest', 'plant', 'gather', 'plan', 'build', 'repair', 'deposit', 'withdraw', 'forage', 'exchange', 'expand', 'till'].includes(kind)) return { ok: false, error: 'UNKNOWN_KIND' };
   let actionLoc=w.loc.p1;
   if ((kind==='plan' || kind==='gather') && (Object.hasOwn(body,'from') || w.districts?.[actionLoc])) {
     const district=w.districts?.[body.target];
@@ -735,13 +735,13 @@ function survActInner(sp, body) {
     actionLoc=body.target;
   }
   if ((kind==='build' || kind==='repair') && w.districts?.[actionLoc]) return {ok:false,code:'OUT_OF_REACH'};
-  const gate = validate(w, 'p1', { kind, type: body?.type }, actionLoc);
+  const gate = validate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc); // RES-03：till 需要 plot，不能只带 kind/type
   if (!gate.ok) {
     sp.log.push({ t: w.t, kind, ok: false, code: gate.code });
     if (sp.log.length > 40) sp.log.shift();
     return gate;
   }
-  const r = actuate(w, 'p1', { kind, type: body?.type }, actionLoc);
+  const r = actuate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc);
   if (r.ok) w.agents.p1?.viab?.spend(SURV_COST[kind]); // P0-2：与 AI execute 同表结算，成功才扣，不重复扣
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
@@ -834,12 +834,14 @@ export function dumpSurv(sp) {
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
-  return { t: w.t, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
+  const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.regionalWork, settlementLife: !!w.settlementLife, farmLife: !!w.farmLife, ecosystem: !!w.ecosystem };
+  return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
-    { ...options, regionalWork:options?.regionalWork ?? raw?.regionalWork, eventRulesVersion: raw ? raw.eventRulesVersion ?? LEGACY_EVENT_RULES : options?.eventRulesVersion,
+    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), regionalWork: (options?.adoptArchivedRules && raw?.rules?.regionalWork) ?? options?.regionalWork ?? raw?.regionalWork, eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
       mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;

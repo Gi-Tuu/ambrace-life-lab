@@ -312,7 +312,7 @@ function modelConfigured() {
 function campManager() {
   if (!S.camps) {
     if (!S.seedSurv) S.seedSurv = structuredClone(dumpSurv(S.mainSurv ?? S.surv));
-    S.camps = new CampInstances({ dataDir: S.dir, options: survivalOptions(), limit: 6, seedSurvival: S.seedSurv });
+    S.camps = new CampInstances({ dataDir: S.dir, options: { ...survivalOptions(), adoptArchivedRules: true, upgradeLegacyEventRules: true }, limit: 6, seedSurvival: S.seedSurv });
   }
   return S.camps;
 }

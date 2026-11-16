@@ -170,7 +170,8 @@ export function advanceSurvival(world) {
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
       // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
       // sweep 研究世界无 households ⇒ 不进入此支，§16 务农动机平衡与基线不受影响。
-      if (s.households && !a.isPlayer) a.viab?.regen(s.feedViab ?? 0.5);
+      // RES-01：游戏态玩家同样吃这一天的配给（研究/历史路径保持只给居民，维持基线）。
+    if (s.households && (!a.isPlayer || (world.gameRules && world.survival.playerRation === true))) a.viab?.regen(s.feedViab ?? 0.5);
     }
   }
 
