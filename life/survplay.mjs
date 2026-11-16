@@ -109,6 +109,8 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     restoreHouseholds(world);
     // P1-1：创始居民也入生命周期（开局即 fresh 成年，随世界时间衰老）；玩家不衰老（死亡走存续）。
     for (const [id] of ROSTER) s.households.residents[id] ??= { born: -ADULT_DAYS * DAY_TICKS, parents: [], stage: 'adult' };
+    // V7.1：正式游戏里玩家也是会老的人。成年起点与居民相同（12 天），研究态不写。
+    if (world.independentWorld) s.households.residents.p1 ??= { born: -ADULT_DAYS * DAY_TICKS, parents: [], stage: 'adult' };
   }
 
   // 采集/蓄养：独立产出账，缺省 tolerant（旧档没有这些键也能补上）。
@@ -231,7 +233,8 @@ function stepLifecycle(w, log) {
   if (!s.households) return;
   const day = dayOf(w.t);
   for (const a of Object.values(w.agents)) {
-    if (a.isPlayer || !isAlive(a)) continue;
+    if (!isAlive(a)) continue;
+    if (a.isPlayer && !w.independentWorld) continue; // 研究态保持原行为
     const rec = s.households.residents[a.id];
     if (!rec) continue;
     const stage = residentStage(w, a.id);
@@ -360,6 +363,10 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
   try { maybeResidentRequest(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理）。
+  if (w.independentWorld && w.survival.households && w.agents.p1 && isAlive(w.agents.p1) && residentStage(w, 'p1') === 'elder') {
+    w.agents.p1.viab.v = Math.max(0, w.agents.p1.viab.v - ELDER_DECAY);
+  }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
@@ -805,7 +812,7 @@ export function survView(sp) {
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
       ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
@@ -865,6 +872,13 @@ export function loadSurv(raw,seed=7,options) {
       }
     }
     restoreHouseholds(w, raw.housing);
+    // V7.1：旧档没有玩家年龄记录 ⇒ 按成年起点回填，绝不把玩家立即判老或触发死亡。
+    if (w.independentWorld && w.survival.households) {
+      const rec = w.survival.households.residents.p1;
+      if (!rec || !Number.isFinite(rec.born)) {
+        w.survival.households.residents.p1 = { ...(rec ?? {}), born: w.t - ADULT_DAYS * DAY_TICKS, parents: rec?.parents ?? [], stage: 'adult' };
+      }
+    }
     // AUD-02：旧档 households 里缺 born 的创始居民不能判成 elder（NaN ⇒ 年龄 null、永久绝育、永不自然死亡）。
     // 按 createSurvPlay 的成人起点回填，属兼容逻辑，不改默认常量、不写回磁盘。
     for (const [id, rec] of Object.entries(w.survival.households?.residents ?? {})) {

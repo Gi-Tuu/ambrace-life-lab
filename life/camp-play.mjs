@@ -171,8 +171,9 @@ export function campAction(world,body) {
     setCount(meal,item,amount(meal,item)-1);
     s.mealsToday = (s.mealsToday ?? 0) + 1;
     const pl=world.agents.p1;
-    pl?.viab?.regen?.(1);              // 一份饭按 mealYield 折算；低于 mealMin 不算进食
-    pl?.drives?.reward?.('energy',0.35);
+    // V7.1：一份饭与居民日界配给同一折算（feedViab/feedReward），不是玩家专属的 1.0/0.35。
+    pl?.viab?.regen?.(s.feedViab ?? 0.5);
+    pl?.drives?.reward?.('energy', s.feedReward ?? 0.5);
     s.mealsEaten=(s.mealsEaten??0)+1;
     return ok();
   }

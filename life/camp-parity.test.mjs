@@ -13,11 +13,11 @@ test('CAMP-01 进食上限：同刻最多两餐，第三餐被拒；每餐 50 �
   w.pinv.p1 = { ...(w.pinv.p1 ?? {}), tray: 1 };
   w.survival.campContainers = { 'home:meal': { crop: 6 } };
   w.agents.p1.viab.v = 0.3;
-  w.agents.p1.drives.v.energy = 0.2; // 两餐后仍会回到饥饿区，用于验证上限本身
+  w.agents.p1.drives.v.energy = 0.1; // 第一餐后 0.6（未超门槛），用于验证第二餐
   const results = [0, 1, 2, 3].map(() => survAct(sp, { kind: 'camp_eat', type: 'crop' }));
   const ok = results.filter((r) => r.ok).length;
   assert.equal(ok, 2, '同刻最多两餐，实测 ' + results.map((r) => (r.ok ? 'ok' : r.code)).join(','));
-  assert.ok(w.agents.p1.viab.v > 0.6 && w.agents.p1.viab.v < 0.7, '两餐应只加 0.36 存续，实测 ' + w.agents.p1.viab.v.toFixed(3));
+  assert.ok(w.agents.p1.viab.v > 0.46 && w.agents.p1.viab.v <= 0.49, '两餐按 feedViab 折算应 +0.18 存续，实测 ' + w.agents.p1.viab.v.toFixed(3));
   assert.equal(w.survival.mealsToday, 2);
   // 下一刻：日上限仍然生效（不是只靠时间预算/饥饿门）
   w.t += 1;
