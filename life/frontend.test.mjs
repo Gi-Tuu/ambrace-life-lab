@@ -201,3 +201,10 @@ test('F16 失效营地有明确提示：view.camp.invalid ⇒ 提示"已回收"�
   assert.match(APP, /该营地已回收/, '缺少明确提示文案');
   assert.match(APP, /campInvalidNotified/, '缺少去重标记（会每次轮询刷屏）');
 });
+
+test('F17 居民请求有可见入口：请求条渲染 + 接受/拒绝动作 + 文本走 textContent（SOC-01）', () => {
+  assert.match(HTML, /id="requestBar"/, '缺少请求条容器');
+  assert.match(APP, /respond_request/, '前端没有回应的动作');
+  assert.match(APP, /function renderRequests/, '缺少渲染函数');
+  assert.match(APP, /text\.textContent = req\.text/, '请求文本必须走 textContent');
+});

@@ -15,6 +15,7 @@ import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
+import { maybeResidentRequest, respondRequest } from './resident-requests.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -354,6 +355,8 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
+  try { maybeResidentRequest(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
   if (w.survival.settlementLife) finishDiscussion(w,sp.log);
   // 打字太久：居民主动走开（不等你点发送才判）。
@@ -524,6 +527,7 @@ function survActInner(sp, body) {
   const kind = String(body?.kind ?? '');
   if (w.independentWorld && !isAlive(w.agents.p1)) return { ok: false, code: 'PLAYER_DEAD', error: 'GAME_OVER' };
   if (!w.independentWorld && (w.survival.failed || w.survival.ended)) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
+  if (kind === 'respond_request') return respondRequest(w, body); // SOC-01：免费的社交回应
   if (kind === 'camp_exit') {
     w.campPlayerRoom=null;
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
@@ -787,7 +791,7 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
-    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
+    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, requests: (s.requests ?? []).slice(0, 4), requestsGranted: s.requestsGranted ?? 0, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,

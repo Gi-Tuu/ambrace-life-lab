@@ -3362,6 +3362,7 @@ async function refresh() {
     if (viewA?.camp?.invalid) {
       if (!S.campInvalidNotified) { toast('该营地已回收，当前显示主营地。'); S.campInvalidNotified = true; }
     } else { S.campInvalidNotified = false; }
+    renderRequests(viewA);
     syncAudioScene(viewA);
     if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
@@ -3580,6 +3581,30 @@ function currentCamp() {
   let name = null;
   try { name = localStorage.getItem('ambrace.campName.v1'); } catch { /* 隐私模式 */ }
   return { key: campKeyNow, name };
+}
+// SOC-01：居民会主动请求（食物/木料）。这里只渲染与发动作，后果全部由服务端结算。
+function renderRequests(sv) {
+  const bar = $('requestBar'); if (!bar) return;
+  const list = sv?.requests ?? [];
+  bar.replaceChildren();
+  if (!list.length) { bar.hidden = true; return; }
+  bar.hidden = false;
+  for (const req of list) {
+    const row = document.createElement('div');
+    row.className = 'request-row';
+    const text = document.createElement('span');
+    text.textContent = req.text ?? '';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.textContent = req.kind === 'material' ? '借给他' : '分给他';
+    yes.onclick = () => { api('/act', { kind: 'respond_request', id: req.id, accept: true }).then((r) => { survFlash = { kind: 'respond_request', ok: !!r.ok, code: r.code ?? 'OK' }; refresh(); }); };
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.textContent = '拒绝';
+    no.onclick = () => { api('/act', { kind: 'respond_request', id: req.id, accept: false }).then((r) => { survFlash = { kind: 'respond_request', ok: !!r.ok, code: r.code ?? 'OK' }; refresh(); }); };
+    row.append(text, yes, no);
+    bar.appendChild(row);
+  }
 }
 async function renderCampCurrent() {
   const box = $('campCurrent'); if (!box) return;
