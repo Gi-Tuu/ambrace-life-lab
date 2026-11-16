@@ -454,7 +454,7 @@ export const PLAYER_TIME = Object.freeze({
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
   animal_feed:25, animal_slaughter:75, road_lay:75, road_remove:50, home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
-  camp_store: 25, camp_take: 25, camp_eat: 25, coop_request: 25,
+  camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25,
 });
 const PLAYER_BUDGET = 100;
 function playerTimeCost(w, kind) {
@@ -674,6 +674,9 @@ function survActInner(sp, body) {
     return result;
   }
   if (kind.startsWith('camp_')) {
+    // AUD-01/06：营地动作必须显式登记成本；未知或零成本（除明确免费的退出/睡觉）一律拒绝。
+    const free = kind === 'camp_exit' || kind === 'camp_sleep';
+    if (!free && !(kind in PLAYER_TIME)) return { ok: false, code: 'UNKNOWN_CAMP_ACTION' };
     const result=campAction(w,body);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     if (sp.log.length>40) sp.log.shift();
@@ -852,6 +855,12 @@ export function loadSurv(raw,seed=7,options) {
       }
     }
     restoreHouseholds(w, raw.housing);
+    // AUD-02：旧档 households 里缺 born 的创始居民不能判成 elder（NaN ⇒ 年龄 null、永久绝育、永不自然死亡）。
+    // 按 createSurvPlay 的成人起点回填，属兼容逻辑，不改默认常量、不写回磁盘。
+    for (const [id, rec] of Object.entries(w.survival.households?.residents ?? {})) {
+      if (!rec || Number.isFinite(rec.born)) continue;
+      w.survival.households.residents[id] = { ...rec, born: w.t - ADULT_DAYS * DAY_TICKS, parents: rec.parents ?? [], legacy: true };
+    }
     w.weather = weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.pending = structuredClone(raw.pending ?? []);
