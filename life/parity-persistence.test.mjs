@@ -66,3 +66,23 @@ test('RES-01 游戏态玩家也吃日界配给；研究态保持只给居民', (
     else assert.equal(w.agents.p1.viab.v, 0.5, '研究态玩家不回补（基线）');
   }
 });
+
+test('RES-01b 生产默认开玩家配给（所有者拍板：100 日内饿死算事故）；研究态不受波及', async () => {
+  const { survivalOptions } = await import('./host.mjs');
+  assert.equal(survivalOptions().playerRation, true, '生产 survivalOptions 必须带 playerRation');
+  const prod = createSurvPlay(7, { ...survivalOptions(), gameRules: true, independentWorld: true });
+  assert.equal(prod.world.survival.playerRation, true, 'options 必须落到 world.survival（createSurvPlay 不认的开关等于没开）');
+  prod.world.agents.p1.viab.v = 0.5;
+  prod.world.agents.a1.viab.v = 0.5;
+  prod.world.t = 24;
+  advanceSurvival(prod.world);
+  assert.ok(prod.world.agents.p1.viab.v > 0.5, '按生产默认建的世界，日界必须回补玩家');
+  // 事故不许在老档里继续：rules 里没有这个键的存档，载入后照样采纳新默认
+  const legacy = structuredClone(dumpSurv(prod));
+  delete legacy.rules.playerRation;
+  const back = loadSurv(legacy, 7, { ...survivalOptions(), gameRules: true, independentWorld: true, adoptArchivedRules: true });
+  assert.equal(back.world.survival.playerRation, true, '旧档载入必须吃到修好的默认值');
+  assert.equal(dumpSurv(prod).rules.playerRation, true, '规则开关入档（SAV-02 同族）');
+  // 研究态：不传即关，五份基线的分支条件 `!a.isPlayer || (gameRules && playerRation)` 照旧
+  assert.equal(createSurvPlay(7, GAME).world.survival.playerRation, undefined, '研究态不许被这条改动波及');
+});
