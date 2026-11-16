@@ -66,11 +66,20 @@ test('SA11 非法/未登记 camp 回落主营地：survival 不为空、不回�
   try {
     const a = await (await post(base, '/saves/open', { name: '甲' })).json();
     assert.ok(a.ok);
-    for (const bad of ['../etc/passwd', 'a'.repeat(32)]) {
-      const r = await (await fetch(base + '/world?camp=' + encodeURIComponent(bad))).json();
-      assert.equal(r.camp, null, '非法/未登记 camp 必须回落 MAIN：' + bad);
-      assert.notEqual(r.survival, null, '不得把空世界发给访客：' + bad);
+    // 畸形 key：不回显、camp=null、世界仍可用
+    {
+      const r = await (await fetch(base + '/world?camp=' + encodeURIComponent('../etc/passwd'))).json();
+      assert.equal(r.camp, null, '畸形 camp 不得回流');
+      assert.notEqual(r.survival, null, '不得把空世界发给访客');
       assert.ok(!JSON.stringify(r).includes('../etc/passwd'), '不得回显请求原语');
+    }
+    // 格式合法但未登记（等价 TTL 已回收）：显式 invalid，仍给主营地世界（SAV-05）
+    {
+      const bad = 'a'.repeat(32);
+      const r = await (await fetch(base + '/world?camp=' + bad)).json();
+      assert.equal(r.camp?.invalid, true, '失效 key 必须显式标记 invalid');
+      assert.equal(r.camp?.key, bad);
+      assert.notEqual(r.survival, null, '仍要给出可看的世界');
     }
     const ok = await (await fetch(base + '/world?camp=' + a.key)).json();
     assert.equal(ok.camp?.key, a.key, '合法已登记 key 仍然正常');

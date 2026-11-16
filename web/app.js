@@ -3358,6 +3358,10 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    // SAV-05：失效营地（被回收/文件丢失）——view 已回落主营地，这里只提示一次。
+    if (viewA?.camp?.invalid) {
+      if (!S.campInvalidNotified) { toast('该营地已回收，当前显示主营地。'); S.campInvalidNotified = true; }
+    } else { S.campInvalidNotified = false; }
     syncAudioScene(viewA);
     if (!$('worldMain').hidden) {
       if (ui.fullscreen) { if (B) draw($('cvB'), B); draw($('cvFull'), viewA); }
