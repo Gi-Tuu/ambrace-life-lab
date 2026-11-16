@@ -2387,12 +2387,15 @@ function inspectRoomProp(prop) {
 }
 
 async function performCamp(body,site,done) {
-  if (campBusy || !S.campReady) return null;
+  if (campBusy) return null;                       // 防连点：这一次按键被吞掉是应该的
+  if (!S.campReady) { toast('世界还在加载，请稍后再试。'); return null; }
   campBusy=true;
   try {
     if (site && !body.from && S.view?.loc?.p1!==site && S.view?.campPlayerRoom!==site) {
       const moved=await playAct({kind:'move',room:site});
-      if (!moved.ok) return moved;
+      // 走不过去就是这次交互失败的原因，必须说出来——旧实现在这里静默 return，
+      // 玩家只看到"按了没反应"。（所有者实机反馈：建筑进不去且没有任何提示）
+      if (!moved.ok) { toast(campCodes[moved.code] ?? SURV_CODE_ZH[moved.code] ?? '无法走到那里。'); return moved; }
       const walker=WALK[walkKey('cvA','p1')];
       if (walker) walker.holdDoor=site;
     }
@@ -2650,7 +2653,8 @@ function requestInteraction() {
 }
 
 async function survInteract() {
-  if (campBusy || !S.playing) return;
+  if (campBusy) return;                              // 防连点
+  if (!S.playing) { toast('还没进入世界，请先从菜单点「继续生存」。'); return; }
   if (ui.surveyRoom) { returnFromSurvey(); return; }
   const s=S.view;
   if (ui.interior) {

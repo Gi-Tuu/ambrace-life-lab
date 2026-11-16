@@ -680,3 +680,16 @@
   .bwrap { display:inline-flex; align-items:center; gap:3px; }
   .bwrap .bl { font-style:normal; font-size:12px; color:var(--dim); line-height:1; }
   .bwrap .bar { display:flex; gap:1px; height:8px; width:49px; }
+
+  /* ── 全屏态 HUD 重锚定（取证：docs/fs-measure.mjs，1280×720 / 1920×1080 / 2560×1080 实测）──
+     全屏只把 #gameHud 搬进 #fullViewport，而 #hotbar / #itemBar 仍留在原页面流里：
+     静态定位 ⇒ 它们以"普通布局里的位置"浮在场景上，还被拉成整条宽；引导卡 top:8 right:8
+     又正好压在时钟上（三种视口都重叠 5922px²）。这里只改表现层，不动载荷与读数。 */
+  body.full-on #gameHud { inset:50px 2px 2px; }
+  body.full-on #hotbar, body.full-on #itemBar {
+    position:fixed; left:50%; transform:translateX(-50%);
+    width:max-content; max-width:calc(100vw - 24px); margin:0;
+  }
+  body.full-on #hotbar { bottom:14px; }
+  body.full-on #itemBar { bottom:84px; }
+  body.full-on #firstRun { top:auto; right:12px; bottom:150px; width:min(360px,42vw); }
