@@ -31,13 +31,19 @@ export function makeHouseholds(housing) {
 
 // P1-1 生命周期阶段：婴幼儿→儿童→成年→老年（死亡由 viability/reapDeaths 管）。
 // 无 households 或无出生记录（初始 roster/旧档）＝成年 ⇒ lab/town 与 sweep 基线逐位不变。
+// AUD-09(i)（所有者 2026-11-16 拍板）：玩家仍会自然老死，但老年门槛单独拉长到 180 天。
+// 只改门槛、不改机制：掷骰、老年代谢、老年减产全都照旧，只是从 180 天起才对玩家生效；
+// 且 `gameRules` 为假时一律退回 ELDER_DAYS ⇒ 研究态与五份基线逐位不变。
+export const ELDER_DAYS_PLAYER = Number(process.env.ELDER_DAYS_PLAYER ?? 180);
+export const elderDaysFor = (w, id) => (w.gameRules && w.agents?.[id]?.isPlayer ? ELDER_DAYS_PLAYER : ELDER_DAYS);
+
 export function residentStage(w, id) {
   const resident = w.survival.households?.residents[id];
   if (!resident) return 'adult';
   const age = (w.t - resident.born) / DAY_TICKS;
   if (age < INFANT_DAYS) return 'infant';
   if (age < ADULT_DAYS) return 'child';
-  if (age < ELDER_DAYS) return 'adult';
+  if (age < elderDaysFor(w, id)) return 'adult';
   return 'elder';
 }
 export const ageDays = (w, id) => {

@@ -28,7 +28,7 @@ import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, elderDaysFor, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 const SURV_LOG_LIMIT = 200;
@@ -246,7 +246,9 @@ function stepLifecycle(w, log) {
     }
     rec.stage = stage;
     if (stage === 'elder') {
-      const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - ELDER_DAYS) * 0.01) *
+      // 风险从**各自的老年门槛**起算，不是从固定 60 天起算：否则玩家门槛拉到 180 后，
+      // 一越过 180 就落到 0.5 的封顶概率上——变成"活到 180 天当天暴毙"，而不是"之后逐渐走下坡"。
+      const p = Math.min(0.5, 0.02 + (ageDays(w, a.id) - elderDaysFor(w, a.id)) * 0.01) *
         (w.populationExperiment?.elderHazardScale ?? 1);
       if (survivalRoll(w, 'elder-death', a.id, day) < p) { a.hurtBy = '衰老'; a.viab.v = 0; }
     }
