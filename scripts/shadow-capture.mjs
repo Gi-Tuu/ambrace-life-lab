@@ -24,6 +24,8 @@ for (const seed of seeds) {
       seed, t: world.t, agent: agent.id, name: agent.name,
       trigger: String(trigger ?? '').slice(0, 70),
       rulesTop1: ids[0], candidateIds: ids, candidateCount: ids.length, prompt,
+      labels: Object.fromEntries(scored.map((s2) => [s2.id, s2.act?.label ?? s2.id])),
+      here: world.loc[agent.id], day: Math.floor(world.t / 24),
     });
     return null;
   };
