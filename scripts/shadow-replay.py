@@ -6,6 +6,7 @@ import json, sys, time, urllib.request, urllib.error, re, os
 from concurrent.futures import ThreadPoolExecutor
 
 asks_file, base, model_marker, out_file = sys.argv[1:5]
+max_tokens = int(sys.argv[7]) if len(sys.argv) > 7 else 100  # 审议只需要 {id,reason}，解码长度直接进延迟
 limit = int(sys.argv[5]) if len(sys.argv) > 5 else 80
 workers = int(sys.argv[6]) if len(sys.argv) > 6 else 3
 
@@ -41,7 +42,7 @@ def one(a):
         return urllib.request.urlopen(req, timeout=40).read()
 
     payload = {
-        'model': model_id, 'temperature': 0.85, 'max_tokens': 100,
+        'model': model_id, 'temperature': 0.85, 'max_tokens': max_tokens,
         'response_format': {'type': 'json_object'},
         'messages': [{'role': 'user', 'content': a['prompt']}],
         # 与生产同一适配：Qwen3.x 默认开思考，不关掉量出来的延迟不是生产延迟（D3）
