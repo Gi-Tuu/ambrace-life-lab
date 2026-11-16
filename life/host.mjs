@@ -456,12 +456,13 @@ export function buildDeliberationPrompt({ agent, scored, world, rejected, memori
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
   lines.push('如果此刻有在场的人、你想顺带说一句话，再加三个字段："act" 从 request/offer/warn/inform/greet/accuse/thank/decline/refuse 里选一个；"topic" 从 food/firewood/shelter/child/work/weather/boundary/trust 里选一个；"text" 不超过 28 字。不想说就省略这三项。');
 
-  return lines;
+  // 返回字符串（不是数组）：调用方与采集脚本用的是同一份成品，避免出现 join 位置不一致造成的静默失配
+  return lines.join(String.fromCharCode(10));
 }
 
 async function modelBrain(args) {
   const { agent, scored, world, rejected, memories, trigger, daySummary } = args;
-  const lines = buildDeliberationPrompt(args);
+  const prompt = buildDeliberationPrompt(args);
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   // C3：按营地判车道。分名字营地在无人时直接走确定性替身，询问不发出。
   const campKey = world?.campKey ?? 'MAIN';
@@ -504,7 +505,7 @@ async function modelBrain(args) {
     if (waitMs <= 0) return null;
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
-      const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: lines.join('\n') }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
+      const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
       if (!res.ok) { note(`HTTP ${res.status}`); breakerSee(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
