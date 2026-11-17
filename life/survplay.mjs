@@ -11,6 +11,7 @@ import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { validate } from './rules.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
+import { resLedgerView } from './resource-ledger.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
@@ -882,6 +883,7 @@ export function survView(sp) {
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,
       ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
+    ...(w.gameRules ? { resources: resLedgerView(w) } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
     ...forecastDisasters(w),
     drought: !!s.drought, disasterToday: s.disasterToday,

@@ -9,6 +9,7 @@ import { TIMBER_GROVE } from '../web/camp-layout.mjs';
 import { doForage, doGather, takeFoodKind } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
 
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
@@ -167,6 +168,7 @@ export function campAction(world,body) {
       if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
       const kindEaten = takeFoodKind(s);
       if (!kindEaten) return fail('EMPTY');
+      noteConsumed(world, kindEaten, 'player'); // D1/D2：这一份只在这里消费一次
       s.mealsToday = (s.mealsToday ?? 0) + 1;
       s.mealsEaten = (s.mealsEaten ?? 0) + 1;
       pl0?.viab?.regen?.(s.feedViab ?? 0.5);
@@ -185,6 +187,7 @@ export function campAction(world,body) {
     // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
     if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
     setCount(meal,item,amount(meal,item)-1);
+    noteConsumed(world, item, 'player:meal');
     s.mealsToday = (s.mealsToday ?? 0) + 1;
     const pl=world.agents.p1;
     // V7.1：一份饭与居民日界配给同一折算（feedViab/feedReward），不是玩家专属的 1.0/0.35。
@@ -274,6 +277,7 @@ export function campAction(world,body) {
     world.observeProduction?.('collected', item, 1);
   }
   bag[item]=amount(bag,item)+1;
+  noteRes(world, 'personal', item, 1); // D1：从来源/树上收进个人包
   pay(world,cost);
   return ok();
 }

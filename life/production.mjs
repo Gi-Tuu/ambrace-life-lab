@@ -6,6 +6,7 @@ import { siteOf } from './geometry.mjs';
 import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
+import { noteRes } from './resource-ledger.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -116,6 +117,8 @@ export function doGather(world, agentId, loc = world.loc[agentId]) {
   stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
   bag[res] += take;
+  noteRes(world, 'gross', res, take); // D1：自然产出与个人获得分开记
+  noteRes(world, 'personal', res, take);
   world.observeProduction?.('gather', res, take);
   return { ok: true, code: 'OK', res, amount: take };
 }
@@ -283,6 +286,7 @@ export function doForage(world, id, site = world.loc[id], target) {
   if (s.wildBerries) takeBerry(s, site, target);
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
+  noteRes(world, 'gross', 'berry', 1); // D1：树上/地面的产出（未收集），收集时再记 personal
   world.observeProduction?.('gross', 'berry', 1);
   world.observeProduction?.('stock', 'berry', 1);
   s.forageCd = world.t + FORAGE_COOLDOWN;

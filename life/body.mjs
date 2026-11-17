@@ -12,6 +12,7 @@ import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './hou
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
 import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
+import { noteConsumed } from './resource-ledger.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
@@ -544,7 +545,9 @@ function actuateInner(world, agentId, action, actionLoc) {
         if (world.loc[me] !== 'store') return { action, ok: false, code: 'NOT_PRESENT', observation: '要去公仓才能取粮' };
         if ((s.store ?? 0) < 1) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
         if (self?.mealDay === day) return { action, ok: false, code: 'ALREADY_ATE', observation: '今天已经吃过一份了' };
-        if (!takeFoodKind(s)) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        const eatenKind = takeFoodKind(s);
+        if (!eatenKind) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        noteConsumed(world, eatenKind, 'resident');
         if (self) self.mealDay = day;
         return { action, ok: true, code: 'OK', observation: `从公仓吃了一份（余 ${s.store}）`, satiated: 'energy', amount: s.feedViab ?? 0.5, evt: evt({ kind: 'eat', valence: 0.2, selfCaused: true, serves: 'energy' }) };
       }

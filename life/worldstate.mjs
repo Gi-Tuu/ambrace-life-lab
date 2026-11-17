@@ -6,6 +6,7 @@ import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, addFood, takeFood, FOOD_KINDS, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
 
 export const SURV = Object.freeze({
   startStore: 6,          // 初始公共粮仓
@@ -130,19 +131,32 @@ export function advanceSurvival(world) {
   regrowWildBerries(world, day);
 
   // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。P0-1：死者不占配给。
-  const pop = livingResidents(world).length;
+  // D2：当天已经吃过实物的人不再占这份配给（同一份食物只消费一次），也不再重复回补能量/存续。
+  const today = dayOf(world.t);
+  const fedToday = (a) => Boolean(a) && (a.isPlayer
+    ? (s.mealsDay === today && (s.mealsToday ?? 0) > 0)
+    : a.mealDay === today);
+  const needers = world.gameRules ? livingResidents(world).filter(a => !fedToday(a)) : livingResidents(world);
+  const pop = needers.length;
   // 审计 LIFE-05：玩家"是否吃这一份"只能有一个判据；否则会出现扣粮不回补/回补不扣粮。
-  const playerShares = isAlive(world.agents.p1) && (world.gameRules ? s.playerRation === true : s.playerEats === true);
+  const playerShares = isAlive(world.agents.p1) && (world.gameRules ? s.playerRation === true : s.playerEats === true) &&
+    !(world.gameRules && fedToday(world.agents.p1));
   const eaters = pop + (playerShares ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
   const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
     world.observeProduction?.('ration', 'store', Math.min(s.store, need));
+    const beforeFood = s.food ? { ...s.food } : null;
     // gameRules：按品类扣配给；研究世界保持原算术
     if (s.food) { const taken = takeFood(s, null, need); shortfall = need - taken; }
     else if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
+    // D1：配给入口的消费按品类入账
+    if (beforeFood) for (const k of FOOD_KINDS) {
+      const used = (beforeFood[k] ?? 0) - (s.food[k] ?? 0);
+      if (used > 0) noteConsumed(world, k, 'ration', used);
+    }
   }
 
   // 灯火燃料（仅 gameRules）：每天烧 1 份木料；没柴就熄灯，屋里夜里变暗。
@@ -160,6 +174,7 @@ export function advanceSurvival(world) {
     s.wasCrisis = true;
     for (const a of Object.values(world.agents)) {
       if (!a.viab || !isAlive(a)) continue; // P0-1：死者不再受饥饿压力
+      if (world.gameRules && fedToday(a)) continue; // D2：吃过实物的人不再因配给缺口被二次惩罚
       a.hurtBy = '饥饿';
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
@@ -170,6 +185,7 @@ export function advanceSurvival(world) {
     // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
     if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
       if (!a.drives || !isAlive(a)) continue; // P0-1：死者不再被喂饱
+      if (world.gameRules && fedToday(a)) continue; // D2：今天已经吃过实物的人不再重复回补
       a.hurtBy = null;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
       // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
@@ -215,8 +231,19 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   s.harvestCount = (s.harvestCount ?? 0) + 1;
   const before = s.store;
   // gameRules：收获按品类入库；研究世界保持原算术
-  if (s.food) addFood(s, 'crop', Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  const added = Math.max(0, Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  if (s.food) addFood(s, 'crop', added);
   else s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
+  // D1：实际采收 / 个人获得 / 公共入库 / 超容量损失 分开记账；溢出给可见反馈。
+  noteRes(world, 'gross', 'crop', yieldAmt);
+  noteRes(world, 'personal', 'crop', personalPortion);
+  noteRes(world, 'publicIn', 'crop', added);
+  const overflow = Math.max(0, yieldAmt - personalPortion - added);
+  if (overflow > 0) {
+    noteRes(world, 'overflow', 'crop', overflow);
+    s.lastOverflow = { t: world.t, kind: 'crop', n: overflow, code: 'STORE_FULL' };
+    world.survival.lastStoreFullAt = world.t;
+  }
   world.observeProduction?.('gross', 'crop', yieldAmt);
   world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };

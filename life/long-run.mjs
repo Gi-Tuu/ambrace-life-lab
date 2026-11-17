@@ -9,6 +9,7 @@ import { dayOf, DAY_TICKS } from './clock.mjs';
 import { effectiveMods } from './production.mjs';
 import { LABOR_ENERGY, RESIDENT_MIN } from './resident-time.mjs';
 import { ledgerStats } from './action-ledger.mjs';
+import { resLedgerView } from './resource-ledger.mjs';
 
 export const LONG_SEEDS = [7, 13, 29, 41, 53];
 export const GAME_OPTIONS = Object.freeze({
@@ -90,6 +91,16 @@ function snapshot(w) {
     aiActions: { ...(s.aiActions ?? {}) }, counters: actionCounters(w), actionAudit: structuredClone(s.actionAudit ?? {}),
     coop: { completions: (s.coop?.completions ?? []).length, refusals: s.coop?.refusals ?? 0, replans: s.coop?.replans ?? 0, exits: s.coop?.exits ?? 0 },
     stats: ledgerStats(w),
+    resources: resLedgerView(w),
+    agri: {
+      plots: (s.plots ?? []).length,
+      mature: (s.plots ?? []).filter((p) => p.growth >= 1).length,
+      growing: (s.plots ?? []).filter((p) => p.growth > 0 && p.growth < 1).length,
+      water: Number((s.water ?? 0).toFixed(3)), soil: Number((s.soil ?? 0).toFixed(3)),
+      yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
+      storeCap: mods.storeCap, drought: !!s.drought, disasterToday: s.disasterToday ?? null,
+      produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? {}) },
+    },
     agentErrors: s.agentErrors ?? 0,
   };
 }
