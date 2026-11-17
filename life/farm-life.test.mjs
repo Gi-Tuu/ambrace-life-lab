@@ -45,7 +45,7 @@ test('田畦迁移保留坐标和 ID，只有真实地块有模型；指定田�
   const loaded = restore(migrated);
   assert.deepEqual(survView(loaded).plots, survView(migrated).plots);
   const crop = { kind:'camp_collect', type:'crop', tool:'basket', plot: 3, from };
-  assert.equal(survAct(migrated, crop).code, 'NO_MATURE', '同刻可连续动作，此刻只差作物没熟');
+  assert.equal(survAct(migrated, crop).code, 'ACTION_BUDGET');
   w.survival.disasters = false;
   // 对照使用同一模拟日界，隔离居民的收种以测量玩家地块。
   for (const a of Object.values(w.agents)) if (!a.isPlayer) a.dead = true;
@@ -70,7 +70,7 @@ test('自然决策开垦并播种，存档恢复；储粮充足、干旱和缺�
   assert.equal(s.agentErrors ?? 0, 0);
   assert.equal(s.plots.length, 5);
   assert.equal(tilled.goal, 'farmland');
-  assert.ok(tilled.energyPaid > 0, '开垦是普通劳动，要扣体力');
+  assert.ok(tilled.paid > 0);
   assert.ok(s.plots.at(-1).growth > 0);
   assert.deepEqual(survView(restore(sp)).plots, survView(sp).plots);
 

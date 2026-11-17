@@ -140,9 +140,9 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.workFeeds = false; // §16 选点：E1 off（E4 已足）
   s.storeHunger = true; // §16 选点：E4 on（公仓目标挂钩饥饿⇒AI 自足 idleWon 2/3）
   s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
-  // V7.2 阶段 B：个人时间模型是正式游戏的默认语义（独立世界），研究态保持旧预算逐位不变。
-  // 显式传 false 可回旧路径（V72_TIME=0 的兼容开关）；不传则跟随 independentWorld。
-  if (actTimeModel ?? independentWorld) s.actTimeModel = true;
+  // V7.2 阶段 B：个人时间模型只属于正式游戏（独立世界 + gameRules），研究态（gameRules:false）保持旧预算逐位不变。
+  // 显式传入时以显式值为准（host 的 survivalOptions 会显式给 true/false）。
+  if (actTimeModel ?? (independentWorld && gameRules)) s.actTimeModel = true;
   if (world.gameRules) {
     s.actClock = {};
     for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };

@@ -27,15 +27,13 @@ test('V3-14 100 日代表样本与 200 日自然灭绝样本', async () => {
   assert.ok(success.final.births > 0);
   assert.equal(success.final.agentErrors, 0);
 
-  // V7.2 之后普通劳动不再侵蚀存续（viab 只承担长期损耗），seed 13 已不在这条边界上：
-  // 重新标定后 seed 12 是新的"100 日只剩 2 人、200 日自然灭绝"样本（2026-11-17）。
-  const boundary = await runLong(12, 100, { eventRulesVersion: 1 });
+  const boundary = await runLong(13, 100, { eventRulesVersion: 1 });
   assert.ok(boundary.final.population <= 2, `boundary pop=${boundary.final.population}`);
 
-  const extinct = await runLong(12, 200, { eventRulesVersion: 1 });
+  const extinct = await runLong(13, 200, { eventRulesVersion: 1 });
   assert.equal(extinct.eventRulesVersion, 1);
   assert.equal(extinct.final.t, 4800);
-  assert.equal(extinct.deaths.filter(d => d.id !== 'p1').at(-1).day, 130);
+  assert.equal(extinct.deaths.filter(d => d.id !== 'p1').at(-1).day, 180);
   assert.equal(extinct.final.ended, true, '200 日 sample 应自然灭绝');
   assert.equal(extinct.final.population, 0);
   assert.ok(Object.keys(extinct.final.deathCauses).length > 0);

@@ -59,7 +59,7 @@ test('住宅使用真实建房和产权记录，竣工前后的外壳、底座�
   };
   assert.equal(draw(sp).project, undefined);
   const phases = new Map();
-  for (let i = 0; i < 480; i++) {
+  for (let i = 0; i < 240; i++) {
     await tickSurvPlay(sp);
     const state = draw(sp);
     if (!state.project) continue;

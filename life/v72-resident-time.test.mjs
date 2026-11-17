@@ -156,6 +156,17 @@ test('R9 进行中的动作随存档恢复：busy 与 remainMin 不丢', () => {
   assert.equal(busy.remainMin, RESIDENT_MIN.build - 5);
 });
 
+test('R10 只有 independentWorld、没有 gameRules 不算正式游戏：不进个人时间模型', () => {
+  const sp = createSurvPlay(7, { independentWorld: true, unifiedCooperation: true }), w = sp.world, a = w.agents.a1;
+  w.t = 10;
+  assert.equal(w.survival.actTimeModel, undefined, '研究/长跑世界不得挂上个人时间模型');
+  const dump = JSON.stringify(dumpSurv(sp));
+  assert.equal(dump.includes('actTimeModel'), false, '研究世界存档里不得出现 actTimeModel');
+  assert.equal(dump.includes('actClock'), false, '研究世界存档里不得出现 actClock');
+  assert.ok(a.execute(w, { kind: 'rest' }, 'deliberation', w.t, true).ok);
+  assert.equal(a.execute(w, { kind: 'rest' }, 'deliberation', w.t, true), null, '研究态仍是旧的每刻一次');
+});
+
 test('R7 研究态保持旧的"每刻一次"：不建 actClock，第二次执行仍被拒', () => {
   const sp = createSurvPlay(7, { unifiedCooperation: true }), w = sp.world, a = w.agents.a1;
   w.t = 10;
