@@ -139,6 +139,11 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.workFeeds = false; // §16 选点：E1 off（E4 已足）
   s.storeHunger = true; // §16 选点：E4 on（公仓目标挂钩饥饿⇒AI 自足 idleWon 2/3）
   s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
+  // V7.2 阶段 B（第 1 步）：角色个人时间只落在正式游戏；本步只建数据，不改任何行动判定。
+  if (world.gameRules) {
+    s.actClock = {};
+    for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };
+  }
   return { world, log: [] };
 }
 
@@ -911,6 +916,11 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    if (sp.world.gameRules) {
+      const clock = (sp.world.survival.actClock ??= {});
+      for (const id of Object.keys(sp.world.agents)) clock[id] ??= { day: Math.floor(sp.world.t / (sp.world.dayTicks ?? 24)), usedMin: 0, busy: null };
+      for (const id of Object.keys(clock)) if (!sp.world.agents[id]) delete clock[id];
+    }
     // 旧档（开关之前烘的）没有 food 字段：新建世界留下的分档必须按载入后的 store 重新入账，
     // 否则 Σ分档 与 store 会永久差着一截，配给扣完而公仓显示不变。
     if (sp.world.gameRules && sp.world.survival) {
