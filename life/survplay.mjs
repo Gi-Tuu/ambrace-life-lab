@@ -760,6 +760,12 @@ function survActInner(sp, body) {
     // AUD-01/06：营地动作必须显式登记成本；未知或零成本（除明确免费的退出/睡觉）一律拒绝。
     const free = kind === 'camp_exit' || kind === 'camp_sleep';
     if (!free && !(kind in PLAYER_TIME)) return { ok: false, code: 'UNKNOWN_CAMP_ACTION' };
+    // ARCH3-02 / SEC3-05：正式游戏里凡是带 from 的营地动作，先过服务端位置裁决（连续性/锚点），
+    // 不能只靠 from→to 的距离自证——否则人在家里也能点鸡圈。
+    if (w.independentWorld && w.gameRules && body?.from && kind !== 'camp_exit' && kind !== 'camp_sleep') {
+      const reach = playerReach(w, body.from);
+      if (!reach.ok) return reach;
+    }
     const result=campAction(w,body);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     if (sp.log.length>40) sp.log.shift();
