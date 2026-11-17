@@ -78,6 +78,10 @@ export async function measureConservation(seed = 7, ticks = 240, { tamper = null
     head: head(), ruleVersion: CURRENT_EVENT_RULES, actTimeModel: w.survival.actTimeModel === true,
     config: { ...CONS_OPTIONS }, rows,
     closedKinds, openKinds: [...OPEN_KINDS],
+    // 严格证明（不计入闭合平衡的原因）：open 品类的 gross 记的是“从野存/畜群收进库存”的转移，
+    // 不是新生产；standing stock 既没有起点快照也没有生产时刻账本。把 gross 与库存末值相加会重复计数，
+    // 把 standing 加进快照又缺“生产发生在哪一刻”的信息，两种口径都无法定义零残差。
+    openProof: 'open kinds record harvest transfers, not production; standing stock lacks start snapshot and production timestamps, so residual is undefined without a production ledger',
     worstResidual: Number(worst.toFixed(3)), worstClosed: Number(worstClosed.toFixed(3)),
     // 开边界品类（野果/果树/蛋奶/木石）的产出发生在未纳入快照的野外/畜群 standing stock 上，
     // 本探针无法用“库存+消费”闭合；它们只报告 residual，不冒充闭合。闭合品类必须为 0。
