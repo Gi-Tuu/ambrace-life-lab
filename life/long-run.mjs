@@ -7,6 +7,7 @@ import { isAlive, livingResidents } from './body.mjs';
 import { bedsPerHome, maritalStatus, residentsAt, residentStage } from './households.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { effectiveMods } from './production.mjs';
+import { LABOR_ENERGY, RESIDENT_MIN } from './resident-time.mjs';
 
 export const LONG_SEEDS = [7, 13, 29, 41, 53];
 export const GAME_OPTIONS = Object.freeze({
@@ -50,9 +51,22 @@ function familySnapshot(w) {
   };
 }
 
+// V7.2 平衡：劳动分钟数只从既有 aiActions 计数换算，不改任何模拟路径（研究态读数逐位不变）。
+function laborMinutesOf(s) {
+  let labor = 0, total = 0;
+  for (const [kind, n] of Object.entries(s.aiActions ?? {})) {
+    const mins = RESIDENT_MIN[kind] ?? 10;
+    total += n * mins;
+    if (Object.hasOwn(LABOR_ENERGY, kind) && LABOR_ENERGY[kind] > 0) labor += n * mins;
+  }
+  return { labor, total };
+}
+
 function snapshot(w) {
   const s = w.survival, res = livingResidents(w), mods = effectiveMods(w);
   const v = res.map((a) => Number((a.viab?.v ?? 0).toFixed(4)));
+  const energy = res.map((a) => Number((a.drives?.v?.energy ?? 0).toFixed(4)));
+  const minutes = laborMinutesOf(s);
   return {
     t: w.t, day: dayOf(w.t),
     population: res.length, stages: stages(w),
@@ -60,6 +74,9 @@ function snapshot(w) {
     playerAlive: !s.playerDead, playerViab: Number((w.agents.p1?.viab?.v ?? 0).toFixed(4)),
     ended: !!s.ended, failed: !!s.failed, won: !!s.won, endReason: s.endReason ?? null,
     viability: { avg: v.length ? Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)) : null, min: v.length ? Math.min(...v) : null },
+    energy: { avg: energy.length ? Number((energy.reduce((a, b) => a + b, 0) / energy.length).toFixed(4)) : null, min: energy.length ? Math.min(...energy) : null },
+    laborMinutes: minutes.labor, actionMinutes: minutes.total,
+    laborShare: minutes.total ? Number((minutes.labor / minutes.total).toFixed(4)) : null,
     store: s.store, storeCap: mods.storeCap, inv: { ...s.inv },
     materials: Object.fromEntries(['wood', 'stone'].map(kind => [kind, (s.inv[kind] ?? 0) +
       (s.households.receipts[kind] ?? 0) + [...Object.values(w.pinv), ...Object.values(s.campContainers ?? {})]
@@ -76,9 +93,9 @@ function snapshot(w) {
 }
 
 export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVENT_RULES,
-  familyExperiment, populationExperiment, recordTimeline = false, checkpoints = [days], observeProduction } = {}) {
+  familyExperiment, populationExperiment, recordTimeline = false, checkpoints = [days], observeProduction, options = {} } = {}) {
   const ticks = days * DAY_TICKS;
-  const sp = createSurvPlay(seed, { ...GAME_OPTIONS, eventRulesVersion });
+  const sp = createSurvPlay(seed, { ...GAME_OPTIONS, eventRulesVersion, ...options });
   const w = sp.world;
   w.familyExperiment = familyExperiment;
   w.populationExperiment = populationExperiment;
@@ -137,6 +154,7 @@ export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVE
     birthChecks, marriageEvents, homeCompletions, deaths: w.survival.deaths, marriages: w.survival.households.marriages ?? [],
     housingHistory: w.survival.households.housingHistory ?? [], ...(recordTimeline ? { timeline, dailyTimeline: daily } : {}),
     daily: { days: daily.length, needSum: dailyNeed, shortfallDays, disasterDays, last: daily.slice(-5) },
+    curve: daily.map((d) => ({ day: d.day, population: d.population, store: d.store, endStore: d.endStore, shortfall: d.shortfall ?? 0 })),
     runtime: {
       avgTickMs: Number((sumTickMs / ticks).toFixed(3)), maxTickMs,
       saveBytes: save, heapDeltaBytes: process.memoryUsage().heapUsed - heap0,
