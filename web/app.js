@@ -76,6 +76,12 @@ async function api(path, body) {
   showPersistNotice(result, path);
   return result;
 }
+// V7.3：取消玩家进行中的动作（只取消，不结算成果，已用分钟不退）。
+async function cancelBusyAction() {
+  const r = await api('/act', { kind: 'busy_cancel', ...(ui.compare ? { mode: 'compare', revision: S.compareRevision } : { mode: 'survival' }) });
+  if (r?.ok) { toast(r.cancelled ? `已取消：${r.cancelled}` : '已取消进行中的动作'); void refresh(); }
+  else toast(r?.code === 'NO_BUSY' ? '没有正在进行的动作' : `取消失败：${SURV_CODE_ZH[r?.code] ?? r?.code ?? ''}`);
+}
 
 // 验收/调试钩子：占位碰撞与寻路可在浏览器内断言（drive6 用）
 window.__lifeDebug = { buildWorld, astar, isWalkable, sitesOf, talk: (target) => openTalkWith(target) };
@@ -3197,11 +3203,24 @@ function renderSeasonHud(view, location, outdoor) {
   $('seasonDate').textContent=(view.season??'—')+'季 第'+(view.dayInSeason??'?')+'天';
   $('seasonWeather').textContent=clock+' '+weather;
   const ph = $('playerHud');
-  if (ph) ph.innerHTML = [
-    [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
-    [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
-    [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日时间' : '本刻行动', `${view.player?.timeLeft ?? 0}/${view.player?.timeMax ?? 100}`],
-  ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
+  if (ph) {
+    ph.innerHTML = [
+      [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
+      [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
+      [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日时间' : '本刻行动', `${view.player?.timeLeft ?? 0}/${view.player?.timeMax ?? 100}`],
+      ...(view.player?.busy ? [[`${STAT_ICON.action}`, '⏳ 动作', `${esc(view.player.busy.kind)} 剩 ${view.player.busy.remainMin} 分`]] : []),
+    ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
+    if (view.player?.busy && !ph.querySelector('#btnBusyCancel')) {
+      const btn = document.createElement('button');
+      btn.id = 'btnBusyCancel';
+      btn.type = 'button';
+      btn.textContent = '取消';
+      btn.title = '取消当前进行中的动作（不结算成果，已用分钟不退）';
+      btn.style.marginLeft = '6px';
+      btn.onclick = () => cancelBusyAction();
+      ph.appendChild(btn);
+    }
+  }
   const pl = $('placeHud');
   if (pl) pl.textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
 }
@@ -4722,4 +4741,5 @@ Object.assign(window.__lifeDebug, {
   replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
     actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },
 });
+
 

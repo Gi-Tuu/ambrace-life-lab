@@ -19,7 +19,7 @@ import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
 import { maybeResidentRequest, respondRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
-import { noteAction, noteRefusal, noteAbort } from './action-ledger.mjs';
+import { noteAction, noteRefusal, noteAbort, noteCancel } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -291,25 +291,39 @@ function playerViabSpend(w, amount) {
   if (w.survival?.actTimeModel === true) return;
   w.agents.p1?.viab?.spend?.(amount);
 }
+// V7.3 第三批：中止/取消进行中的动作（只结束 busy，不结算效果、不退已用分钟、不重复扣体力）。
 function playerBusyAbort(sp, code) {
   const w = sp.world, clock = clockOf(w, 'p1'), b = clock?.busy;
   if (!b) return;
+  const userCancel = code === 'USER_CANCEL';
   clock.busy = null;
-  recordSettlementEvent(w, 'player_action', { actor: 'p1', action: b.kind, status: 'cancelled', code, minutes: b.totalMin - b.remainMin, actionId: b.id });
-  noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
-  noteRefusal(w, 'player', b.kind);
-  noteAbort(w, 'player', b.kind);
-  w.survival.lastPlayerAbort = { id: b.id, kind: b.kind, code, at: w.t, minutesDone: b.totalMin - b.remainMin };
-  sp.log.push({ t: w.t, kind: b.kind, ok: false, code });
+  recordSettlementEvent(w, 'player_action', {
+    actor: 'p1', action: b.kind,
+    status: userCancel ? 'cancelled' : 'aborted',
+    code: userCancel ? 'USER_CANCEL' : code,
+    minutesDone: b.totalMin - b.remainMin, actionId: b.id,
+  });
+  if (userCancel) {
+    noteCancel(w, 'player', b.kind);
+    noteAbort(w, 'player', b.kind);
+    noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+  } else {
+    noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+    noteRefusal(w, 'player', b.kind);
+    noteAbort(w, 'player', b.kind);
+  }
+  w.survival.lastPlayerAbort = { id: b.id, kind: b.kind, code: userCancel ? 'CANCELLED' : code, at: w.t, minutesDone: b.totalMin - b.remainMin };
+  sp.log.push({ t: w.t, kind: b.kind, ok: false, code: userCancel ? 'CANCELLED' : code });
   if (sp.log.length > 40) sp.log.shift();
 }
-// V7.3 第三批：玩家主动取消进行中的 busy（与死亡/跨日中止同口径、幂等）。
+// V7.3 第三批：玩家主动取消进行中的 busy（幂等；无 busy ⇒ NO_BUSY）。
 export function cancelPlayerBusy(sp) {
-  if (sp?.world?.survival?.actTimeModel !== true) return { ok: false, code: 'NO_BUSY' };
-  const b = clockOf(sp.world, 'p1')?.busy;
+  const w = sp?.world;
+  if (w?.independentWorld !== true || w?.survival?.actTimeModel !== true) return { ok: false, code: 'NO_BUSY' };
+  const b = clockOf(w, 'p1')?.busy;
   if (!b) return { ok: false, code: 'NO_BUSY' };
   playerBusyAbort(sp, 'USER_CANCEL');
-  return { ok: true, code: 'CANCELLED', kind: b.kind };
+  return { ok: true, code: 'OK', cancelled: b.kind };
 }
 
 // 玩家跨刻动作：每拍按剩余分钟推进；完成时只结算一次（busy 先清空再执行）。
@@ -662,6 +676,7 @@ function chargePlayerEnergy(w, energy) {
 
 export function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
+  if (kind === 'busy_cancel') return cancelPlayerBusy(sp);
   const model = w.independentWorld && w.survival?.actTimeModel === true;
   const cost = model ? costFor(kind, body) : { shared: 'legacy', minutes: legacyPlayerTime(w, kind), energy: 0 };
   let spentMinutes = 0;
@@ -1277,6 +1292,8 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
+
 
 
 

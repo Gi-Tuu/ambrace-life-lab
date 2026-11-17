@@ -1531,7 +1531,31 @@ export const host = {
     });
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
-      const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask'];
+      const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state'];
+      // V7.3 第三批浏览器夹具：只在 V73_TEST=1 下暴露的受控接口（不进入生产默认路径）。
+      if (body.action === 'v73_fixture') {
+        if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+        const sp = S.mainSurv ?? S.surv;
+        if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+        const w = sp.world;
+        w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
+        w.pinv.p1 = { wood: 5, stone: 5 };
+        return { ok: true, code: 'OK' };
+      }
+      if (body.action === 'v73_state') {
+        if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+        const sp = S.mainSurv ?? S.surv;
+        if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+        const w = sp.world, s = w.survival, clock = s.actClock?.p1;
+        return {
+          ok: true, usedMin: clock?.tick?.usedMin ?? null,
+          busy: clock?.busy ? { kind: clock.busy.kind, remainMin: clock.busy.remainMin, minutesDone: clock.busy.totalMin - clock.busy.remainMin } : null,
+          cancelled: s.actionLedger?.player?.cancelled ?? {},
+          events: (s.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action'),
+          progress: s.sites?.[0]?.progress ?? null,
+          energy: w.agents.p1?.drives?.v?.energy ?? null,
+        };
+      }
       if (body.action === 'pause' || body.action === 'resume') {
         const key = body.mode === 'compare' ? 'compareRunning' : 'running';
         S[key] = body.action === 'resume';

@@ -1,11 +1,11 @@
 // V7.1 §7：累计行动账本（内存计数，不保存无限日志）。
 // 区分 尝试 / 成功 / 规则拒绝 / 决策来源（reflex|habit|deliberation），并把玩家与居民分开。
 // V7.2 E2/E3：同一口径补齐 开始/完成/中止/时间/体力/资源变化；服务端位置同步不算劳动。
-const BOOK_FIELDS = ['attempt', 'success', 'refused', 'aborted', 'byLayer', 'minutes', 'energy', 'resources'];
+const BOOK_FIELDS = ['attempt', 'success', 'refused', 'aborted', 'cancelled', 'byLayer', 'minutes', 'energy', 'resources'];
 const SYNC_KINDS = new Set(['player_sync']); // 客户端位移同步：表现层事实，不是行动
 
 const emptyBook = () => ({
-  attempt: {}, success: {}, refused: {}, aborted: {}, byLayer: {},
+  attempt: {}, success: {}, refused: {}, aborted: {}, cancelled: {}, byLayer: {},
   minutes: {}, energy: {}, resources: {},
   laborAttempt: 0, laborSuccess: 0, sync: 0,
 });
@@ -60,6 +60,15 @@ export function noteRefusal(world, side, kind) {
   book.refused[kind] = (book.refused[kind] ?? 0) + 1;
 }
 
+export function noteCancel(world, side, kind) {
+  if (world?.gameRules !== true) return;
+  const ledger = ensureLedger(world);
+  if (!ledger || !kind) return;
+  const book = side === 'resident' ? ledger.resident : ledger.player;
+  book.cancelled ??= {};
+  book.cancelled[kind] = (book.cancelled[kind] ?? 0) + 1;
+}
+
 export function noteAbort(world, side, kind) {
   if (world?.gameRules !== true) return; // 研究态不写新字段
   const ledger = ensureLedger(world);
@@ -75,7 +84,7 @@ const sideStats = (book) => {
   const laborAttempt = book.laborAttempt ?? 0;
   const laborSuccess = book.laborSuccess ?? 0;
   return {
-    attempt: sum(book.attempt), success: sum(book.success), refused: sum(book.refused), aborted: sum(book.aborted),
+    attempt: sum(book.attempt), success: sum(book.success), refused: sum(book.refused), aborted: sum(book.aborted), cancelled: sum(book.cancelled),
     laborAttempt, laborSuccess,
     laborRate: laborAttempt ? Number((laborSuccess / laborAttempt).toFixed(4)) : null,
     sync: book.sync ?? 0,
@@ -90,3 +99,4 @@ export function ledgerStats(world) {
   if (!L) return null;
   return { player: sideStats(L.player), resident: sideStats(L.resident) };
 }
+
