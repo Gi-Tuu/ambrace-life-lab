@@ -125,12 +125,22 @@ export function touchSave(dataDir, entry, index = readIndex(dataDir)) {
 }
 
 // TTL 清扫：只删 saves/ 里的文件；**正在被观看的营地绝不删**（先查观看计数再动文件）。
+// DATA3-02：索引不健康时一律不清、不删（readIndex 已把坏索引备份移走）；健康索引下的孤儿档改为隔离，不 rm。
 export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, lastSeenAt = () => 0, isWatched = () => false } = {}) {
   const dir = savesDir(dataDir);
-  if (!existsSync(dir)) return { removed: [], kept: 0 };
+  if (!existsSync(dir)) return { removed: [], kept: 0, quarantined: [], indexUnhealthy: false };
   const index = readIndex(dataDir);
+  // readIndex 会把坏索引改名备份；之后 index.json 缺失 + 存在 .corrupt-* ⇒ 仍视为「索引不健康」，
+  // 直到有人写回一份健康索引。否则重启后 sweep 会把所有档当孤儿。
+  const hasCorruptBackup = !existsSync(indexFile(dataDir)) &&
+    readdirSync(dir).some((name) => name.startsWith('index.json.corrupt-'));
+  if (index.indexError || hasCorruptBackup) {
+    // 索引坏：这份目录里哪些档是"活的"无从判断，宁可不动。恢复由备份 + 人工完成。
+    return { removed: [], kept: index.entries.length, quarantined: [], indexUnhealthy: true };
+  }
   const removed = [];
   const kept = [];
+  const quarantined = [];
   const known = new Set();
   for (const entry of index.entries) {
     known.add(entry.key);
@@ -141,17 +151,21 @@ export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, las
     if (existsSync(file)) rmSync(file);
     removed.push(entry.key);
   }
-  // 审计 DATA-05：没有索引的孤儿营地文件（崩溃/索引重建后遗留）按文件时间清掉。
+  // 审计 DATA-05：没有索引的孤儿营地文件（崩溃/索引重建后遗留）按文件时间隔离（不删除，留作取证/恢复）。
   try {
+    const qdir = join(dir, 'quarantine');
     for (const name of readdirSync(dir)) {
       const m = /^([0-9a-f]{32})\.json\.gz$/.exec(name);
       if (!m || known.has(m[1])) continue;
       const file = join(dir, name);
-      if (now - statSync(file).mtimeMs > ttlMs) { rmSync(file); removed.push(m[1]); }
+      if (now - statSync(file).mtimeMs <= ttlMs) continue;
+      mkdirSync(qdir, { recursive: true });
+      renameSync(file, join(qdir, name));
+      quarantined.push(m[1]);
     }
   } catch { /* 清扫尽力而为 */ }
   if (removed.length) writeIndex(dataDir, { entries: kept });
-  return { removed, kept: kept.length };
+  return { removed, kept: kept.length, quarantined, indexUnhealthy: false };
 }
 
 // fork 新营地：从种子营地的 survival 块起步，但玩家必须是"刚到的人"。
