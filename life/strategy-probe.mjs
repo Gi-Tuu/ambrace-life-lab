@@ -5,6 +5,8 @@ import { createSurvPlay, tickSurvPlay, survAct } from './survplay.mjs';
 import { livingResidents } from './viability.mjs';
 import { FORMAL_OPTIONS } from './balance-probe.mjs';
 import { ledgerStats } from './action-ledger.mjs';
+import { RESIDENT_MIN as RES_MIN, LABOR_ENERGY } from './resident-time.mjs';
+const LABOR = new Set(Object.keys(LABOR_ENERGY).filter((k) => LABOR_ENERGY[k] > 0));
 import { move } from './body.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 
@@ -22,8 +24,9 @@ async function runOne(name, seed, days) {
   const cfg = STRATEGIES[name];
   const sp = createSurvPlay(seed, { ...FORMAL_OPTIONS, ...cfg.options });
   const w = sp.world;
+  let marriageEvents = 0;
+  w.observeFamilyMarriage = () => { marriageEvents += 1; };
   if (cfg.policy === 'playerDead') { w.agents.p1.dead = true; w.agents.p1.viab.v = 0; }
-  const endedP1 = cfg.policy === 'playerDead';
   for (let d = 0; d < days; d += 1) {
     if (cfg.policy === 'produce' && !w.agents.p1.dead) {
       // 每日一次生产：走到院子采集两次，回仓入库
@@ -37,20 +40,30 @@ async function runOne(name, seed, days) {
     if (w.survival.ended) break;
   }
   const res = resLedgerView(w);
+  // 劳动占比：与 long-run 同一口径（aiActions × 动作分钟表），不新增模拟路径。
+  let labor = 0, totalMinutes = 0;
+  for (const [kind, n] of Object.entries(w.survival.aiActions ?? {})) {
+    const mins = RES_MIN[kind] ?? 10;
+    totalMinutes += n * mins;
+    if (LABOR.has(kind)) labor += n * mins;
+  }
   return {
     strategy: name, intervention: cfg.intervention, seed, days,
-    playerDead: Boolean(w.agents.p1?.dead) || endedP1,
+    playerAlive: !(w.agents.p1?.dead),
     population: livingResidents(w).length,
     births: w.survival.births ?? 0,
+    marriages: marriageEvents,
+    marriedPairs: (() => { const seen = new Set(); let n = 0; for (const [id, sp2] of Object.entries(w.survival.households?.spouses ?? {})) { if (!sp2) continue; const k = [id, sp2].sort().join('|'); if (!seen.has(k)) { seen.add(k); n += 1; } } return n; })(),
     deaths: (w.survival.deaths ?? []).length,
     ended: !!w.survival.ended,
     store: w.survival.store,
     consumed: res?.totals?.consumed ?? null,
-    laborMinutes: ledgerStats(w)?.resident?.minutes ?? null,
+    laborMinutes: labor,
+    laborShare: totalMinutes ? Number((labor / totalMinutes).toFixed(4)) : null,
   };
 }
 
-export async function measureStrategies(tag = 'run', daysList = [30, 100]) {
+export async function measureStrategies(tag = 'run', daysList = [30, 100, 200]) {
   const rows = [];
   for (const days of daysList) for (const name of Object.keys(STRATEGIES)) for (const seed of STRATEGY_SEEDS) {
     rows.push(await runOne(name, seed, days));
@@ -61,7 +74,10 @@ export async function measureStrategies(tag = 'run', daysList = [30, 100]) {
 }
 
 if (process.argv[1]?.endsWith('strategy-probe.mjs')) {
-  const out = await measureStrategies(process.argv[2] ?? 'run', [30, 100]);
+  const out = await measureStrategies(process.argv[2] ?? 'run');
   for (const r of out.rows) console.log(JSON.stringify(r));
 }
+
+
+
 
