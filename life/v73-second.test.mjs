@@ -210,3 +210,12 @@ test('V73-11 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', asy
   assert.equal(w.survival.inv.wood, 4, '每天烧 1 份公共柴');
   assert.equal(w.survival.resLedger.consumed.wood?.fuel ?? 0, 1, '灯火消费进账本');
 });
+
+test('V73-12 严格角色互换：正式游戏居民/玩家同动作同分钟同体力', async () => {
+  const { measureSwap } = await import('./role-swap-probe.mjs');
+  const r = measureSwap(7);
+  assert.ok(r.allSame, `互换实验应全通过：${JSON.stringify(r.rows.filter((x) => !x.same))}`);
+  const gather = r.rows.find((x) => x.kind === 'gather');
+  assert.equal(gather.player.minutes, 10);
+  assert.equal(gather.resident.minutes, 10, '居民 gather 也应记 10 分钟（与玩家同表）');
+});

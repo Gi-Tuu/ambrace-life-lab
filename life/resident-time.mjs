@@ -11,6 +11,7 @@ import { actuate } from './body.mjs';
 import { validate } from './rules.mjs';
 import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
 import { isLaborAction } from './households.mjs';
+import { costFor } from './action-cost.mjs';
 
 export const TICK_MINUTES = 60;
 export const DAY_MINUTES = 1440;
@@ -41,7 +42,12 @@ export function residentTimeModel(world) {
   return world?.independentWorld === true && world?.survival?.actTimeModel === true;
 }
 
-export function residentMinutes(kind) {
+export function residentMinutes(kind, world = null) {
+  // V7.3：正式游戏玩家/居民共用 action-cost 表；研究态保留旧 RESIDENT_MIN，五份基线逐位不变。
+  if (world?.survival?.actTimeModel === true) {
+    const shared = costFor(kind).minutes;
+    if (shared > 0) return shared;
+  }
   return RESIDENT_MIN[kind] ?? DEFAULT_MINUTES;
 }
 
@@ -115,7 +121,7 @@ export function residentBeginTime(world, id, kind) {
   const clock = clockOf(world, id);
   if (clock.busy) return { ok: false, code: 'BUSY' };
   if (clock.tick.n >= TICK_ACTION_CAP) return { ok: false, code: 'TICK_CAP' };
-  const cost = residentMinutes(kind);
+  const cost = residentMinutes(kind, world);
   if (cost <= 0) { clock.tick.n += 1; return { ok: true, minutes: 0, staged: false }; }
   const tickLeft = Math.max(0, TICK_MINUTES - clock.tick.usedMin);
   const dayLeft = Math.max(0, DAY_MINUTES - clock.usedMin);
