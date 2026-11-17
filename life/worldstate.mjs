@@ -70,7 +70,9 @@ const PANTRY_FOOD = [...PANTRY_FIRST, ...FOOD_KINDS.filter(item => !PANTRY_FIRST
 // 家里容器是公仓缺口的第一层缓冲（玩家与居民同享）：按容器键序确定性地吃掉食物。
 function drainCampPantry(world, need) {
   const all = world.survival.campContainers ?? {};
+  // A2：只征用公共容器（store:*）。私人餐台（home:meal 等）必须由所有者明确捐赠/转移才能进入公共配给。
   for (const key of Object.keys(all)) {
+    if (!key.startsWith('store:')) continue;
     const bag = all[key];
     for (const item of PANTRY_FOOD) {
       while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; }
@@ -146,9 +148,8 @@ export function advanceSurvival(world) {
   // 灯火燃料（仅 gameRules）：每天烧 1 份木料；没柴就熄灯，屋里夜里变暗。
   // 先烧公共柴堆，再烧玩家背包——居民与玩家同一条规则。
   if (world.gameRules && !ended) {
-    const bag = (world.pinv ?? {})['p1'] ?? {};
+    // A3：公共设施只烧公共柴堆。私人木材（玩家或其他居民）必须通过明确的捐赠/运输行动进入公仓。
     if ((s.inv?.wood ?? 0) >= 1) { s.inv.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
-    else if ((bag.wood ?? 0) >= 1) { bag.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
     // 亮不亮由当前柴量推导（见 survView.light），这里只负责每天烧一份。
   }
 

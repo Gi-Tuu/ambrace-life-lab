@@ -392,6 +392,8 @@ export function stepHouseholds(w, log) {
   }
 
   for (const [id, person] of Object.entries(h.residents)) {
+    // A1：玩家的住房只能由玩家自己的明确行动改变；居民住房流程不得替玩家买房/建房/扣私人物资。
+    if (w.agents[id]?.isPlayer) continue;
     if (!adults.includes(id) || ['stayed', 'bought', 'built', 'building'].includes(person.decision)) continue;
     const room = w.housing[id];
     const parents = person.parents.filter(p => adults.includes(p) && w.housing[p] === room);
