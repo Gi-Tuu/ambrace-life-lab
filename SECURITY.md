@@ -11,13 +11,18 @@
 
 | 配置 | 不配的后果 |
 |---|---|
-| `CTL_TOKEN` | 写路由（`/act` `//ctl`）默认姿态：**非 loopback** 的写请求必须出示浏览器同源证据（Origin / `sec-fetch-site: same-origin`）**或**有效令牌，二者皆无一律 403——堵掉"脚本一条无 Origin 的 JSON 就能 reset"的洞；loopback 保留无令牌的开发便利。设了 `CTL_TOKEN` 后，**所有**非浏览器写请求（含 loopback 脚本）都要带 `authorization: Bearer <token>` 或 `x-ctl-token`；浏览器同源请求不受影响。公开部署**建议设**，令牌只进密文变量 |
+| `CTL_TOKEN` | 两种姿态，**按是否配置区分**：①**不配（生产默认）**——非 loopback 的写请求必须出示浏览器同源证据（Origin / `sec-fetch-site: same-origin`），二者皆无一律 403，loopback 保留无令牌的开发便利；②**配了**——普通交互（`/act`、`/saves/open`、`/saves/back`）仍允许同源浏览器通过（不会被令牌锁死，避免 11-16 线上全停的形态），只有 `/ctl` 的破坏性动作（`reset` / `survival_reset` / `catchup` / `brain` / `compare_reset`）强制 `authorization: Bearer <token>` 或 `x-ctl-token`。公开部署建议设，令牌只进密文变量 |
 | `CHAT_TOKEN` | `/chat` 转发默认**关闭**（返回 404）。不设就没人能用它烧你的模型额度（这是有意的默认） |
 | `MAX_CALLS` | 每日模型调用额度。不设默认 120；公开实例建议按预算设小 |
 | `PRESENCE_MS` | 无人观看时停调真模型的窗口。**单位是毫秒**：想 60 秒要写 `60000`，写 `60` 只有 60 毫秒 |
 
 其它已内置的防护：静态面白名单 + realpath（只放 `/web/`）、`/healthz` 不回显密钥/端点/数据目录、
 请求体上限 64 KB、畸形 URL 与未捕获异常不会杀进程、`world.json` 原子写 + `.bak` 轮转。
+
+**营地归属（SEC3-02）**：创建营地时下发 `camp_owner`（HttpOnly cookie，32 hex），索引里只存它的
+sha256（`ownerHash`），不存原文。`survival_reset` 必须出示匹配的 `camp_owner` 或 `CTL_TOKEN`；
+没有 owner 的旧营地首次打开时绑定给当前访客（claim），之后匿名不可重置。创建者可正常游玩，
+但别人的浏览器无法用一条 reset 抹掉他的营地。
 
 ## 不在范围内
 

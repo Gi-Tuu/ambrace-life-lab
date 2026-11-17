@@ -65,3 +65,25 @@ export function mutatingDenied(req, token = '') {
   if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
   return 'UNAUTHORIZED';
 }
+
+// SEC3-01：普通交互（/act、/saves/open、/saves/back）在配了 CTL_TOKEN 时也允许同源浏览器通过；
+// 令牌只锁破坏性控制面。否则"设了令牌 = 浏览器全 401"（11-16 线上全停的形态）。
+export function interactionDenied(req, token = '') {
+  if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
+  if (token && tokenMatches(bearerOf(req), token)) return null;
+  if (!sameOrigin(req)) return 'CROSS_SITE';
+  if (browserEvidence(req)) return null;
+  if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
+  return 'UNAUTHORIZED';
+}
+
+// SEC3-02：/ctl 的破坏性动作（reset/survival_reset/catchup/brain）在配置了令牌时必须带令牌；
+// 其余 /ctl 动作（pause/resume/step/mask/compare_reset 等）仍按普通交互守卫。
+export const DESTRUCTIVE_CTL = Object.freeze(['reset', 'survival_reset', 'catchup', 'brain', 'compare_reset']);
+export function ctlDenied(req, body, token = '') {
+  if (token && DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
+    if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
+    return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
+  }
+  return interactionDenied(req, token);
+}

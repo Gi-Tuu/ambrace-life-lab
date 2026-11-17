@@ -306,13 +306,17 @@ test('SEC-03c 全局桶兜住"刷名字造营地"：不同名字也要被总量�
   } finally { await stopServer(child); }
 });
 
-test('SEC-02b 配了 CTL_TOKEN 就只认令牌：浏览器访客必被拒，且 boot 要警告出来【变红法：把 boot 警告删掉或让同源证据重新放行】', async () => {
+test('SEC-02b 配了 CTL_TOKEN：浏览器交互不被锁；破坏性 /ctl 只认令牌；boot 仍警告', async () => {
   const { child, base, out } = await bootServer({ CTL_TOKEN: 'top-secret', OPEN_LIMIT: '50' });
   try {
     const r = await post(base, '/saves/open', { name: '令牌下访客' });
-    assert.ok(r.status === 401 || r.status === 403, `无令牌的浏览器式请求必须被拒，实测 ${r.status}`);
-    const withToken = await post(base, '/saves/open', { name: '持令牌脚本' }, { authorization: 'Bearer top-secret' });
-    assert.equal(withToken.status, 200, '带正确令牌的脚本仍要能建档');
-    assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把"设了令牌会锁死访客"这条警告打出来');
+    assert.equal(r.status, 200, `同源浏览器建档不该被令牌锁死，实测 ${r.status}`);
+    const act = await post(base, '/act', { mode: 'survival', kind: 'move', room: 'hall' });
+    assert.equal(act.status, 200, '浏览器 /act 不该被令牌锁死');
+    const anonReset = await post(base, '/ctl', { action: 'reset', confirm: true });
+    assert.ok([401, 403].includes(anonReset.status), `匿名 reset 必须被拒，实测 ${anonReset.status}`);
+    const tokenReset = await post(base, '/ctl', { action: 'reset', confirm: true }, { authorization: 'Bearer top-secret' });
+    assert.ok(![401, 403].includes(tokenReset.status), `带令牌 reset 不该被拒，实测 ${tokenReset.status}`);
+    assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把令牌姿态打印出来');
   } finally { await stopServer(child); }
 });

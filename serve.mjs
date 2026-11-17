@@ -6,7 +6,8 @@ import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
 import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
-import { mutatingDenied, isJson } from './life/request-guard.mjs';
+import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson } from './life/request-guard.mjs';
+import { createHash, randomBytes } from 'node:crypto';
 import { normalizeName } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -230,6 +231,12 @@ async function chatProxy(req, res) {
   }
 }
 
+function cookieValue(req, name) {
+  return String(req?.headers?.cookie ?? '').split(';').map((x) => x.trim())
+    .find((x) => x.startsWith(`${name}=`))?.slice(name.length + 1) ?? null;
+}
+const ownerHashOf = (token) => createHash('sha256').update(String(token)).digest('hex');
+
 const healthStatus = ({ saveError, tickError }) => saveError || tickError ? 503 : 200;
 
 async function handle(req, res) {
@@ -258,14 +265,14 @@ async function handle(req, res) {
     // 名字存档：公开列表只投影六项；进场是写路由（同源/令牌守卫）。
   if (p === '/saves' && req.method === 'GET') return json(res, 200, { entries: listCamps() });
   if (p === '/saves/back' && req.method === 'POST') {
-    const denied = mutatingDenied(req, CTL_TOKEN);
+    const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     const back = await backToMainCamp();
     res.setHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
     return json(res, 200, back);
   }
   if (p === '/saves/open' && req.method === 'POST') {
-    const denied = mutatingDenied(req, CTL_TOKEN);
+    const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     if (listCamps().length >= CAMP_TOTAL_MAX) return json(res, 429, { error: 'CAMP_LIMIT' });
     let body;
@@ -276,7 +283,13 @@ async function handle(req, res) {
     }
     const opened = await openCamp(body?.name);
     if (!opened.ok) return json(res,['CAMP_UNAVAILABLE','SAVE_FAILED'].includes(opened.code)?503:400,{error:opened.code});
-    res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
+    // SEC3-02：创建者拿 camp_owner（HttpOnly）；索引只存 sha256。
+    const ownerToken = cookieValue(req, 'camp_owner') || randomBytes(16).toString('hex');
+    host.claimCamp(opened.key, ownerHashOf(ownerToken));
+    res.setHeader('set-cookie', [
+      `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`,
+      `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
+    ]);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
@@ -327,8 +340,6 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   }
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
-    const denied = mutatingDenied(req, CTL_TOKEN);
-    if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
     // H-30：读体失败要分清"超长"(413) 与"JSON 坏了"(400)。旧版把两者都包在同一个 catch 里 → 全变 400。
     let rawBody;
     try {
@@ -344,9 +355,23 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
       return json(res, 400, { error: 'BAD_JSON' });
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
+    // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
+    const denied = p === '/act' ? interactionDenied(req, CTL_TOKEN) : ctlDenied(req, body, CTL_TOKEN);
+    if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
     // H-02c：reset 是唯一会把整段历史丢掉的动作，必须显式确认，避免误点与 CSRF 成功。
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
+    }
+    // SEC3-02：营地归属。survival_reset 只有 owner cookie 或 CTL_TOKEN 能做；旧营地没 owner 的不得匿名重置。
+    if (p === '/ctl' && body?.action === 'survival_reset') {
+      const tokenOk = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+      if (!tokenOk) {
+        const ownerToken = cookieValue(req, 'camp_owner');
+        const ownerHash = host.campOwnerHash(campKey || 'MAIN');
+        if (!ownerHash || !ownerToken || ownerHashOf(ownerToken) !== ownerHash) {
+          return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+        }
+      }
     }
     try {
       return json(res,200,await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined)));
@@ -445,8 +470,10 @@ if (DELIBERATION_MODEL) console.error(`[serve] 审议车道指到 ${DELIBERATION
 // 播报归应用层：host 是库，往 stdout 写日志会干扰测试 runner 的消息通道
 const boot = await host.start();
 // 决策口径（所有者 2026-11-16）：生产不设 CTL_TOKEN。这条警告必须排在"就绪"之前，便于启动日志与测试都看得到。
-if (CTL_TOKEN) console.error('[serve] 警告：CTL_TOKEN 已配置 ⇒ 写路由只认 Bearer 令牌，浏览器访客的 /act、/ctl、/saves/open 会一律 401。公开演示实例应保持不配置。');
+if (CTL_TOKEN) console.error('[serve] 提示：CTL_TOKEN 已配置 ⇒ /ctl 的破坏性动作（reset/survival_reset/catchup/brain）只认 Bearer 令牌；/act 与 /saves/open 仍允许同源浏览器，不会被锁死。');
 console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
+

@@ -24,7 +24,7 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
-import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive } from './camp-instances.mjs';
+import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
 
 const ROSTER = [
@@ -372,6 +372,22 @@ export function campSurv(campKey) {
 
 export function listCamps() {
   return listSaves(S.dir, Date.now());
+}
+
+// SEC3-02：营地归属。索引只存所有者令牌的 sha256，不存原值。
+export function campOwnerHash(key) {
+  const entry = readIndex(S.dir).entries.find((e) => e.key === key);
+  return entry?.ownerHash ?? null;
+}
+export function claimCamp(key, hash) {
+  if (!key || !hash) return { ok: false, code: 'BAD_CLAIM' };
+  const idx = readIndex(S.dir);
+  const entry = idx.entries.find((e) => e.key === key);
+  if (!entry) return { ok: false, code: 'NO_CAMP' };
+  if (entry.ownerHash) return { ok: true, claimed: false, owned: entry.ownerHash === hash };
+  entry.ownerHash = hash;
+  writeIndex(S.dir, idx);
+  return { ok: true, claimed: true, owned: true };
 }
 
 // 进场：先落当前营地，再把指定名字的营地切为当前世界。返回不进游戏时只读的摘要。
@@ -1330,6 +1346,8 @@ export const host = {
   },
   status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, masks: S.masks }),
   listCamps,
+  campOwnerHash,
+  claimCamp,
   sweepCamps,
   openCamp,
   backToMainCamp,
