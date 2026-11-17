@@ -10,6 +10,7 @@ import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed, SURV_COST } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
 import { residentTimeModel, clockOf, residentBeginTime, attachBusyAction, residentRefundTime, laborEnergy } from './resident-time.mjs';
+import { isLaborAction } from './households.mjs';
 import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
@@ -536,7 +537,6 @@ export class Organism {
     const result = actuate(world, this.id, action);
     // 失败的动作退还个人时间：误点/被驳回不占当天预算。
     if (timeSpent > 0 && !result?.ok) residentRefundTime(world, this.id, timeSpent);
-    noteAction(world, 'resident', action?.kind, !!result?.ok, layer);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
     const actionCost = (world.unifiedCooperation ? SURV_COST[action.kind] : undefined) ?? action.cost ?? 0.06;
     let spentNow = null;
@@ -555,6 +555,12 @@ export class Organism {
       paid = Number((eBeforeSpend - (this.viab.v + this.viab.reserve)).toFixed(6)); // 实际扣掉的：v 归零时少于名义值
     }
     if (spentNow) this.noteErosion(spentNow, t);
+    // E2/E3：玩家与居民同一口径的累计账本（时间/体力/劳动成败；位置同步不在此处进账）。
+    noteAction(world, 'resident', action?.kind, !!result?.ok, layer, {
+      minutes: result?.ok ? timeSpent : 0,
+      energy: energyPaid,
+      labor: isLaborAction(action.kind),
+    });
     // 记录用四舍五入，喂给模型的必须是原值：进食量是 0.26+0.24×熟悉度 这类带小数的量，舍一下就会改变收支
     const ateAmount = result.ok && result.satiated === 'energy' ? result.amount ?? 0 : 0;
     const eBeforeRegen = this.viab.v + this.viab.reserve;

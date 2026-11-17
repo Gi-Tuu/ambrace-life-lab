@@ -8,6 +8,7 @@ import { bedsPerHome, maritalStatus, residentsAt, residentStage } from './househ
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { effectiveMods } from './production.mjs';
 import { LABOR_ENERGY, RESIDENT_MIN } from './resident-time.mjs';
+import { ledgerStats } from './action-ledger.mjs';
 
 export const LONG_SEEDS = [7, 13, 29, 41, 53];
 export const GAME_OPTIONS = Object.freeze({
@@ -88,6 +89,7 @@ function snapshot(w) {
     family: familySnapshot(w),
     aiActions: { ...(s.aiActions ?? {}) }, counters: actionCounters(w), actionAudit: structuredClone(s.actionAudit ?? {}),
     coop: { completions: (s.coop?.completions ?? []).length, refusals: s.coop?.refusals ?? 0, replans: s.coop?.replans ?? 0, exits: s.coop?.exits ?? 0 },
+    stats: ledgerStats(w),
     agentErrors: s.agentErrors ?? 0,
   };
 }

@@ -8,6 +8,7 @@
 // - 研究态（非 independentWorld 或未开个人时间）完全不进这里，旧路径逐位不变。
 import { actuate } from './body.mjs';
 import { validate } from './rules.mjs';
+import { noteAbort } from './action-ledger.mjs';
 
 export const TICK_MINUTES = 60;
 export const DAY_MINUTES = 1440;
@@ -127,6 +128,7 @@ function abortBusy(world, id, clock, code) {
   const b = clock.busy;
   clock.busy = null;
   if (!b) return;
+  noteAbort(world, 'resident', b.kind); // E2/E3：中止进累计账本
   clock.lastAbort = { kind: b.kind, code, at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
 }
 

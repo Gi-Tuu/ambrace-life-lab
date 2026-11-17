@@ -7,10 +7,9 @@ import { CURRENT_EVENT_RULES } from './rng.mjs';
 
 const GAME = { eventRulesVersion: CURRENT_EVENT_RULES, independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true };
 
-test('COP-01 同处一地（含在途）每天涨熟度，但不生成任何 talk 动作【变红法：把 gameRules 条件去掉】', () => {
+test('COP-01 同处真实位置每天涨熟度，但不生成任何 talk 动作；在途不算同处【变红法：把 gameRules 条件去掉】', () => {
   const sp = createSurvPlay(13, GAME); const w = sp.world;
   w.loc.a1 = 'yard'; w.loc.a2 = 'yard';
-  w.survival.districtTravel = { a2: { from: 'home', to: 'yard', left: 1 } }; // a2 正在赶路：LIFE-02 下他不能开口
   const before = w.agents.a1.relations.get('a2').familiarity;
   w.t += 24; stepRelationships(w, sp.log);
   const after = w.agents.a1.relations.get('a2').familiarity;
@@ -22,6 +21,11 @@ test('COP-01 同处一地（含在途）每天涨熟度，但不生成任何 tal
   // 同一天再跑一次不得重复积累（否则一 tick 一次会把剂量放大 24 倍）
   stepRelationships(w, sp.log);
   assert.equal(w.agents.a1.relations.get('a2').familiarity, after, '同一天内不得重复积累');
+  // V7.2 C1：在途的人不站在任何一端 ⇒ 逻辑 loc 相同也不算面对面
+  w.survival.districtTravel = { a2: { from: 'home', to: 'yard', left: 1 } };
+  const mid = w.agents.a1.relations.get('a2').familiarity;
+  w.t += 24; stepRelationships(w, sp.log);
+  assert.equal(w.agents.a1.relations.get('a2').familiarity, mid, '在途不算同处');
 });
 
 test('COP-02 研究态不得被动到（基线逐位不变的边界）【变红法：把条件改成恒真】', () => {

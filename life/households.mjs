@@ -3,6 +3,7 @@ import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
 import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
 import { isAlive } from './viability.mjs';
+import { worldSite } from './geometry.mjs';
 
 export const ADULT_DAYS = 12;
 export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
@@ -35,14 +36,23 @@ export function makeHouseholds(housing) {
 // 只改门槛、不改机制：掷骰、老年代谢、老年减产全都照旧，只是从 180 天起才对玩家生效；
 // 且 `gameRules` 为假时一律退回 ELDER_DAYS ⇒ 研究态与五份基线逐位不变。
 export const ELDER_DAYS_PLAYER = Number(process.env.ELDER_DAYS_PLAYER ?? 180);
-export const elderDaysFor = (w, id) => (w.gameRules && w.agents?.[id]?.isPlayer ? ELDER_DAYS_PLAYER : ELDER_DAYS);
+// C4：生命参数随档。正式游戏把当次参数写进 survival.lifecycle，读档按档恢复；
+// 旧档缺字段 ⇒ 继承当前默认（下面的常量），不写回、不突变。研究态不写 ⇒ 基线逐位不变。
+const lifeOf = (w) => (w.gameRules ? w.survival?.lifecycle : null);
+export const infantDaysFor = (w) => lifeOf(w)?.infantDays ?? INFANT_DAYS;
+export const adultDaysFor = (w) => lifeOf(w)?.adultDays ?? ADULT_DAYS;
+export const elderDaysFor = (w, id) => {
+  const life = lifeOf(w);
+  if (w.gameRules && w.agents?.[id]?.isPlayer) return life?.elderDaysPlayer ?? ELDER_DAYS_PLAYER;
+  return life?.elderDays ?? ELDER_DAYS;
+};
 
 export function residentStage(w, id) {
   const resident = w.survival.households?.residents[id];
   if (!resident) return 'adult';
   const age = (w.t - resident.born) / DAY_TICKS;
-  if (age < INFANT_DAYS) return 'infant';
-  if (age < ADULT_DAYS) return 'child';
+  if (age < infantDaysFor(w)) return 'infant';
+  if (age < adultDaysFor(w)) return 'child';
   if (age < elderDaysFor(w, id)) return 'adult';
   return 'elder';
 }
@@ -65,6 +75,28 @@ const relation = (w, a, b) => w.agents[a].relations?.map.get(b);
 const trust = (w, a, b) => relation(w, a, b)?.trust ?? 30;
 const sameRoom = (w, a, b) => w.loc[a] === w.loc[b] &&
   !w.survival.districtTravel?.[a] && !w.survival.districtTravel?.[b];
+
+// C1：自然接触按**真实位置**判定，不按逻辑 loc。
+// - 在途/跨区移动的人不站在任何一端 ⇒ 不与任何人算面对面（旧版把"在途"也算同处）。
+// - 玩家用服务端拥有的真实坐标 playerPos（客户端持续上报，缺省时落到所在地点中心）。
+// - 其余角色取所在地点/外围住宅/营地的锚点坐标；不同锚点超出半径不算。
+export const CO_PRESENCE_RADIUS = 6;
+export function actualPosition(w, id) {
+  const s = w.survival;
+  if (!s) return null;
+  if (s.districtTravel?.[id]) return null;
+  if (id === 'p1' && s.playerPos && Number.isFinite(s.playerPos.x) && Number.isFinite(s.playerPos.z)) {
+    return [s.playerPos.x, s.playerPos.z];
+  }
+  const site = worldSite(w, w.loc[id]);
+  return Array.isArray(site) ? [site[0], site[1]] : null;
+}
+export function coLocated(w, a, b) {
+  if (a === b) return false;
+  const pa = actualPosition(w, a), pb = actualPosition(w, b);
+  if (!pa || !pb) return false;
+  return Math.hypot(pa[0] - pb[0], pa[1] - pb[1]) <= CO_PRESENCE_RADIUS;
+}
 export const residentsAt = (w, room) => Object.entries(w.housing).filter(([id, home]) => home === room && isAlive(w.agents[id])).length; // P0-1：床位按存活人口，死者腾出床位
 const hasBed = (w, room) => Object.hasOwn(w.survival.households.deeds, room) && residentsAt(w, room) < bedsPerHome(w);
 export const housingMode = w => w.familyExperiment?.housing ?? (w.eventRulesVersion === CURRENT_EVENT_RULES ? 'inherit' : 'legacy');
@@ -256,23 +288,18 @@ export function stepRelationships(w, log) {
   const day = dayOf(w.t);
   h.offers = h.offers.filter(o => day - dayOf(o.t) <= 2);
   const adults = Object.keys(w.agents).filter(id => adult(w, id));
-  // C（所有者 2026-11-16 拍板"先做 C"）：同处一地的成年人当天点过头就积累一点熟度——**哪怕其中一方正在赶路**。
-  // 这不倒改 LIFE-02：这里不生成 talk 动作、不交付、不改行程，"在途不开口/不交付"照旧成立。
-  // 为什么必须有：实测玩家占公仓一口会让在途比例翻倍，把 talk 候选可得率从 90% 压到 48%，
-  // 于是熟度永远跨不过 `familiarity ≥ 0.45` 这条婚配门槛 ⇒ 100 日 0 婚 0 出生、全员老死。
-  // 社会可达性不该由"谁正好在路上"决定。只在 gameRules 下生效，研究态逐位不变。
+  // C1（所有者拍板）：自然接触按真实位置积累熟度——玩家与居民、居民之间都在内；
+  // 在途的人不算站在任何一端，逻辑 loc 相同但实际位置不同也不算面对面。只积累熟度，不生成 talk 动作、不交付。
+  // 只在 gameRules 下生效，研究态逐位不变。
   if (w.gameRules && day !== (h.coFamiliarDay ?? -1)) {
     h.coFamiliarDay = day;
-    const bySite = {};
-    for (const id of adults) {
-      const a = w.agents[id];
-      if (!a || a.isPlayer || a.dead) continue;
-      (bySite[w.loc[id]] ??= []).push(a);
-    }
-    for (const group of Object.values(bySite)) {
-      for (let i = 0; i < group.length; i += 1) for (let j = i + 1; j < group.length; j += 1) {
-        group[i].bumpRel(group[j].id, 0, CO_PRESENCE_FAM);
-        group[j].bumpRel(group[i].id, 0, CO_PRESENCE_FAM);
+    const people = Object.keys(w.agents).filter(id => isAlive(w.agents[id]) && w.agents[id].relations);
+    for (let i = 0; i < people.length; i += 1) {
+      for (let j = i + 1; j < people.length; j += 1) {
+        const a = people[i], b = people[j];
+        if (!coLocated(w, a, b)) continue;
+        w.agents[a].bumpRel(b, 0, CO_PRESENCE_FAM);
+        w.agents[b].bumpRel(a, 0, CO_PRESENCE_FAM);
       }
     }
   }
@@ -462,12 +489,13 @@ export function householdPlans(w, id) {
 export const strictLifecycle = w => (w.lifecycleRulesVersion ?? w.eventRulesVersion) === CURRENT_EVENT_RULES;
 
 export function birthHomeStatus(w,a,b) {
-  if (strictLifecycle(w) && (!adult(w,a) || !adult(w,b))) return { reason:'age' };
+  if (strictLifecycle(w) && (!adult(w,a) || !adult(w,b))) return { reason:'age', ok:false };
   const h=w.survival.households, room=w.housing[a];
-  if (h.spouses[a] !== b) return { reason:'marriage' };
-  if (room !== w.housing[b]) return { reason:'residence' };
-  if (!hasBed(w,room)) return { reason:'beds' };
-  return { room };
+  if (h.spouses[a] !== b) return { reason:'marriage', ok:false };
+  if (room !== w.housing[b]) return { reason:'residence', ok:false };
+  if (!hasBed(w,room)) return { reason:'beds', ok:false };
+  // E1：成功也要显式 ok，否则统计工具把"能生"误记成 unknown。
+  return { room, ok: true };
 }
 
 export function familyHomeForBirth(w, a, b) {
