@@ -49,7 +49,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -140,6 +140,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.storeHunger = true; // §16 选点：E4 on（公仓目标挂钩饥饿⇒AI 自足 idleWon 2/3）
   s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
   // V7.2 阶段 B（第 1 步）：角色个人时间只落在正式游戏；本步只建数据，不改任何行动判定。
+  if (actTimeModel) s.actTimeModel = true;
   if (world.gameRules) {
     s.actClock = {};
     for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };
