@@ -9,7 +9,8 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 // - 研究态（非 independentWorld 或未开个人时间）完全不进这里，旧路径逐位不变。
 import { actuate } from './body.mjs';
 import { validate } from './rules.mjs';
-import { noteAbort } from './action-ledger.mjs';
+import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
+import { isLaborAction } from './households.mjs';
 
 export const TICK_MINUTES = 60;
 export const DAY_MINUTES = 1440;
@@ -56,7 +57,29 @@ export function clockOf(world, id) {
   const day = dayOf(world);
   if (clock.day !== day) {
     // 跨日：进行中的动作不无限续命，记一条 DAY_END 中止（已落的施工进度留在工地）。
-    if (clock.busy) clock.lastAbort = { kind: clock.busy.kind, code: 'DAY_END', at: world.t, progressMin: clock.busy.progressMin, totalMin: clock.busy.totalMin, applied: clock.busy.applied };
+    // V7.3 第三批：与跨刻/死亡中止同口径，补写累计账本与聚落事件；clock.day 更新后天然幂等。
+    if (clock.busy) {
+      const b = clock.busy;
+      clock.lastAbort = { kind: b.kind, code: 'DAY_END', at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
+      if (world.gameRules === true) {
+        if (id === 'p1') {
+          const minutes = Math.max(0, (b.totalMin ?? 0) - (b.remainMin ?? 0));
+          recordSettlementEvent(world, 'player_action', {
+            actor: 'p1', action: b.kind, status: 'cancelled', code: 'DAY_END',
+            minutes, actionId: b.id,
+          });
+          noteAction(world, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+          noteRefusal(world, 'player', b.kind);
+          noteAbort(world, 'player', b.kind);
+          s.lastPlayerAbort = { id: b.id, kind: b.kind, code: 'DAY_END', at: world.t, minutesDone: minutes };
+        } else {
+          noteAbort(world, 'resident', b.kind);
+          recordSettlementEvent(world, 'work_interrupted', {
+            actor: id, loc: world.loc[id], action: b.kind, reason: 'DAY_END', applied: b.applied,
+          });
+        }
+      }
+    }
     clock.day = day; clock.usedMin = 0; clock.busy = null;
   }
   if (!clock.tick || clock.tick.t !== world.t) clock.tick = { t: world.t, usedMin: 0, n: 0 };

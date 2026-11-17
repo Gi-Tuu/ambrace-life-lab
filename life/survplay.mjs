@@ -19,7 +19,7 @@ import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
 import { maybeResidentRequest, respondRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
-import { noteAction, noteRefusal } from './action-ledger.mjs';
+import { noteAction, noteRefusal, noteAbort } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
@@ -298,10 +298,20 @@ function playerBusyAbort(sp, code) {
   recordSettlementEvent(w, 'player_action', { actor: 'p1', action: b.kind, status: 'cancelled', code, minutes: b.totalMin - b.remainMin, actionId: b.id });
   noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
   noteRefusal(w, 'player', b.kind);
+  noteAbort(w, 'player', b.kind);
   w.survival.lastPlayerAbort = { id: b.id, kind: b.kind, code, at: w.t, minutesDone: b.totalMin - b.remainMin };
   sp.log.push({ t: w.t, kind: b.kind, ok: false, code });
   if (sp.log.length > 40) sp.log.shift();
 }
+// V7.3 第三批：玩家主动取消进行中的 busy（与死亡/跨日中止同口径、幂等）。
+export function cancelPlayerBusy(sp) {
+  if (sp?.world?.survival?.actTimeModel !== true) return { ok: false, code: 'NO_BUSY' };
+  const b = clockOf(sp.world, 'p1')?.busy;
+  if (!b) return { ok: false, code: 'NO_BUSY' };
+  playerBusyAbort(sp, 'USER_CANCEL');
+  return { ok: true, code: 'CANCELLED', kind: b.kind };
+}
+
 // 玩家跨刻动作：每拍按剩余分钟推进；完成时只结算一次（busy 先清空再执行）。
 function advancePlayerBusy(sp) {
   const w = sp.world, s = w.survival;
@@ -1044,7 +1054,11 @@ export function survView(sp) {
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,
-      ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
+      ...(w.independentWorld ? {
+        result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive',
+        // V7.3 第三批：把进行中的 busy 暴露给 UI，供「取消」按钮显示；研究态不输出。
+        busy: (() => { const b = w.survival?.actClock?.p1?.busy; return b ? { id: b.id, kind: b.kind, remainMin: Number((b.remainMin ?? 0).toFixed(1)), totalMin: b.totalMin } : null; })(),
+      } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     ...(w.gameRules ? { resources: resLedgerView(w) } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),

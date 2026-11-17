@@ -26,7 +26,7 @@ import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex } from './camp-instances.mjs';
-import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival } from './survplay.mjs';
+import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy } from './survplay.mjs';
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
@@ -885,6 +885,7 @@ async function actInSurvival(sp, body, ask, now) {
   if (body.kind === 'talk_open') result = openTalk(sp, body, now);
   else if (body.kind === 'talk_say') result = await sayTo(sp, body, ask, now);
   else if (body.kind === 'talk_close') result = closeTalk(sp);
+  else if (body.kind === 'busy_cancel') result = cancelPlayerBusy(sp);
   else result = survAct(sp, body);
   const settled = settleSurvival(sp);
   return settled ? {...result, settled: true} : result;

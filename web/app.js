@@ -2152,7 +2152,7 @@ function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.textContent = ''; }, ms);
 }
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', TELEPORT: '太远了，得走过去才行（村外按世界时限速）', OUT_OF_REACH: '够不到，走近一点', REFUSED: '对方拒绝协助', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', TELEPORT: '太远了，得走过去才行（村外按世界时限速）', OUT_OF_REACH: '够不到，走近一点', REFUSED: '对方拒绝协助', CANCELLED: '已取消当前动作', NO_BUSY: '没有正在进行的动作', BUSY: '手上还有没做完的动作', STAMINA: '体力不够', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
@@ -3276,6 +3276,7 @@ function renderSurv(s) {
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}
       ${flash}
+      ${s.player?.busy ? `<span class="stat busy-on" title="进行中的动作">⏳ ${esc(s.player.busy.kind)} 剩 ${s.player.busy.remainMin} 分</span><button id="btnBusyCancel" title="取消当前动作（已用分钟与体质不退还）">取消动作</button>` : ''}
       ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>
     <details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
@@ -4033,6 +4034,13 @@ $('housingDlg').addEventListener('click',(e)=>{
 });
 $('survPanel').addEventListener('click', (e) => {
   if (e.target.closest('#btnSurvReset')) { if (ui.compare) $('btnReset').click(); else newSurvival(); return; }
+  if (e.target.closest('#btnBusyCancel')) {
+    playAct({ kind: 'busy_cancel' }).then((r) => {
+      survFlash = { kind: 'busy_cancel', ok: !!r.ok, code: r.code ?? (r.ok ? 'CANCELLED' : 'NO_BUSY') };
+      refresh();
+    });
+    return;
+  }
   const family=e.target.closest('button[data-family]');
   if (family) {
     const {family:kind,id:target,accept}=family.dataset;

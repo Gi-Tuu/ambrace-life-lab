@@ -127,3 +127,68 @@ test('V73-06 研究态仍走旧路径（不建共享账），第二次同刻动�
 
 
 
+
+// ── V7.3 第三批闸门：跨日清 busy 写事件与账本 ──────────────────────────────
+const crossDay = (w, id) => {
+  const c = clockOf(w, id);
+  w.t += w.dayTicks ?? 24; // 跨到下一天
+  clockOf(w, id);          // 触发跨日清理
+  return c;
+};
+
+test('V73-08 跨日清玩家 busy：写 cancelled 事件与账本，且不重复结算', () => {
+  const sp = make(), w = sp.world;
+  w.t = 10; move(w, 'p1', 'yard');
+  w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
+  w.pinv.p1 = { wood: 5, stone: 5 };
+  w.survival.lastDay = Math.floor(w.t / 24);
+  clockOf(w, 'p1').tick = { t: w.t, usedMin: 55, n: 0 };
+  assert.equal(survAct(sp, { kind: 'build' }).code, 'BUSY_START');
+  const ev0 = (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action').length;
+  crossDay(w, 'p1');
+  const evs = (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action');
+  assert.equal(evs.length, ev0 + 1, '跨日应写一条 cancelled 事件');
+  assert.equal(evs.at(-1).status, 'cancelled');
+  assert.equal(evs.at(-1).code, 'DAY_END');
+  assert.ok((w.survival.actionLedger.player.attempt.build ?? 0) >= 1, '跨日中止进玩家账本');
+  assert.ok((w.survival.actionLedger.player.aborted?.build ?? 0) >= 1, '跨日中止计 aborted');
+  assert.equal(w.survival.sites[0].progress, 0, '跨日不得结算未完成的施工进度');
+  crossDay(w, 'p1');
+  assert.equal((w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action').length, evs.length, '再次跨日不再写');
+});
+
+test('V73-09 跨日清居民 busy：写 work_interrupted 与中止账本', () => {
+  const sp = make(), w = sp.world;
+  const c = clockOf(w, 'a1');
+  c.busy = { kind: 'build', action: null, startTick: w.t, totalMin: 30, remainMin: 10,
+    progressMin: 20, bankedMin: 0, applied: 0 };
+  const ev0 = (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'work_interrupted').length;
+  crossDay(w, 'a1');
+  const evs = (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'work_interrupted');
+  assert.equal(evs.length, ev0 + 1, '跨日应写一条居民中止事件');
+  assert.equal(evs.at(-1).reason, 'DAY_END');
+  assert.ok((w.survival.actionLedger.resident.aborted?.build ?? 0) >= 1, '居民中止计 aborted');
+  crossDay(w, 'a1');
+  assert.equal((w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'work_interrupted').length, evs.length, '重复跨日不再写');
+});
+
+test('V73-10 玩家主动取消 busy：写 cancelled 事件与账本，二次取消 NO_BUSY', async () => {
+  const sp = make(), w = sp.world;
+  w.t = 10; move(w, 'p1', 'yard');
+  w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
+  w.pinv.p1 = { wood: 5, stone: 5 };
+  w.survival.lastDay = Math.floor(w.t / 24);
+  clockOf(w, 'p1').tick = { t: w.t, usedMin: 55, n: 0 };
+  assert.equal(survAct(sp, { kind: 'build' }).code, 'BUSY_START');
+  const { cancelPlayerBusy } = await import('./survplay.mjs');
+  const r = cancelPlayerBusy(sp);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(clockOf(w, 'p1').busy, null, '取消后 busy 清空');
+  const evs = (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action');
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].status, 'cancelled');
+  assert.equal(evs[0].code, 'USER_CANCEL');
+  assert.ok((w.survival.actionLedger.player.aborted?.build ?? 0) >= 1);
+  assert.equal(w.survival.sites[0].progress, 0, '取消不得结算进度');
+  assert.equal(cancelPlayerBusy(sp).code, 'NO_BUSY', '无 busy 时二次取消被拒');
+});
