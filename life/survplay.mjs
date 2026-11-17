@@ -520,24 +520,42 @@ export function playerReach(w, from) {
   s.playerPos = { x: from[0], z: from[1], t: w.t };
   return { ok: true };
 }
+const DAY_MINUTES = 1440; // 24 刻 × 60 分：玩家一天真正可用的时间，不再是"每刻 100 点"
 function spendTime(w, cost) {
-  budgetLeft(w);
-  if (w.survival.p1BudgetLeft + 1e-9 < cost) return false;
-  w.survival.p1BudgetLeft -= cost;
+  if (!w.independentWorld) return true; // 研究态保持旧路径（playerTimeCost 已返回 0）
+  const s = w.survival;
+  if (s.actTimeModel !== true) { // 原型期开关：默认仍走旧的每刻预算，下一步再切默认
+    budgetLeft(w);
+    if (s.p1BudgetLeft + 1e-9 < cost) return false;
+    s.p1BudgetLeft -= cost;
+    return true;
+  }
+  const day = Math.floor(w.t / (w.dayTicks ?? 24));
+  const clock = ((s.actClock ??= {}).p1 ??= { day, usedMin: 0, busy: null });
+  if (clock.day !== day) { clock.day = day; clock.usedMin = 0; clock.busy = null; }
+  if (clock.usedMin + cost > DAY_MINUTES + 1e-9) return false;
+  clock.usedMin += cost;
   return true;
+}
+function refundTime(w, cost) {
+  if (!w.independentWorld || cost <= 0) return;
+  if (w.survival?.actTimeModel !== true) { budgetLeft(w); w.survival.p1BudgetLeft += cost; return; }
+  const clock = w.survival?.actClock?.p1;
+  if (clock) clock.usedMin = Math.max(0, clock.usedMin - cost);
 }
 
 export function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
   const cost = playerTimeCost(w, kind);
   if (cost > 0 && !spendTime(w, cost)) {
-    sp.log.push({ t: w.t, kind, ok: false, code: 'ACTION_BUDGET' });
+    const code = w.survival.actTimeModel === true ? 'TIME_WAIT' : 'ACTION_BUDGET';
+    sp.log.push({ t: w.t, kind, ok: false, code });
     if (sp.log.length > 40) sp.log.shift();
-    return { ok: false, code: 'ACTION_BUDGET', why: '本世界刻的行动时间已用完，等下一拍' };
+    return { ok: false, code, why: code === 'TIME_WAIT' ? '这一天的个人时间已用完，等明天' : '本世界刻的行动时间已用完，等下一拍' };
   }
   const r = survActInner(sp, body);
   if (w.independentWorld && r.ok) settleSurvival(sp);
-  if (!r.ok && cost > 0) { budgetLeft(w); w.survival.p1BudgetLeft += cost; } // 失败退还，避免误点吃掉整刻
+  if (!r.ok && cost > 0) refundTime(w, cost); // 失败退还个人时间，避免误点吃掉当天时间
   noteAction(sp.world, 'player', body?.kind, !!r?.ok);
   if (r && !r.ok) noteRefusal(sp.world, 'player', body?.kind);
   return r;
