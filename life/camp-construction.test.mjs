@@ -75,6 +75,9 @@ test('住宅使用真实建房和产权记录，竣工前后的外壳、底座�
   assert.ok(deed.homes.entrances.house6);
   assert.equal(deed.view.housing.a3, 'house6');
   assert.deepEqual(shell.boxes, deed.boxes);
+  const slopes=deed.boxes.filter(b=>b.rot && b.h===.13);
+  assert.deepEqual(slopes.map(b=>Math.sign(b.rot[0])).sort(),[-1,1]);
+  assert.ok(slopes.every(b=>!b.solid && b.bounds.h>1));
   assert.deepEqual(foundation.boxes.filter(b=>b.solid).map(b=>[b.x,b.z,b.w,b.d]),
     deed.boxes.filter(b=>b.solid).map(b=>[b.x,b.z,b.w,b.d]));
   const back = loadSurv(JSON.parse(JSON.stringify(dumpSurv(sp))), 13, options);

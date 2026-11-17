@@ -4,6 +4,7 @@ import { dayOf, DAY_TICKS } from './clock.mjs';
 import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
 import { isAlive } from './viability.mjs';
 import { worldSite } from './geometry.mjs';
+import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
 
 export const ADULT_DAYS = 12;
 export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
@@ -269,9 +270,11 @@ function startHome(w, actor, room) {
   const h = w.survival.households, bag = w.pinv[actor];
   if (!residentialSite(room,w.peripheralHomes) || Object.hasOwn(h.deeds, room) ||
       Object.hasOwn(h.projects, room) || !affordable(bag, BUILD)) return false;
+  if (!constructionAccess(w,siteRecord(w,room,'house'),{proposed:true}).ok) return false;
   transfer(bag, null, BUILD);
   h.projects[room] = { owner: actor, started: w.t, progress: 0 };
-  if (w.peripheralHomes?.[room]) w.locs[room]='外围住宅工地';
+  if (constructionAccessEnabled(w)) w.locs[room]='住宅工地';
+  else if (w.peripheralHomes?.[room]) w.locs[room]='外围住宅工地';
   w.observeProduction?.('materialSpent', 'houseWood', BUILD.wood);
   w.observeProduction?.('materialSpent', 'houseStone', BUILD.stone);
   if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'start', room, owner: actor });
@@ -338,6 +341,7 @@ function recordHousing(w, event) {
 }
 
 function finishHome(w, room, project, log) {
+  if (!constructionAccess(w,siteRecord(w,room,'house')).ok) return;
   const h = w.survival.households, id = project.owner;
   delete h.projects[room];
   if (Object.hasOwn(h.deeds, room)) return;
@@ -398,7 +402,7 @@ function resumeProjects(w, adults) {
     } else if (dayOf(w.t) - dayOf(project.pausedAt) >= WORK_DAYS) {
       // Materials were spent when construction began. Cancelling removes the unfinished work.
       delete h.projects[room];
-      if (w.peripheralHomes?.[room]) delete w.locs[room];
+      if (w.peripheralHomes?.[room] || constructionAccessEnabled(w)) delete w.locs[room];
       recordHousing(w, { kind: 'cancel', room, owner: project.owner });
     }
   }
@@ -431,7 +435,8 @@ export function stepHouseholds(w, log) {
     const crowded = !room || residentsAt(w, room) >= bedsPerHome(w);
     const stayScore = allowed && !crowded ? (w.agents[id].traits.archetype === '孤僻' ? 1 : 4) : 0;
     const sale = Object.keys(h.deeds).find(k => h.deeds[k].listed && h.deeds[k].owner !== id && !residentsAt(w, k));
-    const available=k=>!Object.hasOwn(h.deeds,k) && !Object.hasOwn(h.projects,k);
+    const available=k=>!Object.hasOwn(h.deeds,k) && !Object.hasOwn(h.projects,k) &&
+      constructionAccess(w,siteRecord(w,k,'house'),{proposed:true}).ok;
     const plot=Object.keys(HOUSING_PLOTS).find(available) ?? Object.keys(w.peripheralHomes??{}).find(available);
     const buyScore = sale && affordable(bag, PRICE) ? 3 : 0;
     const buildScore = plot && affordable(bag, BUILD) ? (w.agents[id].traits.archetype === '孤僻' ? 4 : 2) : 0;
@@ -446,13 +451,21 @@ export function stepHouseholds(w, log) {
   }
 }
 
+const homeWorkSite = (w,room) => w.peripheralHomes?.[room] || constructionAccessEnabled(w) ? room : 'workshop';
+
+export function houseConstructionAccess(w,id) {
+  const project = Object.entries(w.survival?.households?.projects ?? {}).find(([,row])=>row.owner===id);
+  return project ? constructionAccess(w,siteRecord(w,project[0],'house')) : {ok:true};
+}
+
 export function houseLabor(w, id, apply = false) {
   const h = w.survival?.households;
   const entry=h && Object.entries(h.projects).find(([,p])=>p.owner===id);
   const [room,work]=entry??[];
-  const site=w.peripheralHomes?.[room]?room:'workshop';
+  const site=homeWorkSite(w,room);
   const day = dayOf(w.t);
   if (!work || w.survival.districtTravel?.[id] || (housingMode(w) !== 'legacy' && !canWork(w, id)) || w.loc[id] !== site || work.lastWorkDay === day || work.progress >= WORK_DAYS) return false;
+  if (!houseConstructionAccess(w,id).ok) return false;
   if (apply) {
     work.lastWorkDay = day;
     work.progress += housingMode(w) !== 'legacy' && residentStage(w, id) === 'elder' ? .5 : 1;
@@ -468,13 +481,13 @@ export function householdPlans(w, id) {
     const entry=Object.entries(h.projects).find(([,p])=>p.owner===id);
     if (!entry) return null;
     const [room,work]=entry;
-    return work.progress < WORK_DAYS && work.lastWorkDay !== dayOf(w.t) ? (w.peripheralHomes?.[room]?room:'workshop') : null;
+    return work.progress < WORK_DAYS && work.lastWorkDay !== dayOf(w.t) ? homeWorkSite(w,room) : null;
   }
   if (!adult(w, id)) return null;
   if (person.decision === 'building') {
     const entry=Object.entries(h.projects).find(([,p])=>p.owner===id);
     if (entry?.[1].lastWorkDay===dayOf(w.t)) return null;
-    return w.peripheralHomes?.[entry?.[0]]?entry[0]:'workshop';
+    return entry ? homeWorkSite(w,entry[0]) : null;
   }
   if (person.decision !== 'seeking') return null;
   const cost = Object.values(h.deeds).some(d => d.listed) ? PRICE : BUILD;
@@ -510,7 +523,8 @@ export function restoreHouseholds(w, housing) {
     if (Object.hasOwn(w.agents, id) && residentialSite(room,w.peripheralHomes) && Object.hasOwn(h.deeds, room)) w.housing[id] = room;
   }
   for (const room of Object.keys(h.projects)) {
-    if (w.peripheralHomes?.[room]) w.locs[room]='外围住宅工地';
+    if (constructionAccessEnabled(w)) w.locs[room]='住宅工地';
+    else if (w.peripheralHomes?.[room]) w.locs[room]='外围住宅工地';
   }
   for (const [room, deed] of Object.entries(h.deeds)) {
     if (residentialSite(room,w.peripheralHomes)) w.locs[room] = deed.owner ? `${w.agents[deed.owner]?.name ?? '居民'}的小屋` : housingMode(w) !== 'inherit' || deed.listed ? '待售小屋' : '住用公房';

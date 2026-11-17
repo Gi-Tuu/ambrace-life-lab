@@ -10,6 +10,21 @@ export function constructionLot(site, layout) {
   return Object.hasOwn(CONSTRUCTION_LOTS,site)?CONSTRUCTION_LOTS[site]:null;
 }
 
+export function homeLot(room, layout, peripheralHomes) {
+  const at = layout?.sites[room] ?? residentialSite(room,peripheralHomes);
+  return at && {x:at[0]-2.3,z:at[1]-6.05,w:4.6,d:3.7};
+}
+
+export function campBridgeBounds(first, last, riverCenter, riverHalfWidth) {
+  const y0=first*16, y1=(last+1)*16;
+  let west=Infinity,east=-Infinity;
+  for (let y=y0;y<y1;y++) {
+    west=Math.min(west,riverCenter(y)-riverHalfWidth(y));
+    east=Math.max(east,riverCenter(y)+riverHalfWidth(y));
+  }
+  return [Math.floor(west/16-1.65),first,Math.ceil(east/16+1.65),last+1];
+}
+
 export function overlapsLot(a,b,pad=0) {
   return a.x-pad<b.x+b.w && a.x+a.w+pad>b.x &&
     a.z-pad<b.z+b.d && a.z+a.d+pad>b.z;

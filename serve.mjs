@@ -331,6 +331,13 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     });
   }
 
+  // 阶段 5：A/B 只读回放（range 或单刻）。历史浏览不写任何世界。
+  if (req.method === 'GET' && p === '/replay') {
+    const q = url.searchParams;
+    const num = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
+    const out = host.replay({ from: num('from'), to: num('to'), t: num('t'), revision: num('rev') });
+    return json(res, out.code === 'REPLAY_STALE' ? 409 : 200, out);
+  }
   if (req.method === 'GET' && p === '/world') {
     try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
     catch (error) {
@@ -475,5 +482,6 @@ console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
 
 

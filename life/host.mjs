@@ -20,6 +20,7 @@ import { hashSeed, CURRENT_EVENT_RULES } from './rng.mjs';
 import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { withNoThink, withoutNoThink } from './model-adapter.mjs';
+import { compactEnabled, buildCompactDeliberationPrompt } from './model-context.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
@@ -123,6 +124,7 @@ const ATTEMPT_CAP = 20;
 const PRESENCE_MS = Number(process.env.PRESENCE_MS ?? 180000);
 // 纯函数便于闸门测试：最近有人在看才允许调用
 import { modelLaneFor } from './camp-lane.mjs';
+import { createReplay, recordReplayFrame, replayRange, replayPoint } from './replay-history.mjs';
 export { modelLaneFor };
 
 export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
@@ -482,9 +484,16 @@ export function buildDeliberationPrompt({ agent, scored, world, rejected, memori
   return lines.join(String.fromCharCode(10));
 }
 
+// 阶段 4：审议输入边界。默认原版；MODEL_CONTEXT=compact 时走候选（两版复用同一份 args）。
+export function deliberationPrompt(args, mode = compactEnabled() ? 'compact' : 'original') {
+  if (mode !== 'compact') return buildDeliberationPrompt(args);
+  const bands = preferenceBands(args.scored, args.agent.ch);
+  return buildCompactDeliberationPrompt({ ...args, bands });
+}
+
 async function modelBrain(args) {
   const { agent, scored, world, rejected, memories, trigger, daySummary } = args;
-  const prompt = buildDeliberationPrompt(args);
+  const prompt = deliberationPrompt(args);
   budgetTick(S.model, new Date().toISOString().slice(0, 10));
   // C3：按营地判车道。分名字营地在无人时直接走确定性替身，询问不发出。
   const campKey = world?.campKey ?? 'MAIN';
@@ -633,6 +642,7 @@ function makeComparison(origin, revision = 0, saved) {
       stat: record?.stat ?? {决策: 0, 高冲动: 0, 越轨: 0, 驳回: 0, 发现: 0}, last: record?.last ?? {}}];
   }));
   const pair = {origin, branches, revision};
+  pair.replay = saved?.replay?.revision === revision ? saved.replay : createReplay(revision);
   for (const branch of Object.values(branches)) {
     survView(branch.play);
     if (!branch.series.length) recordComparisonSeries(branch);
@@ -685,12 +695,31 @@ function recordComparisonAction(branch, a, trace) {
   if (branch.log.length > 80) branch.log.splice(0, branch.log.length - 80);
 }
 
+function replayCard(branch) {
+  const w = branch.play.world;
+  return {
+    side: w.residentCondition === 'C2' ? 'A' : 'B', t: w.t,
+    store: w.survival?.store ?? null,
+    buildings: (w.survival?.buildings ?? []).map((b) => ({ type: b.type, loc: b.loc, integrity: b.integrity })),
+    pinv: { wood: w.pinv?.p1?.wood ?? 0, stone: w.pinv?.p1?.stone ?? 0 },
+    agents: Object.values(w.agents).filter((a) => !a.isPlayer).map((a) => ({
+      id: a.id, name: a.name, loc: w.loc[a.id], dead: !!a.dead,
+      energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((a.viab?.v ?? 0).toFixed(2)),
+    })),
+  };
+}
+
 async function tickComparison(now = Date.now()) {
   for (const key of COMPARE_SIDES) {
     const branch = S.comparison.branches[key];
     await tickSurvPlay(branch.play, {now, onResidentAction: (agent, rows) => recordComparisonAction(branch, agent, rows)});
     recordComparisonSeries(branch);
   }
+  const A = S.comparison.branches.A, B = S.comparison.branches.B;
+  const t = A.play.world.t;
+  const events = [['A', A], ['B', B]].flatMap(([side, br]) =>
+    (br.play.world.survival?.eventJournal?.rows ?? []).filter((e) => e.t === t).map((e) => ({ ...e, side })));
+  recordReplayFrame(S.comparison.replay, { t, A: replayCard(A), B: replayCard(B), events });
 }
 
 function makeComparisonView() {
@@ -721,7 +750,7 @@ function publishComparison() {
 
 async function saveComparison() {
   const {origin, revision, branches} = S.comparison;
-  const record = {origin, revision, masks: S.comparisonMasks,
+  const record = {origin, revision, masks: S.comparisonMasks, replay: S.comparison.replay,
     branches: Object.fromEntries(COMPARE_SIDES.map(key => {
       const {play, ...observations} = branches[key];
       return [key, {...observations, world: dumpSurv(play)}];
@@ -745,7 +774,7 @@ async function saveComparison() {
 async function advanceWorlds(onError = null, auto = false) {
   if (!auto || S.running) await tickBody(onError);
   if (!auto) return;
-  if (S.compareRunning && observerActive(S.viewers.comparison, Date.now())) {
+  if (S.compareRunning && observerActive(Math.max(S.viewers.compare ?? 0, S.viewers.comparison ?? 0), Date.now())) {
     await tickComparison();
     publishComparison();
     if (S.compareView.A.t % SAVE_EVERY === 0) await saveComparison();
@@ -927,7 +956,7 @@ function enqueueTick(auto = false) {
 }
 
 function autoTick() {
-  if (!S.running && !(S.compareRunning && observerActive(S.viewers.comparison,Date.now()))) return;
+  if (!S.running && !(S.compareRunning && observerActive(Math.max(S.viewers.compare ?? 0, S.viewers.comparison ?? 0),Date.now()))) return;
   if (autoPending) return; // 上一拍还没跑完/还在排队：跳过这一拍
   autoPending = true;
   enqueueTick(true).finally(() => { autoPending = false; });
@@ -1206,6 +1235,12 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
 }
 
 export const host = {
+  // 阶段 5：只读回放查询（range / 单刻）。修订号不符或超窗都由 replay-history 返回可解释码。
+  replay(query = {}) {
+    if (!S.comparison?.replay) return { ok: false, code: 'NO_COMPARISON' };
+    if (Number.isFinite(query?.t)) return replayPoint(S.comparison.replay, query.t, query.revision);
+    return replayRange(S.comparison.replay, { from: query?.from, to: query?.to, revision: query?.revision });
+  },
   setBackend: configure,
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
   touch: (mode, campKey) => {
@@ -1619,3 +1654,4 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+

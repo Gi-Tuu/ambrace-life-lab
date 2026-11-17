@@ -11,6 +11,10 @@ import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
 import { buildDef, gatherResource, forageRule } from './production.mjs';
 
+import { constructionAccess, constructionDestination, residentConstructionAccess, siteRecord } from './construction-access.mjs';
+import { CONSTRUCTION_CODES } from '../web/camp-construction-access.mjs';
+import { houseConstructionAccess } from './households.mjs';
+
 export function validate(world, agentId, intent, here = world.loc[agentId]) {
   const locs = world.locs ?? LOCS;
   const others = (world.occupancy[here] ?? []).filter(x=>x!==agentId && !world.survival?.districtTravel?.[x]);
@@ -22,7 +26,11 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
   if (strictLifecycle(world) && !laborAllowed(world, agentId, kind)) {
     return fail('TOO_YOUNG', '未成年居民不能执行劳动');
   }
-  if (kind === 'house_work' && !houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
+  if (kind === 'house_work') {
+    const access = houseConstructionAccess(world,agentId);
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]);
+    if (!houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
+  }
   if (kind === 'eat') {
     if (world.survival) {
       if ((world.survival.store ?? 0) < 1) return fail('DEPLETED', '公仓空了');
@@ -39,6 +47,11 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
     if (!Object.hasOwn(locs,intent.to)) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
     const access=homeEntry(world,agentId,intent.to);
     if (!access.ok) return fail(access.code,'住宅没有开放进入');
+    const target = constructionDestination(world,intent.to);
+    if (target && !world.agents[agentId]?.isPlayer) {
+      const travel = residentConstructionAccess(world,agentId,target);
+      if (!travel.ok) return fail(travel.code,CONSTRUCTION_CODES[travel.code]);
+    }
   }
   if (kind==='road_lay' || kind==='road_remove') return roadRule(world,agentId,intent);
   if (kind.startsWith('discuss_') && !discussionAction(world,agentId,kind).ok)
@@ -84,12 +97,17 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
     const def = buildDef(world, intent.type);
     if (!def) return fail('NO_TYPE', '未知建筑类型');
     if (world.survival.sites.some((s) => s.loc === here) || world.survival.buildings.some((b) => b.loc === here)) return fail('OCCUPIED', '这里已经有建筑或工地');
+    const access = constructionAccess(world,siteRecord(world,here,intent.type),{proposed:true});
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]??'当前地点不能奠基');
     const bagP = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包+公仓合计
     if (bagP.wood + world.survival.inv.wood < def.cost.wood || bagP.stone + world.survival.inv.stone < def.cost.stone) return fail('NO_MATERIAL', '材料不够');
   }
   if (kind === 'build') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有工地');
-    if (!world.survival.sites.some((s) => s.loc === here)) return fail('NO_SITE', '这里没有工地');
+    const site = world.survival.sites.find(s => s.loc===here);
+    if (!site) return fail('NO_SITE', '这里没有工地');
+    const access = constructionAccess(world,siteRecord(world,here,site.type,site.lot));
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]);
   }
   if (kind === 'repair') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可维修的建筑');

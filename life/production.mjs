@@ -1,3 +1,4 @@
+import { recordSettlementEvent, stormDamageForRepair } from './settlement-events.mjs';
 import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-produce.mjs';
 // 生产建设层（Phase B）。服务端权威：资源库存、建筑选址/材料/工时/功能/损坏/维修。
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
@@ -7,6 +8,7 @@ import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
 import { noteRes } from './resource-ledger.mjs';
+import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -163,6 +165,8 @@ export function doPlan(world, agentId, type, loc = world.loc[agentId]) {
     const occupied=b.lot??buildLot(world,b.loc);
     return b.loc===loc || occupied && overlapsLot(lot,occupied,.35);
   })) return {ok:false,code:'OCCUPIED'};
+  const access = constructionAccess(world,siteRecord(world,loc,type,lot),{proposed:true});
+  if (!access.ok) return access;
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
   if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
@@ -177,6 +181,13 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
   const site = atLoc(s.sites, loc);
   if (!site) return { ok: false, code: 'NO_SITE' };
+  if (constructionAccessEnabled(world)) {
+    if (!world.agents[agentId]?.isPlayer && (world.loc[agentId]!==loc || s.districtTravel?.[agentId])) {
+      return {ok:false,code:'BUILD_NOT_ARRIVED'};
+    }
+    const access = constructionAccess(world,siteRecord(world,loc,site.type,site.lot));
+    if (!access.ok) return access;
+  }
   if (s.settlementLife) {
     const people=site.contributors??={};
     people[agentId]=(people[agentId]??0)+1;
@@ -190,12 +201,23 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   return { ok: true, code: 'OK', completed: null, progress: site.progress };
 }
 
+export function recordRepairFailure(world, actor, loc, code) {
+  recordSettlementEvent(world, 'repair', { ok: false, actor, loc, code });
+}
+
 export function doRepair(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
   const b = atLoc(s.buildings, loc);
-  if (!b || b.integrity >= 1) return { ok: false, code: 'NO_REPAIR' };
+  if (!b || b.integrity >= 1) {
+    if (agentId !== 'p1') recordRepairFailure(world, agentId, loc, 'NO_REPAIR');
+    return { ok: false, code: 'NO_REPAIR' };
+  }
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
-  if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
+  if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) {
+    if (agentId !== 'p1') recordRepairFailure(world, agentId, loc, 'NO_MATERIAL');
+    return { ok: false, code: 'NO_MATERIAL' };
+  }
+  const before = b.integrity;
   const bw = Math.min(bag.wood, 1); bag.wood -= bw; s.inv.wood -= 1 - bw;
   const bs = Math.min(bag.stone, 1); bag.stone -= bs; s.inv.stone -= 1 - bs;
   world.observeProduction?.('materialSpent', 'repairWood', 1);
@@ -203,6 +225,12 @@ export function doRepair(world, agentId, loc = world.loc[agentId]) {
   b.integrity = 1;
   const task=s.coop?.task;
   if (s.settlementLife && task?.loc===loc && task.repair) (task.repairedBy??=[]).push(agentId);
+  if (world.gameRules) recordSettlementEvent(world, 'repair', {
+    ok: true, actor: agentId, loc, type: b.type, before, after: b.integrity,
+    spent: { bag: { wood: bw, stone: bs }, store: { wood: 1 - bw, stone: 1 - bs } },
+    ...(task?.loc === loc && task.repair && { taskStartedAt: task.startedAt }),
+    ...stormDamageForRepair(world, loc, b.type),
+  });
   return { ok: true, code: 'OK' };
 }
 

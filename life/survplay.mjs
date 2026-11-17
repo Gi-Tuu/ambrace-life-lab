@@ -22,9 +22,12 @@ import { noteAction, noteRefusal } from './action-ledger.mjs';
 import { campAction, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
-import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, addFood, takeFood, takeFoodKind, initFoodStore, FOOD_KINDS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, recordRepairFailure, addFood, takeFood, takeFoodKind, initFoodStore, FOOD_KINDS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
 import { COOP, initCoop, willingness, finishCooperation } from './cooperation.mjs';
 import { forecastDisasters, SURV } from './worldstate.mjs';
+import { recordSettlementEvent, recordStormWarning, restoreSettlementEvents } from './settlement-events.mjs';
+import { constructionAccess, constructionAccessEnabled, constructionDestination, recordConstructionBlock, residentConstructionAccess, siteRecord } from './construction-access.mjs';
+import { CONSTRUCTION_CODES } from '../web/camp-construction-access.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
@@ -289,6 +292,7 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   w.percepts = [];
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
+  if (w.gameRules && forecastDisasters(w).stormTomorrow) recordStormWarning(w, dayOf(w.t) + 1);
   if (!w.unifiedCooperation && w.survival.forage && dayOf(w.t) !== dayOf(w.t - 1)) forageRound(w);
   if (dayOf(w.t) !== dayOf(w.t - 1)) {
     if (w.survival.households && (w.independentWorld || !w.survival.ended && !w.survival.failed)) stepHouseholds(w, sp.log);
@@ -344,7 +348,13 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
         continue;
       }
       delete w.survival.districtTravel[id];
-      if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) move(w,id,travel.to);
+      const site = constructionDestination(w,travel.to);
+      const access = site && residentConstructionAccess(w,id,site);
+      if (access && !access.ok) recordConstructionBlock(w,id,travel.to,'move_to',access.code);
+      else if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) {
+        move(w,id,travel.to);
+        if (access?.destination && w.residentTravel[id]) w.residentTravel[id].at = access.destination;
+      }
     }
     // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
     if (w.survival.talk?.target === id) {
@@ -588,16 +598,32 @@ export function survAct(sp, body) {
   const cost = playerTimeCost(w, kind);
   if (cost > 0 && !spendTime(w, cost)) {
     const code = w.survival.actTimeModel === true ? 'TIME_WAIT' : 'ACTION_BUDGET';
+    if (kind === 'repair') playerRepairFailure(w, body, code);
     sp.log.push({ t: w.t, kind, ok: false, code });
     if (sp.log.length > 40) sp.log.shift();
     return { ok: false, code, why: code === 'TIME_WAIT' ? '这一天的个人时间已用完，等明天' : '本世界刻的行动时间已用完，等下一拍' };
   }
   const r = survActInner(sp, body);
+  if (kind === 'repair' && !r.ok) playerRepairFailure(w, body, r.code);
+  if (!r.ok && Object.hasOwn(CONSTRUCTION_CODES,r.code)) {
+    const workTarget = kind==='coop_request' ? body.site : body.target;
+    const loc = kind==='build' || kind==='coop_request'
+      ? w.survival.sites.find(b=>`work:${b.loc}:${b.type}`===workTarget)?.loc ?? w.loc.p1
+      : kind==='move' ? facilityOf(w,body.room)?.loc ?? body.room : body.target ?? w.loc.p1;
+    recordConstructionBlock(w,'p1',loc,kind,r.code);
+  }
   if (w.independentWorld && r.ok) settleSurvival(sp);
   if (!r.ok && cost > 0) refundTime(w, cost); // 失败退还个人时间，避免误点吃掉当天时间
   noteAction(sp.world, 'player', body?.kind, !!r?.ok, null, { minutes: r?.ok ? cost : 0, labor: isLaborAction(body?.kind) });
   if (r && !r.ok) noteRefusal(sp.world, 'player', body?.kind);
   return r;
+}
+
+function playerRepairFailure(w, body, code) {
+  const loc = Object.hasOwn(body, 'from')
+    ? w.survival.buildings.find(b => `work:${b.loc}:${b.type}` === body.target)?.loc
+    : w.loc.p1;
+  recordRepairFailure(w, 'p1', loc, code);
 }
 
 function survActInner(sp, body) {
@@ -705,6 +731,13 @@ function survActInner(sp, body) {
       if (building.type==='wall' || building.integrity<=0) return {ok:false,code:'NO_FACILITY'};
       if (w.campPlayerRoom || !body.entrance || !gate || !regionPoint(body.from) ||
           distanceToRect(body.from,gate)>.12) return {ok:false,code:'OUT_OF_REACH'};
+      const access = constructionAccess(w,siteRecord(w,building.loc,building.type,building.lot),
+        {from:body.from,entrance:true});
+      if (!access.ok) return access;
+      if (constructionAccessEnabled(w) && w.districts?.[building.loc]) {
+        const reach = playerReach(w,body.from);
+        if (!reach.ok) return reach;
+      }
       move(w,'p1',building.loc);
       w.campPlayerRoom=room;
       w.agents.p1.viab.spend(SURV_COST.move_to);
@@ -727,6 +760,14 @@ function survActInner(sp, body) {
       const gate=campEntrance(room,worldSite(w,room),w.peripheralHomes);
       if (!adjacent && (previous || !gate || !regionPoint(body.from) ||
           distanceToRect(body.from,gate)>.12)) return {ok:false,code:'OUT_OF_REACH'};
+      if (constructionAccessEnabled(w) && residentialSite(room,w.peripheralHomes)) {
+        const approach = constructionAccess(w,siteRecord(w,room,'house'),{from:body.from,entrance:true});
+        if (!approach.ok) return approach;
+        if (w.peripheralHomes?.[room]) {
+          const reach = playerReach(w,body.from);
+          if (!reach.ok) return reach;
+        }
+      }
       w.campPlayerRoom=room;
     } else w.campPlayerRoom=null;
     w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
@@ -745,6 +786,10 @@ function survActInner(sp, body) {
       const reach=playerReach(w,body.from); if (!reach.ok) return reach;
     } else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
     if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+    if (kind==='build') {
+      const access = constructionAccess(w,siteRecord(w,building.loc,building.type,lot),{from:body.from});
+      if (!access.ok) return access;
+    }
     const result=(kind==='build'?doBuild:doRepair)(w,'p1',building.loc);
     if (result.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
@@ -789,11 +834,19 @@ function survActInner(sp, body) {
       } else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
       if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
     }
+    const work = siteRecord(w,site.loc,site.type,site.lot);
+    const access = constructionAccess(w,work,positioned ? {from:body.from} : {});
+    if (!access.ok) return access;
+    const travel = residentConstructionAccess(w,target,work);
+    if (!travel.ok) return travel;
     const wl = willingness(w, target, { type: site.type, severity: 0.7, requester: 'p1', loc: site.loc });
     if (wl.decision === 'refuse') {
       s.coop.refusals += 1;
       sp.log.push({ t: w.t, kind, ok: false, code: 'REFUSED' });
       if (sp.log.length > 40) sp.log.shift();
+      recordSettlementEvent(w, 'cooperation_reply', {
+        actor: target, target: 'p1', loc: site.loc, type: site.type, result: wl.decision, reason: wl.reason,
+      });
       return { ok: false, code: 'REFUSED', decision: 'refuse', score: wl.score, reason: wl.reason };
     }
     let ct = s.coop.task;
@@ -803,6 +856,9 @@ function survActInner(sp, body) {
       ct.workers.push(target);
     }
     (ct.commit ??= {})[target] = wl.decision; // assist＝稳定承诺；alternative＝每拍重评，可中途退出
+    recordSettlementEvent(w, 'cooperation_reply', {
+      actor: target, target: 'p1', loc: site.loc, type: site.type, result: wl.decision, taskStartedAt: ct.startedAt,
+    });
     sp.log.push({ t: w.t, kind, ok: true, code: wl.decision });
     if (sp.log.length > 40) sp.log.shift();
     return { ok: true, code: 'OK', decision: wl.decision, score: wl.score, reason: wl.reason };
@@ -823,6 +879,16 @@ function survActInner(sp, body) {
     actionLoc=body.target;
   }
   if ((kind==='build' || kind==='repair') && w.districts?.[actionLoc]) return {ok:false,code:'OUT_OF_REACH'};
+  if (constructionAccessEnabled(w) && (kind==='plan' || kind==='build')) {
+    const site = w.survival.sites.find(b=>b.loc===actionLoc);
+    if (kind==='build' && !site) return {ok:false,code:'NO_SITE'};
+    if (!regionPoint(body.from) || w.campPlayerRoom) return {ok:false,code:'BUILD_NOT_ARRIVED'};
+    const record = siteRecord(w,actionLoc,kind==='plan' ? body.type : site.type,kind==='build' ? site.lot : undefined);
+    if (!record.lot) return {ok:false,code:'NO_LOT'};
+    if (distanceToRect(body.from,record.lot)>1.15) return {ok:false,code:'BUILD_NOT_ARRIVED'};
+    const access = constructionAccess(w,record,{from:body.from,proposed:kind==='plan'});
+    if (!access.ok) return access;
+  }
   const gate = validate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc); // RES-03：till 需要 plot，不能只带 kind/type
   if (!gate.ok) {
     sp.log.push({ t: w.t, kind, ok: false, code: gate.code });
@@ -875,6 +941,8 @@ export function survView(sp) {
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
     loc: w.loc, occupancy: w.occupancy,
+    ...(constructionAccessEnabled(w) && { constructionArrivals: Object.fromEntries(Object.entries(w.residentTravel??{})
+      .filter(([id,row])=>row.at && row.to===w.loc[id]).map(([id,row])=>[id,row.at])) }),
     store: s.store, storeCap: mods.storeCap, food: s.food ?? null, requests: (s.requests ?? []).slice(0, 4), requestsGranted: s.requestsGranted ?? 0, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
@@ -896,6 +964,7 @@ export function survView(sp) {
     clearStreak: s.clearStreak ?? 0, coldStreak: s.coldStreak ?? 0,
     yieldTotal: s.yieldTotal ?? 0, harvestCount: s.harvestCount ?? 0,
     log: sp.log.slice(-12),
+    ...(w.gameRules && { settlementEvents: s.eventJournal?.rows.slice() ?? [] }),
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? DEFAULT_LIVESTOCK) },
     wildBerries: s.wildBerries, berryPatches: s.berryPatches, ecoSources: sourceView(w),
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
@@ -980,6 +1049,7 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    restoreSettlementEvents(w.survival);
     if (sp.world.gameRules) {
       const clock = (sp.world.survival.actClock ??= {});
       for (const id of Object.keys(sp.world.agents)) clock[id] ??= { day: Math.floor(sp.world.t / (sp.world.dayTicks ?? 24)), usedMin: 0, busy: null };

@@ -1,6 +1,6 @@
 import { beam, cyl, modelBounds } from './camp-3d-render.mjs';
 import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
-import { constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
+import { homeLot as layoutHomeLot, constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
 import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { itemBoxes } from './camp-items.mjs';
@@ -123,7 +123,7 @@ function house(s, id, x, z, seed) {
   const left=x-width/2, back=z-depth-1.7;
   s.box(left,0,back,width,.27,depth,DARK,true);
   const masonry = id === 'workshop' || id === 'watch' || variant===2;
-  s.box(left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry?'#67675E':'#72513B');
+  s.box(left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry?'#67675E':'#72513B',false,false,null,{castShadow:true});
   cladding(s,left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry);
   cladding(s,left,0,back,width,.27,depth,true);
   roof(s,left,back,width,depth,3.08,color,variant===2?3:variant===3?4:5);
@@ -1119,13 +1119,38 @@ function wall3d(s, lot, record, world) {
 }
 
 // 从奠基到登记入住使用同一个地块和木屋外壳。
+function homeRoof(s,x,y,z,w,d,color) {
+  const half=d/2, rise=1.06, slope=Math.atan2(rise,half), length=Math.hypot(half,rise);
+  const ridge=z+half;
+  for (const side of [-1,1]) {
+    const pivot=[x+w/2,y+rise/2,ridge+side*half/2];
+    const surface={rot:[side*slope,0,0],pivot};
+    const start=pivot[2]-length/2;
+    s.box(x-.06,pivot[1]-.065,start,w+.12,.13,length,color,false,false,surface);
+    for (let k=.32; k<w; k+=.62) {
+      s.box(x+k,pivot[1]+.065,start+.04,.044,.031,length-.08,'#514134',false,false,surface);
+    }
+    const eave=ridge+side*half;
+    s.box(x-.12,y-.09,eave-.055,w+.24,.14,.11,'#72513B');
+    // The gable closes the space under the roof at both ends.
+    for (let step=0;step<7;step++) {
+      const span=half/7, zz=side<0 ? z+step*span : z+d-(step+1)*span;
+      for (const xx of [x+.025,x+w-.12]) {
+        const high=rise*step/7;
+        if (high>0) s.box(xx,y-.02,zz,.095,high+.02,span,'#976A45');
+      }
+    }
+  }
+  s.box(x-.12,y+rise-.033,ridge-.071,w+.24,.12,.142,'#514134');
+}
+
 function home3d(s, lot, record, seed) {
   const { x, z, w, d } = lot;
   const X = x + .25, Z = z + .25, W = w - .5, D = d - .5;
   const phase = constructionStage(record);
   const ratio = Math.min(1, (record.progress ?? HOME_LABOR) / HOME_LABOR), front = Z + D;
   const v = Math.floor(campHash(seed ?? 0, `home-${record.loc}`) * 4);
-  const roofColor = ['#8D593F', '#526B54', '#70657A', '#A17B54'][v];
+  const roofColor = ['#944735', '#497245', '#77607A', '#8D6A3D'][v];
   if (worksBase(s, lot, phase)) return;
   const postH = phase === 'frame' ? .5 + ratio * 1.5 : 1.95;
   for (const px of [X, X + W - .18]) for (const pz of [Z, front - .18])
@@ -1135,16 +1160,19 @@ function home3d(s, lot, record, seed) {
     s.box(X, .16 + postH, Z, W, .14, .18, WOOD, false, true);
     return;
   }
-  s.box(X, .16, Z, W, 1.85, D, '#72513B');
+  s.box(X, .16, Z, W, 1.85, D, '#72513B', false, false, {castShadow:true});
   grPlanks(s, X, .16, Z, W, 1.82, D, true);
-  grGable(s, X - .08, 2.0, Z - .08, W + .16, D + .16, roofColor);
+  homeRoof(s,X-.19,2.0,Z-.30,W+.38,D+.60,roofColor);
   s.box(X + W / 2 - .46, .16, front, .92, 1.42, .08, '#514134');
   s.box(X + W / 2 - .36, .24, front + .05, .72, 1.26, .04, '#AB5236');
   const doorX = X + W / 2;
   s.box(doorX - .6, 0, front + .14, 1.2, .12, .43, '#7A7667');
   s.box(doorX - .49, .004, front + .57, .98, .04, .39, '#939584');
   for (const dx of [-1.35, .78]) {
-    s.box(X + W / 2 + dx, 1.05, front + .01, .54, .58, .06, '#514134');
+    const windowX=X+W/2+dx;
+    s.box(windowX,1.05,front+.01,.54,.58,.06,'#514134');
+    s.box(windowX-.035,1.043,front+.015,.61,.045,.105,'#976A45');
+    s.box(windowX-.018,1.60,front+.019,.578,.065,.09,'#72513B');
   }
   // 烟囱是房屋的一部分。烟、暖窗和柴堆由住户状态决定。
   s.box(X + W - .62, 2.35, Z + .45, .34, .92, .34, '#5F574F');
@@ -1163,8 +1191,7 @@ function home3d(s, lot, record, seed) {
 const HOME_LABOR = 3;
 
 function homeLot(world, room) {
-  const at = world.layout?.sites[room] ?? residentialSite(room,world.peripheralHomes);
-  return at && { x: at[0] - 2.3, z: at[1] - 6.05, w: 4.6, d: 3.7 };
+  return layoutHomeLot(room,world.layout,world.peripheralHomes);
 }
 
 export function homeAppearance(world, sites = world.rooms ?? {}) {
@@ -1179,6 +1206,7 @@ export function homeAppearance(world, sites = world.rooms ?? {}) {
 
 export function outdoorHomes(world, appearance) {
   const s = stage(0, 0);
+  s.windows=[];
   for (const [room, occupied, damage] of appearance) {
     const lot = homeLot(world, room);
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
@@ -1186,7 +1214,8 @@ export function outdoorHomes(world, appearance) {
     s.group(`work:${room}:house`, () => {
       for (const dx of [-1.29, .84]) {
         const side=dx<0?'left':'right';
-        s.box(x+dx,1.12,front+.075,.42,.44,.03,occupied?'#EDC787':'#2E3B3A',false,occupied,null,{part:'window-'+side});
+        const pane=s.box(x+dx,1.12,front+.075,.42,.44,.03,occupied?'#EDC787':'#2E3B3A',false,occupied,null,{part:'window-'+side});
+        if (occupied) s.windows.push([pane.x+pane.w/2,pane.z+pane.d,pane.w/2,pane.y]);
         const shutter=occupied?(dx<0?x+dx-.2:x+dx+.44):x+dx;
         s.box(shutter,1.1,front+.115,occupied?.17:.42,.48,.045,'#976A45',false,false,null,{part:'shutter-'+side});
       }

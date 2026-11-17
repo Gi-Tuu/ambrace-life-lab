@@ -12,6 +12,8 @@ import { validate, actionId } from './rules.mjs';
 import { residentTimeModel, clockOf, residentBeginTime, attachBusyAction, residentRefundTime, laborEnergy } from './resident-time.mjs';
 import { isLaborAction } from './households.mjs';
 import { noteAction, noteRefusal } from './action-ledger.mjs';
+import { recordRepairFailure } from './production.mjs';
+import { recordConstructionBlock } from './construction-access.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
@@ -258,6 +260,8 @@ export class Organism {
     let chosen = await this.choose({ scored, temp, ch, world, paths, reason });
     let v = validate(world, this.id, chosen.act);
     if (!v.ok) {
+      if (chosen.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], v.code);
+      recordConstructionBlock(world,this.id,chosen.act.to ?? world.loc[this.id],chosen.act.kind,v.code);
       this.counters.rejected += 1;
       this.noteDayReject(t);
       const rest = scored.filter((s) => s.id !== chosen.id);
@@ -269,7 +273,10 @@ export class Organism {
       // 等于"被驳回一次之后就免检"——实测夜里 eat 被 DEPLETED 驳回、重选到 look_out
       // （validate 明确返回 LOCKED_HOUR）仍然执行，角色夜里上了瞭台。
       // 不无限重试，也不重复计数：一次驳回只记一次 rejected（askedRetry === rejected 这条恒等式靠它）。
-      if (!validate(world, this.id, again.act).ok) {
+      const retryGate = validate(world, this.id, again.act);
+      if (!retryGate.ok) {
+        if (again.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], retryGate.code);
+        recordConstructionBlock(world,this.id,again.act.to ?? world.loc[this.id],again.act.kind,retryGate.code);
         // 重选后仍非法 ⇒ 本刻不行动。但仍然留一条 trace（带 scored、不带 action），
         // 否则引擎内的 cfDecisions 会比"从 trace 独立重算的决策数"多出来，
         // o1-counterfactual 的装置交叉核对（两条实现必须一致）就会红。
@@ -492,6 +499,8 @@ export class Organism {
     // 原因（习惯那条漏了三个月）。这里再验一次：非法就拒绝，并且**不消耗任何资源**。
     const gate = validate(world, this.id, action);
     if (!gate.ok) {
+      if (action?.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], gate.code);
+      recordConstructionBlock(world,this.id,action?.to ?? world.loc[this.id],action?.kind,gate.code);
       noteRefusal(world, 'resident', action?.kind);
       this.counters.refused = (this.counters.refused ?? 0) + 1;
       this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: gate.code, why: gate.why, m: this.bank.snapshot(), cond: this.condition });

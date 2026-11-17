@@ -1,3 +1,4 @@
+import { recordSettlementEvent } from './settlement-events.mjs';
 // V7.2 阶段 B 第 3 步：居民侧个人时间与进行中动作。
 //
 // 规则（与玩家侧同一口径）：
@@ -129,6 +130,9 @@ function abortBusy(world, id, clock, code) {
   clock.busy = null;
   if (!b) return;
   noteAbort(world, 'resident', b.kind); // E2/E3：中止进累计账本
+  recordSettlementEvent(world, 'work_interrupted', {
+    actor: id, loc: world.loc[id], action: b.kind, reason: code, applied: b.applied,
+  });
   clock.lastAbort = { kind: b.kind, code, at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
 }
 

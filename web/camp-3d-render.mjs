@@ -56,7 +56,7 @@ export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55
   const aim = [x,targetY,z], eye = aim.map((v,i)=>v+80*back[i]);
   const halfX = span/2, halfY = halfX*height/width;
   return {
-    back,
+    back, focus:[x,z],
     view: [right[0],up[0],back[0],0,right[1],up[1],back[1],0,right[2],up[2],back[2],0,
       -dot(right,eye),-dot(up,eye),-dot(back,eye),1],
     projection: [1/halfX,0,0,0,0,1/halfY,0,0,0,0,-2/199.9,0,0,0,-200.1/199.9,1],
@@ -428,8 +428,9 @@ const VERTEX = `
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
   uniform bool uRegionTexture;
-  uniform vec4 uSunRay;
-  uniform mediump vec3 uLight, uSun;
+  uniform mediump vec4 uSunRay;
+  uniform mediump vec3 uLight;
+  uniform mediump float uSunStrength;
   varying vec3 vColor;
   varying vec2 vUV;
   #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -449,7 +450,7 @@ void main(){
     gl_Position=uProjection*uView*vec4(point,1.);
     vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x; vBank=aMaterial.y;
     float diffuse=max(0.,dot(aNormal.xyz,uSunRay.xyz));
-    vPhysical=uLight*(.78+.14*max(0.,aNormal.y)+diffuse*uSunRay.w*.55)+vec3(.22,.09,.035)*uSun.z*diffuse;
+    vPhysical=uLight*(.78+.14*max(0.,aNormal.y)+diffuse*uSunRay.w*.55)+vec3(.22,.09,.035)*uSunStrength*diffuse;
     vFinish=aNormal.w;
     vColor=aColor; vUV=aUV; vWorld=aPosition.xz;
   }
@@ -460,14 +461,19 @@ const FRAGMENT = `
   uniform vec4 uFogBounds;
   uniform bool uTexture, uVisibility, uHasWater;
   uniform vec3 uSight;
+  uniform vec3 uViewDirection;
+  uniform mediump vec4 uSunRay;
   uniform vec4 uHearth;
 uniform float uExposure;
 uniform vec4 uWindowA, uWindowB;
+uniform vec4 uExteriorWindows[8];
+uniform int uExteriorWindowCount;
 uniform float uDaylight;
 uniform bool uInterior;
   uniform mediump vec4 uWeather;
   uniform float uSeason;
-  uniform mediump vec3 uLight, uSun;
+  uniform mediump vec3 uLight;
+  uniform mediump float uSunStrength;
   uniform bool uPhysical, uShadow;
   uniform float uAlpha;
   varying vec3 vColor;
@@ -490,6 +496,16 @@ float windowPool(vec4 w, vec2 p, float h){
   float deep = exp(-max(0., p.y - w.y) * .42);
   float high = 1. - smoothstep(1.4, 2.6, h);
   return lat * deep * high;
+}
+
+float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
+  vec2 fromWindow=point-window.xy;
+  float forward=fromWindow.y;
+  float width=window.z+max(0.,forward)*.36;
+  float side=1.-smoothstep(width*.58,width+.18,abs(fromWindow.x));
+  float depth=smoothstep(.05,.52,forward)*(1.-smoothstep(.65,2.8,forward));
+  float low=1.-smoothstep(window.w*.65,window.w+.20,elevation);
+  return side*depth*low;
 }
 
 
@@ -554,12 +570,10 @@ float windowPool(vec4 w, vec2 p, float h){
       shade=(known?texture2D(uFog,local).r:0.)*radial;
     }
     if (uShadow) {
-      gl_FragColor=vec4(.105,.135,.12,vColor.r*shade);
+      gl_FragColor=vec4(.105,.135,.12,vColor.r);
       return;
     }
-    float facing=1.;
-    if (!uPhysical || water>.5) facing=clamp(dot(normalize(vWorld-uSight.xy+vec2(.001)),uSun.xy)*.5+.5,0.,1.);
-    vec3 sunlight=vec3(.27,.123,.046)*uSun.z*(.7+facing*.6);
+    vec3 sunlight=vec3(.27,.123,.046)*uSunStrength;
     float baked=fract(vFinish)*2.;
     float finish=floor(vFinish);
     if (uPhysical && finish>0. && !uTexture && !uRegionTexture) {
@@ -568,8 +582,12 @@ float windowPool(vec4 w, vec2 p, float h){
       float tone=texture2D(uGrain,vec2(fract(grain.x*.82),fract(grain.y*1.21)*.48+.01+row)).r;
       color*=mix(.87,1.12,tone);
     }
-    vec3 lit=color*(uPhysical?vPhysical:(uLight+sunlight)*baked)*mix(.48,1.,shade);
-    if (water>.5) lit+=vec3(.20,.105,.037)*uSun.z*facing;
+    vec3 lit=color*(uPhysical?vPhysical:(uLight+sunlight)*baked);
+    if (water>.5) {
+      vec3 reflected=reflect(-uSunRay.xyz,vec3(0.,1.,0.));
+      float glint=pow(max(0.,dot(reflected,uViewDirection)),5.);
+      lit+=vec3(.20,.105,.037)*uSunStrength*(.20+.80*glint);
+    }
     vec3 amber=mix(vec3(.65,.27,.08),vec3(1.,.68,.34),clamp(color.g+color.b*.6,0.,1.));
     float fire=uHearth.w*(1.-smoothstep(.15,3.7,distance(vWorld,uHearth.xy)));
     lit+=vec3(.31,.145,.048)*fire;
@@ -581,12 +599,24 @@ float windowPool(vec4 w, vec2 p, float h){
       float pool=windowPool(uWindowA,vWorld,vHeight)+windowPool(uWindowB,vWorld,vHeight);
       lit+=vec3(.46,.33,.19)*pool*uDaylight;
     }
+    if (uExteriorWindowCount>0) {
+      float spill=0.;
+      for (int i=0;i<8;i++) {
+        if (i>=uExteriorWindowCount) break;
+        spill=max(spill,exteriorWindowPool(uExteriorWindows[i],vWorld,vHeight));
+      }
+      lit+=vec3(.23,.115,.038)*spill*smoothstep(.57,.9,uWeather.w);
+    }
     if (uWild) {
       float mist=smoothstep(2.,25.,-vHeight);
       float drift=.92+.08*sin(vWorld.x*.13+vWorld.y*.11+uWeather.x*.2);
       lit=mix(lit,vec3(.38,.48,.51),mist*drift*.79);
     }
-    gl_FragColor=vec4(mix(lit,amber*mix(.55,1.,shade),max(0.,vGlow)*uWeather.w)*uExposure,uAlpha);
+    vec3 sceneColor=mix(lit,amber,max(0.,vGlow)*uWeather.w)*uExposure;
+    // The perception layer mutes detail without becoming a moving light.
+    float luma=dot(sceneColor,vec3(.2126,.7152,.0722));
+    vec3 muted=mix(vec3(luma),sceneColor,.52);
+    gl_FragColor=vec4(mix(sceneColor,muted,1.-shade),uAlpha);
   }
 `;
 
@@ -633,7 +663,7 @@ export function createCampRenderer() {
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['Sun','SunRay','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','Daylight','Interior','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
@@ -760,7 +790,8 @@ export function createCampRenderer() {
       gl.uniformMatrix4fv(uniform.View,false,camera.view);
       gl.uniformMatrix4fv(uniform.Projection,false,camera.projection);
       gl.uniform3fv(uniform.Light,light);
-      gl.uniform3fv(uniform.Sun,sun?[...sun.direction,sun.strength]:[0,0,0]);
+      gl.uniform1f(uniform.SunStrength,sun?.strength??0);
+      gl.uniform3fv(uniform.ViewDirection,camera.back);
       gl.uniform4fv(uniform.SunRay,sun?[...sun.sunVector,sun.direct]:[0,1,0,0]);
       gl.uniform1i(uniform.Physical,Number(physical));
       gl.uniform1i(uniform.Shadow,0);
@@ -769,6 +800,12 @@ export function createCampRenderer() {
 gl.uniform1f(uniform.Exposure,exposure);
 gl.uniform4fv(uniform.WindowA,windows?.[0]??[0,0,0,0]);
 gl.uniform4fv(uniform.WindowB,windows?.[1]??[0,0,0,0]);
+      const exteriorWindows=weather[3]>.57 && homes?.windows?.length
+        ? homes.windows.map(window=>({window,distance:Math.hypot(window[0]-camera.focus[0],window[1]-camera.focus[1])}))
+          .sort((a,b)=>a.distance-b.distance).slice(0,8).flatMap(({window})=>window)
+        : [];
+      gl.uniform1i(uniform.ExteriorWindowCount,exteriorWindows.length/4);
+      if (exteriorWindows.length) gl.uniform4fv(uniform['ExteriorWindows[0]'],exteriorWindows);
 gl.uniform1f(uniform.Daylight,daylight);
 gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       gl.uniform4fv(uniform.Weather,weather);

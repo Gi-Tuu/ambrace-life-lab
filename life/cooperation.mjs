@@ -10,6 +10,8 @@ import { laborStage } from './households.mjs';
 // occupancy 里留着旧地点、新地点没有该角色，下一次 move() 读 occupancy[from] 时崩，
 // 然后 survplay 的 try/catch 每拍吞一条 agentError，工人整条决策环停摆（2026-11-12 实测）。
 import { move as moveTo, BASE_KINDS, SURV_COST } from './body.mjs';
+import { recordSettlementEvent } from './settlement-events.mjs';
+import { constructionAccess, siteRecord } from './construction-access.mjs';
 
 export const COOP = Object.freeze({
   assistThreshold: 0.5,
@@ -54,10 +56,11 @@ export function identifyPublicNeeds(world) {
 // 任务分解：采集材料 → 奠基 → 施工（维修另走 repair）。
 export const decompose = (task) => (task.repair ? ['repair'] : ['gather', 'plan', 'build']);
 
-const pickBuildLoc = (world, exclude) => {
+const pickBuildLoc = (world, exclude, type) => {
   const s = world.survival;
   const taken = (l) => (s.sites ?? []).some((x) => x.loc === l) || (s.buildings ?? []).some((x) => x.loc === l);
-  return (world.outdoor ?? []).find((l) => l !== exclude && !taken(l)) ?? null;
+  return (world.outdoor ?? []).find(loc => loc !== exclude && !taken(loc) &&
+    constructionAccess(world,siteRecord(world,loc,type),{proposed:true}).ok) ?? null;
 };
 
 export const assignWorkers = (world, task) => Object.keys(world.agents)
@@ -96,7 +99,7 @@ function execTick(world, t) {
       const r = doPlan(world, id, t.type);
       if (r.ok) { world.onLegacyLabor?.(id, 'plan'); t.phase = 'build'; }
       else if (r.code === 'OCCUPIED' || r.code === 'NOT_OUTDOOR') {
-        const nl = pickBuildLoc(world, t.loc);
+        const nl = pickBuildLoc(world, t.loc, t.type);
         if (nl && nl !== t.loc) { t.loc = nl; s.coop.replans += 1; t.tries = (t.tries ?? 0) + 1; if (t.tries > 3) t.abandoned = true; }
         else t.abandoned = true;   // 没有空位：放弃该任务，绝不空转重规划
       } else if (r.code === 'NO_MATERIAL') t.phase = 'gather';
@@ -136,11 +139,17 @@ function syncTask(world, task) {
   }
   const site = s.sites.find(b => b.loc === task.loc);
   if (task.repair ? building?.type !== task.type : (building || site && site.type !== task.type)) {
-    const next = task.repair || task.adopted || task.requester ? null : pickBuildLoc(world, task.loc);
+    const next = task.repair || task.adopted || task.requester ? null : pickBuildLoc(world, task.loc, task.type);
     if (!next) task.abandoned = true;
     else { task.loc = next; s.coop.replans += 1; }
   }
   if (!task.repair) {
+    if (!site && !task.abandoned && !task.adopted && !task.requester &&
+        !constructionAccess(world,siteRecord(world,task.loc,task.type),{proposed:true}).ok) {
+      const next = pickBuildLoc(world,task.loc,task.type);
+      if (next) { task.loc = next; s.coop.replans += 1; }
+      else task.abandoned = true;
+    }
     if (task.phase === 'build' && !site && (task.adopted || task.requester)) task.abandoned = true;
     task.phase = site?.type === task.type ? 'build' : 'gather';
   }
@@ -168,6 +177,7 @@ export function cooperationCandidate(world, id) {
   if (task.repair ? !building || building.integrity >= 1 : building || (!site && (task.adopted || task.requester))) return null;
   const move = to => ({ kind: 'move_to', to, id: `move_to:${to}`, label: `去${world.locs[to] ?? to}` });
   let act;
+  if (!task.repair && !constructionAccess(world,siteRecord(world,task.loc,task.type,site?.lot),{proposed:!site}).ok) return null;
   const cost = task.repair ? { wood: 1, stone: 1 } : buildDef(world, task.type).cost;
   const materials = Object.keys(cost);
   const missing = materials.find(res => (bag[res] ?? 0) + s.inv[res] < cost[res]);
@@ -194,10 +204,17 @@ export function cooperationCandidate(world, id) {
     cooperationValue: value, cooperation: true };
 }
 
-function availableForCooperation(world, id, task) {
+function cooperationBlock(world, id, task) {
   const a = world.agents[id];
-  return isAlive(a) && laborStage(world, id) && (a.drives?.v?.energy ?? 0) > .22 &&
-    (a.viab?.v ?? 0) > .18 && willingness(world, id, task).decision !== 'refuse';
+  if (!isAlive(a)) return 'DEAD';
+  if (!laborStage(world, id)) return 'LIFE_STAGE';
+  if (!((a.drives?.v?.energy ?? 0) > .22)) return 'STAMINA';
+  if (!((a.viab?.v ?? 0) > .18)) return 'VIABILITY';
+  return willingness(world, id, task).decision === 'refuse' ? 'UNWILLING' : null;
+}
+
+function availableForCooperation(world, id, task) {
+  return cooperationBlock(world, id, task) === null;
 }
 
 export function stepCooperation(world) {
@@ -212,7 +229,7 @@ export function stepCooperation(world) {
     const site = (s.sites ?? [])[0];
     const need = site ? { type: site.type, severity: 0.7, loc: site.loc, adopted: true } : identifyPublicNeeds(world)[0];
     if (!need) return null;
-    const loc = need.loc ?? pickBuildLoc(world);
+    const loc = need.loc ?? pickBuildLoc(world, undefined, need.type);
     if (!loc) return null;   // 没有可用选址就不再派活，避免空转
     const workers = assignWorkers(world, need);
     if (!workers.length) { c.refusals += 1; return { refused: true }; }
@@ -221,13 +238,16 @@ export function stepCooperation(world) {
   // P0-5 中途退出：死亡立即退出；替代/自发工人每拍重评意愿，拒绝即退出（明确协助承诺者保持稳定）。
   const task = c.task;
   task.workers = task.workers.filter((id) => {
-    const a = world.agents[id];
-    if (world.unifiedCooperation && !availableForCooperation(world, id, task)) { c.exits += 1; return false; }
-    if (!isAlive(a)) { c.exits += 1; return false; }
-    if (task.commit?.[id] === 'alternative' || task.adopted) {
-      if (willingness(world, id, task).decision === 'refuse') { c.exits += 1; return false; }
-    }
-    return true;
+    let reason = world.unifiedCooperation ? cooperationBlock(world, id, task) : null;
+    if (!reason && !isAlive(world.agents[id])) reason = 'DEAD';
+    if (!reason && (task.commit?.[id] === 'alternative' || task.adopted) &&
+        willingness(world, id, task).decision === 'refuse') reason = 'UNWILLING';
+    if (!reason) return true;
+    c.exits += 1;
+    recordSettlementEvent(world, 'cooperation_exit', {
+      actor: id, loc: task.loc, type: task.type, taskStartedAt: task.startedAt, reason,
+    });
+    return false;
   });
   if (!task.workers.length) {
     const again = assignWorkers(world, task);
@@ -247,7 +267,7 @@ export function runConstruction({ seed = 7, type = 'granary', coop = true, maxTi
   world.agents.p1 = { id: 'p1', name: '你', isPlayer: true }; spawn(world, 'p1', 'hall');
   initCoop(world.survival, true);
   const workers = coop ? assignWorkers(world, { type, severity: 0.8 }) : ['a1'];
-  const task = { type, severity: 0.8, loc: pickBuildLoc(world), phase: 'gather', workers, startedAt: 0 };
+  const task = { type, severity: 0.8, loc: pickBuildLoc(world, undefined, type), phase: 'gather', workers, startedAt: 0 };
   world.survival.coop.task = task;
   for (let t = 1; t <= maxTicks; t++) {
     world.t = t;

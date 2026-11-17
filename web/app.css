@@ -226,6 +226,13 @@
   table { width:100%; border-collapse:collapse; margin-top:8px; font-size:12px; }
   th, td { border-bottom:2px solid var(--line); text-align:right; padding:4px 0; }
   th:first-child, td:first-child { text-align:left; color:var(--dim); }
+  #journalDlg { width:min(42rem, 92vw); }
+  .journal-controls { display:flex; flex-wrap:wrap; gap:.6rem 1rem; margin-block:.8rem; }
+  .journal-controls select { font:inherit; color:inherit; background:var(--sunken); }
+  .journal-list { max-height:54vh; overflow:auto; padding-inline:.25rem; }
+  .journal-list details { border-top:1px solid var(--line); padding:.55rem .25rem; }
+  .journal-list summary { cursor:pointer; }
+  .journal-list ul { margin:.35rem 0 .25rem; padding-left:1.4rem; }
   .log { height:200px; overflow-y:auto; border-top:2px solid var(--line); padding-top:8px; font-size:12px; }
   .log div { padding:1px 0; }
   .log .A { color:var(--a); } .log .B { color:var(--b); }
@@ -699,3 +706,12 @@
   body.full-on #hotbar { bottom:14px; }
   body.full-on #itemBar { bottom:84px; }
   body.full-on #firstRun { top:auto; right:12px; bottom:150px; width:min(360px,42vw); }
+
+/* 阶段 5：A/B 历史回放（只读）。历史态压暗实时画面，输入由 app.js 拒绝。 */
+#replayPanel{margin:8px 0;padding:8px;border:1px solid #6b5a44;border-radius:6px;background:rgba(0,0,0,.15)}
+#replayPanel .replay-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#replayPanel .replay-range{display:flex;gap:8px;align-items:center;margin:6px 0}
+#replayPanel .replay-range input{flex:1;min-width:120px}
+#replayEvents{max-height:140px;overflow:auto;margin:6px 0;padding-left:18px}
+body.replay-mode #cvA,body.replay-mode #cvB{opacity:.35;filter:grayscale(.5)}
+body.replay-mode #tltA,body.replay-mode #titA{color:#EDC787}

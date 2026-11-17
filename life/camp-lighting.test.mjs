@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { modelMesh, MODEL_STRIDE, campCamera, regionOnScreen, collisionFootprint } from '../web/camp-3d-render.mjs';
 import { contactShadowMesh, materialGrain } from '../web/camp-lighting.mjs';
 import { solarLight } from '../web/camp-sun.mjs';
+import { outdoorHomes } from '../web/camp-3d-scene.mjs';
 
 const source=[{x:3,y:0,z:4,w:3,h:.16,d:2,solid:true}];
 const axes=(b)=>{
@@ -42,4 +43,29 @@ test('material texture is deterministic and camera clipping keeps partly visible
   const camera=campCamera({x:0,z:0,width:960,height:540,span:20});
   assert.equal(regionOnScreen([0,0,0,20,3,8],camera,960,540),true);
   assert.equal(regionOnScreen([90,0,90,120,6,120],camera,960,540),false);
+});
+
+test('日出时高物体的投影比低物体更长，接地点仍邻接底座',()=>{
+  const sun=solarLight(3.36,24,0);
+  const shadow=h=>contactShadowMesh({source:[{...source[0],h}],x:4,z:5,height:()=>0},sun);
+  const extent=mesh=>{
+    const xs=Array.from(mesh).filter((_,i)=>i%MODEL_STRIDE===0);
+    return [Math.min(...xs),Math.max(...xs)];
+  };
+  const [lowMin,lowMax]=extent(shadow(.3));
+  const [tallMin,tallMax]=extent(shadow(4));
+  assert.ok(tallMin<lowMin-2);
+  assert.equal(tallMax,lowMax);
+  assert.ok(tallMax>source[0].x+source[0].w);
+});
+
+test('只有住人住宅的真实发光窗会提供室外暖光位置',()=>{
+  const world={};
+  assert.deepEqual(outdoorHomes(world,[['house1',false,0]]).windows,[]);
+  const home=outdoorHomes(world,[['house1',true,0]]);
+  assert.equal(home.windows.length,2);
+  for (const [x,z,halfWidth,h] of home.windows) {
+    assert.ok(home.boxes.some(box=>box.glow && box.part.startsWith('window-') &&
+      Math.abs(box.x+halfWidth-x)<1e-8 && Math.abs(box.z+box.d-z)<1e-8 && box.y===h));
+  }
 });

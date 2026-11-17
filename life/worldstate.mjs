@@ -7,6 +7,7 @@ import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, addFood, takeFood, FOOD_KINDS, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
+import { recordSettlementEvent } from './settlement-events.mjs';
 
 export const SURV = Object.freeze({
   startStore: 6,          // 初始公共粮仓
@@ -119,12 +120,21 @@ export function advanceSurvival(world) {
     if (!world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7)) {
       s.lastStormDay = day;
       s.disasterToday = 'storm';
-      for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
+      const buildings = [];
+      for (const b of s.buildings) {
+        const before = b.integrity;
+        b.integrity = Math.max(0, Number((before - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2)));
+        if (b.integrity < before) buildings.push({ loc: b.loc, type: b.type, before, after: b.integrity });
+      }
+      let plot = null;
       const growing = s.plots.filter((p) => p.growth > 0 && p.growth < 1);
       if (growing.length) {
         const p = growing[Math.floor(hash01(world.seed ?? 7, day * 13 + 5) * growing.length)];
-        p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
+        const before = p.growth;
+        p.growth = Math.max(0, Number((before - 0.5).toFixed(2)));
+        plot = { id: p.id, before, after: p.growth };
       }
+      recordSettlementEvent(world, 'storm_impact', { stormDay: day, buildings, plot });
     } else if (!world.ecologyExperiment?.noColdsnap && s.coldStreak >= 2) s.disasterToday = 'coldsnap';
   }
 

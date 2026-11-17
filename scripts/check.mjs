@@ -90,7 +90,10 @@ for (const f of walk(join(ROOT, 'life')).filter((x) => x.endsWith('.mjs') && !x.
 const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 for (const f of serverShared) {
   if (!existsSync(f)) { fail(`life/ 引用的 ${rel(f)} 不存在`); continue; }
-  const body = stripComments(readFileSync(f, 'utf8'));
+  // Quoted part names are data. Keep bracketed globalThis access visible to this check.
+  const body = stripComments(readFileSync(f, 'utf8')).replace(
+    /(?:globalThis\s*\[\s*)?(?:'(?:\\.|[^'\\\r\n])*'|"(?:\\.|[^"\\\r\n])*")/g,
+    match => match.startsWith('globalThis') ? match : ' ');
   for (const api of ['document', 'window', 'localStorage', 'sessionStorage', 'navigator']) {
     if (new RegExp(`\\b${api}\\b`).test(body)) {
       fail(`${rel(f).replace(rel(ROOT) + '/', '')} 被 life/ 引用，却用了浏览器 API '${api}'（服务端 import 时会炸）`);

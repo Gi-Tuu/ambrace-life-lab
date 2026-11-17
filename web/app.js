@@ -7,7 +7,8 @@ import { facilityGate, FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } 
 import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, campPlants, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
 import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
-import { constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
+import { campBridgeBounds, constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
+import { CONSTRUCTION_CODES, CONSTRUCTION_REACH, entrancePoints, workPoints } from './camp-construction-access.mjs';
 import * as audio from './audio.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
@@ -66,6 +67,11 @@ function showPersistNotice(result, path) {
 }
 
 async function api(path, body) {
+  // 阶段 5：历史浏览只读——任何 /act（含位置同步）在回放态一律拒绝，先「返回实时」。
+  if (S.replay && String(path).startsWith('/act')) {
+    toast('历史回放中：返回实时后才能操作。');
+    return { ok: false, code: 'REPLAY_READONLY' };
+  }
   const result = await postJson(path, body);
   showPersistNotice(result, path);
   return result;
@@ -225,7 +231,9 @@ function sitesOf(w) {
 function slotsOf(w, sites) {
   const slots = {};
   for (const [r, [sx, sy]] of Object.entries(sites)) {
-    (w.occupancy?.[r] ?? []).forEach((who, i) => { slots[who] = [sx - 1 + (i % 3), sy + Math.floor(i / 3)]; });
+    (w.occupancy?.[r] ?? []).forEach((who, i) => {
+      slots[who] = w.constructionArrivals?.[who]?.map(v=>v-.5) ?? [sx - 1 + (i % 3), sy + Math.floor(i / 3)];
+    });
   }
   return slots;
 }
@@ -683,16 +691,10 @@ function buildWorld(w) {
     else groups.push([first,last]);
   }
   for(const [first,last] of groups){
-    const y0=first*TILE,y1=(last+1)*TILE;
-    let west=Infinity,east=-Infinity;
-    for (let y=y0;y<y1;y+=1) {
-      const center=streamCenter(y), half=streamHalfWidth(y);
-      west=Math.min(west,center-half);
-      east=Math.max(east,center+half);
-    }
     // 两侧坡道均伸过河岸，留出角色和推车的上桥余量。
-    const x0=Math.floor((west-1.65*TILE)/TILE)*TILE,x1=Math.ceil((east+1.65*TILE)/TILE)*TILE;
-    bridges.push([x0/TILE,y0/TILE,x1/TILE,y1/TILE]);
+    const bounds=campBridgeBounds(first,last,streamCenter,streamHalfWidth);
+    const [x0,y0,x1,y1]=bounds.map(v=>v*TILE);
+    bridges.push(bounds);
     if (!campRenderer) {
       g.fillStyle='#514134';g.fillRect(x0,y0,x1-x0,y1-y0);
       for(let x=x0+1;x<x1-1;x+=5){g.fillStyle='#BA8752';g.fillRect(x,y0+2,4,y1-y0-4);g.fillStyle='#EDC787';g.fillRect(x,y0+2,1,y1-y0-4);}
@@ -843,9 +845,9 @@ function buildWorld(w) {
   return worldWithCollisions(liveSites, w);
 }
 
-// 玩家真实视野：从玩家 tile 出发，光半径 + Bresenham 光线投射，树/岩/屋舍挡视线。
+// 玩家真实视野：按世界时相取观察距离，地形与模型仍挡视线。
 
-function lightRadius(phase) {
+function sightRadius(phase) {
   return phase === '夜' ? 5 : phase === '昼' ? 11 : 8;
 }
 let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
@@ -1014,7 +1016,7 @@ function ensureWalker(cvId, who, world, slots) {
   const snapshot=cvId==='cvB'?S.viewB:S.view;
   const travel=who!=='p1' && snapshot?.districtTravel?.[who];
   const destination=travel && world.sites[travel.to];
-  const auth = destination ? [destination[0]-1,destination[1]] : slots[who];
+  const auth = travel?.at?.map(v=>v-.5) ?? (destination ? [destination[0]-1,destination[1]] : slots[who]);
   const route=s=>{
     s.path=routeForWalker(world,s,auth)??[];
     if (!s.path.length && destination) {
@@ -1249,14 +1251,14 @@ function campShadows(world,regions) {
     ...regions.flatMap(region=>region.boxes?[region.boxes]:[])].filter(Boolean);
   const old=campShadowSources.get(world.canvas);
   if (old?.layers.length===layers.length && layers.every((layer,i)=>old.layers[i]===layer)) return old.source;
-  const source=layers.flatMap(layer=>layer.filter(b=>b.solid && b.w*b.d>.10)
+  const source=layers.flatMap(layer=>layer.filter(b=>b.castShadow || b.solid && b.w*b.d>.10)
     .map(b=>b.bounds??modelBounds(b)));
   campShadowSources.set(world.canvas,{layers,source});
   return source;
 }
 
 function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
-  const radius=lightRadius(phase);
+  const radius=sightRadius(phase);
   const lists=[world.scene3d.boxes,world.homes3d?.boxes,world.work3d,world.life3d?.boxes,regional?.boxes,
     ...regions.flatMap(r=>r.boxes && r!==regional?[r.boxes]:[])].filter(Boolean);
   let views=campFog.get(world.canvas);
@@ -1811,7 +1813,7 @@ function drawCamp(cv,w) {
       visibility=campVisibility(world,playerId,playerX,playerZ,w.phase,extended,exterior.regional,regions??[]);
       animals=animals.filter(a=>visibility.sees(a.x,a.z,(a.groundY??stage.heightAt(a.x,a.z))+(a.kind==='bird'?3.4:.65)));
     }
-    if (!overview && pTile) sight=[pTile[0]+.5,pTile[1]+.5,lightRadius(w.phase)];
+    if (!overview && pTile) sight=[pTile[0]+.5,pTile[1]+.5,sightRadius(w.phase)];
     for(const [who,[sx,sy]] of Object.entries(slots)){
       const walker=WALK[walkKey(playerId,who)];
       const px=walker?.x??sx, pz=walker?.y??sy;
@@ -1854,9 +1856,9 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   if (!right && S.playing && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
-  const shadows=exterior && !overview && player && sun?.direct && sun.phase!=='夜晚' ? {
-    source:campShadows(exterior,regions??[]), x:player.x,z:player.z,
-    height:extended?.height??( (x,z)=>stage.heightAt(x,z) ),
+  const shadows=exterior && !overview && sun?.direct && sun.phase!=='夜晚' ? {
+    source:campShadows(exterior,regions??[]), x,z,
+    height:(px,pz)=>Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??0),
   } : undefined;
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
@@ -2157,6 +2159,7 @@ const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'
 const CAMP_FOOD=['meat','berry','fruit','crop','egg','milk'];
 const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助',respond_request:'回应居民'};
 const campCodes={
+  ...CONSTRUCTION_CODES,
   ACCEPTED:'已答应', DECLINED:'已拒绝', NO_REQUEST:'该请求已经结束', REQUESTER_GONE:'提出请求的居民已离开',
   NO_FOOD:'当前餐桌没有食物可分', NO_WOOD:'背包里没有可借出的木料', CAMP_INVALID:'营地已回收，请从菜单返回主营地',
   ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
@@ -3014,6 +3017,137 @@ function openCenterDlg(id, renderFn) {
   renderFn(S.view);
   if (!d.open) d.showModal();
 }
+const JOURNAL_TOPICS = { storm: '风暴', cold: '寒潮', famine: '缺粮', build: '施工', farm: '开垦', housing: '住房' };
+const JOURNAL_RESULTS = {
+  agreed: '达成共识', split: '意见分歧', no_quorum: '未能成会', invited: '邀请未获回应',
+  joined: '参加', declined: '拒绝', left: '离开', opened: '发出', delivered: '已交付', expired: '已过期',
+  cancelled: '已取消', refuse: '拒绝', assist: '同意协助', alternative: '有条件协助',
+};
+const JOURNAL_REASONS = {
+  LOW_TRUST: '信任不足', NO_WOOD: '没有可借的木料', REQUESTER_GONE: '请求者已离开',
+  PARTICIPANT_GONE: '参与者已离开', REQUEST_LIMIT: '待处理请求已满', UNWILLING: '协作意愿不足',
+  DEAD: '居民已死亡', STAMINA: '体力不足', VIABILITY: '存续过低', LIFE_STAGE: '当前生命阶段无法施工',
+  NO_REPAIR: '没有可维修的建筑', NO_MATERIAL: '材料不足',
+};
+
+function journalRow(s, event) {
+  const name = id => s.agents?.[id]?.name ?? id;
+  const place = id => s.rooms?.[id] ?? id;
+  const building = type => s.buildingsDef?.[type]?.label ?? type;
+  const result = code => JOURNAL_RESULTS[code] ?? code;
+  const reason = code => JOURNAL_REASONS[code] ?? campCodes[code] ?? code;
+  const percent = value => `${Math.round(value * 100)}%`;
+  const change = row => `${percent(row.before)} → ${percent(row.after)}`;
+  const eventDay = Number.isInteger(event.stormDay) ? `第 ${event.stormDay + 1} 天风暴` : '';
+  const who = event.actor ? name(event.actor) : '';
+  const where = event.loc ? place(event.loc) : '';
+  let title;
+  let notes = [];
+  switch (event.kind) {
+    case 'storm_warning':
+      title = '发布风暴预警';
+      notes = [`预计 ${eventDay}`];
+      break;
+    case 'storm_observed':
+      title = '瞭望确认风暴预报';
+      notes = [`预计 ${eventDay}`];
+      break;
+    case 'storm_impact':
+      title = `风暴损伤 · ${event.buildings?.length ?? 0} 栋建筑`;
+      notes = (Array.isArray(event.buildings) ? event.buildings : [])
+        .map(row => `${place(row.loc)} · ${building(row.type)}：${change(row)}`);
+      if (event.plot) notes.push(`菜畦 ${event.plot.id} 生长：${change(event.plot)}`);
+      break;
+    case 'discussion':
+      title = `${JOURNAL_TOPICS[event.topic] ?? event.topic}讨论 · ${result(event.result)}`;
+      notes = [`第 ${event.startedAt} 刻发起`, ...Object.entries(event.members ?? {}).map(([id, state]) =>
+        `${name(id)} · ${result(state)}${event.advice?.[id] ? ' · ' + event.advice[id] : ''}`)];
+      break;
+    case 'repair': {
+      title = event.ok ? `维修完成 · ${building(event.type)}` : '维修未完成';
+      if (!event.ok) { notes = [reason(event.code)]; break; }
+      const materials = (label, stock) => stock && (stock.wood || stock.stone) ? `${label} 木 ${stock.wood} · 石 ${stock.stone}` : '';
+      notes = [`完好度 ${change(event)}`, materials('背包扣除', event.spent?.bag), materials('公仓扣除', event.spent?.store)];
+      if (eventDay) notes.push(`该建筑此前受${eventDay}影响 · 记录 #${event.damageId}`);
+      break;
+    }
+    case 'resource_request':
+      title = `${event.resource === 'food' ? '请求食物' : '借木'} · ${result(event.result)}`;
+      notes = [`${who} 向 ${name(event.target)} 请求 · ${event.requestId}`,
+        event.delivered && `交付 ${event.delivered.amount} × ${event.delivered.item === 'wood' ? '木料' : s.economy?.produceLabel?.[event.delivered.item] ?? '食物'}`,
+        event.reason && reason(event.reason)];
+      break;
+    case 'cooperation_reply':
+      title = `施工邀请 · ${result(event.result)}`;
+      notes = [building(event.type), event.reason && reason(event.reason)];
+      break;
+    case 'cooperation_exit':
+      title = '退出协作';
+      notes = [building(event.type), reason(event.reason)];
+      break;
+    case 'work_interrupted':
+      title = `${ACT_ZH[event.action] ?? event.action}中断`;
+      notes = [reason(event.reason)];
+      break;
+    case 'construction_access':
+      title = '施工通行受阻';
+      notes = [event.action==='move' ? '进门' : ACT_ZH[event.action], reason(event.reason)];
+      break;
+    default:
+      return '';
+  }
+  if (Number.isSafeInteger(event.taskStartedAt)) notes.push(`协作起于第 ${event.taskStartedAt} 刻`);
+  const label = [`第 ${event.t} 刻`, title, who, where].filter(Boolean).join(' · ');
+  return `<details data-event="${event.id}"><summary>${esc(label)}</summary>
+    <ul>${notes.filter(Boolean).map(line => `<li>${esc(line)}</li>`).join('')}</ul></details>`;
+}
+
+function renderJournal() {
+  const side = $('journalSide').value;
+  $('journalSideControl').hidden = !ui.compare;
+  const snapshot = ui.compare ? S.comparison?.[side] : S.survivalView;
+  const rows = snapshot?.settlementEvents ?? [];
+  const filter = $('journalFilter');
+  const storms = [...new Set(rows.map(row => row.stormDay).filter(Number.isInteger))].sort((a, b) => b - a);
+  const available = [['', '全部事件'], ['repair', '维修'], ['cooperation', '求助与协作'],
+    ...storms.map(day => [`storm-${day}`, `第 ${day + 1} 天风暴`])];
+  const options = available.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  if (filter.dataset.options !== options) {
+    const previous = filter.value;
+    filter.innerHTML = options;
+    filter.value = available.some(([value]) => value === previous) ? previous : '';
+    filter.dataset.options = options;
+  }
+  const selected = filter.value;
+  const shown = rows.filter(row => {
+    if (selected === 'cooperation') return ['resource_request', 'cooperation_reply', 'cooperation_exit', 'work_interrupted', 'construction_access', 'discussion'].includes(row.kind);
+    if (selected.startsWith('storm-')) return selected === `storm-${row.stormDay}`;
+    return !selected || row.kind === selected;
+  }).reverse();
+  const list = $('journalBody');
+  const html = shown.map(row => journalRow(snapshot, row)).join('') || '<p class="dim">暂无符合条件的记录。</p>';
+  const view = ui.compare ? `${S.compareRevision}:${side}` : `survival:${snapshot?.mapSeed}`;
+  if (list.dataset.html === html && list.dataset.view === view) return;
+  const sameView = list.dataset.view === view;
+  const open = new Set(sameView ? [...list.querySelectorAll('details[open]')].map(row => row.dataset.event) : []);
+  const focus = sameView ? list.contains(document.activeElement) && document.activeElement.closest('details')?.dataset.event : null;
+  list.innerHTML = html;
+  for (const row of list.querySelectorAll('details')) {
+    row.open = open.has(row.dataset.event);
+    if (row.dataset.event === focus) row.querySelector('summary').focus({ preventScroll: true });
+  }
+  list.dataset.html = html;
+  list.dataset.view = view;
+}
+
+function openJournal() {
+  if (!S.playing) return;
+  keys.clear();
+  roomRoute = null;
+  renderJournal();
+  if (!$('journalDlg').open) $('journalDlg').showModal();
+}
+
 function renderManual(s) {
   const el = $('manualBody'); if (!el) return;
   const line = (t) => `<li>${esc(t)}</li>`;
@@ -3278,6 +3412,79 @@ const refreshMode=()=>ui.menu?'menu':ui.compare?'compare':'survival';
 function discardPendingRefreshes() {
   refreshApplied=++refreshIssued;
 }
+// ── 阶段 5：A/B 历史回放（只读）──────────────────────────────
+// 数据只来自 GET /replay（帧 + 事件）；历史态拒绝 /act，返回实时后恢复输入。
+async function loadReplayRange(force=false){
+  if(!ui.compare||S.compareRevision==null) return;
+  if(!force&&S.replayRangeRev===S.compareRevision) return;
+  try{
+    const r=await fetch(`/replay?rev=${S.compareRevision}`).then(x=>x.json());
+    if(!r?.ok) return;
+    S.replayRange=r; S.replayRangeRev=S.compareRevision;
+    const panel=$('replayPanel'); if(panel) panel.hidden=false;
+    const slider=$('replayRange');
+    if(slider){
+      const c=r.coverage;
+      slider.min=c?c.min:0; slider.max=c?c.max:0; slider.step=1;
+      if(!S.replay&&c) slider.value=c.max;
+    }
+    renderReplayList(r.events??[]);
+    const note=$('replayNote');
+    if(note) note.textContent=r.coverage?`可回放 ${r.coverage.min}–${r.coverage.max} 刻（保留 ${r.frames.length} 帧）`:(r.note??'');
+  }catch{/* 回放失败不阻塞实时世界 */}
+}
+function renderReplayList(events){
+  const box=$('replayEvents'); if(!box) return;
+  box.innerHTML='';
+  for(const e of (events??[]).slice(-80)){
+    const li=document.createElement('li');
+    li.textContent=`第 ${e.t} 刻 · ${e.side??''} · ${e.kind??''}`;
+    li.style.cursor='pointer';
+    li.onclick=()=>showReplayAt(e.t);
+    box.appendChild(li);
+  }
+}
+function replayCardHtml(card){
+  if(!card) return '<p class="note">该侧没有状态</p>';
+  const bs=(card.buildings??[]).map(b=>`${esc(b.type)}@${esc(b.loc)} ${Math.round((b.integrity??0)*100)}%`).join('；')||'无建筑';
+  const as=(card.agents??[]).map(a=>`${esc(a.name)}@${esc(a.loc)} 体${a.energy} 存${a.viab}${a.dead?'（死）':''}`).join('；')||'无角色';
+  return `<b>第 ${card.t} 刻 · ${esc(card.side)}</b><div>公仓 ${card.store} · 木${card.pinv?.wood??0}/石${card.pinv?.stone??0}</div><div>建筑：${bs}</div><div>角色：${as}</div>`;
+}
+async function showReplayAt(t){
+  if(!ui.compare||S.compareRevision==null) return;
+  try{
+    const r=await fetch(`/replay?rev=${S.compareRevision}&t=${t}`).then(x=>x.json());
+    if(r?.ok){
+      S.replay=r.frame.t;
+      if($('replayTick')) $('replayTick').textContent=r.frame.t;
+      if($('replayCardA')) $('replayCardA').innerHTML=replayCardHtml(r.frame.A);
+      if($('replayCardB')) $('replayCardB').innerHTML=replayCardHtml(r.frame.B);
+      if($('replayNote')) $('replayNote').textContent=`历史态：第 ${r.frame.t} 刻（只读）`;
+      renderReplayList(r.events??[]);
+    }else{
+      S.replay=t;
+      if($('replayNote')) $('replayNote').textContent=r?.note??'该刻没有可回放状态';
+      renderReplayList(r?.events??[]);
+    }
+    document.body.classList.add('replay-mode');
+  }catch{}
+}
+function exitReplay(silent=false){
+  const was=Boolean(S.replay);
+  S.replay=null;
+  document.body.classList.remove('replay-mode');
+  if($('replayCardA')) $('replayCardA').innerHTML='';
+  if($('replayCardB')) $('replayCardB').innerHTML='';
+  if($('replayNote')) $('replayNote').textContent='';
+  if(was&&!silent){ toast('已返回实时'); void refresh(); }
+}
+function syncReplayPanel(pair){
+  const panel=$('replayPanel'); if(!panel) return;
+  if(!ui.compare||!pair){ exitReplay(true); panel.hidden=true; return; }
+  panel.hidden=false;
+  if(S.replayRangeRev!==pair.revision) void loadReplayRange(true);
+}
+
 async function refresh() {
   const id=++refreshIssued, mode=refreshMode(), camp=campKeyNow;
   const path='/world?mode='+mode;
@@ -3342,6 +3549,7 @@ async function refresh() {
     S.tickMs=j.tickMs;
     S.masks = pair?.masks ?? S.masks;
     S.viewB = B;
+    syncReplayPanel(pair);
     S.layer = j.layer ?? S.layer;
     // 后端状态必须可见：评委要能判断"现在到底是真模型还是替身"，而不是靠猜
     const m = j.model ?? {};
@@ -3381,6 +3589,7 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    if ($('journalDlg').open) renderJournal();
     // 营地路由状态在信封中，生存快照里的 camp 是家具与物资数据。
     if (!ui.compare && j.camp?.invalid) {
       if (!S.campInvalidNotified) {
@@ -3410,7 +3619,7 @@ async function refresh() {
     $('btnOverview').title=ui.interior?'返回营地后可打开全景':'';
     $('btnOverview').textContent = ui.surveyRoom ? '返回瞭望台' : ui.overview ? '返回角色视角' : '世界全景';
     const fi = $('fullInfo');
-    if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${viewA.t} 刻 · ${viewA.phase ?? ''} · 视野 ${lightRadius(viewA.phase)} 格`;
+    if (fi) fi.textContent = `拥爱生命实验室 · 全屏${ui.interior ? '室内' : ui.overview ? '全景' : ''} · 第 ${viewA.t} 刻 · ${viewA.phase ?? ''} · 视野 ${sightRadius(viewA.phase)} 格`;
     const vi = $('visionInfo');
     if (vi) vi.textContent = ui.interior
       ? `室内 · ${(viewA.rooms ?? LOCS)[ui.interior] ?? ui.interior} · 走近按 F 或点家具 · 到门口离开`
@@ -3789,6 +3998,10 @@ const bindCenterDlg=(btnId,dlgId,renderFn)=>{
 bindCenterDlg('btnExchange','exchangeDlg',renderExchangeDlg);
 bindCenterDlg('btnBuild','buildDlg',renderBuildDlg);
 bindCenterDlg('btnVillage','villageDlg',renderVillageDlg);
+$('btnJournal').onclick = openJournal;
+$('btnJournalCompare').onclick = openJournal;
+$('journalSide').onchange = renderJournal;
+$('journalFilter').onchange = renderJournal;
 for (const id of ['exchangeDlg','buildDlg','villageDlg']) {
   const dlg=$(id);
   dlg.addEventListener('click',(e)=>{
@@ -3944,7 +4157,7 @@ function outdoorEntities(world,w,people,animals) {
   }) : [];
   const lots=ui.tool==='hammer' ? world.openLots.map(({loc,lot:rect})=>({
     id:'lot:'+loc,kind:'lot',target:loc,rect,at:[rect.x+rect.w/2,rect.z+rect.d/2],
-    reach:1.15,tool:'hammer',name:'可施工地块',
+    reach:CONSTRUCTION_REACH,tool:'hammer',name:'可施工地块',
   })) : [];
   const resources=Object.entries(w.districts??{}).map(([loc,{source:[x,z],resource}])=>({
     id:'resource:'+loc,kind:'resource',target:loc,rect:{x:x-.42,z:z-.42,w:.84,d:.84},at:[x,z],
@@ -3953,7 +4166,7 @@ function outdoorEntities(world,w,people,animals) {
   }));
   const works=(world.workProjects??[]).filter(p=>p.record.type!=='house').map(p=>({
     id:p.id,kind:'work',target:p.id,room:p.record.loc,rect:p.lot,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
-    reach:1.15,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
+    reach:CONSTRUCTION_REACH,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
   }));
   return [...doors,...facilities,...timber,...plants,...fields,...works,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
@@ -4169,6 +4382,10 @@ function approachEntity(world,walker,e) {
     const a=i*Math.PI/4, r=e.rect?0:e.reach*.75;
     return [e.at[0]+Math.cos(a)*(e.rect?e.rect.w/2+.25:r),e.at[1]+Math.sin(a)*(e.rect?e.rect.d/2+.25:r)];
   });
+  if ((S.view?.layoutVersion??0)>=2) {
+    if (e.kind==='door') candidates.push(...entrancePoints(e.rect));
+    else if (e.kind==='work' || e.kind==='lot') candidates.push(...workPoints(e.rect));
+  }
   candidates.sort((a,b)=>distanceTo(a,from)-distanceTo(b,from));
   const map=campBodyWorld(world,true);
   for (const p of candidates) {
@@ -4292,7 +4509,7 @@ function entrySiteAt(sites, tx, ty) {
 const keys = new Set();
 const KEY_DIR = { w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right' };
 window.addEventListener('keydown', (e) => {
-  if (ui.menu) return;
+  if (ui.menu || $('journalDlg').open) return;
   // 只让真正的输入控件吞按键；按钮/summary 焦点不吞（点过按钮后键盘仍可用）
   if (e.isComposing || e.target.closest?.('input,textarea,select,[contenteditable]') ||
       e.metaKey || e.ctrlKey || e.altKey) return;
@@ -4480,6 +4697,13 @@ loadAssets().finally(() => {
 });
 // 验收钩子补挂：WALK/ui 在模块后段声明，顶部对象字面量引用会 TDZ 炸掉整个模块
 if (!campRenderer) showGfxUnavailable(true);
+// 阶段 5：时间轴/事件点选/返回实时。拖动时只在 change 发请求，避免每像素打一次接口。
+{
+  const slider=$('replayRange'), live=$('replayLive');
+  if(slider) slider.addEventListener('change',()=>{ const t=Number(slider.value); if(Number.isFinite(t)) void showReplayAt(t); });
+  if(live) live.addEventListener('click',()=>exitReplay());
+}
+
 Object.assign(window.__lifeDebug, {
   WALK, ui, S,
   survFlash: () => survFlash,
@@ -4487,4 +4711,7 @@ Object.assign(window.__lifeDebug, {
   pointedEntity,
   hallFront: () => structuredClone(hallFront),
   hallWalkable: (x,y) => roomAllows(collisionEditor.cells('hall'),x,y,roomPixelWalk('hall'),roomBounds('hall')),
+  replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
+    actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },
 });
+
