@@ -233,7 +233,7 @@ test('V4-15 真实玩家采收同时结算背包、公仓和满仓丢弃', async
 });
 
 
-test('V4-05 私房施工经过 Organism 正常选择、规则验证、执行和存续扣费', async () => {
+test('V4-05 私房施工经过 Organism 正常选择、规则验证、执行和体力扣费', async () => {
   const sp = createSurvPlay(13, options), w = sp.world, h = w.survival.households;
   w.housing.a3 = 'house5';
   w.pinv.a1 = { wood: 5, stone: 3 };
@@ -247,6 +247,7 @@ test('V4-05 私房施工经过 Organism 正常选择、规则验证、执行和�
   for (let i = 0; i < 12 * DAY_TICKS && !h.deeds[room]; i++) await tickSurvPlay(sp);
   const labor = actions.filter(a => a.id === 'a1' && a.kind === 'house_work');
   assert.equal(labor.length, 3);
-  assert.ok(labor.every(a => a.paid > 0));
+  assert.ok(labor.every(a => a.energyPaid > 0), '私房施工要从体力里扣，不是白干');
+  assert.ok(labor.every(a => a.paid === 0), '普通劳动不再扣存续（viab 只承担长期损耗）');
   assert.equal(h.deeds[room].owner, 'a1');
 });

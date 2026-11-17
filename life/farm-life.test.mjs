@@ -70,7 +70,7 @@ test('自然决策开垦并播种，存档恢复；储粮充足、干旱和缺�
   assert.equal(s.agentErrors ?? 0, 0);
   assert.equal(s.plots.length, 5);
   assert.equal(tilled.goal, 'farmland');
-  assert.ok(tilled.paid > 0);
+  assert.ok(tilled.energyPaid > 0, '开垦是普通劳动，要扣体力');
   assert.ok(s.plots.at(-1).growth > 0);
   assert.deepEqual(survView(restore(sp)).plots, survView(sp).plots);
 

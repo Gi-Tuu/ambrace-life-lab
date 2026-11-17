@@ -10,6 +10,7 @@ import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { validate } from './rules.mjs';
+import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
@@ -343,7 +344,24 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
       continue;
     }
     const traceStart = onResidentAction ? a.trace.length : 0;
+    // V7.2：进行中的动作每刻推进一次（施工按 30 分钟落一单位劳动，打断时进度保留）。
+    if (residentTimeModel(w)) {
+      const adv = advanceResidentBusy(w, id);
+      if (adv.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: adv.code });
+    }
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+    // V7.2：个人时间模型下，同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX ⇒ 不会 CPU 爆炸）。
+    // 追加决策 reason=null ⇒ 不问模型；模型预算/熔断仍只归 host 资源层。
+    if (residentTimeModel(w) && a.lastMetabTick === w.t) {
+      const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
+      const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
+      for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {
+        if (!residentCanChain(w, id) || residentBusy(w, id)) break;
+        const before = a.counters.actions ?? 0;
+        try { await a.decideOn(w, { metab: a.lastMetab, reason: null, told: false, silent: true, sameKind }); } catch { break; }
+        if ((a.counters.actions ?? 0) === before) break;
+      }
+    }
     // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
     if (w.gameRules && a.pendingSay) {
       const say = a.pendingSay;

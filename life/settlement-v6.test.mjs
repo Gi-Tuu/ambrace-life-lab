@@ -84,16 +84,31 @@ test('近距离可请求住户邀请，破门要锤、工时并损害信任，�
   assert.equal(homeEntry(w,'p1',room).code,'HOME_LOCKED');
 });
 
-test('真实居民决策发起、谢绝、离开及产生分歧，关闭后无讨论记录',async()=>{
+test('真实居民决策发起、谢绝、离开与记录持久化（分歧分支用下方确定性闸门）',async()=>{
   const sp=make(), off=make(13,{discussions:false});
-  for (const world of [sp,off]) for (let i=0;i<144;i++) await tickSurvPlay(world);
+  for (const world of [sp,off]) for (let i=0;i<300;i++) await tickSurvPlay(world);
   const history=survView(sp).social.discussions.history;
-  assert.ok(history.some(m=>m.result==='split' && new Set(Object.values(m.advice)).size>1));
-  assert.ok(history.some(m=>Object.values(m.members).includes('declined')));
+  // V7.2 之后居民体力更稳、会议节奏变长：真实会议里少见"两人判断不同"，分歧分支改由确定性 finishDiscussion 闸门覆盖。
+  assert.ok(history.length>=3, JSON.stringify(history));
+  assert.ok(history.some(m=>Object.values(m.members).includes('declined')), '应有人谢绝');
+  assert.ok(history.some(m=>Object.values(m.members).includes('joined')), '应有人加入');
+  assert.ok(history.some(m=>Object.values(m.members).includes('left')), '应有人中途离开');
   assert.equal(off.world.survival.discussions.history,undefined);
   assert.deepEqual(survView(restore(sp,{discussions:false})).social.discussions.history,history);
   assert.equal(sp.world.survival.agentErrors??0,0);
   assert.deepEqual(survView(restore(sp)).social.discussions.history,history);
+});
+
+test('讨论分歧：在场两人判断不同时记为 split（V7.2 后真实会议更容易共识，分支用确定性状态闸门）',()=>{
+  const sp=make(),w=sp.world,s=w.survival;
+  w.loc.a1='hall'; w.loc.a2='hall';
+  w.agents.a1.drives.v.energy=.9; // 头脑清醒：按议题给建议
+  w.agents.a2.drives.v.energy=.3; // 低于 .48 ⇒ 建议"先休整"
+  s.discussions.active={t:w.t,until:w.t+3,by:'a1',room:'hall',topic:'storm',severity:.8,members:{a1:'joined',a2:'joined'}};
+  finishDiscussion(w,sp.log);
+  const rec=s.discussions.history.at(-1);
+  assert.equal(rec.result,'split',JSON.stringify(rec));
+  assert.equal(new Set(Object.values(rec.advice)).size,2,'两人的判断必须真的不同');
 });
 
 test('有共识时建议进入实际行动比较，没有工地或缺料仍由原规则驳回',()=>{
