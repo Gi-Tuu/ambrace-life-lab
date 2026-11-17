@@ -93,7 +93,12 @@ export async function run({ env = process.env } = {}) {
       }
       const j = JSON.parse(text);
       const content = j?.choices?.[0]?.message?.content ?? '';
-      log(`跑了 model=${job.body?.model} 排队=${job.waitedMs}ms 用时=${Date.now() - t0}ms 正文=${String(content).length}字 tokens=${j?.usage?.total_tokens ?? '?'}${lane}`);
+      // #53 的定性需要"提示 vs 生成"的拆分与 finish_reason：只看 total 时，超 TTL 到底是预填贵还是
+      // 100 token 解码上限被吃满，两种病因会给出完全相反的修法（前者换引擎，后者压上限）。
+      const u = j?.usage ?? {};
+      log(`跑了 model=${job.body?.model} 排队=${job.waitedMs}ms 用时=${Date.now() - t0}ms 正文=${String(content).length}字`
+        + ` 提示=${u.prompt_tokens ?? '?'} 生成=${u.completion_tokens ?? '?'} 结束=${j?.choices?.[0]?.finish_reason ?? '?'}`
+        + ` tokens=${u.total_tokens ?? '?'}${lane}`);
       await report({ id: job.id, content, usage: j?.usage ?? {}, finish_reason: j?.choices?.[0]?.finish_reason ?? 'stop' });
     } catch (e) {
       log(`上游异常 model=${job.body?.model} ${String(e?.name ?? e)} ${String(e?.message).slice(0, 60)}`);
