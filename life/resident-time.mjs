@@ -43,15 +43,15 @@ export function residentTimeModel(world) {
 }
 
 export function residentMinutes(kind, world = null) {
-  // V7.3：正式游戏玩家/居民共用 action-cost 表；研究态保留旧 RESIDENT_MIN，五份基线逐位不变。
-  if (world?.survival?.actTimeModel === true) {
-    const shared = costFor(kind).minutes;
-    if (shared > 0) return shared;
-  }
+  // V7.3.1：正式游戏玩家/居民共用 action-cost 表（0 分钟的休息/睡眠也用共享表，不回退旧值）；
+  // 研究态保留旧 RESIDENT_MIN，五份基线逐位不变。
+  if (world?.survival?.actTimeModel === true) return costFor(kind).minutes;
   return RESIDENT_MIN[kind] ?? DEFAULT_MINUTES;
 }
 
-export function laborEnergy(kind) {
+export function laborEnergy(kind, world = null) {
+  // V7.3.1：正式游戏与玩家同取 SHARED_COST；研究态/旧路径保留 LABOR_ENERGY。
+  if (world?.survival?.actTimeModel === true) return costFor(kind).energy;
   return LABOR_ENERGY[kind] ?? 0;
 }
 
@@ -113,14 +113,14 @@ export function residentCanChain(world, id) {
   const clock = clockOf(world, id);
   if (clock.busy) return true; // 有进行中动作时也要推进它
   const budget = residentBudget(world, id);
-  return budget.tickLeft > 0 && budget.dayLeft > 0 && budget.actionsLeft > 0 && (a.drives?.v?.energy ?? 0) > 0.01;
+  return budget.tickLeft > 0 && budget.dayLeft > 0 && (a.drives?.v?.energy ?? 0) > 0.01;
 }
 
 // 开始一个动作：先扣时间；装不下当前刻就转成 busy（不立刻产生效果）。
 export function residentBeginTime(world, id, kind) {
   const clock = clockOf(world, id);
   if (clock.busy) return { ok: false, code: 'BUSY' };
-  if (clock.tick.n >= TICK_ACTION_CAP) return { ok: false, code: 'TICK_CAP' };
+  // V7.3.1：TICK_ACTION_CAP 只作调度统计，不再作为“不能行动”的资格上限。
   const cost = residentMinutes(kind, world);
   if (cost <= 0) { clock.tick.n += 1; return { ok: true, minutes: 0, staged: false }; }
   const tickLeft = Math.max(0, TICK_MINUTES - clock.tick.usedMin);
@@ -135,7 +135,7 @@ export function residentBeginTime(world, id, kind) {
   // 装不下本刻：把本刻剩余分钟记进 busy，下一（几）刻继续。
   clock.busy = {
     kind, action: null, startTick: world.t, totalMin: cost, remainMin: cost - tickLeft,
-    progressMin: tickLeft, bankedMin: 0, applied: 0,
+    progressMin: tickLeft, bankedMin: 0, applied: 0, energyPaid: 0,
   };
   clock.tick.usedMin += tickLeft;
   clock.usedMin += tickLeft;
@@ -160,7 +160,9 @@ function abortBusy(world, id, clock, code) {
   if (!b) return;
   noteAbort(world, 'resident', b.kind); // E2/E3：中止进累计账本
   recordSettlementEvent(world, 'work_interrupted', {
-    actor: id, loc: world.loc[id], action: b.kind, reason: code, applied: b.applied,
+    actor: id, loc: world.loc[id], action: b.kind, reason: code,
+    minutesDone: Math.max(0, b.totalMin - b.remainMin), energyPaid: Number((b.energyPaid ?? 0).toFixed(3)),
+    applied: b.applied, progressMin: b.progressMin, totalMin: b.totalMin,
   });
   clock.lastAbort = { kind: b.kind, code, at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
 }
@@ -172,7 +174,7 @@ export function advanceResidentBusy(world, id) {
   const b = clock.busy;
   if (!b) return { none: true };
   const a = world.agents?.[id];
-  const cost = laborEnergy(b.kind);
+  const cost = laborEnergy(b.kind, world);
   if (!a || a.dead) { abortBusy(world, id, clock, 'DEAD'); return { aborted: true, code: 'DEAD' }; }
   // 体力门：进行中也可能撑不住，撑不住就中止（进度保留）。
   if (cost > 0 && (a.drives?.v?.energy ?? 0) + 1e-9 < cost) {
@@ -204,11 +206,36 @@ export function advanceResidentBusy(world, id) {
       b.applied += 1;
     }
   }
-  if (cost > 0) a.drives.v.energy = Math.max(0, a.drives.v.energy - cost * (chunk / Math.max(1, b.totalMin)));
+  if (cost > 0) {
+    // V7.3.1：按“累计应付 - 已付”结算，5+25 与一次 30 分钟总体力一致；
+    // progressMin 包含起手时已占用的本刻剩余分钟，第一次推进补扣。
+    b.energyPaid ??= 0;
+    const due = cost * (b.progressMin / Math.max(1, b.totalMin));
+    const pay = Math.max(0, due - b.energyPaid);
+    a.drives.v.energy = Math.max(0, a.drives.v.energy - pay);
+    b.energyPaid = Number((b.energyPaid + pay).toFixed(6));
+  }
   if (b.remainMin <= 1e-9) {
     let result = null;
     if (!STAGED_LABOR_KINDS.has(b.kind) && b.action) result = actuate(world, id, b.action);
     clock.busy = null;
+    // V7.3.1：完成必须进累计账本 + 聚落事件；busy 已清空，保证同一动作只结算一次。
+    if (result && result.ok === false) {
+      noteAction(world, 'resident', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+      recordSettlementEvent(world, 'work_interrupted', {
+        actor: id, loc: world.loc[id], action: b.kind, reason: result.code ?? 'FAILED',
+        minutesDone: b.totalMin, energyPaid: b.energyPaid ?? cost, applied: b.applied, progressMin: b.progressMin, totalMin: b.totalMin,
+      });
+      return { completed: true, kind: b.kind, applied: b.applied, result };
+    }
+    noteAction(world, 'resident', b.kind, true, null, {
+      minutes: b.totalMin, energy: cost, labor: isLaborAction(b.kind),
+    });
+    recordSettlementEvent(world, 'work_completed', {
+      actor: id, loc: world.loc[id], action: b.kind, status: 'completed',
+      minutes: b.totalMin, energy: cost, applied: b.applied, progressMin: b.progressMin,
+      actionId: `${id}:${b.kind}:${b.startTick}`,
+    });
     return { completed: true, kind: b.kind, applied: b.applied, result };
   }
   return { advanced: true, kind: b.kind, progressMin: b.progressMin, remainMin: b.remainMin };

@@ -529,7 +529,7 @@ export class Organism {
         }
         timeSpent = budget.minutes ?? 0;
         // 体力门：普通劳动要先有体力，否则连开工都不行（不会白扣时间）。
-        const energyCost = laborEnergy(action.kind);
+        const energyCost = laborEnergy(action.kind, world);
         if (energyCost > 0 && (this.drives?.v?.energy ?? 0) + 1e-9 < energyCost) {
           residentRefundTime(world, this.id, timeSpent);
           noteRefusal(world, 'resident', action?.kind);
@@ -553,7 +553,7 @@ export class Organism {
     let energyPaid = 0;
     if (residentTimeModel(world)) {
       // V7.2：普通劳动扣体力（drives.energy），viab 只承担长期损耗；力气不够就不扣 viab。
-      const energyCost = laborEnergy(action.kind);
+      const energyCost = laborEnergy(action.kind, world);
       if (result?.ok && energyCost > 0) {
         this.drives.v.energy = Math.max(0, this.drives.v.energy - energyCost);
         energyPaid = energyCost;
@@ -631,3 +631,4 @@ export class Organism {
     return { id, ...result };
   }
 }
+

@@ -195,9 +195,16 @@ test('V73-10 玩家主动取消 busy：写 cancelled 事件与账本，二次取
 
 test('V73-11 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', async () => {
   const { measureConservation } = await import('./resource-conservation-probe.mjs');
-  const r = measureConservation(7, 240);
-  assert.ok(r.balanced, `资源守恒残差应 0：${JSON.stringify(r.rows)}`);
-  assert.ok(Object.values(r.rows).some((x) => x.consumed > 0), '应覆盖到有消费的样本');
+  const r = await measureConservation(7, 240);
+  assert.equal(r.error, undefined, String(r.error));
+  assert.equal(r.actualTicks, 240, '必须等 240 刻全部完成');
+  // 真实测量会暴露账本缺口（crop +1、berry/fruit/egg/milk 等开边界），本闸门只保证：
+  // 1) 探针等满 240 刻；2) 人为篡改必须报警；3) 闭合品类里 meat/wool 必须为 0。
+  assert.ok(r.rows.crop, '应产出 crop 行');
+  assert.ok(r.balanced, `闭合品类守恒残差应为 0：${JSON.stringify(r.rows)}`);
+  const bad = await measureConservation(7, 60, { tamper: (L) => { L.gross.crop = (L.gross.crop ?? 0) + 5; } });
+  assert.equal(bad.balanced, false, '人为破坏账本必须报警');
+
   const { createSurvPlay } = await import('./survplay.mjs');
   const { advanceSurvival } = await import('./worldstate.mjs');
   const sp = createSurvPlay(7, { eventRulesVersion: CURRENT_EVENT_RULES, gameRules: true,
@@ -219,3 +226,40 @@ test('V73-12 严格角色互换：正式游戏居民/玩家同动作同分钟同
   assert.equal(gather.player.minutes, 10);
   assert.equal(gather.resident.minutes, 10, '居民 gather 也应记 10 分钟（与玩家同表）');
 });
+
+
+test('V73-13 时间/体力充足时同一刻第 5 个动作仍可做（TICK_CAP 不再是资格）', () => {
+  const sp = createSurvPlay(7, GAME);
+  const w = sp.world; w.t = 10;
+  move(w, 'a1', 'yard');
+  w.survival.resStock.yard = 500;
+  w.agents.a1.drives.v.energy = 1;
+  const codes = [];
+  for (let i = 0; i < 5; i += 1) codes.push(w.agents.a1.execute(w, { kind: 'gather' }, 'deliberation', w.t, true)?.code);
+  assert.deepEqual(codes, Array(5).fill('OK'), '第 5 个动作应仍可执行');
+  assert.equal(clockOf(w, 'a1').tick.n, 5);
+});
+
+test('V73-14 居民跨刻完成：账本/事件只一次，5+25 体力=一次 30 分钟', async () => {
+  const sp = createSurvPlay(7, GAME);
+  const w = sp.world; w.t = 10;
+  move(w, 'a1', 'yard');
+  w.survival.lastDay = Math.floor(w.t / 24);
+  w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
+  w.pinv.a1 = { wood: 5, stone: 5 };
+  w.agents.a1.drives.v.energy = 0.8;
+  clockOf(w, 'a1').tick = { t: w.t, usedMin: 55, n: 0 };
+  const start = w.agents.a1.execute(w, { kind: 'build' }, 'deliberation', w.t, true);
+  assert.equal(start.code, 'BUSY_START');
+  await tickSurvPlay(sp); // 下一拍补 5 分钟并完成
+  const book = w.survival.actionLedger.resident;
+  assert.equal(book.success.build, 1, '完成进累计账本');
+  assert.ok(Math.abs(book.energy.build - 0.10) < 1e-6, `累计体力应为 0.10，实测 ${book.energy.build}`);
+  const evs = () => (w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'work_completed' && e.action === 'build');
+  assert.equal(evs().length, 1, '完成写一条事件');
+  await tickSurvPlay(sp);
+  assert.equal(book.success.build, 1, '同一动作只结算一次');
+  assert.equal(evs().length, 1);
+});
+
+

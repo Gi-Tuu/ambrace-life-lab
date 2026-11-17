@@ -26,6 +26,8 @@ export const SHARED_COST = Object.freeze({
   rest: { minutes: 0, energy: 0 },
   sleep: { minutes: 0, energy: 0 },
   free: { minutes: 0, energy: 0 },
+  unknown: { minutes: 5, energy: 0.01 }, // 未知动作不得零成本
+  house_work: { minutes: 15, energy: 0.06 },
 });
 
 // 玩家旧 kind → 共享动作。默认 5 分钟/0 体力（社交、请求等轻动作）。
@@ -40,6 +42,10 @@ export const PLAYER_TO_SHARED = Object.freeze({
   camp_chop: 'gather', camp_plant: 'plant', camp_water: 'water', camp_craft: 'build',
   camp_store: 'store', camp_take: 'take', camp_eat: 'eat', camp_resident: 'talk',
   camp_sleep: 'sleep', camp_exit: 'free',
+  // 居民动作名 → 共享动作（正式游戏与玩家同表；研究态不读本表）。
+  move_to: 'move', look_out: 'talk', house_work: 'house_work', road_lay: 'road', road_remove: 'road',
+  discuss_open: 'talk', discuss_join: 'talk', discuss_share: 'talk', discuss_decline: 'talk', discuss_leave: 'talk',
+  deafen: 'talk', seclude: 'talk', refuse: 'talk', cooperate: 'talk',
 });
 
 function sharedKind(kind, body = {}) {
@@ -53,7 +59,7 @@ function sharedKind(kind, body = {}) {
   if (kind.startsWith('family_')) return 'free';
   if (kind === 'rest') return 'rest';
   if (kind === 'sleep') return 'sleep';
-  return PLAYER_TO_SHARED[kind] ?? 'free';
+  return PLAYER_TO_SHARED[kind] ?? 'unknown';
 }
 
 // 玩家旧 kind（+ 可选 body 区分 camp_collect 品类）→ 共享动作、分钟、体力。
@@ -64,3 +70,4 @@ export function costFor(kind, body = {}) {
 }
 
 export const ACTION_KINDS = Object.freeze(Object.keys(SHARED_COST));
+

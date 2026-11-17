@@ -7,6 +7,8 @@ import { dayOf, seasonOf, DAY_TICKS } from './clock.mjs';
 import { survivalRoll } from './rng.mjs';
 import { MATURE_DAYS, takeProduce } from './source-produce.mjs';
 import { takeFood } from './production.mjs';
+import { noteConsumed } from './resource-ledger.mjs';
+import { FOOD_KINDS } from './production.mjs';
 
 export const ECO = Object.freeze({
   orchardCap: 12, chickenCap: 12,
@@ -79,7 +81,15 @@ export function stepEcosystem(world, log) {
   }
   if (consumed < need) {
     const take = Math.min(s.store ?? 0, need - consumed);
-    if (s.food) takeFood(s, null, take); else s.store -= take;
+    if (s.food) {
+      // V7.3.1：动物吃掉的粮也要进 consumed 账本，否则库存消失但账本无记录。
+      const before = { ...s.food };
+      takeFood(s, null, take);
+      for (const k of FOOD_KINDS) {
+        const used = (before[k] ?? 0) - (s.food[k] ?? 0);
+        if (used > 0) noteConsumed(world, k, 'animalFeed', used);
+      }
+    } else s.store -= take;
     consumed += take;
     world.observeProduction?.('chickenFeed', 'store', take);
   }

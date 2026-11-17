@@ -19,25 +19,22 @@ const site = (w, progress = 0) => {
   return w.survival.sites[0];
 };
 
-test('R1 同一刻在个人时间预算内可连续动作，动作数有硬上限', () => {
+test('R1 同一刻在个人时间预算内可连续动作，动作数不再有资格上限', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'home');
   const rest = { kind: 'rest' };
   const results = [];
-  for (let i = 0; i < TICK_ACTION_CAP; i += 1) results.push(a.execute(w, rest, 'deliberation', w.t, true));
-  assert.equal(results.filter((r) => r && r.ok).length, TICK_ACTION_CAP, JSON.stringify(results));
+  for (let i = 0; i < 6; i += 1) results.push(a.execute(w, rest, 'deliberation', w.t, true));
+  assert.equal(results.filter((r) => r && r.ok).length, 6, 'TICK_ACTION_CAP 不再是资格上限');
+  assert.ok(!results.some((r) => r && r.code === 'TICK_CAP'), '不得返回 TICK_CAP');
   const clock = clockOf(w, 'a1');
-  assert.equal(clock.tick.usedMin, TICK_ACTION_CAP * RESIDENT_MIN.rest);
-  assert.equal(clock.usedMin, TICK_ACTION_CAP * RESIDENT_MIN.rest, '当天累计分钟要跟着涨');
-  // 第 5 个动作：本刻动作数到顶，且不再有"每刻一次"这种永久限制
-  assert.equal(a.execute(w, rest, 'deliberation', w.t, true), null);
-  assert.equal(lastRefusal(a).code, 'TICK_CAP');
-  // 下一世界刻重置本刻预算，但当天累计不重置
+  assert.equal(clock.tick.usedMin, 0, '休息不计分钟');
+  assert.equal(clock.tick.n, 6, '只作调度统计');
+  // 下一世界刻重置本刻统计
   w.t += 1;
   assert.ok(a.execute(w, rest, 'deliberation', w.t, true).ok);
-  assert.equal(clockOf(w, 'a1').tick.usedMin, RESIDENT_MIN.rest);
-  assert.equal(clockOf(w, 'a1').usedMin, TICK_ACTION_CAP * RESIDENT_MIN.rest + RESIDENT_MIN.rest);
+  assert.equal(clockOf(w, 'a1').tick.n, 1);
 });
 
 test('R2 常规决策环同一世界刻会产生不止一个动作（不是"每刻一次"）', async () => {

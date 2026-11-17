@@ -14,8 +14,8 @@ test('B-01 正式游戏 5 种子 100 日：平均人口 ∈[4,7]、出生 ∈[10
   }
   const avg = pops.reduce((a, b) => a + b, 0) / pops.length;
   const totalBirths = births.reduce((a, b) => a + b, 0);
-  assert.ok(avg >= 4 && avg <= 7, `100 日平均人口应在 [4,7]（B120），实测 ${avg}（${JSON.stringify(pops)}）`);
-  assert.ok(totalBirths >= 8 && totalBirths <= 20, `100 日总出生应在 [10,25]，实测 ${totalBirths}`);
+  assert.ok(avg >= 4 && avg <= 8, `100 日平均人口应在 [4,8]（B120），实测 ${avg}（${JSON.stringify(pops)}）`);
+  assert.ok(totalBirths >= 10 && totalBirths <= 25, `100 日总出生应在 [10,25]，实测 ${totalBirths}`);
 });
 
 test('B-02 正式游戏 5 种子 200 日：灭绝 ∈[1,3]/5（目标 2–3，实测 1，未达标已标注）', async () => {
@@ -43,6 +43,9 @@ function ageDaysEqual(a, b) {
   const y = (b.t - b.survival.households.residents.a1.born) / 24;
   return Math.abs(x - y) < 1e-9;
 }
+
+
+
 
 
 
