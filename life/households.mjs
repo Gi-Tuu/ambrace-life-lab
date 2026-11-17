@@ -8,7 +8,7 @@ import { worldSite } from './geometry.mjs';
 export const ADULT_DAYS = 12;
 export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
 export const ELDER_DAYS = 60;   // 研究/历史默认：60 天起老年（五份基线用这个，不得动）
-export const ELDER_DAYS_GAME = 90; // B 决策：正式游戏居民 90 天起老年（玩家仍 180）
+export const ELDER_DAYS_GAME = 120; // B120：正式游戏居民与玩家都是 120 天起老年（研究态仍 60）
 export const RESIDENT_CAP = 10; // P1-3：存活居民上限（算力/生态承载），不含玩家
 const BEDS = 4;
 export const bedsPerHome = w => w.populationExperiment?.bedsPerHome ?? BEDS;
@@ -36,7 +36,7 @@ export function makeHouseholds(housing) {
 // AUD-09(i)（所有者 2026-11-16 拍板）：玩家仍会自然老死，但老年门槛单独拉长到 180 天。
 // 只改门槛、不改机制：掷骰、老年代谢、老年减产全都照旧，只是从 180 天起才对玩家生效；
 // 且 `gameRules` 为假时一律退回 ELDER_DAYS ⇒ 研究态与五份基线逐位不变。
-export const ELDER_DAYS_PLAYER = Number(process.env.ELDER_DAYS_PLAYER ?? 180);
+export const ELDER_DAYS_PLAYER = Number(process.env.ELDER_DAYS_PLAYER ?? 120);
 // C4：生命参数随档。正式游戏把当次参数写进 survival.lifecycle，读档按档恢复；
 // 旧档缺字段 ⇒ 继承当前默认（下面的常量），不写回、不突变。研究态不写 ⇒ 基线逐位不变。
 const lifeOf = (w) => (w.gameRules ? w.survival?.lifecycle : null);
@@ -516,4 +516,5 @@ export function restoreHouseholds(w, housing) {
     if (residentialSite(room,w.peripheralHomes)) w.locs[room] = deed.owner ? `${w.agents[deed.owner]?.name ?? '居民'}的小屋` : housingMode(w) !== 'inherit' || deed.listed ? '待售小屋' : '住用公房';
   }
 }
+
 
