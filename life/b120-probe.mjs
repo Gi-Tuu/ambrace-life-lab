@@ -1,5 +1,5 @@
 // B120 测量：5 种子 × 30/100/200 日（正式游戏，玩家闲置），逐种子表。
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { runLong, LONG_SEEDS } from './long-run.mjs';
 import { FORMAL_OPTIONS } from './balance-probe.mjs';
 
@@ -17,4 +17,6 @@ for (const days of [30, 100, 200]) {
     console.log(JSON.stringify(rows.at(-1)));
   }
 }
+mkdirSync('docs',{recursive:true});
 writeFileSync('docs/b120.json', JSON.stringify({ seeds: LONG_SEEDS, rows }, null, 2));
+

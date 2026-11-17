@@ -111,7 +111,8 @@ test('outskirts: valid travel, blocked progress and recovered work through norma
   w.survival.buildings.pop();
   assert.equal(a.execute(w,{kind:'build'},'test',w.t,true).ok,true);
   assert.equal(found(sp,place).progress,4);
-  for (let i=0;i<3;i++) assert.ok(survAct(sp,{kind:'build',target:key(place,type),from}).ok);
+  // V7.3：玩家 60 分/刻池另测；本用例只验施工访问裁决，逐次给满池避免跨刻忙态干扰。
+  for (let i=0;i<3;i++) { clockOf(w,'p1').tick={t:w.t,usedMin:0,n:0}; assert.ok(survAct(sp,{kind:'build',target:key(place,type),from}).ok); }
   assert.equal(found(sp,place),undefined);
   assert.ok(w.survival.buildings.find(b=>b.loc===place&&b.type===type));
   const loaded=loadSurv(structuredClone(dumpSurv(sp)),13,options);

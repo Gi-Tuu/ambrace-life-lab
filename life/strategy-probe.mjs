@@ -1,6 +1,6 @@
 // V7.2 F1：四组策略（无干预 / 消费型 / 生产型 / 自主居民对照），正式游戏。
 // 自然演化 vs 干预在每行显式标注；玩家死亡后聚落统计继续（independentWorld）。
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createSurvPlay, tickSurvPlay, survAct } from './survplay.mjs';
 import { livingResidents } from './viability.mjs';
 import { FORMAL_OPTIONS } from './balance-probe.mjs';
@@ -69,6 +69,7 @@ export async function measureStrategies(tag = 'run', daysList = [30, 100, 200]) 
     rows.push(await runOne(name, seed, days));
   }
   const out = { tag, generatedAt: new Date().toISOString(), daysList, seeds: STRATEGY_SEEDS, strategies: Object.fromEntries(Object.entries(STRATEGIES).map(([k, v]) => [k, v.intervention])), rows };
+  mkdirSync('docs', { recursive: true });
   writeFileSync(`docs/strategies-${tag}.json`, JSON.stringify(out, null, 2));
   return out;
 }
@@ -77,6 +78,8 @@ if (process.argv[1]?.endsWith('strategy-probe.mjs')) {
   const out = await measureStrategies(process.argv[2] ?? 'run');
   for (const r of out.rows) console.log(JSON.stringify(r));
 }
+
+
 
 
 

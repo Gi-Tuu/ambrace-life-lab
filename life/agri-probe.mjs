@@ -1,6 +1,6 @@
 // V7.2 D3/D4：正式游戏长期农业与消费表（30/100/200 日，5 种子）。
 // 只读模拟，不改规则；产物 docs/agri-<tag>.json。
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { runLong, LONG_SEEDS } from './long-run.mjs';
 import { FORMAL_OPTIONS } from './balance-probe.mjs';
 
@@ -43,6 +43,7 @@ export async function agriMeasure(tag = 'run', daysList = [30, 100, 200]) {
   };
   const summary = daysList.map(summarize);
   const out = { tag, generatedAt: new Date().toISOString(), seeds: LONG_SEEDS, rows, summary };
+  mkdirSync('docs', { recursive: true });
   writeFileSync(`docs/agri-${tag}.json`, JSON.stringify(out, null, 2));
   return out;
 }
@@ -52,4 +53,6 @@ if (process.argv[1]?.endsWith('agri-probe.mjs')) {
   const out = await agriMeasure(tag);
   console.log(JSON.stringify(out.summary, null, 2));
 }
+
+
 

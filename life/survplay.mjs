@@ -10,7 +10,8 @@ import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { validate } from './rules.mjs';
-import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
+import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, clockOf, CHAIN_MAX } from './resident-time.mjs';
+import { costFor } from './action-cost.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
@@ -285,9 +286,57 @@ function restoreDistricts(world) {
   }
 }
 
+function playerViabSpend(w, amount) {
+  // V7.3：正式游戏普通劳动不再伤长期存续；viab 只承担饥饿/疾病/长期损耗。
+  if (w.survival?.actTimeModel === true) return;
+  w.agents.p1?.viab?.spend?.(amount);
+}
+function playerBusyAbort(sp, code) {
+  const w = sp.world, clock = clockOf(w, 'p1'), b = clock?.busy;
+  if (!b) return;
+  clock.busy = null;
+  recordSettlementEvent(w, 'player_action', { actor: 'p1', action: b.kind, status: 'cancelled', code, minutes: b.totalMin - b.remainMin, actionId: b.id });
+  noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+  noteRefusal(w, 'player', b.kind);
+  w.survival.lastPlayerAbort = { id: b.id, kind: b.kind, code, at: w.t, minutesDone: b.totalMin - b.remainMin };
+  sp.log.push({ t: w.t, kind: b.kind, ok: false, code });
+  if (sp.log.length > 40) sp.log.shift();
+}
+// 玩家跨刻动作：每拍按剩余分钟推进；完成时只结算一次（busy 先清空再执行）。
+function advancePlayerBusy(sp) {
+  const w = sp.world, s = w.survival;
+  if (s?.actTimeModel !== true || !w.independentWorld) return;
+  const clock = clockOf(w, 'p1');
+  const b = clock.busy;
+  if (!b) return;
+  if (!isAlive(w.agents.p1)) { playerBusyAbort(sp, 'DEAD'); return; }
+  const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
+  const chunk = Math.min(left, b.remainMin);
+  clock.tick.usedMin += chunk;
+  b.remainMin -= chunk;
+  if (b.remainMin > 1e-9) return;
+  clock.busy = null;
+  const r = survActInner(sp, b.body);
+  if (r?.ok) {
+    chargePlayerEnergy(w, b.energyTotal);
+    if (w.independentWorld) settleSurvival(sp);
+    recordSettlementEvent(w, 'player_action', { actor: 'p1', action: b.kind, status: 'completed', minutes: b.totalMin, actionId: b.id });
+    noteAction(w, 'player', b.kind, true, null, { minutes: b.totalMin, energy: b.energyTotal, labor: isLaborAction(b.kind) });
+    sp.log.push({ t: w.t, kind: b.kind, ok: true, code: r.code ?? 'OK' });
+  } else {
+    recordSettlementEvent(w, 'player_action', { actor: 'p1', action: b.kind, status: 'aborted', code: r?.code ?? 'FAILED', minutes: b.totalMin, actionId: b.id });
+    noteAction(w, 'player', b.kind, false, null, { minutes: 0, labor: isLaborAction(b.kind) });
+    noteRefusal(w, 'player', b.kind);
+    s.lastPlayerAbort = { id: b.id, kind: b.kind, code: r?.code ?? 'FAILED', at: w.t, minutesDone: b.totalMin };
+    sp.log.push({ t: w.t, kind: b.kind, ok: false, code: r?.code ?? 'FAILED' });
+  }
+  if (sp.log.length > 40) sp.log.shift();
+}
+
 export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   const w = sp.world;
   w.t += 1;
+  advancePlayerBusy(sp);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
   w.percepts = [];
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
@@ -507,9 +556,7 @@ function reproduce(w, log) {
   if (!born) report('noPair',{rejected});
 }
 
-// P0-A：玩家行动时间。正式游戏（independentWorld）每世界刻预算 100：
-// 重劳动 75、中劳动 50、移动/轻交互 25；研究模式不计，保护既有实验轨迹。
-// 一个角色在同一世界刻不可能完成两次实质劳动；AI 由决策环天然每刻一次。
+// V7.3：PLAYER_TIME 只留给兼容开关 actTimeModel=false（旧每刻 100 点预算）；正式游戏用共享表。
 export const PLAYER_TIME = Object.freeze({
   move: 25, gather: 75, harvest: 75, plant: 75, plan: 75, build: 75, repair: 75,
   forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
@@ -518,7 +565,8 @@ export const PLAYER_TIME = Object.freeze({
   camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25, till: 75,
 });
 const PLAYER_BUDGET = 100;
-function playerTimeCost(w, kind) {
+const P1_TICK_MINUTES = 60; // 与 resident-time 的 TICK_MINUTES 同源：玩家与居民共用 60 分/刻
+function legacyPlayerTime(w, kind) {
   if (!w.independentWorld) return 0;
   if (kind.startsWith('family_')) return 10;
   if (kind === 'camp_exit' || kind === 'camp_sleep' || kind.startsWith('talk_')) return 0;
@@ -529,20 +577,17 @@ function budgetLeft(w) {
   if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
   return s.p1BudgetLeft;
 }
-const DAY_MINUTES = 1440; // 24 刻 × 60 分：玩家一天真正可用的时间，不再是"每刻 100 点"
-// 剩余可行动时间：旧路径仍是本刻 100 点额度；个人时间模型下是当天还剩多少分钟。
+// 剩余可行动时间：旧路径仍是本刻 100 点额度；V7.3 正式游戏是本刻 60 分钟池的剩余。
 export function playerTimeLeft(w) {
   const s = w.survival;
   if (s?.actTimeModel === true) {
-    const day = Math.floor(w.t / (w.dayTicks ?? 24));
-    const clock = s.actClock?.p1;
-    if (!clock || clock.day !== day) return DAY_MINUTES;
-    return Math.max(0, DAY_MINUTES - clock.usedMin);
+    const clock = clockOf(w, 'p1');
+    return Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
   }
   return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
 }
 export function playerTimeMax(w) {
-  return w.survival?.actTimeModel === true ? DAY_MINUTES : PLAYER_BUDGET;
+  return w.survival?.actTimeModel === true ? P1_TICK_MINUTES : PLAYER_BUDGET;
 }
 
 // P0-1（第三阶段·外围同权）：服务端拥有玩家外围位置 w.survival.playerPos={x,z,t}。
@@ -554,54 +599,92 @@ export function playerTimeMax(w) {
 export function playerReach(w, from) {
   if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
-  let last = s.playerPos;
+  const last = s.playerPos;
   const first = !last || !Number.isFinite(last.x) || !Number.isFinite(last.z);
   if (first) {
     const at = worldSite(w, w.loc.p1);
     if (!at) return { ok: false, code: 'OUT_OF_REACH' };
-    last = { x: at[0], z: at[1], t: w.t };
+    // 首次定位只容许出生槽与地点中心的小幅偏移（旧口径一致），不接受任意远点。
+    const d0 = Math.hypot(from[0] - at[0], from[1] - at[1]);
+    if (d0 > 2 + 1e-6) return { ok: false, code: 'TELEPORT' };
+    s.playerPos = { x: from[0], z: from[1], t: w.t };
+    s.playerReachState = { t: w.t, allowance: PLAYER_UNITS_PER_TICK, sub: 0 };
+    return { ok: true };
   }
-  const dt = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
   const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
-  // 前端出生槽与地点中心存在小幅偏移。仅首次定位容许这段偏移。
-  const limit = first ? 2 : PLAYER_UNITS_PER_TICK * dt;
-  if (dist > limit + 1e-6) return { ok: false, code: 'TELEPORT' };
+  // V7.3 §7：子刻精度——同一世界刻内的多次上报共用本刻速度额度（默认 10 单位），
+  // 不再用 dt=0 ⇒ 允许距离 0 把正常连续行走判成瞬移；跨刻按经过刻数换一份新额度。
+  const ticks = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
+  const st = s.playerReachState;
+  const sameTick = Boolean(st) && st.t === w.t;
+  const allowanceBase = sameTick ? st.allowance : PLAYER_UNITS_PER_TICK * Math.max(1, ticks);
+  const used = sameTick ? st.sub : 0;
+  if (dist > allowanceBase - used + 1e-6) return { ok: false, code: 'TELEPORT' };
   s.playerPos = { x: from[0], z: from[1], t: w.t };
+  s.playerReachState = { t: w.t, allowance: allowanceBase, sub: used + dist };
   return { ok: true };
 }
+// 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用。
 function spendTime(w, cost) {
-  if (!w.independentWorld) return true; // 研究态保持旧路径（playerTimeCost 已返回 0）
+  if (!w.independentWorld) return true;
   const s = w.survival;
-  // 兼容开关（V72_TIME=0）回旧的每刻 100 点预算；正式游戏默认已是个人时间。
-  if (s.actTimeModel !== true) {
-    budgetLeft(w);
-    if (s.p1BudgetLeft + 1e-9 < cost) return false;
-    s.p1BudgetLeft -= cost;
-    return true;
-  }
-  const day = Math.floor(w.t / (w.dayTicks ?? 24));
-  const clock = ((s.actClock ??= {}).p1 ??= { day, usedMin: 0, busy: null });
-  if (clock.day !== day) { clock.day = day; clock.usedMin = 0; clock.busy = null; }
-  if (clock.usedMin + cost > DAY_MINUTES + 1e-9) return false;
-  clock.usedMin += cost;
+  budgetLeft(w);
+  if (s.p1BudgetLeft + 1e-9 < cost) return false;
+  s.p1BudgetLeft -= cost;
   return true;
 }
 function refundTime(w, cost) {
   if (!w.independentWorld || cost <= 0) return;
-  if (w.survival?.actTimeModel !== true) { budgetLeft(w); w.survival.p1BudgetLeft += cost; return; }
-  const clock = w.survival?.actClock?.p1;
-  if (clock) clock.usedMin = Math.max(0, clock.usedMin - cost);
+  budgetLeft(w);
+  w.survival.p1BudgetLeft += cost;
+}
+function refundPlayerMinutes(w, minutes) {
+  if (!(minutes > 0)) return;
+  const clock = clockOf(w, 'p1');
+  clock.tick.usedMin = Math.max(0, clock.tick.usedMin - minutes);
+}
+function chargePlayerEnergy(w, energy) {
+  if (!(energy > 0)) return;
+  const a = w.agents.p1;
+  if (!a?.drives) return;
+  a.drives.v.energy = Math.max(0, a.drives.v.energy - energy);
 }
 
 export function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
-  const cost = playerTimeCost(w, kind);
-  if (cost > 0 && !spendTime(w, cost)) {
-    const code = w.survival.actTimeModel === true ? 'TIME_WAIT' : 'ACTION_BUDGET';
+  const model = w.independentWorld && w.survival?.actTimeModel === true;
+  const cost = model ? costFor(kind, body) : { shared: 'legacy', minutes: legacyPlayerTime(w, kind), energy: 0 };
+  let spentMinutes = 0;
+  const failTime = (code, why) => {
     if (kind === 'repair') playerRepairFailure(w, body, code);
     sp.log.push({ t: w.t, kind, ok: false, code });
     if (sp.log.length > 40) sp.log.shift();
-    return { ok: false, code, why: code === 'TIME_WAIT' ? '这一天的个人时间已用完，等明天' : '本世界刻的行动时间已用完，等下一拍' };
+    return { ok: false, code, why };
+  };
+  if (cost.minutes > 0 || cost.energy > 0) {
+    if (model) {
+      const clock = clockOf(w, 'p1');
+      if (clock.busy) return failTime('BUSY', '手上还有没做完的动作，等它完成');
+      if (cost.energy > 0 && (w.agents.p1?.drives?.v?.energy ?? 0) + 1e-9 < cost.energy) {
+        return failTime('STAMINA', '体力不够做这件活');
+      }
+      const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
+      if (left <= 1e-9) return failTime('TIME_WAIT', '这一拍的时间用完了，等下一拍');
+      if (cost.minutes <= left + 1e-9) {
+        clock.tick.usedMin += cost.minutes;
+        spentMinutes = cost.minutes;
+      } else {
+        // 装不下本刻剩余分钟：记 busy，下一（几）拍继续；未完成前不产生效果。
+        clock.tick.usedMin = P1_TICK_MINUTES;
+        clock.busy = {
+          id: `p1:${kind}:${w.t}:${clock.tick.n ?? 0}`, kind, body: { ...body }, startTick: w.t,
+          totalMin: cost.minutes, remainMin: cost.minutes - left, energyTotal: cost.energy, energyPaid: 0, status: 'running',
+        };
+        return { ok: true, code: 'BUSY_START', remainMin: cost.minutes - left, why: '本刻只剩这些分钟，剩下的下一拍继续' };
+      }
+    } else if (!spendTime(w, cost.minutes)) {
+      return failTime('ACTION_BUDGET', '本世界刻的行动时间已用完，等下一拍');
+    }
   }
   const r = survActInner(sp, body);
   if (kind === 'repair' && !r.ok) playerRepairFailure(w, body, r.code);
@@ -613,8 +696,14 @@ export function survAct(sp, body) {
     recordConstructionBlock(w,'p1',loc,kind,r.code);
   }
   if (w.independentWorld && r.ok) settleSurvival(sp);
-  if (!r.ok && cost > 0) refundTime(w, cost); // 失败退还个人时间，避免误点吃掉当天时间
-  noteAction(sp.world, 'player', body?.kind, !!r?.ok, null, { minutes: r?.ok ? cost : 0, labor: isLaborAction(body?.kind) });
+  if (!r.ok && spentMinutes > 0) refundPlayerMinutes(w, spentMinutes);
+  if (!r.ok && !model && cost.minutes > 0) refundTime(w, cost.minutes);
+  if (model && r.ok && cost.energy > 0) chargePlayerEnergy(w, cost.energy);
+  noteAction(sp.world, 'player', body?.kind, !!r?.ok, null, {
+    minutes: r?.ok ? spentMinutes : 0,
+    energy: model && r?.ok ? cost.energy : 0,
+    labor: isLaborAction(body?.kind),
+  });
   if (r && !r.ok) noteRefusal(sp.world, 'player', body?.kind);
   return r;
 }
@@ -646,12 +735,12 @@ function survActInner(sp, body) {
   }
   if (kind==='animal_feed' || kind==='animal_slaughter') {
     const r=animalAction(w,body);
-    if (r.ok) w.agents.p1.viab.spend(kind==='animal_feed'?.015:.1);
+    if (r.ok) playerViabSpend(w, kind==='animal_feed'?.015:.1);
     return r;
   }
   if (kind==='road_lay' || kind==='road_remove') {
     const r=changeRoad(w,'p1',body);
-    if (r.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
+    if (r.ok) playerViabSpend(w, SURV_COST[kind]);
     return r;
   }
   if (kind==='home_request') {
@@ -671,7 +760,7 @@ function survActInner(sp, body) {
     if (w.campPlayerRoom || !gate || !regionPoint(body.from) ||
         distanceToRect(body.from,gate)>.12) return {ok:false,code:'OUT_OF_REACH'};
     const result=doorWork(w,'p1',body.room,kind,body.tool);
-    if (result.ok) w.agents.p1.viab.spend(kind==='home_break'?.15:.08);
+    if (result.ok) playerViabSpend(w, kind==='home_break'?.15:.08);
     return result;
   }
   if (kind==='facility_use') {
@@ -720,7 +809,7 @@ function survActInner(sp, body) {
       s.lastShelterRest=w.t;
       w.agents.p1.drives.reward('energy',.15);
     }
-    w.agents.p1.viab.spend(.01);
+    playerViabSpend(w, .01);
     return {ok:true,code:'OK'};
   }
   if (kind === 'move') {
@@ -740,7 +829,7 @@ function survActInner(sp, body) {
       }
       move(w,'p1',building.loc);
       w.campPlayerRoom=room;
-      w.agents.p1.viab.spend(SURV_COST.move_to);
+      playerViabSpend(w, SURV_COST.move_to);
       return {ok:true,code:'OK'};
     }
     if (!Object.hasOwn(w.locs,room) && !Object.values(w.housing).includes(room)) return {ok:false,error:'NO_LOC'};
@@ -791,7 +880,7 @@ function survActInner(sp, body) {
       if (!access.ok) return access;
     }
     const result=(kind==='build'?doBuild:doRepair)(w,'p1',building.loc);
-    if (result.ok) w.agents.p1.viab.spend(SURV_COST[kind]);
+    if (result.ok) playerViabSpend(w, SURV_COST[kind]);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     return result;
   }
@@ -1174,3 +1263,6 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
+
+

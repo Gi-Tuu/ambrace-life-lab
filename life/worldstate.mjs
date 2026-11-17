@@ -77,7 +77,7 @@ function drainCampPantry(world, need) {
     if (!key.startsWith('store:')) continue;
     const bag = all[key];
     for (const item of PANTRY_FOOD) {
-      while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; }
+      while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; noteConsumed(world, item, 'store'); }
     }
   }
   return need;
@@ -267,3 +267,4 @@ export function doPlant(world, agentId, plot) {
   p.growth = 0.1;
   return { ok: true, code: 'OK' };
 }
+

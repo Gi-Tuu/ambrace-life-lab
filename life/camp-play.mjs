@@ -25,7 +25,7 @@ const setCount=(bag,item,n)=>{bag[item]=n;};
 
 const playerHome=(world,site)=>site==='home' || (Boolean(site) && (world.survival.settlementLife ? householdAccess(world,'p1',site) : site===world.housing?.p1));
 // P0-3：玩家动作与居民同权，也付存续代价（只在动作成功时扣）。
-const pay=(world,cost)=>{world.agents.p1?.viab?.spend?.(cost);};
+const pay=(world,cost)=>{ if(world.survival?.actTimeModel===true) return; /* V7.3：正式游戏走共享体力表，不再伤 viab */ world.agents.p1?.viab?.spend?.(cost); };
 export function campTimberView(world) {
   const cut=world.survival.campTrees??{};
   return Object.fromEntries((world.campLayout?.grove??TIMBER_GROVE).map(tree=>{
@@ -281,3 +281,4 @@ export function campAction(world,body) {
   pay(world,cost);
   return ok();
 }
+

@@ -22,7 +22,7 @@ test('V72 生产配置默认开启个人时间：同刻多动作、当天用尽 
   assert.equal(w.survival.actTimeModel, true, '生产开关应落到世界');
   const results = [0, 1, 2, 3].map((i) => survAct(sp, { kind: 'move', room: i % 2 ? 'yard' : 'hall' }));
   assert.equal(results.filter((r) => r.ok).length, 4, JSON.stringify(results));
-  w.survival.actClock.p1.usedMin = 1430;
+  w.survival.actClock.p1.tick = { t: w.t, usedMin: 60, n: 0 }; // V7.3：本刻池用尽
   const r = survAct(sp, { kind: 'move', room: 'yard' });
   assert.equal(r.code, 'TIME_WAIT');
 }));
@@ -37,3 +37,4 @@ test('V72 兼容开关 V72_TIME=0：正式游戏退回每刻 100 点预算', () 
   assert.ok(survAct(sp, { kind: 'gather' }).ok);
   assert.equal(survAct(sp, { kind: 'gather' }).code, 'ACTION_BUDGET', '旧路径必须仍按每刻预算拒绝');
 }));
+

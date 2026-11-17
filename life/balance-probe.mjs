@@ -1,7 +1,7 @@
 // V7.2 平衡：正式游戏（gameRules:true）5 种子 × 100/200 日的量化探针。
 // 只读模拟，不改任何规则；研究态不会用到这个脚本。
 // 用法：node life/balance-probe.mjs baseline
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { runLong, LONG_SEEDS } from './long-run.mjs';
 
 export const FORMAL_OPTIONS = Object.freeze({
@@ -53,6 +53,7 @@ export async function measure(tag = 'run') {
     }, {}),
   };
   const out = { tag, generatedAt: new Date().toISOString(), formalOptions: FORMAL_OPTIONS, rows, summary };
+  mkdirSync('docs', { recursive: true });
   writeFileSync(`docs/balance-${tag}.json`, JSON.stringify(out, null, 2));
   return out;
 }
@@ -63,3 +64,5 @@ if (process.argv[1]?.endsWith('balance-probe.mjs')) {
   console.log(JSON.stringify(out.summary, null, 2));
   for (const r of out.rows) console.log(JSON.stringify(r));
 }
+
+
