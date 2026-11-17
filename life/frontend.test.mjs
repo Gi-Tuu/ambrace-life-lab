@@ -321,3 +321,4 @@ test('F23 住房面板显示四年龄阶段，两处施工邀请仅列可劳动�
   assert.deepEqual([...coop.matchAll(/data-coop="([^"]+)"/g)].map(m=>m[1]),['adult','elder']);
   assert.match(APP,/Object\.values\(S\.view\.agents\?\?\{\}\)\.filter\(canInviteWorker\)/);
 });
+

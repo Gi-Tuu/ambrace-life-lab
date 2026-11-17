@@ -60,6 +60,14 @@ export function noteRefusal(world, side, kind) {
   book.refused[kind] = (book.refused[kind] ?? 0) + 1;
 }
 
+export function noteSync(world, side = 'player') {
+  if (world?.gameRules !== true) return;
+  const ledger = ensureLedger(world);
+  if (!ledger) return;
+  const book = side === 'resident' ? ledger.resident : ledger.player;
+  book.sync = (book.sync ?? 0) + 1;
+}
+
 export function noteCancel(world, side, kind) {
   if (world?.gameRules !== true) return;
   const ledger = ensureLedger(world);
@@ -99,4 +107,5 @@ export function ledgerStats(world) {
   if (!L) return null;
   return { player: sideStats(L.player), resident: sideStats(L.resident) };
 }
+
 

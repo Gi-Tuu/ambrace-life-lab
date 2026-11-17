@@ -20,11 +20,14 @@ const n = (v) => Number(v ?? 0);
 
 // 所有会被转移的位置一起计入：公共仓计数、公共容器、玩家/居民背包、私人容器。
 // 内部转移只换位置，总额不变；因此期末-期初只由产出/消费/溢出/损失解释。
-function snapshotStocks(w) {
+export function snapshotStocks(w) {
   const out = Object.fromEntries(CONSERVATION_KINDS.map((k) => [k, 0]));
   const add = (bag) => {
     if (!bag) return;
-    for (const k of CONSERVATION_KINDS) out[k] += n(bag[k]);
+    for (const one of (Array.isArray(bag) ? bag : [bag])) {
+      if (!one) continue;
+      for (const k of CONSERVATION_KINDS) out[k] += n(one[k]);
+    }
   };
   add(w.survival.inv);
   add(w.survival.food);
@@ -101,3 +104,5 @@ if (process.argv[1] && process.argv[1].endsWith('resource-conservation-probe.mjs
     worst: Math.max(...runs.map((r) => r.worstResidual ?? 0)) }, null, 2));
   if (!out.allBalanced) process.exitCode = 1;
 }
+
+

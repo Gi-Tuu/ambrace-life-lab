@@ -28,6 +28,11 @@ const out = {
         actions: r.rows.map((x) => ({ kind: x.kind, expected: x.expected,
           player: x.player, resident: x.resident, same: x.same })) })),
       allSame: swap.every((r) => r.allSame),
+      statusCounts: { passed: swap.flatMap((r) => r.rows).filter((x) => x.status === 'passed').length,
+        failed: swap.flatMap((r) => r.rows).filter((x) => x.status === 'failed').length,
+        expected_rejection: swap.flatMap((r) => r.rows).filter((x) => x.status === 'expected_rejection').length,
+        inconclusive: swap.flatMap((r) => r.coverage).filter((x) => x.status === 'inconclusive').length },
+      fullyCovered: false, // 15 个动作仍缺对称前置，不能写成全部通过
     },
     reproduce: 'node scripts/competition-cases.mjs v73',
   },
@@ -48,4 +53,5 @@ console.log(JSON.stringify({ tag,
   case2: out.case2_continuousLife.evidence.conservation.every((r) => r.balanced) && !!(b120),
   pop100: pop(100), extinct200 }, null, 2));
 if (!out.case1_equalRules.evidence.allSame) process.exitCode = 1;
+
 

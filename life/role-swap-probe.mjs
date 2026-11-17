@@ -40,6 +40,8 @@ function runOne(seed, kind, actor) {
   const isPlayer = actor === 'player';
   const who = isPlayer ? 'p1' : 'a1';
   const e0 = w.agents[who].drives.v.energy, wood0 = pinvSum(w.pinv[who], 'wood'), stone0 = pinvSum(w.pinv[who], 'stone');
+  const crop0 = pinvSum(w.pinv[who], 'crop'), berry0 = pinvSum(w.pinv[who], 'berry');
+  const store0 = num(w.survival.store);
   const prog0 = siteProgress(w);
   const r = isPlayer ? survAct(sp, { kind }) : w.agents.a1.execute(w, { kind }, 'deliberation', w.t, true);
   const ok = r?.ok === true;
@@ -50,6 +52,9 @@ function runOne(seed, kind, actor) {
     energy: num(e0 - w.agents[who].drives.v.energy),
     materials: { wood: num(wood0 - pinvSum(w.pinv[who], 'wood')), stone: num(stone0 - pinvSum(w.pinv[who], 'stone')) },
     progress: num(siteProgress(w) - prog0),
+    production: { crop: num(pinvSum(w.pinv[who], 'crop') - crop0), berry: num(pinvSum(w.pinv[who], 'berry') - berry0),
+      wood: num(pinvSum(w.pinv[who], 'wood') - wood0), stone: num(pinvSum(w.pinv[who], 'stone') - stone0),
+      store: num(num(w.survival.store) - store0) },
     events: (w.survival.eventJournal?.rows ?? []).filter((e) => (e.action ?? e.kind) === kind).length,
   };
 }
@@ -72,7 +77,10 @@ export function measureSwap(seed = 7) {
     } else {
       const same = player.minutes === resident.minutes && player.energy === resident.energy
         && player.materials.wood === resident.materials.wood && player.materials.stone === resident.materials.stone
-        && player.progress === resident.progress && player.code === resident.code;
+        && player.progress === resident.progress && player.code === resident.code
+        && player.production.store === resident.production.store
+        && player.production.crop === resident.production.crop
+        && player.production.berry === resident.production.berry;
       status = same ? 'passed' : 'failed';
     }
     rows.push({ kind, status, expected: { minutes: expected.minutes, energy: expected.energy }, player, resident });
@@ -103,4 +111,5 @@ if (process.argv[1] && process.argv[1].endsWith('role-swap-probe.mjs')) {
     failures: runs.flatMap((r) => r.failed.map((x) => `${r.seed}:${x.kind}`)) }, null, 2));
   if (!out.allSame) process.exitCode = 1;
 }
+
 

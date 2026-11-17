@@ -19,8 +19,8 @@ import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
 import { converseRound, converse } from './intent.mjs';
 import { maybeResidentRequest, respondRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
-import { noteAction, noteRefusal, noteAbort, noteCancel } from './action-ledger.mjs';
-import { campAction, campTimberView, residentContact } from './camp-play.mjs';
+import { noteAction, noteRefusal, noteAbort, noteCancel, noteSync } from './action-ledger.mjs';
+import { campAction, campSleepTicks, campTimberView, residentContact } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout, residentialSite } from '../web/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { buildLot, doBuild, doRepair, effectiveMods, buildingsFor, recordRepairFailure, addFood, takeFood, takeFoodKind, initFoodStore, FOOD_KINDS, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
@@ -676,6 +676,13 @@ function chargePlayerEnergy(w, energy) {
 
 export function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
+  // V7.3.2：player_sync 是技术同步，不是劳动：不扣分钟/体力、不占本刻额度、不取消 busy。
+  if (kind === 'player_sync') {
+    const reach = playerReach(w, body.from);
+    noteSync(w, 'player'); // 同步单独计数，不进入劳动账本（成功或被拒都记一次技术同步）
+    return reach.ok ? { ok: true, code: 'OK', playerPos: w.survival.playerPos }
+      : { ...reach, playerPos: w.survival.playerPos ?? null };
+  }
   if (kind === 'busy_cancel') return cancelPlayerBusy(sp);
   const model = w.independentWorld && w.survival?.actTimeModel === true;
   const cost = model ? costFor(kind, body) : { shared: 'legacy', minutes: legacyPlayerTime(w, kind), energy: 0 };
@@ -915,6 +922,11 @@ function survActInner(sp, body) {
     if (sp.log.length > 40) sp.log.shift();
     return result;
   }
+  if (kind === 'camp_sleep') {
+    const slept = campSleepTicks(w);
+    if (!slept.ok) return slept;
+    return { ok: true, code: 'OK', ticks: slept.ticks, observation: '睡了一觉' };
+  }
   if (kind.startsWith('camp_')) {
     // AUD-01/06：营地动作必须显式登记成本；未知或零成本（除明确免费的退出/睡觉）一律拒绝。
     const free = kind === 'camp_exit' || kind === 'camp_sleep';
@@ -1057,7 +1069,7 @@ export function survView(sp) {
     loc: w.loc, occupancy: w.occupancy,
     ...(constructionAccessEnabled(w) && { constructionArrivals: Object.fromEntries(Object.entries(w.residentTravel??{})
       .filter(([id,row])=>row.at && row.to===w.loc[id]).map(([id,row])=>[id,row.at])) }),
-    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, requests: (s.requests ?? []).slice(0, 4), requestsGranted: s.requestsGranted ?? 0, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0), light: w.gameRules ? ((s.inv?.wood ?? 0) + ((w.pinv ?? {})?.p1?.wood ?? 0)) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
+    store: s.store, storeCap: mods.storeCap, food: s.food ?? null, requests: (s.requests ?? []).slice(0, 4), requestsGranted: s.requestsGranted ?? 0, converse: (s.converseLog ?? []).slice(-12), intents: s.intents ?? 0, fuel: (s.inv?.wood ?? 0), light: w.gameRules ? (s.inv?.wood ?? 0) > 0 : null, water: Number(s.water.toFixed(2)), soil: Number(s.soil.toFixed(2)),
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
@@ -1292,6 +1304,9 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
+
+
 
 
 

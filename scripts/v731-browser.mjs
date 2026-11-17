@@ -146,6 +146,15 @@ try {
   st = await state();
   note('cancel2', st);
   if (st.busy || st.cancelled.build !== 2) throw new Error('取消2异常: ' + JSON.stringify(st));
+  // V7.3.2：30 次重复坐标同步仍不扣时间、不占额度（技术同步）
+  const pos = st.playerPos ?? st.anchor;
+  const usedBefore = st.usedMin;
+  const sync30 = [];
+  for (let i = 0; i < 30; i += 1) sync30.push(await act(sid, { kind: 'player_sync', from: [pos.x, pos.z] }));
+  const syncState = await state();
+  note('sync30', { ok: sync30.filter((r) => r?.ok).length, usedBefore, usedAfter: syncState.usedMin });
+  if (!sync30.every((r) => r?.ok)) throw new Error('30 次重复同步被拒');
+  if (syncState.usedMin !== usedBefore) throw new Error('同步改变了本刻分钟');
   // 6) 重启恢复：恢复一拍重置分钟并暂停，再留 busy；step 保存后重启
   await post('/ctl', { action: 'resume' }); await wait(2200); await post('/ctl', { action: 'pause' });
   for (let i = 0; i < 4; i += 1) await act(sid, { kind: 'gather' });
@@ -189,6 +198,7 @@ try {
   try { rmSync(DATA, { recursive: true, force: true }); } catch {}
   try { rmSync(PROFILE, { recursive: true, force: true }); } catch {}
 }
+
 
 
 
