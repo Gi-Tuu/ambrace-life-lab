@@ -124,6 +124,7 @@ const ATTEMPT_CAP = 20;
 const PRESENCE_MS = Number(process.env.PRESENCE_MS ?? 180000);
 // 纯函数便于闸门测试：最近有人在看才允许调用
 import { modelLaneFor } from './camp-lane.mjs';
+import { worldSite } from './geometry.mjs';
 import { createReplay, recordReplayFrame, replayRange, replayPoint } from './replay-history.mjs';
 export { modelLaneFor };
 
@@ -1540,6 +1541,7 @@ export const host = {
         const w = sp.world;
         w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
         w.pinv.p1 = { wood: 5, stone: 5 };
+        w.survival.resStock.yard = 500;
         return { ok: true, code: 'OK' };
       }
       if (body.action === 'v73_state') {
@@ -1554,6 +1556,15 @@ export const host = {
           events: (s.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action'),
           progress: s.sites?.[0]?.progress ?? null,
           energy: w.agents.p1?.drives?.v?.energy ?? null,
+          t: w.t,
+          hallSite: w.campLayout?.sites?.hall ?? null,
+          anchor: worldSite(w, w.loc.p1),
+          playerPos: s.playerPos ?? null,
+          bag: { wood: w.pinv?.p1?.wood ?? 0, stone: w.pinv?.p1?.stone ?? 0, crop: w.pinv?.p1?.crop ?? 0 },
+          resStockYard: s.resStock?.yard ?? null,
+          residents: Object.values(w.agents).filter((a) => !a.isPlayer).map((a) => ({
+            id: a.id, loc: w.loc[a.id] ?? null, action: a.trace?.at(-1)?.kind ?? null, ok: a.trace?.at(-1)?.ok ?? null,
+          })),
         };
       }
       if (body.action === 'pause' || body.action === 'resume') {
@@ -1679,4 +1690,5 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+
 
