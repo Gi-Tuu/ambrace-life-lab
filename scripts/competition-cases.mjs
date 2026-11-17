@@ -10,7 +10,8 @@ import { SHARED_COST } from '../life/action-cost.mjs';
 
 const tag = process.argv[2] ?? 'v73';
 const swap = [7, 13, 29].map((s) => measureSwap(s));
-const cons = [7, 13, 29].map((s) => measureConservation(s, 240));
+const cons = [];
+for (const s of [7, 13, 29]) cons.push(await measureConservation(s, 240));
 let b120 = null;
 try { b120 = JSON.parse(readFileSync('docs/b120.json', 'utf8')); } catch { /* 未跑过则留空 */ }
 
@@ -47,3 +48,4 @@ console.log(JSON.stringify({ tag,
   case2: out.case2_continuousLife.evidence.conservation.every((r) => r.balanced) && !!(b120),
   pop100: pop(100), extinct200 }, null, 2));
 if (!out.case1_equalRules.evidence.allSame) process.exitCode = 1;
+
