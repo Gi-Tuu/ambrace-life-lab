@@ -4155,7 +4155,12 @@ async function useOutdoorEntity(e,from) {
   }
   if (e.tool!==ui.tool) { toast(`需要${TOOL_ZH[e.tool]}。`); return; }
   if (e.kind==='timber') await performCamp({kind:'camp_chop',target:e.target,tool:ui.tool,from});
-  else await performCamp({kind:'camp_collect',target:e.target,type:e.item,tool:ui.tool,from,to:ecoPoint(e.item,e.target) ?? e.at});
+  else {
+    // NEW-01：动物用场景里的真实位置 e.at（服务端只发门口静态锚点，不能拿它当 to）；
+    // 静态植物仍用服务端发布的坐标。
+    const animal = Object.values(CAMP_ANIMAL_ITEM).includes(e.item);
+    await performCamp({kind:'camp_collect',target:e.target,type:e.item,tool:ui.tool,from,to:animal ? (e.at ?? ecoPoint(e.item,e.target)) : (ecoPoint(e.item,e.target) ?? e.at)});
+  }
 }
 
 function approachEntity(world,walker,e) {

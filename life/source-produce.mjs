@@ -52,7 +52,8 @@ export function sourceView(w) {
   const s = w.survival;
   if (!s.farmLife) return undefined;
   // §3：坐标是服务端的权威值，同时给离线 harness 用（客户端不再自己推 from/to）。
-  const layout = w.layout;
+  // NEW-01：布局 1/2 的世界只有 campLayout（w.layout 是旧字段）⇒ 必须统一取 campLayout。
+  const layout = w.campLayout ?? w.layout;
   const garden = campSite('garden', layout);
   const bed = campBeds(garden, w.mapSeed ?? 0, w.layoutVersion ?? 0)[0];
   const pen = campPen(campSite('yard', layout));

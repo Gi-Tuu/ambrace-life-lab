@@ -25,6 +25,10 @@ test('ECO-02 拿视图坐标原样采集：期望 OK，不是 OUT_OF_REACH', () 
   const row = survView(sp).ecoSources.egg[0];
   assert.ok(row, '应有蛋来源');
   w.survival.standing.egg[row.id] = 1; w.survival.produce.egg = 1;
-  const r = survAct(sp, { kind: 'camp_collect', type: 'egg', tool: 'basket', target: row.id, from: [row.x, row.z], to: [row.x, row.z] });
+  // ARCH3-02 之后：from 必须是真实站位（服务端位置同步），不能拿视图坐标自证。
+  const from = [row.x + 0.5, row.z + 0.5];
+  w.survival.playerPos = { x: from[0], z: from[1], t: w.t };
+  const r = survAct(sp, { kind: 'camp_collect', type: 'egg', tool: 'basket', target: row.id, from, to: [row.x, row.z] });
   assert.equal(r.ok, true, JSON.stringify(r));
 });
+
