@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } from './survplay.mjs';
-import { ELDER_DAYS, ELDER_DAYS_PLAYER, elderDaysFor, residentStage } from './households.mjs';
+import { ELDER_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, elderDaysFor, residentStage } from './households.mjs';
 
 const GAME = { independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true, playerRation: true };
 const DAY = 24;
@@ -76,10 +76,10 @@ test('PLIFE-05 研究态保持原行为：玩家不进生命周期', () => {
 });
 
 // AUD-09(i) 的护栏：门槛只拉长玩家的"老年起点"，机制一位没动；居民的 60 天与整条研究路径必须不受影响。
-test('PCAP-01 门槛拉到 180：60–120 天窗口里玩家不老年、不被掷骰打死，同龄居民照旧老年【变红法：把 ELDER_DAYS_PLAYER 改回 60】', async () => {
+test('PCAP-01 门槛拉到 180：90–150 天窗口里玩家不老年、不被掷骰打死，同龄居民照旧老年【变红法：把 ELDER_DAYS_PLAYER 改回 60】', async () => {
   const sp = createSurvPlay(7, GAME); const w = sp.world;
-  w.t = 61 * DAY; // 居民已老年、玩家在旧口径下也已老年
-  assert.equal(residentStage(w, 'a1'), 'elder', '对照组：居民 60 天门槛必须还在生效');
+  w.t = 91 * DAY; // B 决策：居民 90 天起老年；玩家在旧口径下也已老年
+  assert.equal(residentStage(w, 'a1'), 'elder', '对照组：正式居民 90 天门槛必须还在生效');
   assert.equal(residentStage(w, 'p1'), 'adult', '玩家在这段窗口不该被算作老年');
   for (let d = 0; d < 60; d += 1) await tickDays(sp, 1);
   assert.equal(residentStage(w, 'p1'), 'adult', '跑到 120 天玩家仍未跨门槛');
@@ -90,8 +90,10 @@ test('PCAP-01 门槛拉到 180：60–120 天窗口里玩家不老年、不被�
 test('PCAP-02 门槛归属：游戏态玩家 180、居民 60、研究态玩家也 60（研究路径一位不动）【变红法：把 elderDaysFor 的 gameRules 判定去掉】', () => {
   const game = createSurvPlay(7, GAME).world;
   assert.equal(elderDaysFor(game, 'p1'), ELDER_DAYS_PLAYER, '游戏态玩家用自己的门槛');
-  assert.equal(elderDaysFor(game, 'a1'), ELDER_DAYS, '居民门槛不变');
+  assert.equal(elderDaysFor(game, 'a1'), ELDER_DAYS_GAME, 'B 决策：正式居民门槛 90（玩家仍 180）');
   const lab = createSurvPlay(7, { ...GAME, gameRules: false, independentWorld: false }).world;
   assert.equal(elderDaysFor(lab, 'p1'), ELDER_DAYS, '研究态玩家仍按 60 天 ⇒ 基线分支条件不变');
   assert.equal(residentStage(lab, 'p1'), residentStage(lab, 'a1'), '研究态里玩家与居民阶段一致');
 });
+
+

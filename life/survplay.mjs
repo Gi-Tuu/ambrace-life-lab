@@ -30,7 +30,7 @@ import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
-import { ADULT_DAYS, ELDER_DAYS, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing, isLaborAction } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, laborStage, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, houseAction, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing, isLaborAction } from './households.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 const SURV_LOG_LIMIT = 200;
@@ -147,7 +147,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   if (world.gameRules) {
     // C4：生命参数随档（旧档缺字段时走 households 里的当前默认，不写回、不突变）。
     s.lifecycle = {
-      infantDays: INFANT_DAYS, adultDays: ADULT_DAYS, elderDays: ELDER_DAYS, elderDaysPlayer: ELDER_DAYS_PLAYER,
+      infantDays: INFANT_DAYS, adultDays: ADULT_DAYS, elderDays: ELDER_DAYS_GAME, elderDaysPlayer: ELDER_DAYS_PLAYER,
       ...(lifecycle ?? {}),
     };
   }

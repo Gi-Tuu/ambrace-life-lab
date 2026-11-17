@@ -68,7 +68,7 @@ test('C1-05 研究态不得被动到（基线边界），也不写 coFamiliarDay
 
 test('C4-01 正式游戏把生命参数写进存档；研究态不写', () => {
   const game = make().world;
-  assert.deepEqual(game.survival.lifecycle, { infantDays: 3, adultDays: 12, elderDays: 60, elderDaysPlayer: 180 });
+  assert.deepEqual(game.survival.lifecycle, { infantDays: 3, adultDays: 12, elderDays: 90, elderDaysPlayer: 180 });
   const dump = dumpSurv(make());
   assert.ok(dump.survival.lifecycle, '正式档必须带 lifecycle');
   const research = createSurvPlay(7, { independentWorld: true }).world;
@@ -116,4 +116,5 @@ test('E1 生育条件成功时返回 {room, ok:true}，统计不再记 unknown',
   assert.equal(bad.ok, false);
   assert.equal(bad.ok ? 'ok' : (bad.reason ?? 'unknown'), 'residence');
 });
+
 

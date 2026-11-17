@@ -19,7 +19,7 @@ test('B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显�
   const labor = rows.reduce((s, r) => s + (r.final.laborMinutes ?? 0), 0);
   const causes = new Set(rows.flatMap((r) => Object.keys(r.final.deathCauses ?? {})));
   assert.ok(avg(populations) >= 0 && avg(populations) <= 3, `100 日平均人口应在 [0,3]，实测 ${avg(populations)}（${JSON.stringify(populations)}）`);
-  assert.ok(births >= 3 && births <= 13, `100 日总出生应在 [3,13]，实测 ${births}`);
+  assert.ok(births >= 3 && births <= 16, `100 日总出生应在 [3,16]（B 决策：居民 90 天门槛后出生上限随之上移，不是放宽繁荣），实测 ${births}`);
   assert.ok(labor > 0, '正式游戏里居民应该真的在劳动（劳动分钟数 > 0）');
   assert.ok(rows.every((r) => (r.final.agentErrors ?? 0) === 0), '长跑不得出现 agentErrors');
   assert.ok([...causes].every((c) => KNOWN_CAUSES.has(c)), `出现未知死因：${[...causes].join(',')}`);
@@ -35,3 +35,4 @@ test('B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁�
   }
   assert.ok(extinct >= 3 && extinct <= 5, `200 日灭绝种子数应在 [3,5]，实测 ${extinct}：${JSON.stringify(detail)}`);
 });
+

@@ -7,7 +7,8 @@ import { worldSite } from './geometry.mjs';
 
 export const ADULT_DAYS = 12;
 export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
-export const ELDER_DAYS = 60;   // P1-1：60 天起老年（两季）
+export const ELDER_DAYS = 60;   // 研究/历史默认：60 天起老年（五份基线用这个，不得动）
+export const ELDER_DAYS_GAME = 90; // B 决策：正式游戏居民 90 天起老年（玩家仍 180）
 export const RESIDENT_CAP = 10; // P1-3：存活居民上限（算力/生态承载），不含玩家
 const BEDS = 4;
 export const bedsPerHome = w => w.populationExperiment?.bedsPerHome ?? BEDS;
@@ -44,7 +45,7 @@ export const adultDaysFor = (w) => lifeOf(w)?.adultDays ?? ADULT_DAYS;
 export const elderDaysFor = (w, id) => {
   const life = lifeOf(w);
   if (w.gameRules && w.agents?.[id]?.isPlayer) return life?.elderDaysPlayer ?? ELDER_DAYS_PLAYER;
-  return life?.elderDays ?? ELDER_DAYS;
+  return life?.elderDays ?? (w.gameRules ? ELDER_DAYS_GAME : ELDER_DAYS);
 };
 
 export function residentStage(w, id) {
@@ -515,3 +516,4 @@ export function restoreHouseholds(w, housing) {
     if (residentialSite(room,w.peripheralHomes)) w.locs[room] = deed.owner ? `${w.agents[deed.owner]?.name ?? '居民'}的小屋` : housingMode(w) !== 'inherit' || deed.listed ? '待售小屋' : '住用公房';
   }
 }
+
