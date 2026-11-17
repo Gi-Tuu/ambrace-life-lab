@@ -455,7 +455,10 @@ export function buildDeliberationPrompt({ agent, scored, world, rejected, memori
     ...[...scored].sort((a, b) => (a.id < b.id ? -1 : 1)).map((s) => `- ${s.id} | ${s.act.label} | ${bands[s.id] ?? '同档'}`),
   ].filter(Boolean);
   if (rejected) lines.push(`你上次想做 ${rejected.from} 被驳回：${rejected.why}。这次换一个可行的。`);
-  lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过14字"}');
+  // #53 实测：耗时 ≈ 0.5s(预填) + 0.127s × 生成token；生产均值 30.9 token ⇒ 4.3s，超 TTL 4500 就全部作废。
+  // 唯一不动模型也能省时间的办法是让它少写字，所以理由从 14 字收到 6 字（约省 1 秒）。
+  // 注意不能压低 max_tokens 当油门：均值已 31、长答案到 100，截断会产出半截 JSON ⇒ 审议静默失败（见 decision-lane 闸门 LANE-07）。
+  lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过6字"}，不要复述选项、不要写过程。');
   lines.push('如果此刻有在场的人、你想顺带说一句话，再加三个字段："act" 从 request/offer/warn/inform/greet/accuse/thank/decline/refuse 里选一个；"topic" 从 food/firewood/shelter/child/work/weather/boundary/trust 里选一个；"text" 不超过 28 字。不想说就省略这三项。');
 
   // 返回字符串（不是数组）：调用方与采集脚本用的是同一份成品，避免出现 join 位置不一致造成的静默失配
