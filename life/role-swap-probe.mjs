@@ -78,7 +78,14 @@ export function measureSwap(seed = 7) {
     rows.push({ kind, status, expected: { minutes: expected.minutes, energy: expected.energy }, player, resident });
   }
   const covered = new Set(TESTED);
-  const coverage = COVERAGE.map((kind) => ({ kind, status: covered.has(kind) ? 'tested' : 'inconclusive' }));
+  const MISSING = {
+    water: '菜园水渠/干畦状态', till: '可开垦荒地+工具', plan: '空地+材料+工具', repair: '受损建筑+材料+维修工具',
+    move: '相邻房间坐标', eat: '公仓/家中有粮且当日未进食', rest: '床边/住处位置', store: '公仓容器与背包物品',
+    take: '公仓容器与目标物品', exchange: '工坊产物与兑换条件', talk: '同屋对象+关系阈值', road: '道路地块与材料',
+    facility: '可用设施+完好度', animal: '畜栏/动物+饲料', home: '家庭权限+门',
+  };
+  const coverage = COVERAGE.map((kind) => ({ kind, status: covered.has(kind) ? 'tested' : 'inconclusive',
+    ...(covered.has(kind) ? {} : { missing: MISSING[kind] ?? '对称前置未构造' }) }));
   const allSame = rows.every((r) => r.status === 'passed' || r.status === 'expected_rejection');
   return { seed, rows, coverage, allSame,
     failed: rows.filter((r) => r.status === 'failed'),
@@ -96,3 +103,4 @@ if (process.argv[1] && process.argv[1].endsWith('role-swap-probe.mjs')) {
     failures: runs.flatMap((r) => r.failed.map((x) => `${r.seed}:${x.kind}`)) }, null, 2));
   if (!out.allSame) process.exitCode = 1;
 }
+

@@ -263,3 +263,19 @@ test('V73-14 居民跨刻完成：账本/事件只一次，5+25 体力=一次 30
 });
 
 
+
+test('V73-15 rest 不再零成本：每次 15 分钟，连续刷会耗尽本刻；未知动作非零成本', () => {
+  const sp = createSurvPlay(7, GAME);
+  const w = sp.world; w.t = 10;
+  move(w, 'a1', 'home');
+  w.agents.a1.drives.v.energy = 0.2;
+  const codes = [];
+  for (let i = 0; i < 5; i += 1) codes.push(w.agents.a1.execute(w, { kind: 'rest' }, 'deliberation', w.t, true)?.code);
+  assert.equal(codes.filter((c) => c === 'OK').length, 4, JSON.stringify(codes));
+  assert.equal(codes[4], 'BUSY_START', '第 5 次装不下，转跨刻，不能零成本刷');
+  assert.equal(clockOf(w, 'a1').tick.usedMin, 60);
+  const unknown = costFor('definitely_unknown_action');
+  assert.equal(unknown.minutes, 5);
+  assert.equal(unknown.energy, 0.01);
+});
+

@@ -23,8 +23,8 @@ export const SHARED_COST = Object.freeze({
   facility: { minutes: 15, energy: 0.02 },
   feed: { minutes: 10, energy: 0.02 },
   slaughter: { minutes: 30, energy: 0.08 },
-  rest: { minutes: 0, energy: 0 },
-  sleep: { minutes: 0, energy: 0 },
+  rest: { minutes: 15, energy: 0 },
+  sleep: { minutes: 60, energy: 0 },
   free: { minutes: 0, energy: 0 },
   unknown: { minutes: 5, energy: 0.01 }, // 未知动作不得零成本
   house_work: { minutes: 15, energy: 0.06 },
@@ -70,4 +70,5 @@ export function costFor(kind, body = {}) {
 }
 
 export const ACTION_KINDS = Object.freeze(Object.keys(SHARED_COST));
+
 
