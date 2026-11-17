@@ -173,7 +173,12 @@ export function advanceSurvival(world) {
   // 先烧公共柴堆，再烧玩家背包——居民与玩家同一条规则。
   if (world.gameRules && !ended) {
     // A3：公共设施只烧公共柴堆。私人木材（玩家或其他居民）必须通过明确的捐赠/运输行动进入公仓。
-    if ((s.inv?.wood ?? 0) >= 1) { s.inv.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    if ((s.inv?.wood ?? 0) >= 1) {
+      s.inv.wood -= 1;
+      s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1;
+      // V7.3 第三批：灯火燃料是真实的公共消费，补记资源账本（D1 口径）。
+      noteConsumed(world, 'wood', 'fuel', 1);
+    }
     // 亮不亮由当前柴量推导（见 survView.light），这里只负责每天烧一份。
   }
 

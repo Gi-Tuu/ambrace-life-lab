@@ -192,3 +192,21 @@ test('V73-10 玩家主动取消 busy：写 cancelled 事件与账本，二次取
   assert.equal(w.survival.sites[0].progress, 0, '取消不得结算进度');
   assert.equal(cancelPlayerBusy(sp).code, 'NO_BUSY', '无 busy 时二次取消被拒');
 });
+
+test('V73-11 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', async () => {
+  const { measureConservation } = await import('./resource-conservation-probe.mjs');
+  const r = measureConservation(7, 240);
+  assert.ok(r.balanced, `资源守恒残差应 0：${JSON.stringify(r.rows)}`);
+  assert.ok(Object.values(r.rows).some((x) => x.consumed > 0), '应覆盖到有消费的样本');
+  const { createSurvPlay } = await import('./survplay.mjs');
+  const { advanceSurvival } = await import('./worldstate.mjs');
+  const sp = createSurvPlay(7, { eventRulesVersion: CURRENT_EVENT_RULES, gameRules: true,
+    independentWorld: true, playerRation: true });
+  const w = sp.world;
+  w.survival.lastDay = 0;
+  w.survival.inv.wood = 5;
+  w.t = 24; // 跨到次日
+  advanceSurvival(w); // 单步触发日界灯火
+  assert.equal(w.survival.inv.wood, 4, '每天烧 1 份公共柴');
+  assert.equal(w.survival.resLedger.consumed.wood?.fuel ?? 0, 1, '灯火消费进账本');
+});
