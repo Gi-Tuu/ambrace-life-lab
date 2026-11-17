@@ -3066,7 +3066,7 @@ function renderSeasonHud(view, location, outdoor) {
   if (ph) ph.innerHTML = [
     [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
     [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
-    [`${STAT_ICON.action}`, '本刻行动', `${view.player?.timeLeft ?? 0}/100`],
+    [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日时间' : '本刻行动', `${view.player?.timeLeft ?? 0}/${view.player?.timeMax ?? 100}`],
   ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
   const pl = $('placeHud');
   if (pl) pl.textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
@@ -3137,7 +3137,7 @@ function renderSurv(s) {
       <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
       <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
       ${outside ? '<span class="bad" title="村外步行按世界时限速，冲刺禁用；与居民同速">村外·限速</span>' : ''}
-      ${s.player?.timeLeft != null ? `<span class="stat" title="本刻行动">${STAT_ICON.action}<b>${s.player.timeLeft}/100</b></span>` : ''}
+      ${s.player?.timeLeft != null ? `<span class="stat" title="${s.player?.timeMax === 1440 ? '今日剩余可用分钟' : '本刻行动'}">${STAT_ICON.action}<b>${s.player.timeLeft}/${s.player?.timeMax ?? 100}</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}

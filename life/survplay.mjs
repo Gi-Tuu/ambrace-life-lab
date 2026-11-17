@@ -49,7 +49,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=false}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -139,8 +139,9 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.workFeeds = false; // §16 选点：E1 off（E4 已足）
   s.storeHunger = true; // §16 选点：E4 on（公仓目标挂钩饥饿⇒AI 自足 idleWon 2/3）
   s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
-  // V7.2 阶段 B（第 1 步）：角色个人时间只落在正式游戏；本步只建数据，不改任何行动判定。
-  if (actTimeModel) s.actTimeModel = true;
+  // V7.2 阶段 B：个人时间模型是正式游戏的默认语义（独立世界），研究态保持旧预算逐位不变。
+  // 显式传 false 可回旧路径（V72_TIME=0 的兼容开关）；不传则跟随 independentWorld。
+  if (actTimeModel ?? independentWorld) s.actTimeModel = true;
   if (world.gameRules) {
     s.actClock = {};
     for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };
@@ -492,9 +493,20 @@ function budgetLeft(w) {
   if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
   return s.p1BudgetLeft;
 }
+const DAY_MINUTES = 1440; // 24 刻 × 60 分：玩家一天真正可用的时间，不再是"每刻 100 点"
+// 剩余可行动时间：旧路径仍是本刻 100 点额度；个人时间模型下是当天还剩多少分钟。
 export function playerTimeLeft(w) {
   const s = w.survival;
+  if (s?.actTimeModel === true) {
+    const day = Math.floor(w.t / (w.dayTicks ?? 24));
+    const clock = s.actClock?.p1;
+    if (!clock || clock.day !== day) return DAY_MINUTES;
+    return Math.max(0, DAY_MINUTES - clock.usedMin);
+  }
   return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
+}
+export function playerTimeMax(w) {
+  return w.survival?.actTimeModel === true ? DAY_MINUTES : PLAYER_BUDGET;
 }
 
 // P0-1（第三阶段·外围同权）：服务端拥有玩家外围位置 w.survival.playerPos={x,z,t}。
@@ -521,11 +533,11 @@ export function playerReach(w, from) {
   s.playerPos = { x: from[0], z: from[1], t: w.t };
   return { ok: true };
 }
-const DAY_MINUTES = 1440; // 24 刻 × 60 分：玩家一天真正可用的时间，不再是"每刻 100 点"
 function spendTime(w, cost) {
   if (!w.independentWorld) return true; // 研究态保持旧路径（playerTimeCost 已返回 0）
   const s = w.survival;
-  if (s.actTimeModel !== true) { // 原型期开关：默认仍走旧的每刻预算，下一步再切默认
+  // 兼容开关（V72_TIME=0）回旧的每刻 100 点预算；正式游戏默认已是个人时间。
+  if (s.actTimeModel !== true) {
     budgetLeft(w);
     if (s.p1BudgetLeft + 1e-9 < cost) return false;
     s.p1BudgetLeft -= cost;
@@ -842,7 +854,7 @@ export function survView(sp) {
     agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
-    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null,
+    player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,
       ...(w.independentWorld ? { result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive' } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),

@@ -7,23 +7,33 @@ import { actuate } from './body.mjs';
 import { houseAction } from './households.mjs';
 import { BUILDINGS } from './production.mjs';
 import { compare } from './build-efficiency.mjs';
+import { DAY_TICKS } from './clock.mjs';
 
 const GAME = { residentialDecisions: true, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true };
 
-test('V3-01 同一世界刻不能完成两次实质劳动；移动/睡眠仍可用；研究模式不受影响', () => {
+test('V3-01 同一世界刻可连续完成多次实质劳动，时间按 1440 分/日累计；用尽 TIME_WAIT；研究模式不受影响', () => {
   const sp = createSurvPlay(7, GAME), w = sp.world;
+  assert.equal(w.survival.actTimeModel, true, '正式游戏默认走个人时间模型');
   assert.ok(survAct(sp, { kind: 'move', room: 'yard' }).ok);
   assert.equal(survAct(sp, { kind: 'gather' }).ok, true);
-  assert.equal(survAct(sp, { kind: 'gather' }).code, 'ACTION_BUDGET');
-  assert.equal(survAct(sp, { kind: 'plan', type: 'shelter' }).code, 'ACTION_BUDGET');
-  assert.equal(survView(sp).player.timeLeft, 100 - PLAYER_TIME.move - PLAYER_TIME.gather);
-  w.t += 1; // 下一世界刻重置预算
+  assert.equal(survAct(sp, { kind: 'gather' }).ok, true, '同一刻第二次劳动必须放行（不再按每刻 100 点拒绝）');
   assert.equal(survAct(sp, { kind: 'gather' }).ok, true);
-  // 失败动作退还时间：无工地施工失败后仍能完成一次采集
-  w.t += 1;
-  const bad = survAct(sp, { kind: 'build' });
+  assert.equal(w.t, 0, '玩家连续动作不应偷偷推进世界刻');
+  // 一天 1440 分：移动 25 + 采集 75×3，剩余时间可读
+  assert.equal(survView(sp).player.timeMax, 1440);
+  assert.equal(survView(sp).player.timeLeft, 1440 - PLAYER_TIME.move - PLAYER_TIME.gather * 3);
+  // 失败动作退还当天时间：没有材料的奠基不占时间
+  const bad = survAct(sp, { kind: 'plan', type: 'shelter' });
   assert.equal(bad.ok, false);
-  assert.equal(survAct(sp, { kind: 'gather' }).ok, true);
+  assert.equal(bad.code, 'NO_MATERIAL');
+  assert.equal(survView(sp).player.timeLeft, 1440 - PLAYER_TIME.move - PLAYER_TIME.gather * 3, '被拒的动作不得吃掉个人时间');
+  // 当天时间真的用尽 ⇒ TIME_WAIT；跨日后重置
+  w.survival.actClock.p1.usedMin = 1440 - PLAYER_TIME.gather + 1;
+  const wait = survAct(sp, { kind: 'gather' });
+  assert.equal(wait.ok, false);
+  assert.equal(wait.code, 'TIME_WAIT');
+  w.t += DAY_TICKS;
+  assert.equal(survAct(sp, { kind: 'gather' }).ok, true, '跨日后个人时间重置');
   // 研究模式（非 independentWorld）保持旧行为：同刻两次采集都成功
   const research = createSurvPlay(7);
   assert.ok(survAct(research, { kind: 'move', room: 'yard' }).ok);

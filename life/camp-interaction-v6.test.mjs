@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSurvPlay, survAct, playerTimeLeft } from './survplay.mjs';
+import { createSurvPlay, survAct, playerTimeLeft, PLAYER_TIME } from './survplay.mjs';
 import { openTalk, sayTo, talkInRange } from './dialogue.mjs';
 import { move } from './body.mjs';
 import { campBeds, campEntrance, campPen, campPlants, campSite } from '../web/camp-interaction.mjs';
@@ -37,11 +37,12 @@ test('采集请求以实体和距离决定来源，不提前移动玩家或重�
   const tree=TIMBER_GROVE[0], from=[tree.x+1,tree.z], base={kind:'camp_chop',target:tree.id,tool:'axe',from};
   assert.equal(survAct(sp,{...base,from:[0,0]}).code,'OUT_OF_REACH');
   assert.equal(survAct(sp,{...base,tool:'hand'}).code,'NEED_TOOL');
-  assert.equal(playerTimeLeft(w),100);
+  assert.equal(playerTimeLeft(w),1440,'开局当天个人时间满额');
   assert.ok(survAct(sp,base).ok);
   assert.equal(w.loc.p1,'hall');
-  assert.equal(playerTimeLeft(w),25);
-  assert.equal(survAct(sp,base).code,'ACTION_BUDGET');
+  assert.equal(playerTimeLeft(w),1440-PLAYER_TIME.camp_chop,'砍树按分钟扣当天时间');
+  assert.equal(survAct(sp,base).code,'TREE_GROWING','同刻可以再动手，被拒是因为树已伐倒');
+  assert.equal(playerTimeLeft(w),1440-PLAYER_TIME.camp_chop,'被拒的动作退还个人时间');
   w.t++;
   assert.equal(survAct(sp,base).code,'TREE_GROWING');
   const plant=campPlants(null,3).find(p=>p.item==='berry'&&p.site==='yard');
@@ -85,7 +86,7 @@ test('建筑只允许从正式入口进入，失败保留行动时间',()=>{
   const sp=make(),w=sp.world,door=campEntrance('yard',campSite('yard'));
   const enter={kind:'move',room:'yard',entrance:true};
   assert.equal(survAct(sp,{...enter,from:[20,30]}).code,'OUT_OF_REACH');
-  assert.equal(playerTimeLeft(w),100);
+  assert.equal(playerTimeLeft(w),1440,'被拒的动作不占个人时间');
   assert.ok(survAct(sp,{...enter,from:[door.x+1,door.z+1]}).ok);
   assert.equal(w.campPlayerRoom,'yard');
   assert.ok(survAct(sp,{kind:'camp_exit'}).ok);
@@ -100,7 +101,7 @@ test('点击工地的施工和维修由同一地块校验，玩家逻辑地点�
   s.sites=[{loc:'yard',type:'granary',lot,progress:4}];
   const target='work:yard:granary', from=[25,30.5];
   assert.equal(survAct(sp,{kind:'build',target,from:[20,20]}).code,'OUT_OF_REACH');
-  assert.equal(playerTimeLeft(w),100);
+  assert.equal(playerTimeLeft(w),1440,'被拒的动作不占个人时间');
   assert.ok(survAct(sp,{kind:'build',target,from}).ok);
   assert.equal(w.loc.p1,'hall');
   assert.equal(s.buildings[0].integrity,1);

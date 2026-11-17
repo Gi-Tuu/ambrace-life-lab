@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSurvPlay, dumpSurv, loadSurv, playerTimeLeft, settleSurvival, survAct, survView, tickSurvPlay } from './survplay.mjs';
+import { createSurvPlay, dumpSurv, loadSurv, playerTimeLeft, PLAYER_TIME, settleSurvival, survAct, survView, tickSurvPlay } from './survplay.mjs';
 import { actuate, move } from './body.mjs';
 import { validate } from './rules.mjs';
 import { changeHomeAccess, homeEntry } from './home-access.mjs';
@@ -67,9 +67,9 @@ test('近距离可请求住户邀请，破门要锤、工时并损害信任，�
   const act={kind:'home_break',room,from:atDoor(w,room)};
   assert.equal(survAct(sp,{...act,tool:'hand'}).code,'NEED_TOOL');
   assert.equal(survAct(sp,{...act,tool:'hammer',from:[0,0]}).code,'OUT_OF_REACH');
-  assert.equal(playerTimeLeft(w),100);
+  assert.equal(playerTimeLeft(w),1440,'开局当天个人时间满额');
   assert.ok(survAct(sp,{...act,tool:'hammer'}).ok);
-  assert.equal(playerTimeLeft(w),25);
+  assert.equal(playerTimeLeft(w),1440-PLAYER_TIME.home_break,'破门按分钟扣当天时间');
   assert.equal(w.agents.a1.relations.map.get('p1').trust,50);
   assert.ok(enter(sp,room).ok);
   const view=survView(restore(sp));

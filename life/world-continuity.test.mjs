@@ -73,15 +73,20 @@ test('T25 模型等待期间排队采集、奠基、施工、睡眠和保存', a
     release();
     await running;
     const results=await Promise.all(requests);
-    // P0-A：同一刻已有一次重劳动（gather），后续重劳动必须被行动预算拒绝；移动/睡眠仍可用。
+    // V7.2：正式游戏默认个人时间 ⇒ 模型等待期间排队的动作在同一刻连续执行，全部成功；
+    // 时间按当天分钟累计（1440/日），远未用尽，所以既不该有 ACTION_BUDGET，也不该有 TIME_WAIT。
     assert.equal(results[0].ok,true,JSON.stringify(results));
-    assert.equal(results[1].code,'ACTION_BUDGET',JSON.stringify(results));
-    assert.equal(results[2].code,'ACTION_BUDGET',JSON.stringify(results));
-    assert.equal(results[3].code,'ACTION_BUDGET',JSON.stringify(results));
+    assert.equal(results[1].ok,true,JSON.stringify(results));
+    assert.equal(results[2].ok,true,JSON.stringify(results));
+    assert.equal(results[3].ok,true,JSON.stringify(results));
     assert.equal(results[4].ok,true,JSON.stringify(results));
     assert.equal(results[5].ok,true,JSON.stringify(results));
-    const after=host.snapshot().survival;
+    assert.ok(results.every(r=>r.code!=='ACTION_BUDGET'),JSON.stringify(results));
     const disk=JSON.parse(await readFile(join(dir,'world.json'),'utf8'));
+    const clock=disk.survival.survival.actClock?.p1;
+    assert.ok(clock && clock.usedMin>0 && clock.usedMin<=1440,
+      `同刻动作应累计当天分钟（0<usedMin<=1440），实测 ${JSON.stringify(clock)}`);
+    const after=host.snapshot().survival;
     assert.equal(disk.survival.t,after.t);
     assert.equal(after.t,before.t+results[5].ticks);
     assert.deepEqual(disk.survival.pinv,after.pinv);

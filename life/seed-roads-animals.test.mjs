@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } from './survplay.mjs';
+import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay, playerTimeLeft, PLAYER_TIME } from './survplay.mjs';
 import { campEntrance, campPen, campSite, wildHabitats } from '../web/camp-interaction.mjs';
 import { generateCampLayout, overlapsLot } from '../web/camp-layout.mjs';
 import { roadCandidate } from './home-roads.mjs';
@@ -33,7 +33,8 @@ test('住户可拆路、间隔后用石料复铺，独居偏好可产生道路�
   const attempt=kind=>survAct(sp,{kind,room,from});
   assert.ok(attempt('road_remove').ok);
   assert.equal(w.survival.homeRoads[room].present,false);
-  assert.equal(attempt('road_lay').code,'ACTION_BUDGET');
+  assert.equal(attempt('road_lay').code,'ROAD_COOLDOWN','同刻可以再动手，被拒是因为拆路后的间隔冷却');
+  assert.equal(playerTimeLeft(w),1440-PLAYER_TIME.road_remove,'被拒的铺路退还个人时间');
   w.t+=4*DAY_TICKS;
   assert.equal(attempt('road_lay').code,'NO_MATERIAL');
   w.pinv.p1.stone=1;
