@@ -1,5 +1,5 @@
 {
-  "head": "08c2bdd",
+  "head": "18f8d64",
   "tests": {
     "total": 910,
     "pass": 910,
@@ -63,5 +63,23 @@
     "owner/ catchup/ 守恒未修",
     "索引多实例只解决 tmp 冲突，未做跨进程锁",
     "M3 仍为研究能力，未达正式完成"
-  ]
+  ],
+  "measured": {
+    "multiproc": {
+      "expected": 48,
+      "index": 48,
+      "ok": 48,
+      "fail": 0,
+      "lost": 0,
+      "elapsedMs": 2880,
+      "pass": true
+    },
+    "nonceBrowser": {
+      "anon": 403,
+      "authed": 200,
+      "nonce": true,
+      "pass": true
+    }
+  },
+  "designDoc": "docs/设计-审计遗留-2026-11-18.md"
 }
