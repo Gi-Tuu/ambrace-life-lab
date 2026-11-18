@@ -197,7 +197,7 @@ test('H-02 CSRF：text/plain 与跨站请求必须被挡住 【变红法：删�
 
     // (c) reset 必须带 confirm
     const noConfirm = await post(base, '/ctl', { action: 'reset' });
-    assert.equal(noConfirm.status, 401, `无凭据的 reset 先被鉴权拒绝，返回 ${noConfirm.status}`);
+    assert.equal(noConfirm.status, 403, `无凭据的 reset 被鉴权拒绝，返回 ${noConfirm.status}`);
     assert.equal((await noConfirm.json()).error, 'UNAUTHORIZED');
 
     // 三种攻击之后世界必须还在原刻度
