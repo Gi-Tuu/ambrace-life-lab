@@ -1,0 +1,832 @@
+{
+  "generatedAt": "2026-11-18T09:13:06.523Z",
+  "days": 30,
+  "runs": [
+    {
+      "seed": 7,
+      "days": 30,
+      "population": 4,
+      "starts": 1294,
+      "aborts": 123,
+      "byCategory": {
+        "动作集不匹配/仅耦合": 123
+      },
+      "byCode": {
+        "only_coupling_actions": 123
+      },
+      "byGoal": {
+        "maintain": 123
+      },
+      "onlyCoupling": 123,
+      "goalSurvivalConflict": 0,
+      "examples": [
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.936,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.936,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 4,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 4,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "garden",
+          "energy": 0.802,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 6,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 6,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "watch",
+          "energy": 0.667,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 22,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 22,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "well",
+          "energy": 0.519,
+          "store": 3,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 22,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 22,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.608,
+          "store": 3,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 23,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 23,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.497,
+          "store": 3,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 30,
+          "day": 1,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 30,
+          "candidates": [
+            {
+              "id": "exchange:berry",
+              "kind": "exchange",
+              "target": null,
+              "to": null,
+              "cost": 0.12
+            },
+            {
+              "id": "exchange:fruit",
+              "kind": "exchange",
+              "target": null,
+              "to": null,
+              "cost": 0.12
+            },
+            {
+              "id": "exchange:milk",
+              "kind": "exchange",
+              "target": null,
+              "to": null,
+              "cost": 0.12
+            },
+            {
+              "id": "exchange:wool",
+              "kind": "exchange",
+              "target": null,
+              "to": null,
+              "cost": 0.12
+            }
+          ],
+          "candidateKinds": {
+            "exchange": 4
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.664,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        }
+      ]
+    },
+    {
+      "seed": 13,
+      "days": 30,
+      "population": 5,
+      "starts": 1981,
+      "aborts": 107,
+      "byCategory": {
+        "动作集不匹配/仅耦合": 107
+      },
+      "byCode": {
+        "only_coupling_actions": 107
+      },
+      "byGoal": {
+        "maintain": 107
+      },
+      "onlyCoupling": 107,
+      "goalSurvivalConflict": 0,
+      "examples": [
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.936,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.936,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 3,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 3,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "garden",
+          "energy": 0.914,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 11,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 11,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.707,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 19,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 19,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "watch",
+          "energy": 0.501,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 20,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 20,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.55,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 20,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 20,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "watch",
+          "energy": 0.389,
+          "store": 3,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 22,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 22,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "well",
+          "energy": 0.5,
+          "store": 3,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        }
+      ]
+    },
+    {
+      "seed": 29,
+      "days": 30,
+      "population": 5,
+      "starts": 2059,
+      "aborts": 134,
+      "byCategory": {
+        "动作集不匹配/仅耦合": 134
+      },
+      "byCode": {
+        "only_coupling_actions": 134
+      },
+      "byGoal": {
+        "maintain": 130,
+        "explore": 4
+      },
+      "onlyCoupling": 134,
+      "goalSurvivalConflict": 0,
+      "examples": [
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.937,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 2,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 2,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "yard",
+          "energy": 0.937,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 3,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 3,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "garden",
+          "energy": 0.915,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 11,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 11,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.711,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 11,
+          "day": 0,
+          "actor": "a2",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 11,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-northwest",
+          "energy": 0.711,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 20,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 20,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "watch",
+          "energy": 0.455,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 21,
+          "day": 0,
+          "actor": "a1",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 21,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "watch",
+          "energy": 0.343,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        },
+        {
+          "tick": 23,
+          "day": 0,
+          "actor": "a3",
+          "goal": "maintain",
+          "goalTarget": null,
+          "code": "only_coupling_actions",
+          "duration": 0,
+          "startTick": 23,
+          "candidates": [
+            {
+              "id": "gather",
+              "kind": "gather",
+              "target": null,
+              "to": null,
+              "cost": 0.07
+            }
+          ],
+          "candidateKinds": {
+            "gather": 1
+          },
+          "plannedKinds": {},
+          "plans": [],
+          "dropped": [],
+          "droppedCount": 0,
+          "loc": "district-west",
+          "energy": 0.548,
+          "store": 2,
+          "busy": false,
+          "category": "动作集不匹配/仅耦合"
+        }
+      ]
+    }
+  ]
+}
