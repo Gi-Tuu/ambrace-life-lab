@@ -1128,7 +1128,9 @@ export function dumpSurv(sp) {
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
   const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
-    sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}) };
+    sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}),
+    // V7.3.2：fair 调度的欠账/上次机会随档走，重启后不重置轮转（仅正式游戏）。
+    fairSched: w.fairSched ? { cap: w.fairSched.cap, debt: { ...w.fairSched.debt }, last: { ...w.fairSched.last } } : null };
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
@@ -1305,8 +1307,15 @@ export function loadSurv(raw,seed=7,options) {
       ? Object.fromEntries(Object.entries(rawOcc).map(([k, arr]) => [k, Array.isArray(arr) ? arr.slice() : []]))
       : expected;
   }
+  // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
+  if (raw?.fairSched && sp.world.fairSched) {
+    sp.world.fairSched.debt = { ...(raw.fairSched.debt ?? {}) };
+    sp.world.fairSched.last = { ...(raw.fairSched.last ?? {}) };
+    if (Number.isSafeInteger(raw.fairSched.cap) && raw.fairSched.cap > 0) sp.world.fairSched.cap = raw.fairSched.cap;
+  }
   return sp;
 }
+
 
 
 
