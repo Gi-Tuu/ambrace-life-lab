@@ -1,6 +1,6 @@
 {
-  "head": "11f8413",
-  "generatedAt": "2026-11-18T12:19:14.875Z",
+  "head": "d872595",
+  "generatedAt": "2026-11-18T12:44:56.104Z",
   "note": "临时 DATA_DIR；每个 server 用完即停；不含任何真实令牌。",
   "rows": {
     "noToken": {
@@ -18,6 +18,17 @@
       "bearerStatus": 200,
       "bearerOk": true
     },
+    "tokenMainReset": {
+      "scriptNoCredStatus": 403,
+      "browserNonceStatuses": [
+        200,
+        200,
+        200,
+        429
+      ],
+      "auditOk": true,
+      "auditRateLimited": true
+    },
     "worldOwner": {
       "openA": true,
       "openB": true,
@@ -27,6 +38,13 @@
       "reopenNoCookieStatus": 403,
       "reopenNoCookieError": "CAMP_OWNED",
       "reopenIssuedOwnerCookie": false
+    },
+    "ownerSidecar": {
+      "rebuiltName": true,
+      "otherStatus": 403,
+      "otherError": "CAMP_OWNED",
+      "ownerStatus": 200,
+      "ownerWorldStatus": 200
     },
     "quota": {
       "codes": [
@@ -44,8 +62,8 @@
       "xContentTypeOptions": "nosniff",
       "xFrameOptions": "DENY",
       "setCookie": [
-        "ctl_sid=f3f6ea09af94127d1151ed8be19b141c; Path=/; HttpOnly; SameSite=Strict",
-        "ctl_nonce=2d5f470a087696e4b03e87736ed9b23c; Path=/; SameSite=Strict"
+        "ctl_sid=f2ca4bce41d33d3165114485e473e8e2; Path=/; HttpOnly; SameSite=Strict",
+        "ctl_nonce=f857f3a2930adfb21fef19f6f9399255; Path=/; SameSite=Strict"
       ]
     }
   }

@@ -1,17 +1,18 @@
 {
-  "head": "11f8413",
-  "baselineHead": "34c1aeb",
-  "generatedAt": "2026-11-18T12:19:29.549Z",
+  "head": "d872595",
+  "baselineHead": "c176853",
+  "round": "audit5-second-round",
+  "generatedAt": "2026-11-18T12:45:16.175Z",
   "tests": {
     "files": 178,
-    "total": 967,
-    "pass": 967,
+    "total": 976,
+    "pass": 976,
     "fail": 0,
     "skipped": 0,
-    "targetedAudit5": 32
+    "targetedAudit5": 41
   },
   "lint": {
-    "files": 423,
+    "files": 424,
     "engines": 23,
     "testFiles": 178,
     "ok": true
@@ -19,6 +20,18 @@
   "art": {
     "entries": 95,
     "ok": true
+  },
+  "ci": {
+    "runId": 44305954262,
+    "headSha": "d872595",
+    "workflow": "check.yml",
+    "conclusion": "success",
+    "tests": 976,
+    "pass": 976,
+    "skipped": 0,
+    "requireChrome": "1",
+    "chromeVerified": true,
+    "note": "GitHub Actions run for the second-round code commit. Evidence-only commits trigger a separate run; this id is the gate for the code."
   },
   "securityMatrix": {
     "noToken": {
@@ -36,6 +49,17 @@
       "bearerStatus": 200,
       "bearerOk": true
     },
+    "tokenMainReset": {
+      "scriptNoCredStatus": 403,
+      "browserNonceStatuses": [
+        200,
+        200,
+        200,
+        429
+      ],
+      "auditOk": true,
+      "auditRateLimited": true
+    },
     "worldOwner": {
       "openA": true,
       "openB": true,
@@ -45,6 +69,13 @@
       "reopenNoCookieStatus": 403,
       "reopenNoCookieError": "CAMP_OWNED",
       "reopenIssuedOwnerCookie": false
+    },
+    "ownerSidecar": {
+      "rebuiltName": true,
+      "otherStatus": 403,
+      "otherError": "CAMP_OWNED",
+      "ownerStatus": 200,
+      "ownerWorldStatus": 200
     },
     "quota": {
       "codes": [
@@ -62,14 +93,14 @@
       "xContentTypeOptions": "nosniff",
       "xFrameOptions": "DENY",
       "setCookie": [
-        "ctl_sid=f3f6ea09af94127d1151ed8be19b141c; Path=/; HttpOnly; SameSite=Strict",
-        "ctl_nonce=2d5f470a087696e4b03e87736ed9b23c; Path=/; SameSite=Strict"
+        "ctl_sid=f2ca4bce41d33d3165114485e473e8e2; Path=/; HttpOnly; SameSite=Strict",
+        "ctl_nonce=f857f3a2930adfb21fef19f6f9399255; Path=/; SameSite=Strict"
       ]
     }
   },
   "asyncPersistence": {
-    "tickMaxMs": 19.21,
-    "flushMs": 423.96,
+    "tickMaxMs": 25.88,
+    "flushMs": 440.1,
     "flushOk": true,
     "indexEntries": 6,
     "campsT": [
@@ -88,21 +119,21 @@
     "SEC5-02": "fixed",
     "SEC5-03": "fixed",
     "SEC5-04": "partial (session quota)",
-    "SEC5-05": "partial (owner reopen fixed; token-posture MAIN reset not)",
+    "SEC5-05": "fixed (owner reopen + MAIN nonce reset w/ one-time TTL, 3/min, audit)",
     "SEC5-06": "fixed",
     "DATA5-02": "fixed",
     "DATA5-03": "fixed",
     "DATA5-04": "fixed",
     "DATA5-06": "fixed",
-    "ARCH5-01": "fixed",
-    "ARCH5-02": "fixed",
+    "DATA5-01": "fixed without WAL (start baseline + SAVE_EVERY + .bak fallback; documented loss window)",
+    "DATA5-05": "fixed (owner sidecar + index rebuild)",
     "DATA5-09": "fixed",
     "DATA5-11": "fixed",
     "DATA5-13": "fixed",
     "DATA5-14": "fixed (opt-in budget)",
     "TEST5-02": "fixed",
-    "ARCH5-06": "partial (lanes/tokens unified; calls/attempts pending design)",
-    "camp_* precheck convergence": "design only",
+    "ARCH5-06": "fixed (calls/attempts/choices via budget domain)",
+    "camp_* precheck convergence": "partial (static tool/item family; location/container staged design)",
     "docs/CI drift": "fixed"
   },
   "evidence": {
@@ -116,6 +147,6 @@
   "notes": [
     "All probes use temporary DATA_DIR; no real data/ writes.",
     "Research baselines evidence/{report,sweep,viab,recover,metab}.log and shared/, seed/ unchanged.",
-    "evidence head binds the code commit; this evidence commit is the final HEAD."
+    "Evidence head binds code commit d872595; Actions run 44305954262 is that commit."
   ]
 }
