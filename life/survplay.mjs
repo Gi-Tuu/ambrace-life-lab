@@ -12,6 +12,7 @@ import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents,
 import { validate } from './rules.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, clockOf, CHAIN_MAX } from './resident-time.mjs';
 import { costFor } from './action-cost.mjs';
+import { installFairSched } from './fair-sched.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
@@ -159,6 +160,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     s.actClock = {};
     for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };
   }
+  installFairSched(world); // V7.3.2：FAIR_SCHED=1 时只包审议入口；研究态/默认关不动
   return { world, log: [] };
 }
 
@@ -1304,6 +1306,7 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
 
 
 

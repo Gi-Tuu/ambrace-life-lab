@@ -9,6 +9,7 @@ import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { residentStage, ageDays } from './households.mjs';
 import { isAlive } from './body.mjs';
+import { ledgerStats } from './action-ledger.mjs';
 
 const LABOR = new Set(['gather', 'forage', 'harvest', 'plant', 'water', 'till', 'build', 'repair', 'plan', 'expand', 'road_lay', 'road_remove', 'house_work']);
 const MOVE = new Set(['move_to', 'look_out', 'move']);
@@ -19,6 +20,7 @@ export async function measureIdle(seed = 7, days = 30) {
   const sp = createSurvPlay(seed, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   const w = sp.world;
   const rows = [];
+  let sumTick = 0, maxTick = 0, ticksRun = 0;
   const decisionCount = new Map();
   // 纯观测包装：只统计每刻是否真的拿到决策机会（decideOn 调用），不改变调度/结果。
   for (const a of Object.values(w.agents)) {
@@ -38,7 +40,9 @@ export async function measureIdle(seed = 7, days = 30) {
       trace: a.trace.length, busy: Boolean(clockOf(w, a.id).busy), energy: a.drives?.v?.energy ?? 0,
       decisions: decisionCount.get(a.id) ?? 0,
     }]));
+    const tick0 = performance.now();
     await tickSurvPlay(sp);
+    const tickMs = performance.now() - tick0; sumTick += tickMs; maxTick = Math.max(maxTick, tickMs); ticksRun += 1;
     const day = dayOf(w.t);
     for (const a of Object.values(w.agents)) {
       if (a.isPlayer || !isAlive(a)) continue;
@@ -91,6 +95,9 @@ export async function measureIdle(seed = 7, days = 30) {
     seed, days, actualDays: new Set(rows.map((r) => r.day)).size,
     rows, totals, idleMin,
     schedulingShare: idleTicks ? Number((totals.schedulingTicks / idleTicks).toFixed(4)) : null,
+    tickMs: { avg: Number((sumTick / Math.max(1, ticksRun)).toFixed(3)), max: Number(maxTick.toFixed(3)) },
+    fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null,
+    births: w.survival.births ?? 0, deaths: (w.survival.deaths ?? []).length, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
     definition: {
       voluntary: '本刻有决策 trace 但未产生动作分钟（自己选择不行动）',
       scheduling: '本刻无决策 trace、无 busy、本刻未满且体力可用（有时间/体力但没拿到决策机会）',
@@ -131,4 +138,8 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
+
+
 
