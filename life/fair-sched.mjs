@@ -1,15 +1,13 @@
-// V7.3.2 全链路调度轮转原型：
-// “一次完整决策机会” = 该居民本刻的 agent.tick() 被调用一次（反射/习惯/审议及其链都在 tick 内）。
-// 每刻预算 = min(cap, 存活居民数)；按 lastOpportunityTick 久闲优先取前 N；每人每刻≤1 次机会；
-// tick 之外的追加 decideOn（决策链）在公平模式下被挡住，保证“一次机会只对应一次完整决策”。
-// 默认关（FAIR_SCHED=1 才启用），研究态永不启用；生理代谢仍在 survplay 的 drives/viab 循环，不动世界规则。
+// V7.3.2 episode 语义调度：
+// 一次 agent.tick()（含反射/习惯/审议）= 一次 episode；tick 后的追加 decideOn（链）属于同一 episode，不再计机会。
+// 每刻预算 = min(cap, eligible)，cap 默认 8：先保证每个可行动居民一次；同一居民可继续申请 episode，
+// 直到本刻 episode 额度用尽（不设“每人每刻≤1”）。仅当 eligible > budget 时按 debt + lastOpportunityTick 轮转。
+// 默认关（FAIR_SCHED=1），研究态永不安装；生理代谢/世界规则不变。
 export const FAIR_ENV = 'FAIR_SCHED';
 export const FAIR_CAP_ENV = 'FAIR_DECISION_CAP';
 export const DEFAULT_FAIR_CAP = 8;
 
-export function fairEnabled(env = process.env) {
-  return env?.[FAIR_ENV] === '1';
-}
+export function fairEnabled(env = process.env) { return env?.[FAIR_ENV] === '1'; }
 export function fairCap(env = process.env) {
   const n = Number(env?.[FAIR_CAP_ENV] ?? DEFAULT_FAIR_CAP);
   return Number.isSafeInteger(n) && n > 0 ? n : DEFAULT_FAIR_CAP;
@@ -20,38 +18,50 @@ export function fairBudget(population, cap = DEFAULT_FAIR_CAP) {
 
 export function createFairState(world, { cap = fairCap() } = {}) {
   world.fairSched = {
-    t: null, cap, allowed: new Set(), last: {}, debt: {}, denied: {}, inTick: false,
-    stats: {
-      ticks: 0, allowed: 0, peakAllowed: 0, opportunities: 0, blockedTicks: 0,
-      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0,
-    },
+    t: null, cap, allowed: new Set(), last: {}, debt: {}, denied: {}, episodes: {}, usedEpisodes: 0,
+    inTick: false,
+    stats: { ticks: 0, allowed: 0, peakAllowed: 0, opportunities: 0, blockedTicks: 0,
+      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0, extraEpisodes: 0 },
   };
   return world.fairSched;
 }
 
-function prepare(world, fs) {
-  const eligible = [];
+function eligibleIds(world, fs) {
+  const ids = [];
   fs.denied = {};
   for (const a of Object.values(world.agents)) {
     if (a.isPlayer || a.dead) continue;
     const c = world.survival?.actClock?.[a.id];
-    const busy = Boolean(c?.busy);
-    const tickLeft = c ? 60 - (c.tick?.usedMin ?? 0) : 60;
-    const energy = a.drives?.v?.energy ?? 1;
-    if (busy) { fs.denied[a.id] = 'busy'; continue; }
-    if (tickLeft <= 0) { fs.denied[a.id] = 'time'; continue; }
-    if (energy <= 0.01) { fs.denied[a.id] = 'energy'; continue; }
-    eligible.push(a.id);
+    if (c?.busy) { fs.denied[a.id] = 'busy'; continue; }
+    if (c && 60 - (c.tick?.usedMin ?? 0) <= 0) { fs.denied[a.id] = 'time'; continue; }
+    if ((a.drives?.v?.energy ?? 1) <= 0.01) { fs.denied[a.id] = 'energy'; continue; }
+    ids.push(a.id);
   }
+  return ids;
+}
+
+function prepare(world, fs) {
+  const eligible = eligibleIds(world, fs);
   fs.stats.ticks += 1;
-  fs.stats.callsThisTick = 0;
   fs.stats.eligible = eligible.length;
-  if (!eligible.length) { fs.allowed = new Set(); return; }
-  const budget = fairBudget(eligible.length, fs.cap);
+  fs.usedEpisodes = 0;
+  fs.episodes = {};
+  fs.allowed = new Set();
+  if (!eligible.length) return;
+  const budget = fs.cap; // cap 是每刻 episode 额度；先保证每个 eligible 一次，剩余额度供同人继续
+  fs.episodeBudget = budget;
+  fs.stats.budget = budget;
+  if (eligible.length <= budget) {
+    // 预算够：所有 eligible 都有机会；多出的 episode 额度留给同一居民继续（按调用顺序，受额度约束）。
+    fs.allowed = new Set(eligible);
+    fs.stats.allowed += eligible.length;
+    fs.stats.peakAllowed = Math.max(fs.stats.peakAllowed, eligible.length);
+    return;
+  }
   const ranked = [...eligible].sort((a, b) => {
-    const d = (fs.debt[b] ?? 0) - (fs.debt[a] ?? 0); // 欠账多者优先
+    const d = (fs.debt[b] ?? 0) - (fs.debt[a] ?? 0);
     if (d) return d;
-    const l = (fs.last[a] ?? -1) - (fs.last[b] ?? -1); // 久闲优先
+    const l = (fs.last[a] ?? -1) - (fs.last[b] ?? -1);
     return l || a.localeCompare(b);
   });
   fs.allowed = new Set(ranked.slice(0, budget));
@@ -59,10 +69,8 @@ function prepare(world, fs) {
     if (fs.allowed.has(id)) fs.debt[id] = 0;
     else { fs.debt[id] = (fs.debt[id] ?? 0) + 1; fs.denied[id] = 'budget'; }
   }
-  fs.stats.budget = budget;
   fs.stats.allowed += fs.allowed.size;
   fs.stats.peakAllowed = Math.max(fs.stats.peakAllowed, fs.allowed.size);
-  fs.stats.debtMax = Math.max(...Object.values(fs.debt));
 }
 
 export function installFairGuard(world, agent, fs = world.fairSched) {
@@ -70,22 +78,25 @@ export function installFairGuard(world, agent, fs = world.fairSched) {
   const originalTick = agent.tick.bind(agent);
   agent.tick = async (...args) => {
     if (fs.t !== world.t) { fs.t = world.t; prepare(world, fs); }
-    if (fs.last[agent.id] === world.t) { fs.stats.blockedTicks += 1; return null; }
-    if (!fs.allowed.has(agent.id)) { fs.stats.blockedTicks += 1; return null; }
+    const budget = fs.episodeBudget ?? 0;
+    if (fs.usedEpisodes >= budget) { fs.stats.blockedTicks += 1; return null; }
+    // 预算不足时只允许入选者；预算足够时所有 eligible 可继续 episode。
+    if (!fs.allowed.has(agent.id)) { fs.stats.blockedTicks += 1; if (fs.denied[agent.id] !== 'budget') fs.denied[agent.id] = fs.denied[agent.id] ?? 'budget'; return null; }
+    const used = fs.episodes[agent.id] ?? 0;
+    // 防同一居民刷满整刻：所有入选者都拿到第一次 episode 之前，不允许第二次。
+    if (used > 0 && [...fs.allowed].some((id) => (fs.episodes[id] ?? 0) === 0)) { fs.stats.blockedTicks += 1; return null; }
+    if (used > 0) fs.stats.extraEpisodes += 1;
+    fs.episodes[agent.id] = used + 1;
+    fs.usedEpisodes += 1;
+    if (used === 0) { fs.debt[agent.id] = 0; }
     fs.last[agent.id] = world.t;
-    fs.stats.opportunities += 1; fs.stats.calls = fs.stats.opportunities;
+    fs.stats.opportunities += 1;
+    fs.stats.calls = fs.stats.opportunities;
     fs.inTick = true;
     try { return await originalTick(...args); }
     finally { fs.inTick = false; }
   };
-  // 决策链：tick 之外的追加 decideOn 不再获得第二次机会。
-  if (typeof agent.decideOn === 'function') {
-    const originalDecide = agent.decideOn.bind(agent);
-    agent.decideOn = async (...args) => {
-      if (fs.t === world.t && !fs.inTick) { fs.stats.blockedChains += 1; return null; }
-      return originalDecide(...args);
-    };
-  }
+  // 链决策（tick 后 decideOn）属于同一 episode：不拦、不计机会。
 }
 
 export function installFairSched(world, env = process.env) {
@@ -94,6 +105,4 @@ export function installFairSched(world, env = process.env) {
   for (const a of Object.values(world.agents)) if (!a.isPlayer) installFairGuard(world, a, fs);
   return fs;
 }
-
-
 

@@ -29,10 +29,10 @@ test('V732-FAIR 全链路：每刻≤1次 tick、轮转、决策链被挡', asyn
   // 同刻第二次 tick 被挡
   await w.agents.a1.tick();
   assert.equal(ticks.length, 2);
-  // tick 外的追加 decideOn（链）被挡
+  // tick 外的追加 decideOn（链）属于同一 episode：放行、不计机会
   await w.agents.a1.decideOn();
-  assert.equal(chains.length, 0);
-  assert.equal(fs.stats.blockedChains, 1);
+  assert.equal(chains.length, 1);
+  assert.equal(fs.stats.blockedChains, 0);
   // 下一 tick 轮转到另外两人
   w.t += 1; ticks.length = 0;
   for (const id of ['a1', 'a2', 'a3', 'a4']) await w.agents[id].tick();
@@ -87,3 +87,37 @@ test('V732-FAIR debt：cap 限制与 20 刻内无饥饿、debt 有界', async ()
   assert.ok(Math.max(...Object.values(fs.debt)) <= 3, `debt 不得无限增长：${JSON.stringify(fs.debt)}`);
   assert.equal(fs.stats.blockedTicks, 60);
 });
+
+test('V732-FAIR episode：链不重复计机会、预算内可多次 episode、防单人刷满', async () => {
+  let ticks = 0, chains = 0;
+  const w = { t: 0, independentWorld: true, gameRules: true, agents: {
+    a1: { id: 'a1', isPlayer: false, dead: false, async tick() { ticks += 1; await this.decideOn(); }, async decideOn() { chains += 1; } },
+    a2: { id: 'a2', isPlayer: false, dead: false, async tick() { ticks += 1; }, async decideOn() { chains += 1; } },
+  } };
+  const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '3' });
+  await w.agents.a1.tick(); // 第一次 episode，链属于同一次
+  await w.agents.a1.tick(); // 第二次：a2 还没有第一次 ⇒ 被挡（防刷满）
+  await w.agents.a2.tick();
+  assert.equal(ticks, 2, 'a1 第二次在 a2 首机会前被挡');
+  await w.agents.a1.tick(); // 所有入选者都有第一次后，a1 可用剩余额度
+  assert.equal(ticks, 3);
+  assert.equal(fs.stats.extraEpisodes, 1);
+  assert.equal(chains, 2, '链属于 episode，自身不额外计机会；第二次 episode 各带一次链');
+  assert.equal(fs.stats.opportunities, 3);
+});
+
+test('V732-FAIR episode：超预算 debt 轮转，被挡者欠账', async () => {
+  const ticks = [];
+  const mk = (id) => ({ id, isPlayer: false, dead: false, async tick() { ticks.push(id); }, async decideOn() {} });
+  const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1','a2','a3','a4','a5'].map((id) => [id, mk(id)])) };
+  const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '2' });
+  for (const a of Object.values(w.agents)) await a.tick();
+  assert.equal(ticks.length, 2);
+  assert.equal(Object.values(fs.debt).filter((v) => v === 1).length, 3, '被挡者 debt=1');
+  w.t = 1; ticks.length = 0;
+  for (const a of Object.values(w.agents)) await a.tick();
+  const picked = new Set(ticks);
+  assert.ok(picked.size <= 2);
+  assert.ok([...picked].some((id) => fs.debt[id] === 0), '欠账者优先获授');
+});
+
