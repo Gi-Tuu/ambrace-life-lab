@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T05:02:38.294Z",
+  "generatedAt": "2026-11-18T05:56:50.107Z",
   "seeds": [
     7,
     13,
@@ -12,17 +12,17 @@
       "seed": 7,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 3652,
+      "elapsedMs": 3679,
       "population": 9,
       "births": 6,
       "deaths": 0,
       "store": 0,
-      "laborMin": 11520,
+      "laborMin": 11365,
       "usedMin": 89560,
       "opportunityTicks": 14781,
-      "voluntaryTicks": 5931,
+      "voluntaryTicks": 5216,
       "schedulingTicks": 0,
-      "voluntaryIdleMin": 573590,
+      "voluntaryIdleMin": 565810,
       "schedulingIdleMin": 0,
       "actions": {
         "attempt": 11844,
@@ -39,9 +39,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 1.49,
-        "max": 11.433
+        "avg": 1.318,
+        "max": 13.582
       },
+      "ticksRun": 2400,
+      "popPeak": null,
+      "popAvg": null,
+      "peakEligible": null,
+      "underfundedTicks": null,
+      "grantedEpisodes": null,
+      "wait": null,
+      "head": "33314b5",
       "fair": null
     },
     {
@@ -49,17 +57,17 @@
       "seed": 13,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 2647,
+      "elapsedMs": 1780,
       "population": 7,
       "births": 4,
       "deaths": 0,
       "store": 3,
-      "laborMin": 12560,
+      "laborMin": 10560,
       "usedMin": 51815,
       "opportunityTicks": 12309,
-      "voluntaryTicks": 7005,
+      "voluntaryTicks": 7001,
       "schedulingTicks": 0,
-      "voluntaryIdleMin": 648950,
+      "voluntaryIdleMin": 648190,
       "schedulingIdleMin": 0,
       "actions": {
         "attempt": 6661,
@@ -76,9 +84,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 1.059,
-        "max": 4.538
+        "avg": 0.66,
+        "max": 3.056
       },
+      "ticksRun": 2400,
+      "popPeak": null,
+      "popAvg": null,
+      "peakEligible": null,
+      "underfundedTicks": null,
+      "grantedEpisodes": null,
+      "wait": null,
+      "head": "33314b5",
       "fair": null
     },
     {
@@ -86,17 +102,17 @@
       "seed": 29,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 3440,
+      "elapsedMs": 2282,
       "population": 7,
       "births": 4,
       "deaths": 0,
       "store": 1,
-      "laborMin": 11790,
+      "laborMin": 10230,
       "usedMin": 69550,
       "opportunityTicks": 13245,
-      "voluntaryTicks": 6025,
+      "voluntaryTicks": 5971,
       "schedulingTicks": 0,
-      "voluntaryIdleMin": 656730,
+      "voluntaryIdleMin": 655410,
       "schedulingIdleMin": 0,
       "actions": {
         "attempt": 9270,
@@ -113,9 +129,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 1.394,
-        "max": 6.306
+        "avg": 0.901,
+        "max": 3.946
       },
+      "ticksRun": 2400,
+      "popPeak": null,
+      "popAvg": null,
+      "peakEligible": null,
+      "underfundedTicks": null,
+      "grantedEpisodes": null,
+      "wait": null,
+      "head": "33314b5",
       "fair": null
     },
     {
@@ -123,17 +147,17 @@
       "seed": 7,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 3643,
+      "elapsedMs": 2109,
       "population": 8,
       "births": 5,
       "deaths": 0,
       "store": 0,
-      "laborMin": 12415,
+      "laborMin": 10525,
       "usedMin": 66780,
       "opportunityTicks": 6848,
-      "voluntaryTicks": 10,
+      "voluntaryTicks": 5,
       "schedulingTicks": 0,
-      "voluntaryIdleMin": 10495,
+      "voluntaryIdleMin": 5155,
       "schedulingIdleMin": 0,
       "actions": {
         "attempt": 8709,
@@ -150,9 +174,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 1.481,
-        "max": 9.009
+        "avg": 0.833,
+        "max": 3.631
       },
+      "ticksRun": 2400,
+      "popPeak": 8,
+      "popAvg": 5.57,
+      "peakEligible": 8,
+      "underfundedTicks": 0,
+      "grantedEpisodes": 13101,
+      "wait": null,
+      "head": "33314b5",
       "fair": {
         "calls": 6852,
         "peakCalls": 0,
@@ -167,12 +199,12 @@
       "seed": 13,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 1588,
+      "elapsedMs": 1030,
       "population": 3,
       "births": 0,
       "deaths": 0,
       "store": 0,
-      "laborMin": 11405,
+      "laborMin": 9195,
       "usedMin": 31895,
       "opportunityTicks": 3088,
       "voluntaryTicks": 0,
@@ -194,9 +226,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.626,
-        "max": 4.498
+        "avg": 0.402,
+        "max": 3.463
       },
+      "ticksRun": 2400,
+      "popPeak": 3,
+      "popAvg": 3,
+      "peakEligible": 3,
+      "underfundedTicks": 0,
+      "grantedEpisodes": 5610,
+      "wait": null,
+      "head": "33314b5",
       "fair": {
         "calls": 3089,
         "peakCalls": 0,
@@ -211,17 +251,17 @@
       "seed": 29,
       "days": 100,
       "actualDays": 100,
-      "elapsedMs": 2222,
+      "elapsedMs": 1469,
       "population": 6,
       "births": 3,
       "deaths": 0,
       "store": 0,
-      "laborMin": 11680,
+      "laborMin": 9700,
       "usedMin": 51800,
       "opportunityTicks": 5221,
-      "voluntaryTicks": 10,
+      "voluntaryTicks": 7,
       "schedulingTicks": 0,
-      "voluntaryIdleMin": 12935,
+      "voluntaryIdleMin": 8975,
       "schedulingIdleMin": 0,
       "actions": {
         "attempt": 6612,
@@ -238,9 +278,17 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.885,
-        "max": 4.374
+        "avg": 0.58,
+        "max": 3.129
       },
+      "ticksRun": 2400,
+      "popPeak": 6,
+      "popAvg": 4.13,
+      "peakEligible": 6,
+      "underfundedTicks": 0,
+      "grantedEpisodes": 9139,
+      "wait": null,
+      "head": "33314b5",
       "fair": {
         "calls": 5224,
         "peakCalls": 0,
