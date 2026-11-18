@@ -48,12 +48,6 @@ export function tokenMatches(given, expected) {
   return diff === 0;
 }
 
-export function nonceMatches(req) {
-  const cookie = String(req?.headers?.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('ctl_nonce='))?.slice(10);
-  const given = String(req?.headers?.['x-ctl-nonce'] ?? '');
-  return Boolean(cookie && given && cookie.length === given.length && tokenMatches(given, cookie));
-}
-
 export const bearerOf = (req) => {
   const h = String(req?.headers?.authorization ?? '');
   return h.startsWith('Bearer ') ? h.slice(7) : String(req?.headers?.['x-ctl-token'] ?? '');
@@ -82,16 +76,18 @@ export function interactionDenied(req, token = '') {
   return 'UNAUTHORIZED';
 }
 
-// SEC3-02：/ctl 的破坏性动作（reset/survival_reset/catchup/brain）在配置了令牌时必须带令牌；
-// 其余 /ctl 动作（pause/resume/step/mask/compare_reset 等）仍按普通交互守卫。
+// SEC3-02 / SEC5-01：/ctl 的破坏性动作（reset/survival_reset/catchup/brain/compare_reset）。
+// 授权只认两种**服务端可验证**的凭据：
+//   ① 配置了 CTL_TOKEN ⇒ 只认 Bearer/ x-ctl-token（令牌不再落入 nonce 分支）；
+//   ② 未配置令牌 ⇒ 必须出示服务端签发、与会话 cookie 绑定的 nonce（nonceValid 由 serve 注入）。
+// Origin / Sec-Fetch-Site / x-forwarded-host 都是任意脚本可伪造的头，不再单独作为授权证据。
+// nonceValid 缺省 ⇒ 一律拒绝（fail-closed）：纯函数测试不会因为“客户端自选了 nonce 对”而放行。
 export const DESTRUCTIVE_CTL = Object.freeze(['reset', 'survival_reset', 'catchup', 'brain', 'compare_reset']);
-export function ctlDenied(req, body, token = '') {
+export function ctlDenied(req, body, token = '', nonceValid = null) {
   if (DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
     if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
-    if (token && tokenMatches(bearerOf(req), token)) return null;
-    if (!sameOrigin(req)) return 'CROSS_SITE';
-    if (browserEvidence(req) && nonceMatches(req)) return null;
-    return 'UNAUTHORIZED';
+    if (token) return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
+    return typeof nonceValid === 'function' && nonceValid(req) ? null : 'UNAUTHORIZED';
   }
   return interactionDenied(req, token);
 }

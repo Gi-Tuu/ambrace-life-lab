@@ -207,6 +207,8 @@ function reapDeaths(w, log) {
     const cause = a.hurtBy ?? '衰竭';
     a.death = { t: w.t, day: dayOf(w.t), cause };
     (s.deaths ??= []).push({ id: a.id, name: a.name, t: w.t, day: dayOf(w.t), cause });
+    s.deathTotal = (s.deathTotal ?? 0) + 1;
+    trimDeaths(s.deaths);
     const loc = w.loc[a.id];
     if (loc) w.occupancy[loc] = (w.occupancy[loc] ?? []).filter((x) => x !== a.id);
     log.push({ t: w.t, kind: 'death', ok: true, code: `${a.name}死亡（${cause}）` });
@@ -1094,6 +1096,13 @@ export function survView(sp) {
 }
 
 const SURV_TARGET = 10; // 无尽模式落地前的里程碑显示；P2-B 终局语义替换
+// DATA5-13：deaths 随 survival 整块入档，长期运行必须封顶；总死亡数单独累计。
+export const DEATHS_CAP = 200;
+export function trimDeaths(deaths, cap = DEATHS_CAP) {
+  if (!Array.isArray(deaths)) return deaths;
+  if (deaths.length > cap) deaths.splice(0, deaths.length - cap);
+  return deaths;
+}
 
 // 持久化（additive）：只 dump 生存世界事实，读回时 tolerant。
 export function dumpSurv(sp) {
@@ -1119,8 +1128,20 @@ export function dumpSurv(sp) {
  };
 }
 export function loadSurv(raw,seed=7,options) {
+  // DATA5-09：settlementLife 的旧档迁移。旧档可能在 7 小时窗口里把 rules/survival 都写成 false，
+  // 但 top-level regionalWork=true 或 survival.settlementLife=true 证明分城区曾经存在。
+  // 这类“证据优先”的显式 OR 不能让 false 永久吞掉 districts/peripheralHomes。
+  const adopt = options?.adoptArchivedRules === true;
+  const archivedRules = raw?.rules ?? {};
+  const settlementEvidence = adopt && (raw?.regionalWork === true || raw?.survival?.settlementLife === true || archivedRules.settlementLife === true);
+  const settlementLife = settlementEvidence
+    ? true
+    : (adopt ? (archivedRules.settlementLife ?? options?.settlementLife) : options?.settlementLife);
+  const regionalWork = settlementEvidence
+    ? true
+    : (options?.regionalWork ?? raw?.regionalWork ?? (adopt ? raw?.rules?.regionalWork : undefined));
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
-    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), regionalWork: options?.regionalWork ?? raw?.regionalWork ?? (options?.adoptArchivedRules ? raw?.rules?.regionalWork : undefined), eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
+    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), settlementLife, regionalWork, eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
       mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
@@ -1170,6 +1191,8 @@ export function loadSurv(raw,seed=7,options) {
       if (l) (sp.world.occupancy[l] ??= []).push(id);
     }
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    // 证据优先：坏 rules/survival 的 false 不能把已经证明存在的分城区吞掉。
+    if (settlementEvidence && !sp.world.survival.settlementLife) sp.world.survival.settlementLife = true;
     restoreSettlementEvents(w.survival);
     if (sp.world.gameRules) {
       const clock = (sp.world.survival.actClock ??= {});

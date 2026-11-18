@@ -38,6 +38,12 @@ export function createCoalescer({ delayMs = 0, run, unref = true }) {
 }
 
 let writeSeq = 0;
+// SEC5-06：错误只回错误码，不把 fs message 里的绝对路径/用户名带回 HTTP。
+export function publicSaveError(error) {
+  if (error?.code === 'PRESERVE_PRIMARY') return '旧存档未能隔离，暂停覆盖';
+  const code = String(error?.code ?? '');
+  return /^[A-Z][A-Z0-9_]*$/.test(code) ? code : 'SAVE_FAILED';
+}
 // 唯一 tmp（H-09）→ 备份旧档 → rename 发布。失败不覆盖旧档；tmp 无论成败都清掉。
 export async function writeArchiveAtomic({ file, text, preservePrimary = false, primaryValid = false }) {
   const tmp = `${file}.${process.pid}.${(writeSeq += 1)}.tmp`;
@@ -48,7 +54,7 @@ export async function writeArchiveAtomic({ file, text, preservePrimary = false, 
     const stall = Number(process.env.ARCH_WRITE_STALL_MS ?? 0);
     if (stall > 0) await new Promise((resolve) => setTimeout(resolve, stall));
     await writeFile(tmp, text, 'utf8');
-    if (preservePrimary) throw new Error('旧存档未能隔离，暂停覆盖');
+    if (preservePrimary) { const e = new Error('旧存档未能隔离，暂停覆盖'); e.code = 'PRESERVE_PRIMARY'; throw e; }
     if (primaryValid) {
       let copied = true;
       try { await copyFile(file, backupTmp); }
@@ -58,13 +64,14 @@ export async function writeArchiveAtomic({ file, text, preservePrimary = false, 
     await rename(tmp, file);
     return { ok: true, file, error: null };
   } catch (error) {
-    return { ok: false, file, error: String(error?.message ?? error).slice(0, 80) };
+    return { ok: false, file, error: publicSaveError(error) };
   } finally {
     await Promise.allSettled([rm(tmp, { force: true }), rm(backupTmp, { force: true })]);
   }
 }
 
 // 读档：主路径失败且属于"可降级"错误（M5 状态）时再读一次 skip，带 warning 返回。
+// BUG-5 / DATA5-09：载入失败的错误可能带路径；这里只留给本地日志（调用方决定是否回显）。
 export async function readArchiveFile(path, { decode, recoverCodes = ['M5_STATE_INVALID'] } = {}) {
   const source = await readFile(path, 'utf8');
   try {

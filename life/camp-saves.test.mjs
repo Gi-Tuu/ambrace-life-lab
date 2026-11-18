@@ -12,6 +12,7 @@ import { dumpSurv, loadSurv } from './survplay.mjs';
 const SEED = JSON.parse(readFileSync(new URL('../seed/world.json', import.meta.url), 'utf8')).survival;
 const OPTIONS = { independentWorld: true, gameRules: true };
 const dir = () => mkdtempSync(join(tmpdir(), 'camps-'));
+const k = (n) => n.toString(16).padStart(2, '0').repeat(16);
 
 test('SA1 隔离：两个名字是两个世界，改 A 不动 B', () => {
   const dataDir = dir();
@@ -70,18 +71,18 @@ test('SA5 名字安全：分隔符/.. /超长/控制符/零宽一律拒绝，且
 test('SA4 TTL：删 3 天无活跃的，正在被观看的绝不删', () => {
   const dataDir = dir();
   const now = Date.now();
-  touchSave(dataDir, { key: 'k-old', name: '旧', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
-  touchSave(dataDir, { key: 'k-watched', name: '看', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
-  touchSave(dataDir, { key: 'k-live', name: '新', day: 3, population: 2, status: 'active', lastSeenAt: now });
-  const r = sweepSaves(dataDir, { now, isWatched: (key) => key === 'k-watched' });
-  assert.deepEqual(r.removed, ['k-old']);
+  touchSave(dataDir, { key: k(1), name: '旧', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
+  touchSave(dataDir, { key: k(2), name: '看', day: 3, population: 2, status: 'active', lastSeenAt: now - 4 * 86400000 });
+  touchSave(dataDir, { key: k(3), name: '新', day: 3, population: 2, status: 'active', lastSeenAt: now });
+  const r = sweepSaves(dataDir, { now, isWatched: (key) => key === k(2) });
+  assert.deepEqual(r.removed, [k(1)]);
   const left = listSaves(dataDir, now).map((e) => e.name).sort();
   assert.deepEqual(left, ['新', '看'].sort());
 });
 
 test('SA6 列表投影：只给五项，不含背包/关系/对话', () => {
   const dataDir = dir();
-  touchSave(dataDir, { key: 'k1', name: '<img onerror=alert(1)>', day: 9, population: 4, status: 'active', lastSeenAt: Date.now(), pinv: { crop: 9 }, relations: { a: 1 }, converseLog: [1] });
+  touchSave(dataDir, { key: k(4), name: '<img onerror=alert(1)>', day: 9, population: 4, status: 'active', lastSeenAt: Date.now(), pinv: { crop: 9 }, relations: { a: 1 }, converseLog: [1] });
   const row = listSaves(dataDir)[0];
   assert.deepEqual(Object.keys(row).sort(), ['day', 'daysLeft', 'lastSeenAt', 'name', 'population', 'status'].sort());
   assert.equal(row.name, '<img onerror=alert(1)>', '名字按原样返回，转义由渲染层负责');

@@ -75,6 +75,7 @@ export function stepEcosystem(world, log) {
     const take = Math.min(have, need - consumed);
     if (take > 0) {
       takeProduce(s, k, take);
+      noteConsumed(world, k, 'animalFeed', take);
       consumed += take;
       world.observeProduction?.('chickenFeed', k, take);
     }

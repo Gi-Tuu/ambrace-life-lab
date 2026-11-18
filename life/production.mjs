@@ -7,7 +7,7 @@ import { siteOf } from './geometry.mjs';
 import { constructionLot, overlapsLot } from '../shared/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
-import { noteRes } from './resource-ledger.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
 
 export const BUILDINGS = Object.freeze({
@@ -330,6 +330,8 @@ export function doExchange(world, id, kind) {
   // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
   takeProduce(s, kind, 1);
+  // DATA5-11：兑换把 wool/奶/蛋等产出换成木料/粮，库存消失必须在 consumed 留痕。
+  noteConsumed(world, kind, 'exchange', 1);
   let gained;
   if (rate.store) {
     const before = s.store;

@@ -5,7 +5,8 @@ import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './househ
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
-import { CAMP_FREE, PLAYER_TIME, isCampKind } from './camp-catalog.mjs';
+import { CAMP_FREE, isCampKind } from './camp-catalog.mjs';
+import { costFor, SHARED_COST } from './action-cost.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
@@ -139,9 +140,14 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
 export function validateCamp(world, body, reachFn = null) {
   const fail = (code, why) => ({ ok: false, code, why });
   const kind = body?.kind;
-  if (!isCampKind(kind)) return fail('NOT_CAMP_ACTION', 规则层不认识 );
+  if (!isCampKind(kind)) return fail('NOT_CAMP_ACTION', '规则层不认识这个动作');
   const free = CAMP_FREE.includes(kind);
-  if (!free && !(kind in PLAYER_TIME)) return fail('UNKNOWN_CAMP_ACTION', '营地动作未登记成本：' + kind);
+  // ARCH5-02：注册闸门与运行时扣费必须同源（costFor → SHARED_COST）。
+  // 旧 PLAYER_TIME 只是 actTimeModel=false 的兼容预算表，不能再单独充当“已登记”凭据。
+  const cost = costFor(kind, body);
+  if (!free && (cost.shared === 'unknown' || !Object.hasOwn(SHARED_COST, cost.shared))) {
+    return fail('UNKNOWN_CAMP_ACTION', '营地动作未登记成本：' + kind);
+  }
   if (reachFn && world?.independentWorld && world?.gameRules && body?.from && !free) {
     const reach = reachFn(world, body.from);
     if (!reach?.ok) return reach;

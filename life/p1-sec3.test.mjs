@@ -32,17 +32,18 @@ process.env.DATA_DIR = DIR;
 const host = await import('./host.mjs');
 
 test('SEC3-02 营地归属：首次 claim 绑定，之后换人 claim 不抢占，哈希不落原文', () => {
-  writeFileSync(join(DIR, 'saves', 'index.json'), JSON.stringify({ entries: [{ key: 'k1', name: '甲', lastSeenAt: Date.now() }] }));
+  const K = '0123456789abcdef0123456789abcdef';
+  writeFileSync(join(DIR, 'saves', 'index.json'), JSON.stringify({ entries: [{ key: K, name: '甲', lastSeenAt: Date.now() }] }));
   const hashA = 'a'.repeat(64);
   const hashB = 'b'.repeat(64);
-  assert.equal(host.campOwnerHash('k1'), null);
-  const first = host.claimCamp('k1', hashA);
+  assert.equal(host.campOwnerHash(K), null);
+  const first = host.claimCamp(K, hashA);
   assert.equal(first.claimed, true);
-  assert.equal(host.campOwnerHash('k1'), hashA);
-  const second = host.claimCamp('k1', hashB);
+  assert.equal(host.campOwnerHash(K), hashA);
+  const second = host.claimCamp(K, hashB);
   assert.equal(second.claimed, false);
   assert.equal(second.owned, false, '换人不算 owner');
-  assert.equal(host.campOwnerHash('k1'), hashA, '归属不得被后来者改写');
+  assert.equal(host.campOwnerHash(K), hashA, '归属不得被后来者改写');
 });
 
 test.after(() => { delete process.env.DATA_DIR; rmSync(DIR, { recursive: true, force: true }); });

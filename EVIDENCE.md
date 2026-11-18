@@ -9,7 +9,7 @@
 ## 一、五份基准读数（已随仓库发布）
 
 ```bash
-npm test                                  # 41 个测试文件 / 308 条断言
+npm test                                  # 178 个测试文件 / 967 条断言（2026-11-18，HEAD 见 git log）
 node life/run.mjs --report > /tmp/report.log    # 四条件消融矩阵
 node life/run.mjs --sweep  > /tmp/sweep.log     # 5 seed 复核
 node life/run.mjs --viab   > /tmp/viab.log      # 受损速度
@@ -59,7 +59,7 @@ node life/m4-mutation-battery.mjs        # 7 条（2026-11-09 补，之前只存
   （`life/model-path.test.mjs`），它验的是预算闸门/退替身/坏 JSON，不验供应商的真实质量。
 - **外部基线**：部分 M5 训练脚本读 `D:/Codex-Projects/output/` 下的历史日志，仓库不保证能复现（README 已声明）。
 - **线上实例**：部署在平台上的行为依赖平台休眠策略与是否配置了 `CTL_TOKEN`，仓库无法自证。
-- **覆盖率只统计被套件加载的模块**（43 个），约 80 个一次性测量脚本不在其中；它们是离线装置，不在运行时路径上。
+- **覆盖率只统计被套件加载的模块**（以 `npm run coverage` 最后一次输出为准），约 80 个一次性测量脚本不在其中；它们是离线装置，不在运行时路径上。
 
 ## 五、配对对照（2026-11-09 新增，用来回答"这条差异能不能归因到通道"）
 

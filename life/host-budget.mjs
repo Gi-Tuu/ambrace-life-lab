@@ -78,6 +78,11 @@ export function createBudgetDomain({ getState, budget, nodeBudget = 0, presenceM
       if (s.model.reserved > 0) s.model.reserved -= 1;
       s.model.tokens += Number(tokens) || 0;
     },
+    // 内部决策/对话路径不走 gate 预扣，只记 token；不能误伤 /chat 的在途 reserved。
+    addTokens(tokens = 0) {
+      const s = state();
+      s.model.tokens += Number(tokens) || 0;
+    },
     see(free, ok, at = now()) {
       if (!free) return;
       const s = state();

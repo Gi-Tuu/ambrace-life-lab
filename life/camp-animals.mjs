@@ -3,7 +3,7 @@ import { ANIMAL_ITEMS, campPen, campSite, distanceTo, distanceToRect, pointIn, w
 import { DAY_TICKS } from './clock.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
-import { noteRes } from './resource-ledger.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
 
 export const animalAfraid=(w,id)=>(w.survival.frightenedAnimals?.[id]??0)>w.t;
 const fail=code=>({ok:false,code});
@@ -39,7 +39,12 @@ export function animalAction(w,body) {
   if (group==='chickens' && s.ecosystem) s.ecoPop.chickens=s.ecoPop.chickens.filter(c=>'chickens:'+c.id!==target);
   else (s.culledAnimals??={})[target]=true;
   s.livestock[group]-=1;
-  if (victim.ready>0) takeProduce(s,item,victim.ready,target);
+  if (victim.ready>0) {
+    takeProduce(s,item,victim.ready,target);
+    // DATA5-11：屠宰时挂在动物身上的产出（羊毛/奶/蛋）随尸体一起消失，必须记 consumed，
+    // 否则 wool 账本会永久留下“库存消失但无人消费”的残差。
+    noteConsumed(w,item,'slaughter',victim.ready);
+  }
   const fright=s.frightenedAnimals??={};
   for (const animal of Object.values(ANIMAL_ITEMS).flatMap(k=>animals[k])) {
     if (animal.id!==target) fright[animal.id]=w.t+2*DAY_TICKS;

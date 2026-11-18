@@ -6,9 +6,9 @@
 //    于是两把尺子记账、熔断、排队天然全局共享。
 //  · 名字只作为字段进索引，**永不进路径**；路径由 sha256(归一化名字) 派生。
 //  · 只在 saves/ 目录内读写；拒绝一切越界名字，且拒绝时不得产生任何文件写入。
-import { createHash } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createHash, randomBytes } from 'node:crypto';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
 import { createSurvPlay, dumpSurv, loadSurv, tickSurvPlay } from './survplay.mjs';
@@ -17,6 +17,16 @@ export const NAME_MIN = 1;
 export const NAME_MAX = 16;
 export const SAVE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 天无活跃即删
 export const RESIDENT_LIMIT = 6; // 常驻上限（含主营地）
+// DATA5-06：营地 key 只接受 32 位小写十六进制。名字 sha256 是派生规则，但 key 本身不是 owner 凭据。
+export const CAMP_KEY_RE = /^[0-9a-f]{32}$/;
+// DATA5-04：索引锁。超时必须 fail-fast（绝不无锁继续写）；持锁进程崩溃留下的锁按 owner+时间戳回收。
+const envInt = (name, def) => {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : def;
+};
+const lockTimeoutMs = () => envInt('INDEX_LOCK_TIMEOUT_MS', 3000);
+const lockStaleMs = () => envInt('INDEX_LOCK_STALE_MS', 30000);
+const lockRetryMs = () => Math.max(1, Math.min(50, envInt('INDEX_LOCK_RETRY_MS', 10)));
 
 // 存档形状：dumpSurv 的最小可辨认字段。缺任何一项都不能交给 loadSurv——
 // 它会把空对象当成"新世界"（t=0、4 个 minds），随后 persist 用这份空世界覆盖唯一副本（SAV-01）。
@@ -59,39 +69,152 @@ function folderSafe(name) {
 
 export const savesDir = (dataDir) => join(dataDir, 'saves');
 const indexFile = (dataDir) => join(savesDir(dataDir), 'index.json');
-const campFile = (dataDir, key) => join(savesDir(dataDir), `${key}.json.gz`);
+const isCampKey = (key) => CAMP_KEY_RE.test(String(key ?? ''));
 
-// 索引：{ entries: [{ key, name, day, population, status, lastSeenAt, main }] }
+// 只在 saves/ 内解析营地档路径；非法 key 直接抛 BAD_KEY（调用方不得把外部字符串拼进路径）。
+function campFile(dataDir, key) {
+  if (!isCampKey(key)) { const e = new Error('营地 key 必须是 32 位小写十六进制'); e.code = 'BAD_KEY'; throw e; }
+  const dir = resolve(savesDir(dataDir));
+  const file = resolve(dir, `${key}.json.gz`);
+  if (dirname(file) !== dir) { const e = new Error('营地路径越界'); e.code = 'BAD_KEY'; throw e; }
+  return file;
+}
+
+// 删除/改名前的第二道闸：文件必须真实位于 saves/ 内（展开符号链接/junction 后比较）。
+function safeSavesFile(dataDir, file) {
+  try {
+    const dir = realpathSync(savesDir(dataDir));
+    const real = realpathSync(file);
+    return dirname(real) === dir;
+  } catch { return false; }
+}
+
+function rotateCorrupt(dataDir, keep = 10) {
+  try {
+    const dir = savesDir(dataDir);
+    const olds = readdirSync(dir).filter((n) => n.startsWith('index.json.corrupt-')).sort();
+    for (const n of olds.slice(0, Math.max(0, olds.length - keep))) rmSync(join(dir, n), { force: true });
+  } catch { /* 轮转失败不影响主流程 */ }
+}
+
+// 索引：{ generation, entries: [{ key, name, day, population, status, lastSeenAt, main, ownerHash }] }
 export function readIndex(dataDir) {
   try {
     const raw = JSON.parse(readFileSync(indexFile(dataDir), 'utf8'));
     if (!Array.isArray(raw?.entries)) throw new Error('营地索引格式无效');
-    const entries = raw.entries.filter((e) => e && typeof e === 'object' && !Array.isArray(e) && typeof e.key === 'string' && e.key);
-    return { entries, droppedEntries: raw.entries.length - entries.length };
+    // DATA5-06：只接受 32hex key。语法合法但 key 非法的条目（如 `../../victim`）一律从视图丢弃；
+    // 不在这里改名索引——否则调用方随后拿过滤后的 entries 做 merge 写回时会丢掉别的合法条目。
+    // 下一次 writeIndex/touchSave 会把过滤后的视图原子写回，坏 key 自然消失。
+    const entries = raw.entries.filter((e) => e && typeof e === 'object' && !Array.isArray(e) && isCampKey(e.key));
+    const dropped = raw.entries.length - entries.length;
+    return {
+      entries,
+      droppedEntries: dropped,
+      generation: Number.isSafeInteger(raw?.generation) ? raw.generation : 0,
+    };
   } catch (error) {
-    if (error.code === 'ENOENT') return { entries: [] };
+    if (error.code === 'ENOENT') return { entries: [], generation: 0 };
     // 审计 DATA-04：索引坏掉时先保留现场，再以空索引继续服务（否则 /saves、open、sweep 全部 500）。
-    try { renameSync(indexFile(dataDir), indexFile(dataDir) + '.corrupt-' + Date.now()); } catch { /* 备份失败也不阻塞启动 */ }
-    return { entries: [], recovered: false, indexError: String(error?.message ?? error).slice(0, 80) };
+    try {
+      renameSync(indexFile(dataDir), indexFile(dataDir) + '.corrupt-' + Date.now());
+      rotateCorrupt(dataDir);
+    } catch { /* 备份失败也不阻塞启动 */ }
+    return { entries: [], recovered: false, generation: 0, indexError: String(error?.message ?? error).slice(0, 80) };
+  }
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Windows 上 rename 覆盖目标时可能撞上短暂的 EPERM/EBUSY（杀软/索引器持有句柄）。
+// 有界重试；仍失败就抛出，绝不当成写成功。
+function renameWithRetry(from, to, attempts = 20) {
+  let last;
+  for (let i = 0; i < attempts; i += 1) {
+    try { renameSync(from, to); return true; }
+    catch (error) {
+      last = error;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) break;
+      sleepMs(5 + i * 5);
+    }
+  }
+  throw last;
+}
+
+// 持锁进程是否还活着；读不到 owner 时退回 mtime。过期/进程不存在 ⇒ 可回收。
+function lockIsStale(lock) {
+  let at = 0;
+  let pid = 0;
+  try {
+    const raw = JSON.parse(readFileSync(lock, 'utf8'));
+    at = Number(raw?.at ?? 0);
+    pid = Number(raw?.pid ?? 0);
+  } catch {
+    try { at = statSync(lock).mtimeMs; } catch { return false; }
+  }
+  const age = Date.now() - (Number.isFinite(at) && at > 0 ? at : 0);
+  if (age > lockStaleMs()) return true;
+  if (Number.isSafeInteger(pid) && pid > 0) {
+    try { process.kill(pid, 0); }
+    catch (error) { if (error.code === 'ESRCH') return true; }
+  }
+  return false;
+}
+
+function acquireIndexLock(dataDir) {
+  const lock = indexFile(dataDir) + '.lock';
+  const deadline = Date.now() + lockTimeoutMs();
+  for (;;) {
+    try {
+      const fd = openSync(lock, 'wx');
+      try {
+        writeFileSync(fd, JSON.stringify({ pid: process.pid, at: Date.now(), host: process.env.HOSTNAME ?? '' }));
+      } finally { closeSync(fd); }
+      return lock;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (lockIsStale(lock)) {
+        try { rmSync(lock, { force: true }); } catch { /* 抢不到就重试 */ }
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        const e = new Error('营地索引锁等待超时');
+        e.code = 'INDEX_LOCKED';
+        throw e;
+      }
+      sleepMs(lockRetryMs());
+    }
   }
 }
 
 export function writeIndex(dataDir, index, { merge = false } = {}) {
   const dir = savesDir(dataDir);
   mkdirSync(dir, { recursive: true });
-  const tmp = `${indexFile(dataDir)}.tmp`;
-  const lock = indexFile(dataDir) + '.lock';
-  let locked = false;
-  for (let i = 0; i < 40 && !locked; i += 1) {
-    try { const fd = openSync(lock, 'wx'); closeSync(fd); locked = true; }
-    catch (e) { if (e.code !== 'EEXIST') throw e; }
-    if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
-  }
+  const lock = acquireIndexLock(dataDir);
   try {
-    const entries = merge ? (() => { const disk = readIndex(dataDir).entries; const by = new Map(disk.map((e) => [e.key, e])); for (const e of index.entries ?? []) if (e?.key) by.set(e.key, e); return [...by.values()]; })() : (index.entries ?? []);
-    writeFileSync(tmp, JSON.stringify({ entries }));
-    renameSync(tmp, indexFile(dataDir));
-  } finally { if (locked) { try { rmSync(lock); } catch { /* ignore */ } } }
+    // 锁内重读：merge 基于磁盘最新版本，避免用调用方手里的旧快照覆盖别的进程刚写的条目。
+    const disk = readIndex(dataDir);
+    const incoming = (index?.entries ?? []).filter((e) => e && isCampKey(e.key));
+    let entries;
+    if (merge) {
+      const by = new Map(disk.entries.map((e) => [e.key, e]));
+      for (const e of incoming) {
+        const prev = by.get(e.key);
+        by.set(e.key, prev ? { ...prev, ...e, ...(prev.ownerHash && !e.ownerHash ? { ownerHash: prev.ownerHash } : {}) } : e);
+      }
+      entries = [...by.values()];
+    } else entries = incoming;
+    const generation = Math.max(disk.generation ?? 0, Number(index?.generation) || 0) + 1;
+    const tmp = `${indexFile(dataDir)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify({ generation, entries }));
+      renameWithRetry(tmp, indexFile(dataDir));
+    } finally { if (existsSync(tmp)) rmSync(tmp, { force: true }); }
+    return { ok: true, generation, entries: entries.length };
+  } finally {
+    try { rmSync(lock, { force: true }); } catch { /* ignore */ }
+  }
 }
 
 // 公开列表：只投影五项（§0-9），不泄露背包/关系/对话。
@@ -129,6 +252,7 @@ export function loadCamp(dataDir, key) {
 }
 
 export function touchSave(dataDir, entry, index = readIndex(dataDir)) {
+  if (!entry || !isCampKey(entry.key)) { const e = new Error('营地 key 非法'); e.code = 'BAD_KEY'; throw e; }
   const i = index.entries.findIndex((e) => e.key === entry.key);
   const next = { ...(i >= 0 ? index.entries[i] : { key: entry.key, name: entry.name }), ...entry, lastSeenAt: entry.lastSeenAt ?? Date.now() };
   if (i >= 0) index.entries[i] = next;
@@ -156,12 +280,14 @@ export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, las
   const quarantined = [];
   const known = new Set();
   for (const entry of index.entries) {
+    // readIndex 已经过滤非 32hex；这里再挡一层，任何非法 key 都不得进入路径。
+    if (!isCampKey(entry.key)) continue;
     known.add(entry.key);
     const file = campFile(dataDir, entry.key);
     const stale = now - Math.max(entry.lastSeenAt ?? 0, lastSeenAt(entry.key) ?? 0) > ttlMs;
     if (!stale || isWatched(entry.key)) { kept.push(entry); continue; }
     // 过期才清：新鲜但暂时没有文件的条目（首次落盘前/索引恢复中）保留，避免误删正在使用的营地。
-    if (existsSync(file)) rmSync(file);
+    if (existsSync(file) && safeSavesFile(dataDir, file)) rmSync(file);
     removed.push(entry.key);
   }
   // 审计 DATA-05：没有索引的孤儿营地文件（崩溃/索引重建后遗留）按文件时间隔离（不删除，留作取证/恢复）。
@@ -180,6 +306,16 @@ export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, las
     try {
       const qs = readdirSync(qdir).map((n) => ({ n, m: statSync(join(qdir, n)).mtimeMs })).sort((a, b) => a.m - b.m);
       for (let i = 0; i < qs.length - 100; i += 1) rmSync(join(qdir, qs[i].n), { force: true });
+    } catch { /* ignore */ }
+    // DATA5-12：清掉崩溃残留的营地 tmp（只清 saves/ 内、超过 1 小时的普通文件）。
+    try {
+      const cutoff = now - 60 * 60 * 1000;
+      for (const name of readdirSync(dir)) {
+        if (!/\.json\.gz\.tmp-/.test(name)) continue;
+        const file = join(dir, name);
+        if (now - statSync(file).mtimeMs <= cutoff) continue;
+        if (safeSavesFile(dataDir, file)) rmSync(file, { force: true });
+      }
     } catch { /* ignore */ }
   } catch { /* 清扫尽力而为 */ }
   if (removed.length) writeIndex(dataDir, { entries: kept });
@@ -283,23 +419,20 @@ export class CampInstances {
   }
 
   persistEntry({sp, key, name, lastSeenAt}) {
+    if (!isCampKey(key)) { const e = new Error('营地 key 非法'); e.code = 'BAD_KEY'; throw e; }
     const w = sp.world;
-    const before = readIndex(this.dataDir);
     const {tmp,file} = stageCamp(this.dataDir,key,dumpSurv(sp));
-    let indexed = false;
     try {
+      // DATA5-03：先发布文件、再写索引。反过来的窗口会让索引指向不存在的档（名字失效）；
+      // 文件先落地时，即使索引没写成，下一次 open 也能从文件自愈并补索引。
+      renameSync(tmp,file);
       touchSave(this.dataDir, {
         key, name,
         day: Math.floor((w.t ?? 0) / (w.dayTicks ?? 24)),
         population: Object.values(w.agents).filter(a => !a.dead && !a.isPlayer).length,
         status: w.survival?.playerDead ? 'ended' : 'active',
         lastSeenAt,
-      }, {entries:before.entries.slice()});
-      indexed = true;
-      renameSync(tmp,file);
-    } catch (error) {
-      if (indexed) writeIndex(this.dataDir,before);
-      throw error;
+      });
     } finally {
       if (existsSync(tmp)) rmSync(tmp,{force:true});
     }

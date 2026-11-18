@@ -71,6 +71,8 @@ test('L13 的不可逆损失必须活过重启：账本与受损状态从存档�
 });
 
 test('补时只补慢过程，不补决策；超过上限要如实标截断', async () => {
+  process.env.CATCHUP_COOLDOWN_MS = '0'; // 本用例专门验证补时本身；冷却由 audit5-security 的 MAIN 用例覆盖
+  try {
   await host.ctl({ action: 'reset' });
   const before = snap();
   const e0 = before.A.agents.a1.drives.energy;
@@ -83,6 +85,7 @@ test('补时只补慢过程，不补决策；超过上限要如实标截断', as
   const big = await host.ctl({ action: 'catchup', minutes: CAP + 40 });
   assert.equal(big.missed.capped, true, '超过截断上限却没标 capped');
   assert.equal(big.missed.applied, CAP, `实际补时 ${big.missed.applied} 不等于上限 ${CAP}`);
+  } finally { delete process.env.CATCHUP_COOLDOWN_MS; }
 });
 
 test('有观众才上真模型：在场窗口内允许，超时与从未访问都必须退替身', () => {

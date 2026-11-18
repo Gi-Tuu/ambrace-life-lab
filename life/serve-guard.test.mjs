@@ -190,10 +190,10 @@ test('H-02 CSRF：text/plain 与跨站请求必须被挡住 【变红法：删�
     assert.equal(plain.status, 403, `text/plain 的 reset 返回 ${plain.status} ⇒ CSRF 可抹档`);
     assert.equal((await plain.json()).error, 'NEED_JSON');
 
-    // (b) 跨站 Origin
+    // (b) 跨站 Origin：不再用可伪造的 Origin 做授权判定；没有服务端会话 nonce 一律未授权。
     const cross = await fetch(`${base}/ctl`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ action: 'reset', confirm: true }) });
     assert.equal(cross.status, 403, `跨站 reset 返回 ${cross.status}`);
-    assert.equal((await cross.json()).error, 'CROSS_SITE');
+    assert.equal((await cross.json()).error, 'UNAUTHORIZED');
 
     // (c) reset 必须带 confirm
     const noConfirm = await post(base, '/ctl', { action: 'reset' });
@@ -283,17 +283,28 @@ test('已授权的正常对话请求遇到未配置供应商时返还预留额�
 test('SEC-03b 建档限速必须按营地名分桶，不是按 IP（反代下 IP 恒等 ⇒ 会变成整站总闸）【变红法：把桶键改回 req.socket.remoteAddress】', async () => {
   const { child, base } = await bootServer({ CTL_TOKEN: '', OPEN_LIMIT: '2', OPEN_LIMIT_GLOBAL: '50' });
   try {
+    // SEC5-05：同一个浏览器重开同名营地必须带自己的 camp_owner，否则会被 403 CAMP_OWNED 挡掉。
+    const jar = {};
+    const open = async (name) => {
+      const r = await post(base, '/saves/open', { name }, { cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') });
+      for (const line of r.headers.getSetCookie?.() ?? []) {
+        const pair = line.split(';')[0];
+        const i = pair.indexOf('=');
+        if (i > 0) jar[pair.slice(0, i)] = pair.slice(i + 1);
+      }
+      return r;
+    };
     const codes = [];
-    for (let i = 0; i < 3; i += 1) codes.push((await post(base, '/saves/open', { name: '阿禾' })).status);
+    for (let i = 0; i < 3; i += 1) codes.push((await open('阿禾')).status);
     assert.deepEqual(codes, [200, 200, 429], `同一个名字应撞上限：${codes}`);
-    const other = await post(base, '/saves/open', { name: '林三' });
+    const other = await open('林三');
     assert.equal(other.status, 200, '换了名字就该放行——来源地址与上面完全相同，按 IP 分桶做不到这件事');
     // 前后空白会被正典归一化吃掉 ⇒ 同一个名字、同一个桶
-    const same = await post(base, '/saves/open', { name: ' 阿禾 ' });
+    const same = await open(' 阿禾 ');
     assert.equal(same.status, 429, '归一化后同名必须共用一个桶');
     // 非法名字（分隔符/..）全部落到同一个桶：刷随机名字蹭不到新额度，也撑不爆桶表
     const junk = [];
-    for (const nm of ['a/b', 'c\\d', '..', 'e'.repeat(40)]) junk.push((await post(base, '/saves/open', { name: nm })).status);
+    for (const nm of ['a/b', 'c\\d', '..', 'e'.repeat(40)]) junk.push((await open(nm)).status);
     assert.ok(junk.filter((c) => c === 429).length >= 2, `非法名字应共用一个桶并很快撞上限：${junk}`);
   } finally { await stopServer(child); }
 });

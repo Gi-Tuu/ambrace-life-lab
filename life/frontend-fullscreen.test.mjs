@@ -10,11 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 
+import { chromeGate } from './chrome-gate.mjs';
+
 const APP = readFileSync('web/app.js', 'utf8');
-const CHROME = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x64)/Google/Chrome/Application/chrome.exe',
-].find((p) => existsSync(p));
+const GATE = chromeGate();
 
 // 全屏里 HUD 与场景的相对位置：只量"看得见且占面积"的元素对，重叠 >2px 就算红。
 const PROBE = `(() => {
@@ -54,7 +53,9 @@ const PROBE = `(() => {
     hudParent: document.getElementById('gameHud').parentElement.id };
 })()`;
 
-test('F15 全屏 HUD：三种视口下不重叠不越界，退出全屏回到页面流', { skip: CHROME ? false : '本机没有 Chrome，跳过几何层' }, async () => {
+test('F15 全屏 HUD：三种视口下不重叠不越界，退出全屏回到页面流', { skip: GATE.skip ? GATE.reason : false }, async () => {
+  if (GATE.fail) assert.fail(GATE.reason);
+  const CHROME = GATE.path;
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-fs-'));
   const port = 18980 + (process.pid % 15);
   const child = spawn(process.execPath, ['serve.mjs'], {

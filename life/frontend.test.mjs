@@ -65,12 +65,13 @@ test('F7 菜单与终局重开共用确认后的生存重置', () => {
   assert.match(APP, /action:'survival_reset',confirm:true/);
 });
 
-const CHROME = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].find((p) => existsSync(p));
+import { chromeGate } from './chrome-gate.mjs';
 
-test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN 漏出来', { skip: CHROME ? false : '本机没有 Chrome，跳过冒烟层' }, async () => {
+const GATE = chromeGate();
+
+test('F6 真浏览器冒烟：页面能渲染出世界，且没有 undefined/NaN 漏出来', { skip: GATE.skip ? GATE.reason : false }, async () => {
+  if (GATE.fail) assert.fail(GATE.reason);
+  const CHROME = GATE.path;
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-fe-'));
   const port = 18900 + Math.floor(Math.random() * 80);
   const child = spawn(process.execPath, ['serve.mjs'], {

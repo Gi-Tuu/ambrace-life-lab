@@ -28,7 +28,7 @@ import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, 
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy } from './survplay.mjs';
 import { isFreeProvider as freeProvider, modelChannel, breakerOpenAt, budgetTick, observerActive as observerActiveBase, pickProviderKey, createBudgetDomain } from './host-budget.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
-import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive } from './host-saves.mjs';
+import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive, publicSaveError } from './host-saves.mjs';
 export { modelChannel, breakerOpenAt, budgetTick, pickProviderKey };
 // host 的对外签名保留默认 PRESENCE_MS（纯函数本体在 host-budget，不认识 env）。
 export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
@@ -51,6 +51,22 @@ const TICK_MS = Number(process.env.TICK_MS ?? 7500); // §14 统一游戏时间�
 const GAME_MODE = process.env.GAME_MODE === 'game' ? 'game' : 'research';
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360); // 最多补 6 小时，再多就如实标「被截断」
 const SURV_CATCHUP_CAP = Number(process.env.SURV_CATCHUP_CAP ?? 120); // P1-8 生存离线补时刻上限（默认 120 刻＝5 游戏日），超长截断
+// DATA5-14：分营地 tick 的整拍墙钟预算。默认 0 = 关（研究态行为逐位不变）；设了就在预算用尽时跳过剩余营地，
+// 并把跳过次数暴露到 status.campTickSkipped，避免慢模型把整拍拖到下一拍。
+const campTickBudgetMs = () => {
+  const n = Number(process.env.CAMP_TICK_BUDGET_MS ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+// SEC5-03：手动补时（/ctl catchup）对 MAIN 也设冷却与每日上限；启动时的离线补时不受影响。
+// 读取放在调用时（测试会临时覆盖 env，不能只读一次）。
+const catchupCooldownMs = () => {
+  const n = Number(process.env.CATCHUP_COOLDOWN_MS ?? 60000);
+  return Number.isFinite(n) && n >= 0 ? n : 60000;
+};
+const catchupDayCapMin = () => {
+  const n = Number(process.env.CATCHUP_DAY_CAP_MIN ?? 720);
+  return Number.isFinite(n) && n > 0 ? n : 720;
+};
 // 存档格式版本。旧档没有这个键 ⇒ 视为 1，照旧 tolerant 载入（线上部署不能因为加版本号而起不来）。
 // 更高版本也不拒载，只留一条警告：否则回滚到旧程序会把正在跑的实例卡死。
 const ARCHIVE_VERSION = 1;
@@ -122,11 +138,31 @@ export const modelCharged = (tokens = 0) => budget.charged(tokens);
 // 每次信号会重复 save，最后还会撞 MaxListenersExceededWarning。
 let sigHandlers = null;
 let shuttingDown = false;
+// DATA5-02/03：SIGTERM/SIGINT 必须等所有在途/已排的写落地；任何一个营地档失败都以非零码退出，
+// 不能把“只保存了一部分”伪装成成功。flushWrites 本身会强制再保存一版。
 async function onSignal() {
   if (shuttingDown) return;
   shuttingDown = true;
   S.running = false;
-  await queueWorldWrite(async () => { await save(); if (S.comparison) await saveComparison(); });
+  if (S.timer) { clearInterval(S.timer); S.timer = null; }
+  if (S.sweepTimer) { clearInterval(S.sweepTimer); S.sweepTimer = null; }
+  let ok = true;
+  let reason = null;
+  try {
+    if (S.comparison) {
+      const savedCompare = await queueWorldWrite(saveComparison);
+      if (!savedCompare) { ok = false; reason = S.compareSaveError ?? 'COMPARE_SAVE_FAILED'; }
+    }
+    const flushed = await flushWrites();
+    if (!flushed.ok) { ok = false; reason = flushed.saveError ?? 'SAVE_FAILED'; }
+  } catch (error) {
+    ok = false;
+    reason = publicSaveError(error);
+  }
+  if (!ok) {
+    console.error(`[host] 关机前保存未完成：${String(reason ?? 'SAVE_FAILED').slice(0, 120)}`);
+    process.exit(1);
+  }
   process.exit(0);
 }
 
@@ -479,8 +515,9 @@ async function modelBrain(args) {
       if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
-      if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
-      S.model.tokens += j.usage?.total_tokens ?? 0;
+      // ARCH5-06：车道/令牌记账与 /chat 走同一个预算域，不再手写第二套字段。
+      budget.chargeLane(free);
+      budget.addTokens(j.usage?.total_tokens ?? 0);
       budget.see(free, true);
       const p = JSON.parse(String(j.choices?.[0]?.message?.content ?? '').replace(/^```json?/i, '').replace(/```\s*$/i, '').trim());
       const hit = scored.find((s) => s.id === p.id);
@@ -543,8 +580,9 @@ async function modelTalk({ npc, world, history, text, trust }) {
       if (!res.ok) { budget.see(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
-      if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
-      S.model.tokens += j.usage?.total_tokens ?? 0;
+      // ARCH5-06：车道/令牌记账与 /chat 走同一个预算域，不再手写第二套字段。
+      budget.chargeLane(free);
+      budget.addTokens(j.usage?.total_tokens ?? 0);
       budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
       if (line) return line.slice(0, 80);
@@ -793,9 +831,14 @@ async function tickBody(onError = null) {
   if (S.mainSurv) S.mainSurv.world.campKey = 'MAIN';
   // 按营地 tick：主世界 + 常驻的分名字营地；共享同一套模型预算与熔断。
   const camps = [S.mainSurv, ...(S.camps ? [...S.camps.live.values()].map((v) => v.sp) : [])].filter(Boolean);
+  const budget = campTickBudgetMs();
+  const started = Date.now();
+  let skipped = 0;
   for (const sp of camps) {
+    if (budget > 0 && Date.now() - started > budget) { skipped += 1; continue; }
     try { await tickSurvPlay(sp); } catch (e) { onError?.(String(e?.message ?? e).slice(0,120)); }
-  }   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
+  }
+  S.campTickSkipped = skipped;   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
   // 异步持久化：tick 只排一次保存，不 await 磁盘；flushWrites/start/stop 负责收口。
   if (saveTick % SAVE_EVERY === 0) scheduleTickSave();
@@ -1001,7 +1044,7 @@ function saveCampEntry(entry) {
     S.campSaveErrors.delete(entry.key);
     return true;
   } catch (error) {
-    S.campSaveErrors.set(entry.key, String(error?.message ?? error).slice(0,80));
+    S.campSaveErrors.set(entry.key, publicSaveError(error));
     return false;
   }
 }
@@ -1024,16 +1067,26 @@ async function save() {
   return await saveMain() && campsSaved;
 }
 
+// 已落盘世界的“刻度签名”：flush 只在世界确实前进过或营地仍有错误时强制再写一版，
+// 避免无意义地重复写同一刻（会把 .bak 推成同一份，破坏“上一份存档”的语义）。
+function worldSignature() {
+  const campT = [...(S.camps?.live.values() ?? [])].map((e) => e.sp?.world?.t ?? -1).join(',');
+  return `${S.packs?.A?.world?.t ?? 'x'}|${S.packs?.B?.world?.t ?? 'x'}|${S.surv?.world?.t ?? 'x'}|${campT}`;
+}
+
 function saveMain() {
   return writeQueue.enqueue(async () => {
+    const text = JSON.stringify(serialize());
+    const signature = worldSignature();
     const result = await writeArchiveAtomic({
-      file: join(S.dir, 'world.json'), text: JSON.stringify(serialize()),
+      file: join(S.dir, 'world.json'), text,
       primaryValid: S.primaryValid, preservePrimary: S.preservePrimary,
     });
     if (result.ok) {
       S.primaryValid = true;
       S.savedAt = Date.now();
       S.saveWrites = (S.saveWrites ?? 0) + 1;
+      S.savedSignature = signature;
       S.saveError = null;
       return true;
     }
@@ -1058,14 +1111,25 @@ async function persistAfterAction(sp) {
 function takePendingFlush() {
   saveCoalescer?.takeNow();
 }
-// ARCH4-06：关机/测试用 flush；tick 只排队，不等待磁盘。
+// ARCH4-06 / DATA5-02：关机/测试用 flush。它是**硬屏障**：
+//   1) 等当前排队的世界写与后台存档链；
+//   2) 有世界时强制再 save 一版（没有 tick 过也不能假装“已落盘”）；
+//   3) 等磁盘队列，并把营地档错误一并返回（不再只看主档 saveError）。
 export async function flushWrites() {
   takePendingFlush();
   await tickChain;            // 先让排队中的 saveMain 真正进入写队列
   takeTickSave();             // 把本拍还没启动的后台存档立即踢起来
   await tickSaveChain;        // 营地档 + 主档写入全部落地
+  if (S.packs && (S.savedSignature !== worldSignature() || (S.campSaveErrors?.size ?? 0) > 0)) {
+    await queueWorldWrite(() => save());
+    takeTickSave();
+    await tickSaveChain;
+  }
   await writeQueue.flush();   // 再等磁盘/rename 全部落地
-  return { ok: !S.saveError, savedAt: S.savedAt, saveError: S.saveError };
+  const camps = S.campSaveErrors ? Object.fromEntries(S.campSaveErrors) : {};
+  const campError = Object.values(camps)[0] ?? null;
+  const saveError = S.saveError ?? campError;
+  return { ok: !saveError, savedAt: S.savedAt, saveError, camps };
 }
 
 // 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
@@ -1210,6 +1274,7 @@ export const host = {
     S.masks = { m3: false, coupling: false }; // 演示开关按设计不落盘，重启即回到默认关
     S.tickError = null;
     S.saveError = null;
+    S.savedSignature = undefined;
     S.campSaveErrors = new Map();
     S.camps = null;
     S.campKey = S.campName = null;
@@ -1313,7 +1378,7 @@ export const host = {
       sigHandlers = null;
     }
   },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, masks: S.masks }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
   listCamps,
   campOwnerHash,
   claimCamp,
@@ -1569,6 +1634,9 @@ export const host = {
         // 而那句话描述的是已经不存在的世界。savedAt 同时刷新，免得下次载入把重置前的空档也算进去。
         S.missed = { minutes: 0, applied: 0, capped: false };
         S.savedAt = Date.now();
+        S.savedSignature = undefined; // 重置后的世界是全新内容，下一次 flush 必须真写一版
+        S.catchupAt = {};
+        S.catchupDay = {};
         await save();
       }
       if (body.action === 'catchup') {
@@ -1580,8 +1648,18 @@ export const host = {
         const ck = campKey || 'MAIN';
         const now = Date.now();
         S.catchupAt ??= {};
-        if (ck !== 'MAIN' && now - (S.catchupAt[ck] ?? 0) < 5000) return { ...this.status(), ok: false, error: 'CATCHUP_COOLDOWN' };
+        // SEC5-03：MAIN 与具名营地统一冷却；每日累计也按营地记，防止“等 5 秒再点一次”无限快进。
+        if (catchupCooldownMs() > 0 && now - (S.catchupAt[ck] ?? 0) < catchupCooldownMs()) {
+          return { ...this.status(), ok: false, error: 'CATCHUP_COOLDOWN' };
+        }
+        const dayKey = new Date(now).toISOString().slice(0, 10);
+        S.catchupDay ??= {};
+        if (S.catchupDay[ck]?.day !== dayKey) S.catchupDay[ck] = { day: dayKey, minutes: 0 };
+        if (S.catchupDay[ck].minutes + m > catchupDayCapMin()) {
+          return { ...this.status(), ok: false, error: 'CATCHUP_DAILY_CAP' };
+        }
         S.catchupAt[ck] = now;
+        S.catchupDay[ck].minutes += m;
         if (campKey && campKey !== 'MAIN') {
           const target=campSurv(campKey);
           if (!target) return {...this.status(),ok:false,error:'NO_SURV'};

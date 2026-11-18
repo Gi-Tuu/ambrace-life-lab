@@ -60,16 +60,20 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
-│  ├─ *.test.mjs          #   100 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   178 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
+├─ shared/                # 服务端与浏览器共用的纯数据/几何（无 DOM/Node 副作用，15 个模块）
+│  ├─ camp-layout.mjs / layout-version.mjs     # 营地布局与版本（单一来源）
+│  ├─ camp-scene.mjs / camp-geometry.mjs       # 几何与场景定义（浏览器只负责渲染）
+│  └─ camp-construction-access.mjs …           # 规则/物理/物品纯函数
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
 │  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
-│  ├─ camp-3d-scene.mjs   #   3D 营地几何（代码定义的 box 模型，随 progress/integrity/季节重建）
+│  ├─ camp-3d-scene.mjs   #   兼容层：re-export shared/camp-scene.mjs（实现已迁到 shared/）
 │  ├─ camp-lighting.mjs / camp-sun.mjs   # 受光与日照（接触阴影，纯表现）
-│  ├─ wild-landscape.mjs / camp-outskirts.mjs   # 野外地形 / 郊区（河流、岸线、植被）
-│  ├─ camp-districts.mjs / camp-region-entities.mjs   # 外围资源点（内环日常 + 外环远征）/ 区域实体
+│  ├─ wild-landscape.mjs / camp-outskirts.mjs   # 兼容层：实现在 shared/（河流、岸线、植被）
+│  ├─ camp-districts.mjs / camp-region-entities.mjs   # 兼容层：外围资源点 / 区域实体
 │  ├─ camp-sight.mjs / camp-facility.mjs   # 视野 / 设施几何
 │  ├─ audio.mjs           #   程序化声音：状态驱动 SFX / 环境声 / BGM（离聚落越远越稀疏）
 │  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
@@ -80,7 +84,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  └─ check.mjs / test.mjs
 ├─ seed/world.json        # 固定历史起点（seed=7 实跑 600 刻存档）
 ├─ evidence/              # 研究读数留底（随仓库发布，复现见 EVIDENCE.md）
-├─ Dockerfile             # 魔搭创空间镜像（只含 serve/life/web/seed）
+├─ Dockerfile             # 魔搭创空间镜像（含 serve/life/web/shared/seed）
 └─ package.json           # 零第三方依赖；scripts = lint/test/check/coverage/assets/serve
 ```
 
@@ -137,7 +141,7 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 110 个测试文件 / 669 条检查（发现式点名，不会漏文件）
+npm test          # 178 个测试文件 / 967 条检查（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 90.59% / 分支 87.95% / 函数 92.33%，92 个被加载模块；2026-11-15 实测）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
@@ -186,7 +190,7 @@ node life/m4-mutation-battery.mjs     # 7 条
 
 ## 部署
 
-`Dockerfile` 面向魔搭创空间：监听 `0.0.0.0:7860`，世界状态落在 `DATA_DIR`（容器内 `/data`）。镜像只包含 `serve.mjs`、`life/`、`web/`、`seed/` 四样；密钥走平台密文变量。
+`Dockerfile` 面向魔搭创空间：监听 `0.0.0.0:7860`，世界状态落在 `DATA_DIR`（容器内 `/data`）。镜像包含 `serve.mjs`、`life/`、`web/`、`shared/`、`seed/` 五样；密钥走平台密文变量。
 
 世界状态必须在服务端持久化：放在浏览器里关标签页即重置，免费创空间休眠也会丢——两者都会直接否证「内部状态持续存在」这一主张。
 

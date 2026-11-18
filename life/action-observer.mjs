@@ -1,5 +1,8 @@
 // V7.3.3 P1-A：统一长程动作观测。事件不依赖 trace 长度（裁剪后仍工作），不耗 RNG，限长。
-export const ACTION_EVENT_CAP = 200000;
+// DATA5-13：默认上限从 20 万降到 2 万，raw 流最多 2×cap。observer 只用于诊断，不是生产状态；
+// 25 万事件实测曾占 145MB heap，长跑必须让内存有界。
+export const ACTION_EVENT_CAP = 20000;
+export const ACTION_RAW_CAP_MULT = 2;
 
 export function actionEvent({ actorId, actionId, worldTick, kind, status, actualMinutes = 0, actualEnergy = 0, progressMinutes = null, source = 'trace', extra = null }) {
   return { actorId, actionId, worldTick, kind, status, actualMinutes, actualEnergy, progressMinutes, source, extra };
@@ -18,7 +21,7 @@ export function createActionObserver({ cap = ACTION_EVENT_CAP } = {}) {
     feed(event) {
       if (!event || !event.actorId || !Number.isFinite(event.worldTick) || !event.kind) return false;
       raw.push(event);
-      if (raw.length > cap * 2) raw.shift();
+      if (raw.length > cap * ACTION_RAW_CAP_MULT) raw.shift();
       const key = event.actionId
         ? `${event.actionId}|${event.status}`
         : `${event.actorId}|${event.worldTick}|${event.kind}|${event.status}|${event.source}`;

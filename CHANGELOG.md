@@ -2,6 +2,19 @@
 
 ## [未发布]
 
+### 审计5 修复（2026-11-18）
+
+- **SEC5-01**：`ctl_nonce` 改为服务端签发、绑定 `ctl_sid` 会话并在服务端存储校验；自选 cookie/header 对与伪造 `Origin`/`x-forwarded-host`/`Sec-Fetch-Site` 不再能授权。配置 `CTL_TOKEN` 时破坏性 `/ctl` 只认 Bearer，nonce 分支彻底关闭。
+- **SEC5-02**：非 MAIN 的 `/world?camp=` 无 owner cookie 一律 403；已归属营地重开不换绑、不给非 owner 发新 cookie（`CAMP_OWNED`）。
+- **SEC5-03/04**：MAIN 与营地统一 `catchup` 冷却 + 每日累计上限；`/saves/open` 增加会话配额（默认 5/分钟），NaN env 回落不再归零。
+- **SEC5-06**：CSP / nosniff / XFO / Referrer-Policy 全套安全头；cookie 支持 Secure（`COOKIE_SECURE=1`）；存档错误只回错误码，不回显绝对路径。
+- **DATA5-02/03**：`flushWrites` 改为硬屏障（必要时强制保存、返回营地错误明细）；营地写失败不再报 `ok:true`；SIGTERM 等待 flush，未完成以非零码退出。
+- **DATA5-04/06**：索引 key 严格 32hex；sweep 只操作 `saves/` 内且 realpath 校验的文件；索引锁超时 fail-fast、stale lock 按 owner/时间戳回收、唯一 tmp + 代际；6 进程 ×8 轮 48/48 不丢。
+- **ARCH5-01/02**：`validateCamp` 非 camp 分支改用字符串返回 `NOT_CAMP_ACTION`；成本注册与运行时统一走 `costFor`/`SHARED_COST`。
+- **DATA5-09**：`settlementLife` 旧档按“分城区证据”显式 OR 迁移，不再因 false 永久丢 districts/peripheralHomes。
+- **DATA5-11/13/14**：wool 兑换/屠宰/喂食记入 consumed；deaths 封顶 200 并累计总数；observer 默认 cap 降到 2 万；分营地 tick 支持墙钟预算。
+- **测试/CI**：`REQUIRE_CHROME=1` 真正驱动浏览器用例失败（新增 `chrome-gate.mjs` 与 Linux Chrome 路径）；CI 显式验证 Chrome；文档测试数、Dockerfile、SECURITY 白名单同步到 178 文件 / 967 条。
+
 ### 外围同权收口（P0）
 
 - 服务端拥有玩家外围位置 `playerPos`（进存档）；带 `from` 的外围动作先做连续性校验（玩家速度≤居民 `startMove`）再走距离门与规则层；伪造跨区劳动返回 `TELEPORT`，不扣行动预算与存续。

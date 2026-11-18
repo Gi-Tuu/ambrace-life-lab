@@ -1,7 +1,7 @@
 // 观看/在场：host 的 touch/campViewers/viewers 抽到这里。状态由调用方注入，模块不持有单例。
-export function observerActive(lastVisitor, now, presenceMs) {
-  return now - lastVisitor <= presenceMs;
-}
+// ARCH5-07：observerActive 只有 host-budget 一份实现；这里 re-export，避免两份语义漂移。
+export { observerActive } from './host-budget.mjs';
+import { observerActive } from './host-budget.mjs';
 
 export function createViewerDomain({ getState, presenceMs, now = Date.now, validCampKey = () => true, markSeen = () => {} }) {
   const state = () => getState();
