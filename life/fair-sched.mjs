@@ -41,6 +41,7 @@ function eligibleIds(world, fs) {
 }
 
 function prepare(world, fs) {
+  ensureFairAgents(world, fs); // 出生/新加入的居民自动进入调度，WeakSet 防重复包装
   const eligible = eligibleIds(world, fs);
   fs.stats.ticks += 1;
   fs.stats.eligible = eligible.length;
@@ -73,15 +74,23 @@ function prepare(world, fs) {
   fs.stats.peakAllowed = Math.max(fs.stats.peakAllowed, fs.allowed.size);
 }
 
+const WRAPPED = new WeakSet();
 export function installFairGuard(world, agent, fs = world.fairSched) {
-  if (!fs || typeof agent?.tick !== 'function') return;
+  if (!fs || typeof agent?.tick !== 'function' || WRAPPED.has(agent)) return;
+  WRAPPED.add(agent);
   const originalTick = agent.tick.bind(agent);
   agent.tick = async (...args) => {
     if (fs.t !== world.t) { fs.t = world.t; prepare(world, fs); }
     const budget = fs.episodeBudget ?? 0;
-    if (fs.usedEpisodes >= budget) { fs.stats.blockedTicks += 1; return null; }
-    // 预算不足时只允许入选者；预算足够时所有 eligible 可继续 episode。
-    if (!fs.allowed.has(agent.id)) { fs.stats.blockedTicks += 1; if (fs.denied[agent.id] !== 'budget') fs.denied[agent.id] = fs.denied[agent.id] ?? 'budget'; return null; }
+    const baseOnly = async () => {
+      // P0：被挡下的居民也必须结算本刻基础代谢/需求/内部演化；tick 内的 fairSuppress 分支只跑基础。
+      agent.fairSuppress = true;
+      try { return await originalTick(...args); }
+      finally { agent.fairSuppress = false; }
+    };
+    if (fs.usedEpisodes >= budget) { fs.stats.blockedTicks += 1; await baseOnly(); return null; }
+    if (!fs.allowed.has(agent.id)) { fs.stats.blockedTicks += 1; if (fs.denied[agent.id] !== 'budget') fs.denied[agent.id] = fs.denied[agent.id] ?? 'budget'; await baseOnly(); return null; }
+    agent.fairSuppress = false;
     const used = fs.episodes[agent.id] ?? 0;
     // 防同一居民刷满整刻：所有入选者都拿到第一次 episode 之前，不允许第二次。
     if (used > 0 && [...fs.allowed].some((id) => (fs.episodes[id] ?? 0) === 0)) { fs.stats.blockedTicks += 1; return null; }
@@ -99,10 +108,16 @@ export function installFairGuard(world, agent, fs = world.fairSched) {
   // 链决策（tick 后 decideOn）属于同一 episode：不拦、不计机会。
 }
 
+export function ensureFairAgents(world, fs = world.fairSched) {
+  if (!fs) return;
+  for (const a of Object.values(world.agents)) if (!a.isPlayer && !a.dead) installFairGuard(world, a, fs);
+}
+
 export function installFairSched(world, env = process.env) {
   if (!fairEnabled(env) || world?.independentWorld !== true || world?.gameRules !== true) return null;
   const fs = createFairState(world, { cap: fairCap(env) });
-  for (const a of Object.values(world.agents)) if (!a.isPlayer) installFairGuard(world, a, fs);
+  ensureFairAgents(world, fs);
   return fs;
 }
+
 

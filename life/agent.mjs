@@ -109,6 +109,11 @@ export class Organism {
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
     this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
+    // V7.3.2 P0：同一世界刻的后续 episode 复用已结算的基础代谢/感知，不重复扣需求。
+    if (this.lastMetabTick === world.t && this.lastMetab) {
+      if (this.fairSuppress) return null;
+      return this.decideOn(world, { metab: this.lastMetab, reason: null, told: false, silent: true });
+    }
     // M3 的目标只属于"本刻真的做过非反射决策"的那些刻：反射提前 return 时不得沿用上一次的目标，否则特征表会把反射刻当成 M3 决策
     this.m3Last = null;
     // M4：τ 按刻计（不按决策机会计）——"躲一阵子"是时间量，不是机会量。关闭时不写任何状态。
@@ -152,6 +157,7 @@ export class Organism {
     // P1-A：基础代谢只结算一次；正式游戏先于反射判断（反射不免代谢），
     // 研究模式保持旧顺序（反射提前 return 不结算），保护既有实验轨迹。
     const metabolize = () => {
+      this.metabCount = (this.metabCount ?? 0) + 1; // 观测用，不进入存档
       // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
       const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
       const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
@@ -183,6 +189,13 @@ export class Organism {
       return { ch, prediction };
     };
     const preMetab = world.independentWorld ? metabolize() : null;
+    // V7.3.2 P0：被 episode 配额挡下的居民只结算基础代谢/感知，不做自主决策。
+    if (this.fairSuppress) {
+      const metab = preMetab ?? metabolize();
+      this.lastMetab = metab;
+      this.lastMetabTick = world.t;
+      return null;
+    }
 
     for (const p of percepts) {
       for (const r of REFLEXES) {

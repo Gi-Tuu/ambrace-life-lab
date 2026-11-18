@@ -1,0 +1,25 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm install --ignore-scripts
+      - name: Static check
+        run: npm run lint
+      - name: Art fingerprints
+        run: npm run art:check
+      - name: Full tests
+        run: npm test
+      - name: Save round-trip
+        run: node --test life/save-archive.test.mjs life/camp-saves.test.mjs

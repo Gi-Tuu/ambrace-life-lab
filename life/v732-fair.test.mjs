@@ -15,7 +15,7 @@ test('V732-FAIR 全链路：每刻≤1次 tick、轮转、决策链被挡', asyn
   const ticks = [], chains = [];
   const mk = (id) => ({
     id, isPlayer: false, dead: false,
-    async tick() { ticks.push([id, w.t]); return { ok: true }; },
+    async tick() { if (this.fairSuppress) return null; ticks.push([id, w.t]); return { ok: true }; },
     async decideOn() { chains.push([id, w.t]); return { id: 'x' }; },
   });
   const w = { t: 0, independentWorld: true, gameRules: true,
@@ -43,7 +43,7 @@ test('V732-FAIR tick 内 decideOn 仍可用（同一次机会内）', async () =
   const chains = [];
   const w = { t: 0, independentWorld: true, gameRules: true, agents: {} };
   w.agents.a1 = { id: 'a1', isPlayer: false, dead: false,
-    async tick() { return this.decideOn(); },
+    async tick() { if (this.fairSuppress) return null; return this.decideOn(); },
     async decideOn() { chains.push(w.t); return { id: 'x' }; } };
   const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '2' });
   await w.agents.a1.tick();
@@ -63,7 +63,7 @@ test('V732-FAIR 研究态/默认关不安装调度器', () => {
 test('V732-FAIR debt：欠账高的先拿机会，获授后清零', async () => {
   const ticks = [];
   const mk = (id) => ({ id, isPlayer: false, dead: false, energy: 1,
-    async tick() { ticks.push(id); },
+    async tick() { if (this.fairSuppress) return null; ticks.push(id); },
     async decideOn() { return null; } });
   const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1', 'a2', 'a3', 'a4'].map((id) => [id, mk(id)])) };
   const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '1' });
@@ -77,7 +77,7 @@ test('V732-FAIR debt：欠账高的先拿机会，获授后清零', async () => 
 test('V732-FAIR debt：cap 限制与 20 刻内无饥饿、debt 有界', async () => {
   const seen = new Map();
   const mk = (id) => ({ id, isPlayer: false, dead: false, energy: 1,
-    async tick() { seen.set(id, (seen.get(id) ?? 0) + 1); },
+    async tick() { if (this.fairSuppress) return null; seen.set(id, (seen.get(id) ?? 0) + 1); },
     async decideOn() { return null; } });
   const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1', 'a2', 'a3', 'a4', 'a5'].map((id) => [id, mk(id)])) };
   const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '2' });
@@ -91,8 +91,8 @@ test('V732-FAIR debt：cap 限制与 20 刻内无饥饿、debt 有界', async ()
 test('V732-FAIR episode：链不重复计机会、预算内可多次 episode、防单人刷满', async () => {
   let ticks = 0, chains = 0;
   const w = { t: 0, independentWorld: true, gameRules: true, agents: {
-    a1: { id: 'a1', isPlayer: false, dead: false, async tick() { ticks += 1; await this.decideOn(); }, async decideOn() { chains += 1; } },
-    a2: { id: 'a2', isPlayer: false, dead: false, async tick() { ticks += 1; }, async decideOn() { chains += 1; } },
+    a1: { id: 'a1', isPlayer: false, dead: false, async tick() { if (this.fairSuppress) return null; ticks += 1; await this.decideOn(); }, async decideOn() { chains += 1; } },
+    a2: { id: 'a2', isPlayer: false, dead: false, async tick() { if (this.fairSuppress) return null; ticks += 1; }, async decideOn() { chains += 1; } },
   } };
   const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '3' });
   await w.agents.a1.tick(); // 第一次 episode，链属于同一次
@@ -108,7 +108,7 @@ test('V732-FAIR episode：链不重复计机会、预算内可多次 episode、�
 
 test('V732-FAIR episode：超预算 debt 轮转，被挡者欠账', async () => {
   const ticks = [];
-  const mk = (id) => ({ id, isPlayer: false, dead: false, async tick() { ticks.push(id); }, async decideOn() {} });
+  const mk = (id) => ({ id, isPlayer: false, dead: false, async tick() { if (this.fairSuppress) return null; ticks.push(id); }, async decideOn() {} });
   const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1','a2','a3','a4','a5'].map((id) => [id, mk(id)])) };
   const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '2' });
   for (const a of Object.values(w.agents)) await a.tick();
@@ -120,4 +120,6 @@ test('V732-FAIR episode：超预算 debt 轮转，被挡者欠账', async () => 
   assert.ok(picked.size <= 2);
   assert.ok([...picked].some((id) => fs.debt[id] === 0), '欠账者优先获授');
 });
+
+
 

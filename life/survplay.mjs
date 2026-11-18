@@ -420,6 +420,7 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
       if (w.t<travel.arrive && Object.hasOwn(w.locs,travel.to)) {
         a.drives.tick(1,false);
         a.viab.tick(1);
+        a.metabCount = (a.metabCount ?? 0) + 1;
         continue;
       }
       delete w.survival.districtTravel[id];
@@ -433,7 +434,7 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
     }
     // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
     if (w.survival.talk?.target === id) {
-      try { a.drives.tick(1, false); a.viab.tick(1); } catch { /* 对话优先 */ }
+      try { a.drives.tick(1, false); a.viab.tick(1); a.metabCount = (a.metabCount ?? 0) + 1; } catch { /* 对话优先 */ }
       continue;
     }
     const traceStart = onResidentAction ? a.trace.length : 0;
@@ -895,7 +896,7 @@ function survActInner(sp, body) {
     } else w.campPlayerRoom=null;
     w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
     w.loc.p1 = room; (w.occupancy[room] ??= []).push('p1');
-    w.agents.p1?.viab?.spend(SURV_COST.move_to); // P0-2：移动与 AI move_to 同价
+    playerViabSpend(w, SURV_COST.move_to); // P0-2：移动与 AI move_to 同价
     return { ok: true };
   }
   if ((kind==='build'||kind==='repair') && Object.hasOwn(body,'from')) {
@@ -1024,7 +1025,7 @@ function survActInner(sp, body) {
     return gate;
   }
   const r = actuate(w, 'p1', { kind, type: body?.type, plot: body?.plot }, actionLoc);
-  if (r.ok) w.agents.p1?.viab?.spend(SURV_COST[kind]); // P0-2：与 AI execute 同表结算，成功才扣，不重复扣
+  if (r.ok) playerViabSpend(w, SURV_COST[kind]); // P0-2：与 AI execute 同表结算，成功才扣，不重复扣
   sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
   if (sp.log.length > 40) sp.log.shift();
   return r;
@@ -1306,6 +1307,8 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
+
 
 
 
