@@ -1,4 +1,4 @@
-import { CURRENT_LAYOUT } from '../web/camp-layout.mjs';
+import { CURRENT_LAYOUT } from '../shared/layout-version.mjs';
 import { randomInt } from 'node:crypto';
 // 权威世界宿主：状态在服务器上持续演化，浏览器只是观察与介入的窗口。
 // 三件事是这里的核心，不是装饰：
@@ -1114,6 +1114,8 @@ function takePendingFlush() {
   actFlushTimer = null;
   void queueWorldWrite(saveMain);
 }
+// ARCH4-06：关机/测试用 flush；tick 只排队，不等待磁盘。
+export async function flushWrites() { takePendingFlush(); await saveChain; return { ok: !S.saveError, savedAt: S.savedAt, saveError: S.saveError }; }
 
 // 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
 function preflightM5Archive(raw) {
@@ -1692,6 +1694,8 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+
+
 
 
 

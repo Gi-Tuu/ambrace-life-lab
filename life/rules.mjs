@@ -5,6 +5,7 @@ import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './househ
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
+import { CAMP_FREE, PLAYER_TIME, isCampKind } from './camp-catalog.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
@@ -135,6 +136,19 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
   return { ok: true, code: 'OK' };
 }
 
+export function validateCamp(world, body, reachFn = null) {
+  const fail = (code, why) => ({ ok: false, code, why });
+  const kind = body?.kind;
+  if (!isCampKind(kind)) return fail('NOT_CAMP_ACTION', 规则层不认识 );
+  const free = CAMP_FREE.includes(kind);
+  if (!free && !(kind in PLAYER_TIME)) return fail('UNKNOWN_CAMP_ACTION', '营地动作未登记成本：' + kind);
+  if (reachFn && world?.independentWorld && world?.gameRules && body?.from && !free) {
+    const reach = reachFn(world, body.from);
+    if (!reach?.ok) return reach;
+  }
+  return null;
+}
+
 export const impulseOf = (kind) => BASE_KINDS[kind]?.impulse ?? 0.5;
 
 // S3：传话的合法性由规则层裁决，与"想不想说"彻底分开（和 validate 同一条铁律）。
@@ -163,3 +177,6 @@ export function markKnown(secret, who) {
 
 // 动作身份：路径级（带对象/目的地），不再只有 kind
 export const actionId = (a) => a.id ?? `${a.kind}${a.target ? ':' + a.target : ''}${a.to ? ':' + a.to : ''}`;
+
+
+

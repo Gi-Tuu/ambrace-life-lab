@@ -9,7 +9,7 @@ import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
-import { validate } from './rules.mjs';
+import { validate, validateCamp } from './rules.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, clockOf, CHAIN_MAX } from './resident-time.mjs';
 import { costFor } from './action-cost.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
@@ -581,13 +581,8 @@ function reproduce(w, log) {
 }
 
 // V7.3：PLAYER_TIME 只留给兼容开关 actTimeModel=false（旧每刻 100 点预算）；正式游戏用共享表。
-export const PLAYER_TIME = Object.freeze({
-  move: 25, gather: 75, harvest: 75, plant: 75, plan: 75, build: 75, repair: 75,
-  forage: 75, exchange: 50, expand: 75, deposit: 50, withdraw: 50,
-  animal_feed:25, animal_slaughter:75, road_lay:75, road_remove:50, home_request: 10, home_break: 75, home_fix: 60, home_grant: 10, home_revoke: 10, facility_use: 50,
-  camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
-  camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25, till: 75,
-});
+import { PLAYER_TIME, CAMP_FREE } from './camp-catalog.mjs';
+export { PLAYER_TIME } from './camp-catalog.mjs';
 const PLAYER_BUDGET = 100;
 const P1_TICK_MINUTES = 60; // 与 resident-time 的 TICK_MINUTES 同源：玩家与居民共用 60 分/刻
 function legacyPlayerTime(w, kind) {
@@ -928,15 +923,9 @@ function survActInner(sp, body) {
     return { ok: true, code: 'OK', ticks: slept.ticks, observation: '睡了一觉' };
   }
   if (kind.startsWith('camp_')) {
-    // AUD-01/06：营地动作必须显式登记成本；未知或零成本（除明确免费的退出/睡觉）一律拒绝。
-    const free = kind === 'camp_exit' || kind === 'camp_sleep';
-    if (!free && !(kind in PLAYER_TIME)) return { ok: false, code: 'UNKNOWN_CAMP_ACTION' };
-    // ARCH3-02 / SEC3-05：正式游戏里凡是带 from 的营地动作，先过服务端位置裁决（连续性/锚点），
-    // 不能只靠 from→to 的距离自证——否则人在家里也能点鸡圈。
-    if (w.independentWorld && w.gameRules && body?.from && kind !== 'camp_exit' && kind !== 'camp_sleep') {
-      const reach = playerReach(w, body.from);
-      if (!reach.ok) return reach;
-    }
+    // ARCH4-07：营地动作先过规则层 validateCamp（kind/成本/reach），campAction 只做效果结算。
+    const invalid = validateCamp(w, { ...body, kind }, playerReach);
+    if (invalid) return invalid;
     const result=campAction(w,body);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     if (sp.log.length>40) sp.log.shift();
@@ -1307,6 +1296,9 @@ export function loadSurv(raw,seed=7,options) {
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
   return sp;
 }
+
+
+
 
 
 
