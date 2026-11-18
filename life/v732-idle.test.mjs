@@ -25,3 +25,14 @@ test('V732-IDLE 同种子结果可复现（只测不改调度）', async () => {
   assert.deepEqual(a.rows.map((x) => [x.id, x.usedMin]), b.rows.map((x) => [x.id, x.usedMin]));
 });
 
+
+test('V732-IDLE 修正口径：公平模式下有/无机会可区分，机会刻<总刻', async () => {
+  process.env.FAIR_SCHED = '1';
+  const r = await measureIdle(7, 1);
+  process.env.FAIR_SCHED = '0';
+  const row = r.rows[0];
+  assert.ok(row.opportunityTicks < row.ticks || r.rows.every((x) => x.opportunityTicks <= x.ticks));
+  assert.ok(r.rows.some((x) => x.schedulingTicks > 0), '调度空闲应被识别');
+  assert.ok(r.rows.every((x) => x.voluntaryTicks + x.schedulingTicks <= x.ticks), '两类空闲不重叠');
+  assert.ok(r.rows.every((x) => x.opportunityTicks >= x.voluntaryTicks), '主动空闲必须来自机会');
+});

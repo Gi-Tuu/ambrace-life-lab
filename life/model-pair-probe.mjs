@@ -81,6 +81,7 @@ const out = {
     decisions: metrics.decisions, calls: metrics.calls, tokens: metrics.tokens,
     latencyMs: { n: sorted.length, p50: pct(.5), p95: pct(.95), max: sorted.at(-1) ?? null },
     http: metrics.http, parseFail: metrics.parseFail, invalidId: metrics.invalidId, fallback: metrics.fallback,
+    truncated: metrics.calls >= MAX_CALLS, cap: MAX_CALLS,
   },
   note: 'local arm uses deterministic resident deliberator; real arm uses suanli chat completions via existing prompt builder. Key never logged.',
 };
@@ -89,3 +90,4 @@ writeFileSync('docs/model-pair-v732.json', JSON.stringify(out, null, 2));
 console.log(JSON.stringify({ model: MODEL, host, days: DAYS, calls: metrics.calls, tokens: metrics.tokens,
   p50: out.realCalls.latencyMs.p50, p95: out.realCalls.latencyMs.p95, parseFail: metrics.parseFail,
   invalidId: metrics.invalidId, fallback: metrics.fallback, localPop: out.local.population, realPop: out.real.population }, null, 2));
+

@@ -15,7 +15,11 @@ for (const arm of ['off', 'on']) {
       arm, seed, days: DAYS, actualDays: r.actualDays,
       usedMin: r.totals.used, idleMin: r.idleMin, schedulingShare: r.schedulingShare,
       laborMin: r.totals.labor, moveMin: r.totals.move, restMin: r.totals.rest, socialMin: r.totals.social,
-      busyTicks: r.totals.busyTicks,
+      busyTicks: r.totals.busyTicks, opportunityTicks: r.totals.opportunityTicks,
+      voluntaryTicks: r.totals.voluntaryTicks, schedulingTicks: r.totals.schedulingTicks,
+      voluntaryIdleMin: Number(r.rows.reduce((a, x) => a + x.voluntaryIdleMin, 0).toFixed(1)),
+      schedulingIdleMin: Number(r.rows.reduce((a, x) => a + x.schedulingIdleMin, 0).toFixed(1)),
+      decisionTicks: r.rows.reduce((a, x) => a + x.decisionTicks, 0),
       store: last?.store ?? null, population: r.population, births: r.births, deaths: r.deaths, actions: r.actions,
       tickMs: r.tickMs, fair: r.fair,
     });
@@ -30,4 +34,5 @@ const out = { generatedAt: new Date().toISOString(), seeds: SEEDS, days: DAYS, c
   note: 'on' ? '' : '' };
 out.note = 'FAIR_SCHED=1 only wraps decideOn for formal game; research and default off unchanged';
 writeFileSync('docs/fair-sched-v732.json', JSON.stringify(out, null, 2));
+
 

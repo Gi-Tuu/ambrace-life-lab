@@ -44,6 +44,7 @@ export async function measureIdle(seed = 7, days = 30) {
     await tickSurvPlay(sp);
     const tickMs = performance.now() - tick0; sumTick += tickMs; maxTick = Math.max(maxTick, tickMs); ticksRun += 1;
     const day = dayOf(w.t);
+    if (day >= end) break; // 不把下一日的部分刻算进本窗口
     for (const a of Object.values(w.agents)) {
       if (a.isPlayer || !isAlive(a)) continue;
       const clock = clockOf(w, a.id);
@@ -52,7 +53,7 @@ export async function measureIdle(seed = 7, days = 30) {
       if (!st || st.day !== day) {
         if (st) rows.push(finishDay(w, a, st));
         st = { day, used: 0, labor: 0, move: 0, rest: 0, social: 0, other: 0, busyTicks: 0,
-          voluntaryTicks: 0, schedulingTicks: 0, decisionTicks: 0, energySum: 0, ticks: 0, busyMin: 0 };
+          opportunityTicks: 0, voluntaryTicks: 0, schedulingTicks: 0, decisionTicks: 0, energySum: 0, ticks: 0, busyMin: 0 };
         state.set(a.id, st);
       }
       const fresh = a.trace.slice(b?.trace ?? a.trace.length).filter((r) => r.t === w.t && r.ok !== false);
@@ -69,10 +70,11 @@ export async function measureIdle(seed = 7, days = 30) {
         else st.other += mins;
       }
       if (fresh.length) st.decisionTicks += 1;
-      const decision = (decisionCount.get(a.id) ?? 0) > (b?.decisions ?? 0);
+      const opportunity = w.fairSched ? w.fairSched.last?.[a.id] === w.t : true;
+      if (opportunity) st.opportunityTicks += 1;
       if (b?.busy || clock.busy) { st.busyTicks += 1; st.busyMin += Math.min(DAY_TICKS, 60 - (clock.tick?.usedMin ?? 0)); }
-      else if (decision && acted === 0) st.voluntaryTicks += 1;
-      else if (!decision && (clock.tick?.usedMin ?? 0) < 60 && (a.drives?.v?.energy ?? 0) > 0.01) st.schedulingTicks += 1;
+      else if (opportunity && acted === 0) st.voluntaryTicks += 1;
+      else if (!opportunity && (clock.tick?.usedMin ?? 0) < 60 && (a.drives?.v?.energy ?? 0) > 0.01) st.schedulingTicks += 1;
       st.used = clock.usedMin;
       st.energySum += a.drives?.v?.energy ?? 0;
       st.ticks += 1;
@@ -85,10 +87,10 @@ export async function measureIdle(seed = 7, days = 30) {
   }
   const totals = rows.reduce((acc, r) => {
     acc.available += r.availableMin; acc.used += r.usedMin; acc.labor += r.laborMin; acc.move += r.moveMin;
-    acc.rest += r.restMin; acc.social += r.socialMin; acc.busyTicks += r.busyTicks;
+    acc.rest += r.restMin; acc.social += r.socialMin; acc.busyTicks += r.busyTicks; acc.opportunityTicks += r.opportunityTicks;
     acc.voluntaryTicks += r.voluntaryTicks; acc.schedulingTicks += r.schedulingTicks;
     return acc;
-  }, { available: 0, used: 0, labor: 0, move: 0, rest: 0, social: 0, busyTicks: 0, voluntaryTicks: 0, schedulingTicks: 0 });
+  }, { available: 0, used: 0, labor: 0, move: 0, rest: 0, social: 0, busyTicks: 0, opportunityTicks: 0, voluntaryTicks: 0, schedulingTicks: 0 });
   const idleMin = totals.available - totals.used;
   const idleTicks = totals.voluntaryTicks + totals.schedulingTicks;
   return {
@@ -110,16 +112,21 @@ function finishDay(w, a, st) {
   const idle = Math.max(0, 1440 - st.used);
   const idleTicks = st.voluntaryTicks + st.schedulingTicks;
   const schedShare = idleTicks ? st.schedulingTicks / idleTicks : 0;
+  const voluntaryIdleMin = idleTicks ? idle * (1 - schedShare) : 0;
+  const schedulingIdleMin = idleTicks ? idle * schedShare : 0;
   return {
     seed: w.seed, day: st.day, id: a.id, name: a.name,
     age: Math.floor(ageDays(w, a.id)), stage: residentStage(w, a.id),
     goals: a.traits?.goals ?? null, archetype: a.traits?.archetype ?? null,
-    availableMin: 1440, usedMin: st.used, idleMin: idle,
+    availableMin: 1440, usedMin: st.used, idleMin: idle, ticks: st.ticks,
     laborMin: st.labor, moveMin: st.move, restMin: st.rest, socialMin: st.social, otherMin: st.other,
-    busyTicks: st.busyTicks, decisionTicks: st.decisionTicks,
+    busyTicks: st.busyTicks, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks,
     voluntaryTicks: st.voluntaryTicks, schedulingTicks: st.schedulingTicks,
-    voluntaryIdleMin: Number((idle * (1 - schedShare)).toFixed(1)),
-    schedulingIdleMin: Number((idle * schedShare).toFixed(1)),
+    voluntaryIdleMin: Number(voluntaryIdleMin.toFixed(1)),
+    schedulingIdleMin: Number(schedulingIdleMin.toFixed(1)),
+    unclassifiedIdleMin: Number((idle - voluntaryIdleMin - schedulingIdleMin).toFixed(1)),
+    voluntaryIdleShare: idle > 0 ? Number((voluntaryIdleMin / idle).toFixed(4)) : null,
+    schedulingIdleShare: idle > 0 ? Number((schedulingIdleMin / idle).toFixed(4)) : null,
     energyAvg: Number((st.energySum / Math.max(1, st.ticks)).toFixed(3)),
     store: w.survival.store, food: { ...(w.survival.food ?? {}) }, resStock: { ...(w.survival.resStock ?? {}) },
   };
@@ -138,6 +145,10 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
+
+
 
 
 
