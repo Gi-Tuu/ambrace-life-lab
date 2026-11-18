@@ -12,7 +12,7 @@ async function run(seed, days, grace) {
   process.env.M3_GRACE = String(grace);
   const sp = createSurvPlay(seed, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });
   const w = sp.world;
-  const starts = new Map(); const events = []; const waits = [];
+  const starts = new Map(); const events = []; const waits = []; const lifecycle = [];
   for (const a of Object.values(w.agents)) if (!a.isPlayer) starts.set(a.id, { tick: null, goal: null });
   const choose = new Map();
   for (const a of Object.values(w.agents)) {
@@ -24,10 +24,20 @@ async function run(seed, days, grace) {
       const after = a.m3Last?.goal ?? null;
       const st = starts.get(a.id);
       if (!before && after) { st.tick = w.t; st.goal = after; events.push({ tick: w.t, actor: a.id, type: 'start', goal: after }); }
-      if (before && after && before !== after) events.push({ tick: w.t, actor: a.id, type: 'switch', from: before, to: after });
+      if (before && after && before !== after) {
+        events.push({ tick: w.t, actor: a.id, type: 'switch', from: before, to: after });
+        lifecycle.push({ actor: a.id, goal: before, startTick: st.tick, endTick: w.t, duration: st.tick != null ? w.t - st.tick : null, status: 'switch', to: after });
+        st.tick = w.t; st.goal = after;
+      }
       if (before && !after && (a.m3Last?.interrupted)) {
         events.push({ tick: w.t, actor: a.id, type: 'abort', code: a.m3Last.interrupted, goal: before,
           duration: st.tick != null ? w.t - st.tick : null, waited: a.m3Last?.waited ?? null });
+        lifecycle.push({ actor: a.id, goal: before, startTick: st.tick, endTick: w.t, duration: st.tick != null ? w.t - st.tick : null,
+          status: a.m3Last.interrupted === 'GRACE_EXPIRED' ? 'grace_expired' : 'abort', code: a.m3Last.interrupted });
+        st.tick = null; st.goal = null;
+      }
+      if (before && !after && !a.m3Last?.interrupted) {
+        lifecycle.push({ actor: a.id, goal: before, startTick: st.tick, endTick: w.t, duration: st.tick != null ? w.t - st.tick : null, status: 'complete' });
         st.tick = null; st.goal = null;
       }
       if (a.m3Last?.waited > 0) waits.push(a.m3Last.waited);
@@ -39,6 +49,7 @@ async function run(seed, days, grace) {
   for (let i = 0; i < days * DAY_TICKS; i += 1) await tickSurvPlay(control);
   const book = w.survival?.actionLedger?.resident ?? {};
   const labor = Object.values(book.minutes ?? {}).reduce((a, n) => a + Number(n), 0);
+  for (const [id, st] of starts) if (st.tick != null) lifecycle.push({ actor: id, goal: st.goal, startTick: st.tick, endTick: w.t, duration: w.t - st.tick, status: 'ongoing' });
   const populations = Object.values(w.agents).filter((a) => !a.isPlayer && isAlive(a)).length;
   const counts = events.reduce((a, e) => { const k = e.type === 'abort' ? e.code : e.type; a[k] = (a[k] ?? 0) + 1; return a; }, {});
   return { seed, days, grace, population: populations,
@@ -49,7 +60,11 @@ async function run(seed, days, grace) {
     starts: events.filter((e) => e.type === 'start').length, switches: events.filter((e) => e.type === 'switch').length,
     aborts: events.filter((e) => e.type === 'abort').length, counts,
     waits: { n: waits.length, max: waits.length ? Math.max(...waits) : 0,
-      mean: waits.length ? Number((waits.reduce((a, n) => a + n, 0) / waits.length).toFixed(2)) : 0 },
+      mean: waits.length ? Number((waits.reduce((a, n) => a + n, 0) / waits.length).toFixed(2)) : 0,
+      over1: waits.filter((x) => x > 1).length, over2: waits.filter((x) => x > 2).length },
+    lifecycle, lifecycleCounts: lifecycle.reduce((a, e) => { a[e.status] = (a[e.status] ?? 0) + 1; return a; }, {}),
+    onlyCoupling: events.filter((e) => e.type === 'abort' && e.code === 'only_coupling_actions').length,
+    graceExpired: events.filter((e) => e.type === 'abort' && e.code === 'GRACE_EXPIRED').length,
     nonPerturbation: { observed: sha(dumpSurv(sp)), control: sha(dumpSurv(control)), equal: sha(dumpSurv(sp)) === sha(dumpSurv(control)) },
     events: events.slice(0, 50) };
 }
@@ -57,10 +72,12 @@ async function run(seed, days, grace) {
 if (process.argv[1] && process.argv[1].endsWith('v741-grace-matrix.mjs')) {
   const days = Number(process.argv[2] ?? 30);
   const groups = [];
-  for (const grace of [0, 6, 12]) for (const seed of [7, 13, 29]) groups.push(await run(seed, days, grace));
+  for (const grace of [0, 1, 2]) for (const seed of [7, 13, 29]) groups.push(await run(seed, days, grace));
   mkdirSync('evidence/v741', { recursive: true });
   writeFileSync(`evidence/v741/m3-grace-${days}d.json`, JSON.stringify({ generatedAt: new Date().toISOString(), days, groups }, null, 2));
   console.log(JSON.stringify(groups.map((g) => ({ seed: g.seed, grace: g.grace, pop: g.population, starts: g.starts,
-    aborts: g.aborts, counts: g.counts, waits: g.waits, talk: g.talk, errors: g.errors, hash: g.nonPerturbation.equal })), null, 2));
+    aborts: g.aborts, onlyCoupling: g.onlyCoupling, graceExpired: g.graceExpired, counts: g.counts,
+    lifecycle: g.lifecycleCounts, waits: g.waits, talk: g.talk, errors: g.errors, hash: g.nonPerturbation.equal })), null, 2));
 }
+
 
