@@ -1,10 +1,48 @@
 {
-  "head": "PENDING",
-  "tests": {"total": 916, "pass": 916, "fail": 0},
-  "steps": {
-    "1": {"status": "done", "fixed": ["camp-catalog 抽取 PLAYER_TIME/免费表", "rules.validateCamp 检查未知 kind/成本/reach", "survplay camp_* 先 validate 再 campAction", "新增 4 条 camp 校验红测 + 2 条 shared 常量测试"], "unchanged": "合法路径由原 campAction 结算；研究态不改"},
-    "2": {"status": "partial", "fixed": ["flushWrites 导出", "现有 saveChain 异步 + ACT_SAVE_COALESCE_MS 合并保留", "camp-persistence 10/10 通过"], "not_measured": ["6 营地 tick 阻塞/保存耗时", "崩溃/中断恢复专项"]},
-    "3": {"status": "partial", "fixed": ["host 直接依赖从 web/camp-layout 改为 shared/layout-version；常量一致性测试"], "not_done": ["life/* 仍有多处 ../web 依赖（construction-access 仍 import camp-3d-scene）", "host 单例/领域拆分未做"], "design": "docs/设计-审计遗留-2026-11-18.md"}
+  "head": "76532b8",
+  "tests": {
+    "total": 916,
+    "pass": 916,
+    "fail": 0
   },
-  "risks": ["server 闭包仍含 3D 模块（life/construction-access）", "异步写 6 营地未压测", "host 单例未拆"]
+  "steps": {
+    "1": {
+      "status": "done",
+      "fixed": [
+        "camp-catalog 抽取 PLAYER_TIME/免费表",
+        "rules.validateCamp 检查未知 kind/成本/reach",
+        "survplay camp_* 先 validate 再 campAction",
+        "新增 4 条 camp 校验红测 + 2 条 shared 常量测试"
+      ],
+      "unchanged": "合法路径由原 campAction 结算；研究态不改"
+    },
+    "2": {
+      "status": "partial",
+      "fixed": [
+        "flushWrites 导出",
+        "现有 saveChain 异步 + ACT_SAVE_COALESCE_MS 合并保留",
+        "camp-persistence 10/10 通过"
+      ],
+      "not_measured": [
+        "6 营地 tick 阻塞/保存耗时",
+        "崩溃/中断恢复专项"
+      ]
+    },
+    "3": {
+      "status": "partial",
+      "fixed": [
+        "host 直接依赖从 web/camp-layout 改为 shared/layout-version；常量一致性测试"
+      ],
+      "not_done": [
+        "life/* 仍有多处 ../web 依赖（construction-access 仍 import camp-3d-scene）",
+        "host 单例/领域拆分未做"
+      ],
+      "design": "docs/设计-审计遗留-2026-11-18.md"
+    }
+  },
+  "risks": [
+    "server 闭包仍含 3D 模块（life/construction-access）",
+    "异步写 6 营地未压测",
+    "host 单例未拆"
+  ]
 }
