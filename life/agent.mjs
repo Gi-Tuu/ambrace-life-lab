@@ -12,6 +12,7 @@ import { validate, actionId } from './rules.mjs';
 import { residentTimeModel, clockOf, residentBeginTime, attachBusyAction, residentRefundTime, laborEnergy } from './resident-time.mjs';
 import { isLaborAction } from './households.mjs';
 import { noteAction, noteRefusal } from './action-ledger.mjs';
+import { costFor } from './action-cost.mjs';
 import { recordRepairFailure } from './production.mjs';
 import { recordConstructionBlock } from './construction-access.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
@@ -428,31 +429,43 @@ export class Organism {
       takeable[id] = world.riskyPortion ?? PARAMS.risky.portion;
     }
     // PLAN §28：房间表随世界预设走；规划器的合法性校验以这份为准（lab 下键集与原 KNOWN_LOCS 相同）。
-    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
+    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: Number.isFinite(world.pantry) ? world.pantry : (world.survival?.store ?? 0), energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
   }
 
   m3Choose(world, paths) {
-    // 决策②(a)：M4 的三条耦合动作不进 M3 的两步搜索（规划器的 kind 白名单是硬校验）。
-    // 局限要写清：闭门/捂耳朵期间 M3 不会把它们排进路径目标，两者的取舍仍由同一个评分器在同一刻比较，但不是同一个规划器规划。
-    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind)); // PLAN §28：新动作不进 M3 两步搜索（规划器不认它们；取舍仍由同一评分器比较）
+    const M3_KINDS = new Set(['rest', 'eat', 'move_to', 'talk', 'look_out', 'take_shared']);
+    // V7.4.1 修复：规划器只接受白名单 kind、有限成本、唯一 id；生存候选先做最小 sanitize，不重写规划器。
+    const source = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind) && M3_KINDS.has(p.kind));
+    const planned = [];
+    const rev = new Map();
+    source.forEach((p, i) => {
+      const id = `${p.id}:m3:${i}`;
+      planned.push({ ...p, id, cost: Number.isFinite(p.cost) ? p.cost : costFor(p.kind).minutes });
+      rev.set(id, p.id);
+    });
     if (!planned.length) {
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
       return paths;
     }
-    const r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
+    let r;
+    try {
+      r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
+    } catch {
+      // 规划器仍拒绝时退回完整候选集，绝不让 M3 把每拍决策全部吃掉。
+      this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'planner_rejected' };
+      this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
+      return paths;
+    }
     const previous = this.m3PrevGoal;
     this.m3PrevGoal = r.goal;
     this.m3Last = { previous, goal: r.goal, remaining: r.remaining, reused: r.reused, interrupted: r.interrupted };
     this.counters.m3Decisions = (this.counters.m3Decisions ?? 0) + 1;
     if (r.reused) this.counters.m3Reused = (this.counters.m3Reused ?? 0) + 1;
     if (r.interrupted) this.counters.m3Interrupted = (this.counters.m3Interrupted ?? 0) + 1;
-    // 目标内的可行首步由规划器自己的 plans 给出，不另写 kind→目标 的映射（否则又造出一张会漂移的表）
-    const keep = new Set(r.plans.filter((p) => p.goal === r.goal).map((p) => p.first.id));
-    // 耦合动作不进规划，但**仍然进比较**：把它们一并留在候选集里，否则"排除在 M3 之外"会变成"被 M3 否决"，
-    // 那是决策 ②(a) 没有授权的效果。
-    const filtered = paths.filter((p) => keep.has(p.id) || COUPLING_KINDS.includes(p.kind));
+    const keep = new Set(r.plans.filter((p) => p.goal === r.goal).map((p) => rev.get(p.first.id) ?? p.first.id).filter(Boolean));
+    // 非 M3 白名单的生存动作（采集/建造等）不进规划，但必须保留在候选集，否则 M3 会把人饿死。
+    const filtered = paths.filter((p) => keep.has(p.id) || COUPLING_KINDS.includes(p.kind) || !M3_KINDS.has(p.kind));
     if (!filtered.length) {
-      // 这一刻这个目标没有可见动作：不许把人饿死，退回完整候选集，并把这次中断记进轨迹
       this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
       this.m3Last.interrupted ??= 'goal_has_no_visible_action';
       return paths;
@@ -644,4 +657,6 @@ export class Organism {
     return { id, ...result };
   }
 }
+
+
 
