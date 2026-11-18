@@ -132,7 +132,7 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
     rows, totals, idleMin,
     schedulingShare: idleTicks ? Number((totals.schedulingTicks / idleTicks).toFixed(4)) : null,
     tickMs: { avg: Number((sumTick / Math.max(1, ticksRun)).toFixed(3)), max: Number(maxTick.toFixed(3)) },
-    fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null, observer: observer.summary(),
+    fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null, ledgerBook: w.survival?.actionLedger?.resident ?? null, observer: observer.summary(),
     events: days <= 3 ? observer.events.slice() : undefined,
     activeDays: new Set(rows.filter((x) => x.decisionTicks > 0).map((x) => x.day)).size,
     births: w.survival.births ?? 0, deaths: (w.survival.deaths ?? []).length, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
@@ -181,6 +181,7 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
 
 
 
