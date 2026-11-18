@@ -4,7 +4,7 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
-**版本 `0.1.4`** · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+**版本 `0.1.5`** · 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 它不是什么
 
@@ -26,9 +26,9 @@
 | 耦合调制权 | 变聋 / 离场 / 拒绝互动（可选层，默认关） | `life/coupling.mjs` |
 | L9 规则校验 | 合法性 + 驳回重决策（唯一裁决点） | `life/rules.mjs` |
 | L10 反应器（效应器） | 意图 → 世界改变 | `life/body.mjs` 的 `actuate`（**不是** `host.mjs`） |
-| — 世界宿主 | 持久化 / tick 调度 / 玩家面 / 载荷 | `life/host.mjs`（含线上思考层 `modelBrain`）+ `serve.mjs`（HTTP） |
+| — 世界宿主 | 持久化 / tick 调度 / 玩家面 / 载荷 | `life/host.mjs`（facade + 单例）+ `host-world.mjs`（世界/tick/存档）+ `host-model.mjs`（思考层）+ `host-replay.mjs`（A/B 回放）+ `serve.mjs`（HTTP） |
 | L11 记忆 | 情景记忆 + 习惯表 | `life/memory.mjs`（情景）+ `life/model.mjs` 的 `makeHabit`（习惯） |
-| L12 思考层 | 事件门控、按需接 LLM | 线上：`life/host.mjs` 的 `modelBrain` + `life/agent.mjs` 的 `choose`；离线实验：`life/loop-real.mjs`（**CLI 脚本，服务端不加载**） |
+| L12 思考层 | 事件门控、按需接 LLM | 线上：`life/host-model.mjs` 的 `modelBrain` + `life/agent.mjs` 的 `choose`；离线实验：`life/loop-real.mjs`（**CLI 脚本，服务端不加载**） |
 | L13 自我维持 | 存续账本 + 不可逆降级 | `life/viability.mjs` |
 
 > **未接线模块**（读代码时请注意）：`life/capability.mjs`、`life/pack.mjs`、`life/scene.mjs` 只被各自测试引用，
@@ -49,18 +49,24 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 .
 ├─ serve.mjs              # HTTP 入口：静态资源 + /world /act /ctl /healthz + 写路由守卫
 ├─ life/                  # 引擎（L0–L13）+ 全部闸门测试 + 离线复现脚本
-│  ├─ host.mjs            #   世界宿主：持久化 / tick 调度 / 载荷 / 线上思考层
+│  ├─ host.mjs            #   世界宿主 facade：状态单例 + snapshot/act/ctl + 原导出
+│  ├─ host-world.mjs      #   世界创建/装载、tick 串行链、定时器、补时、存档、营地
+│  ├─ host-model.mjs      #   模型配置/预算车道/审议提示词/modelBrain/modelTalk
+│  ├─ host-replay.mjs     #   A/B 对照、回放帧、comparison.json
 │  ├─ body.mjs            #   载体 + 效应器(actuate) + 感知筛选
 │  ├─ agent.mjs / model.mjs / rules.mjs   # 反射 / 动机 / 规则校验(唯一裁决点)
 │  ├─ clock.mjs / drives.mjs / appraisal.mjs / memory.mjs / viability.mjs …
 │  ├─ m3-planner.mjs / coupling.mjs       # 可选层（默认关）
 │  ├─ worldstate.mjs / production.mjs / geometry.mjs   # 生存 Phase A/B（有限资源 + 建设闭环）
 │  ├─ cooperation.mjs                     # Phase C AI 合作（意愿/公共需求/分解/重规划，默认关）
-│  ├─ survplay.mjs                        # Phase D 生存单世界接 host/前端/持久化
+│  ├─ survplay.mjs                        # Phase D 生存单世界：create/tick/view/生命周期
+│  ├─ survplay-actions.mjs                #   玩家时间/体力/busy/失败回滚与账本
+│  ├─ survplay-camp.mjs                   #   营地/住房/设施/建造/家庭/合作动作入口
+│  ├─ survplay-save.mjs                   #   生存档 dump/load 与旧档迁移
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
-│  ├─ *.test.mjs          #   178 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   179 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ shared/                # 服务端与浏览器共用的纯数据/几何（无 DOM/Node 副作用，15 个模块）
 │  ├─ camp-layout.mjs / layout-version.mjs     # 营地布局与版本（单一来源）
@@ -90,11 +96,11 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 
 美术资产全部由 `scripts/` 代码定义生成（`npm run assets` 一键可复现），色板锁 `web/assets/palette.json`；
 前端只读 `/world` 载荷做表现，动画不读 `w.t`、不消费 rng、不写世界状态，故不污染研究读数。
-内部台账 / 交接稿在 `docs/`（`.gitignore`，不入库）。
+内部台账 / 交接稿在 `docs/`（`.gitignore`，不入库）。**不读 `docs/` 也能接手**：公开的模块边界、默认开关、存档位置与已知限制见根目录 [ARCHITECTURE.md](./ARCHITECTURE.md)；5 分钟真实路径见 [QUICKSTART.md](./QUICKSTART.md)。
 
 ## 快速开始
 
-需要 Node **22+**，零第三方依赖（不需要 `npm install`，没有 lock 文件）。
+需要 Node **22+**，零第三方依赖（不需要 `npm install`，没有 lock 文件）。**3 条命令 + 5 分钟真实路径（起服、进游戏、走/采集/吃/睡、HUD、死亡后世界继续）见 [QUICKSTART.md](./QUICKSTART.md)**；下面是开发者最短路径。
 
 ```bash
 node serve.mjs          # http://localhost:7860
@@ -141,7 +147,7 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 178 个测试文件 / 976 条检查（发现式点名，不会漏文件）
+npm test          # 179 个测试文件 / 982 条检查（发现式点名，不会漏文件）
 npm run coverage  # 同上 + Node 内建覆盖率（行 90.59% / 分支 87.95% / 函数 92.33%，92 个被加载模块；2026-11-15 实测）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1

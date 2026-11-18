@@ -85,7 +85,10 @@ test('ARCH5-06 预算域 recordCall/attempt/choice 与 gate/charged 对账', () 
 
 test('ARCH5-06 host 不再手写 calls/attempts（统一走预算域）', async () => {
   const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('./host.mjs', import.meta.url), 'utf8');
+  // 2026-11-18 主路径拆分：模型调用搬到 host-model.mjs，源码位置断言跟着职责走；
+  // 语义不变——facade 与模型域都不得手写 calls/attempts，且必须走预算域。
+  const src = ['host.mjs', 'host-model.mjs']
+    .map((f) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n');
   assert.ok(!/S\.model\.calls\s*\+=/.test(src), 'host 不得再手写 S.model.calls 自增');
   assert.ok(!/S\.model\.attempts\.push/.test(src), 'host 不得再手写 attempts.push');
   assert.match(src, /budget\.recordCall\(/);

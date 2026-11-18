@@ -9,7 +9,7 @@
 ## 一、五份基准读数（已随仓库发布）
 
 ```bash
-npm test                                  # 178 个测试文件 / 976 条断言（2026-11-18，HEAD 见 git log）
+npm test                                  # 179 个测试文件 / 982 条断言（2026-11-18，HEAD 见 git log）
 node life/run.mjs --report > /tmp/report.log    # 四条件消融矩阵
 node life/run.mjs --sweep  > /tmp/sweep.log     # 5 seed 复核
 node life/run.mjs --viab   > /tmp/viab.log      # 受损速度
@@ -25,6 +25,8 @@ md5sum /tmp/{report,sweep,viab,recover,metab}.log
 | viab | `evidence/viab.log` | `86da5c0a4a0e26b082fbfb54fd6c1736` |
 | recover | `evidence/recover.log` | `feac239b364b8a771042d3996529181e` |
 | metab | `evidence/metab.log` | `e0a23df93d8fa7c9e5db7d2ccc9a76cf` |
+
+> 2026-11-18 主路径拆分后重跑五份面，五份 md5 与上表逐位相同；重跑副本与哈希清单见 `evidence/score/baseline-surfaces/` 与 `evidence/score/research-md5.txt`。
 
 > 注意：`--viab` 的输出末尾多两行**披露文字**（"饥馑档只在头 55 刻真饥馑"），这两行是 2026-11-09 加的；
 > 表格本身与加披露之前逐字节相同。`--sweep`/`--report` 的输出依赖 seed 列表，默认固定。
@@ -60,6 +62,16 @@ node life/m4-mutation-battery.mjs        # 7 条（2026-11-09 补，之前只存
 - **外部基线**：部分 M5 训练脚本读 `D:/Codex-Projects/output/` 下的历史日志，仓库不保证能复现（README 已声明）。
 - **线上实例**：部署在平台上的行为依赖平台休眠策略与是否配置了 `CTL_TOKEN`，仓库无法自证。
 - **覆盖率只统计被套件加载的模块**（以 `npm run coverage` 最后一次输出为准），约 80 个一次性测量脚本不在其中；它们是离线装置，不在运行时路径上。
+
+## 五、2026-11-18 新增证据（0.1.5）
+
+| 证据 | 文件 | 怎么复现 |
+|---|---|---|
+| 5 分钟真实路径（Chrome） | `evidence/score/quickstart-browser.log` | `node scripts/quickstart-browser.mjs`（需本机 Chrome；`REQUIRE_CHROME=1` 强制） |
+| 作者侧消融/负控 | `evidence/score/baseline.json` | `node scripts/score-baseline.mjs --ticks 240 --seeds 7,13 --repeats 2`；说明与未验证声明见 [`BENCHMARK.md`](./BENCHMARK.md) |
+| 五份面拆分后重跑 | `evidence/score/baseline-surfaces/*.log` + `research-md5.txt` | 五条 `node life/run.mjs --…` 命令；md5 应与上表逐位相同 |
+
+> 再次强调：`baseline.json` 是**作者侧**消融/负控，不是外部独立基准，也不是第三方验证；不要把它写成“外部验证通过”。
 
 ## 五、配对对照（2026-11-09 新增，用来回答"这条差异能不能归因到通道"）
 

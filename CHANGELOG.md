@@ -1,5 +1,22 @@
 # 变更记录
 
+## [0.1.5] — 2026-11-18
+
+### 主路径可读性（行为等价拆分）
+
+- `life/host.mjs` 1747 → 约 460 行：拆出 `host-world.mjs`（世界创建/装载、tick 串行链、定时器、离线补时、存档、营地生命周期）、`host-model.mjs`（配置、预算/车道、审议提示词、modelBrain/modelTalk）、`host-replay.mjs`（A/B 对照、回放帧、comparison.json）。`S`/`CFG` 仍是单例引用，不复制；`host.mjs` 保留 facade 与全部原导出。
+- `life/survplay.mjs` 1342 → 约 630 行：拆出 `survplay-actions.mjs`（时间/体力/成本、busy 跨刻、失败回滚与账本）、`survplay-camp.mjs`（营地/住房/设施/建造/家庭/合作动作入口）、`survplay-save.mjs`（dump/load 与旧档迁移）。依赖方向单向，`survplay` 保留 tick/view/原导出。
+- 新增 `life/split-boundaries.test.mjs`：行数、域模块存在性、依赖方向、原导出兼容六条边界闸门（先红后绿）。
+- 行为等价：`npm run check` 全绿；测试 179 文件 / 982 条；五份研究面 md5 与 `seed/world.json` 旧档载入未变。
+
+### 交付项
+
+- `package.json` 增加 `"type": "module"`（消除 lint/ESM 重解析警告）、`repository`/`bugs` 字段，版本 `0.1.5`；新增 `.github/ISSUE_TEMPLATE/bug.md`。
+- 新增根目录 `QUICKSTART.md`（3 条命令 + 5 分钟真实路径）与 `ARCHITECTURE.md`（模块边界、host/survplay 拆分、默认开关、已知限制），clone 后不读 gitignored `docs/` 也能接手。
+- 新增 `BENCHMARK.md` + `scripts/score-baseline.mjs`：同 seeds/同 tick 比较内部通道开/关/随机策略的行为分布与可复现性；明确为**作者侧消融/负控**，不是外部独立基准，附第三方复现协议与未验证声明；证据 `evidence/score/baseline.json`。
+- 新增 `scripts/quickstart-browser.mjs`：真实 Chrome 跑起服→进游戏→走→采集→吃→睡→HUD→死亡后世界继续，证据 `evidence/score/quickstart-browser.log`。
+- 公仓谷仓新增「在公仓吃一份」按钮（与服务端 `camp_eat` 的谷仓分支同源；不饿时按钮给出原因）。
+
 ## [未发布]
 
 ### 审计5 修复（2026-11-18）

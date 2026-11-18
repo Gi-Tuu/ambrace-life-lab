@@ -2319,6 +2319,8 @@ function inspectRoomProp(prop) {
         $('campPropDetail').textContent=`公仓 ${s.store}/${s.storeCap}${fb?`（${fb}）`:''} · 背包作物 ${s.pinv.p1.crop??0}`;
         propOption(options,'存入一份作物',!(s.pinv.p1.crop>=1)?'背包没有作物':s.store+1>s.storeCap?'公仓已满':'',()=>use('deposit'));
         propOption(options,'领取一份粮食',s.store<1?'公仓没有整份粮食':'',()=>use('withdraw'));
+        // 谷仓直接吃一份与家里餐桌共用“今日已吃”计数；不饿时服务端会拒绝，按钮这里先给出原因。
+        propOption(options,'在公仓吃一份',s.store<1?'公仓没有粮食':(s.player?.energy??1)>0.6?'还不饿':'',()=>performCamp({kind:'camp_eat'},ui.interior));
       } else if (facility.type==='shelter') {
         $('campPropDetail').textContent='在避难住所休息可恢复精力。';
         bindAction('休息',()=>use('rest'));
