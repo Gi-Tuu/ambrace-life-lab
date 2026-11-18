@@ -1,12 +1,12 @@
-import { campEntrance, campSite } from '../web/camp-interaction.mjs';
-import { campBridgeBounds, TOWN_SIZE, overlapsLot } from '../web/camp-layout.mjs';
-import { campTerrain } from '../web/camp-terrain.mjs';
-import { districtPads } from '../web/camp-districts.mjs';
-import { outdoorStage, timberStage } from '../web/camp-3d-scene.mjs';
+import { campEntrance, campSite } from '../shared/camp-interaction.mjs';
+import { campBridgeBounds, TOWN_SIZE, overlapsLot } from '../shared/camp-layout.mjs';
+import { campTerrain } from '../shared/camp-terrain.mjs';
+import { districtPads } from '../shared/camp-districts.mjs';
+import { outdoorStage, timberStage } from '../shared/camp-scene.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
-import { inCamp, wildLandscape } from '../web/wild-landscape.mjs';
-import { joinedRoute } from '../web/camp-outskirts.mjs';
-import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../web/camp-construction-access.mjs';
+import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
+import { joinedRoute } from '../shared/camp-outskirts.mjs';
+import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };

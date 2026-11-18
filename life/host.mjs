@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 //   2) 时间差推进：免费创空间会休眠。醒来后必须把「没人看的那段时间」补进内部状态，
 //      否则「内部状态持续存在」这个主张在演示现场就会被戳穿。
 //   3) 只补状态、不补决策：休眠期间没有观察者，编造那段时刻的行为等于伪造历史。
-import { mkdir, readFile, writeFile, rename, readdir, rm, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { makeWorld, spawn, scanSecrets, LOCS, hail, workUsedToday } from './body.mjs';
 import { phaseOf, scheduledLoc, weatherFor, dayOf } from './clock.mjs';
@@ -26,6 +26,14 @@ import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy } from './survplay.mjs';
+import { isFreeProvider as freeProvider, modelChannel, breakerOpenAt, budgetTick, observerActive as observerActiveBase, pickProviderKey, createBudgetDomain } from './host-budget.mjs';
+import { createViewerDomain } from './host-viewers.mjs';
+import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive } from './host-saves.mjs';
+export { modelChannel, breakerOpenAt, budgetTick, pickProviderKey };
+// host 的对外签名保留默认 PRESENCE_MS（纯函数本体在 host-budget，不认识 env）。
+export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
+  return observerActiveBase(lastVisitor, now, presenceMs);
+}
 
 const ROSTER = [
   { id: 'a1', name: '岑', archetype: '谨慎', loc: 'home' },
@@ -86,36 +94,7 @@ const BREAKER_MS = Number(process.env.MODEL_BREAKER_MS ?? 60000);
 const FREE_HOSTS = (process.env.FREE_MODEL_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const PAID_HOSTS = (process.env.PAID_MODEL_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 export function isFreeProvider(base) {
-  const b = String(base ?? '');
-  let host = '';
-  try { host = new URL(b).hostname; } catch { return false; }
-  if (PAID_HOSTS.includes(host)) return false;
-  if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?([/?]|$)/i.test(b)) return true;
-  return FREE_HOSTS.includes(host);
-}
-// 纯函数：给定「有没有观众 / 这条链路花不花钱 / 两本账 / 熔断」，决定这次能不能发、该记哪本账。
-// 拆出来的理由：这是"无人时不花钱"这条承诺的全部逻辑，必须能被逐格断言，而不是藏在循环里靠运气绿。
-export function modelChannel({ watched, free, moneyCalls = 0, nodeCalls = 0, moneyBudget = 0, nodeBudget = 0, breakerOpen = false, allowPaidUnattended = false }) {
-  if (free) {
-    if (breakerOpen) return { go: false, kind: 'node', why: 'BREAKER' };
-    if (nodeBudget > 0 && nodeCalls >= nodeBudget) return { go: false, kind: 'node', why: 'NODE_BUDGET' };
-    return { go: true, kind: 'node' };
-  }
-  if (!watched && !allowPaidUnattended) return { go: false, kind: 'money', why: 'NO_OBSERVER' };
-  if (moneyBudget > 0 && moneyCalls >= moneyBudget) return { go: false, kind: 'money', why: 'BUDGET' };
-  return { go: true, kind: 'money' };
-}
-// 熔断只是运行时状态（不进存档）：节点重启或中继抖动后应当重新试探，而不是把黑名单写进世界。
-export function breakerOpenAt(breaker, now = Date.now()) { return Number(breaker?.openUntil ?? 0) > now; }
-function breakerSee(free, ok, now = Date.now()) {
-  if (!free) return;
-  if (ok) { S.breaker.fails = 0; return; }
-  S.breaker.fails += 1;
-  if (BREAKER_FAILS > 0 && S.breaker.fails >= BREAKER_FAILS) {
-    S.breaker.openUntil = now + BREAKER_MS;
-    S.breaker.trips = (S.breaker.trips ?? 0) + 1;
-    S.breaker.fails = 0;
-  }
+  return freeProvider(base, { freeHosts: FREE_HOSTS, paidHosts: PAID_HOSTS });
 }
 const ATTEMPT_CAP = 20;
 // 有观众才上真模型：无人访问时走替身（0 成本），有人打开页面才调模型。
@@ -127,48 +106,14 @@ import { worldSite } from './geometry.mjs';
 import { createReplay, recordReplayFrame, replayRange, replayPoint } from './replay-history.mjs';
 export { modelLaneFor };
 
-export function observerActive(lastVisitor, now, presenceMs = PRESENCE_MS) {
-  return now - lastVisitor <= presenceMs;
-}
-// 纯函数便于闸门测试：跨天归零，同日原样返回
-export function budgetTick(model, dayKey) {
-  if (model.dayKey === dayKey) return model;
-  model.dayKey = dayKey;
-  model.calls = 0;
-  model.tokens = 0;
-  model.moneyCalls = 0;
-  model.nodeCalls = 0;
-  if ('survivalChoices' in model) model.survivalChoices = 0;
-  model.attempts.length = 0;
-  return model;
-}
 // BUG-8：应用层的其它模型入口（serve.mjs 的 /chat 转发）必须走**同一套**预算与在场闸门，
 // 否则 MAX_CALLS 只对世界内部那条路径有效，旁路照样能把额度烧光。
-// 返回 null 表示放行；否则返回拒因（'BUDGET' / 'NO_OBSERVER'）。
-// H-04：必须**先预扣再放行**。旧版只读不扣，并发请求会在 calls 落账前全部通过检查
-// （实测 MAX_CALLS=5 时 30 并发全部 200、calls=30 ⇒ 6 倍超支，熔断形同虚设）。
-export function modelGate() {
-  budgetTick(S.model, new Date().toISOString().slice(0, 10));
-  if (S.model.calls >= BUDGET) return 'BUDGET';
-  if (!observerActive(S.lastVisitor, Date.now())) return 'NO_OBSERVER';
-  S.model.calls += 1; // 预扣：额度在"决定放行"的此刻就减少，并发下也不可能超发
-  S.model.reserved = (S.model.reserved ?? 0) + 1;
-  return null;
-}
-// 调用失败（上游报错/全供应商失败）必须把预扣退回去，否则额度被白吃
-export function modelRelease() {
-  if (S.model.reserved > 0) S.model.reserved -= 1;
-  S.model.calls = Math.max(0, S.model.calls - 1);
-}
-// 调用成功：预扣转正式消费，只追加 token（calls 已在 gate 里扣过，不能重复计）
-export function modelChargeLane(free) {
-  if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1;
-  else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
-}
-export function modelCharged(tokens = 0) {
-  if (S.model.reserved > 0) S.model.reserved -= 1;
-  S.model.tokens += Number(tokens) || 0;
-}
+// H-04：必须**先预扣再放行**（预算域内部实现），facade 只保留原签名。
+let budget;
+export const modelGate = () => budget.gate();
+export const modelRelease = () => budget.release();
+export const modelChargeLane = (free) => budget.chargeLane(free);
+export const modelCharged = (tokens = 0) => budget.charged(tokens);
 // 演示侧的 M3/M4 开关：机制侧默认关（channelMask 不传），这里只决定这一页要不要把这一层接上。
 // 不落地存档：刷新或重部署回到默认关，免得"默认关"这句只在文档里成立。
 // startRaw 是这次会话的世界起点快照，切开关时两个世界都回到这里（见 replayLayers）。
@@ -189,6 +134,23 @@ const S = { comparison: null, compareView: null, compareSaveError: null, compare
   lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null, // 用 getter 而不是加载时常量：测试常在同一进程里换 DATA_DIR（换目录模拟重启），\
   // 加载时读死会让写入落回仓库的 ./data（2026-11-15 覆盖率下暴露的真实污染）。\
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
+
+// 领域模块只拿状态引用，不持有第二份单例；host 保留 facade 与原对外 API。
+budget = createBudgetDomain({
+  getState: () => S, budget: BUDGET, nodeBudget: NODE_BUDGET, presenceMs: PRESENCE_MS,
+  breakerFails: BREAKER_FAILS, breakerMs: BREAKER_MS,
+});
+const viewers = createViewerDomain({
+  getState: () => S, presenceMs: PRESENCE_MS,
+  validCampKey: (key) => validCampKey(key),
+  markSeen: (key, at) => {
+    const liveCamp = S.camps?.live.get(key);
+    if (!liveCamp) return;
+    try { S.camps.markSeen(liveCamp, at); } catch { /* 本拍和清扫仍使用内存中的真实访问时间。 */ }
+  },
+});
+const writeQueue = createWriteQueue();
+let saveCoalescer = null;
 
 export function configure({ providers = [], keys = [], model = '', models = [], deliberationModel, seed, brain } = {}) {
   if (providers.length) CFG.providers = providers.map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -268,17 +230,9 @@ function loadArchive(text, opts = {}) {
   return { raw, packs: packsFrom(raw, opts) };
 }
 
-// 验证整个候选档案，再由启动入口一次提交世界。
+// 验证整个候选档案，再由启动入口一次提交世界。磁盘读取/坏 M5 回退在 host-saves。
 async function readArchive(path) {
-  const source = await readFile(path, 'utf8');
-  let loaded, warning = null;
-  try {
-    loaded = loadArchive(source);
-  } catch (error) {
-    if (error.code !== 'M5_STATE_INVALID') throw error;
-    warning = error.message;
-    loaded = loadArchive(source, { skipM5: true });
-  }
+  const { loaded, warning } = await readArchiveFile(path, { decode: (text, opts = {}) => loadArchive(text, opts) });
   const survival = loaded.raw.survival;
   if (survival != null && !validCampArchive(survival)) {
     throw new Error('生存存档结构不完整');
@@ -288,19 +242,8 @@ async function readArchive(path) {
   return { ...loaded, surv, warning };
 }
 
-// 隔离文件不能无限堆：每次约 340KB，免费空间磁盘有限。只留最近 5 份。
 async function quarantine(worldFile) {
-  const dst = join(S.dir, `world.corrupt-${Date.now()}.json`);
-  try {
-    await rename(worldFile, dst);
-  } catch {
-    return { path: null, error: '隔离失败（目录不可写/文件被占）' };
-  }
-  try {
-    const olds = (await readdir(S.dir)).filter((n) => n.startsWith('world.corrupt-')).sort();
-    for (const n of olds.slice(0, Math.max(0, olds.length - 5))) await rm(join(S.dir, n), { force: true });
-  } catch { /* 清理失败不重要 */ }
-  return { path: dst, error: null };
+  return quarantineArchive(S.dir, worldFile);
 }
 
 // 切一次开关 = 换一个独立变量重跑，而不是在半路上改规则：
@@ -309,11 +252,6 @@ function buildPacks() {
   S.packs = packsFrom(S.startRaw);
 }
 
-export function pickProviderKey(keys, i, providerCount = (keys ?? []).length) {
-  const list = keys ?? [];
-  if (providerCount <= 1) return list[0] || '';
-  return list[i] || '';
-}
 const providerKey = i => pickProviderKey(CFG.keys, i, CFG.providers.length);
 
 function modelConfigured() {
@@ -354,7 +292,7 @@ export function validCampKey(campKey) {
 
 // 观测用：非法键不得留痕（第三轮 §3），也给 healthz/测试一个读法。
 export function campViewerKeys() {
-  return Object.keys(S.campViewers);
+  return viewers.keys();
 }
 
 export function campSurv(campKey) {
@@ -538,12 +476,12 @@ async function modelBrain(args) {
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
       const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
-      if (!res.ok) { note(`HTTP ${res.status}`); breakerSee(free, false); continue; }
+      if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
       if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
       S.model.tokens += j.usage?.total_tokens ?? 0;
-      breakerSee(free, true);
+      budget.see(free, true);
       const p = JSON.parse(String(j.choices?.[0]?.message?.content ?? '').replace(/^```json?/i, '').replace(/```\s*$/i, '').trim());
       const hit = scored.find((s) => s.id === p.id);
       if (!hit) return null;
@@ -556,7 +494,7 @@ async function modelBrain(args) {
       return { id: hit.id };
     } catch (e) {
       note(String(e.message).slice(0, 40));
-      breakerSee(free, false); // 超时/断连是熔断的输入：中继没答上来就该冷一段，别每次都白等一个 TTL
+      budget.see(free, false); // 超时/断连是熔断的输入：中继没答上来就该冷一段，别每次都白等一个 TTL
     } finally {
       clearTimeout(to);
     }
@@ -602,15 +540,15 @@ async function modelTalk({ npc, world, history, text, trust }) {
     const to = setTimeout(() => ac.abort(), MODEL_TIMEOUT_MS);
     try {
       const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
-      if (!res.ok) { breakerSee(free, false); continue; }
+      if (!res.ok) { budget.see(free, false); continue; }
       const j = await res.json();
       S.model.calls += 1;
       if (free) S.model.nodeCalls = (S.model.nodeCalls ?? 0) + 1; else S.model.moneyCalls = (S.model.moneyCalls ?? 0) + 1;
       S.model.tokens += j.usage?.total_tokens ?? 0;
-      breakerSee(free, true);
+      budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
       if (line) return line.slice(0, 80);
-    } catch { breakerSee(free, false); /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
+    } catch { budget.see(free, false); /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
   }
   return null;
 }
@@ -859,7 +797,32 @@ async function tickBody(onError = null) {
     try { await tickSurvPlay(sp); } catch (e) { onError?.(String(e?.message ?? e).slice(0,120)); }
   }   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
-  if (saveTick % SAVE_EVERY === 0) await save();
+  // 异步持久化：tick 只排一次保存，不 await 磁盘；flushWrites/start/stop 负责收口。
+  if (saveTick % SAVE_EVERY === 0) scheduleTickSave();
+}
+
+// 后台 tick 存档：setImmediate 让本拍先返回；同一时刻最多排一次，写失败不杀世界。
+let tickSaveScheduled = false;
+let tickSaveTimer = null;
+let tickSaveChain = Promise.resolve();
+function scheduleTickSave() {
+  if (tickSaveScheduled) return false;
+  tickSaveScheduled = true;
+  tickSaveTimer = setImmediate(() => {
+    tickSaveTimer = null;
+    tickSaveScheduled = false;
+    tickSaveChain = tickSaveChain.then(() => save()).catch(() => {});
+  });
+  tickSaveTimer.unref?.();
+  return true;
+}
+function takeTickSave() {
+  if (!tickSaveScheduled) return false;
+  clearImmediate(tickSaveTimer);
+  tickSaveTimer = null;
+  tickSaveScheduled = false;
+  tickSaveChain = tickSaveChain.then(() => save()).catch(() => {});
+  return true;
 }
 
 // ─────────────────── 单写者调度器（H-08 / H-10 / H-11）───────────────────
@@ -1030,11 +993,8 @@ function serialize() {
   return { schemaVersion: ARCHIVE_VERSION, savedAt: Date.now(), seed: CFG.seed, brain: CFG.brain, missed: S.missed, model: S.model, A: pack(S.packs.A), B: pack(S.packs.B), ...(S.mainSurv ?? S.surv ? { survival: dumpSurv(S.mainSurv ?? S.surv) } : {}) };
 }
 
-let saveChain = Promise.resolve();
-let saveSeq = 0;
-
 // H-09：并发 save 原先共用固定 `${f}.tmp` 且无锁 ⇒ 一个 rename 先成功、另一个拿 ENOENT，
-// 那次存档被静默丢弃（实测 80 次并发里 3 轮）。这里串行化 + 唯一 tmp 名（双保险）。
+// 那次存档被静默丢弃（实测 80 次并发里 3 轮）。写队列串行化 + 唯一 tmp 名（双保险）在 host-saves。
 function saveCampEntry(entry) {
   try {
     S.camps.persistEntry(entry);
@@ -1054,6 +1014,9 @@ function saveWorld(sp) {
 }
 
 async function save() {
+  // 故障注入（仅证据/测试）：模拟一次很慢的整档落盘，验证 tick 没有 await 磁盘。
+  const stall = Number(process.env.ARCH_SAVE_STALL_MS ?? 0);
+  if (stall > 0) await new Promise((resolve) => setTimeout(resolve, stall));
   let campsSaved = true;
   for (const entry of S.camps?.live.values() ?? []) {
     if (!saveCampEntry(entry)) campsSaved = false;
@@ -1062,60 +1025,48 @@ async function save() {
 }
 
 function saveMain() {
-  const run = saveChain.then(async () => {
-    const f = join(S.dir, 'world.json');
-    const tmp = `${f}.${process.pid}.${(saveSeq += 1)}.tmp`;
-    const backupTmp = `${tmp}.bak`;
-    try {
-      await mkdir(S.dir, { recursive: true });
-      await writeFile(tmp, JSON.stringify(serialize()), 'utf8');
-      // 主档保留到新档发布。先在同目录完成备份，避免中途失去可恢复文件。
-      if (S.preservePrimary) throw new Error('旧存档未能隔离，暂停覆盖');
-      if (S.primaryValid) {
-        let copied = true;
-        try { await copyFile(f, backupTmp); }
-        catch (error) { if (error.code !== 'ENOENT') throw error; copied = false; }
-        if (copied) await rename(backupTmp, `${f}.bak`);
-      }
-      await rename(tmp, f);
+  return writeQueue.enqueue(async () => {
+    const result = await writeArchiveAtomic({
+      file: join(S.dir, 'world.json'), text: JSON.stringify(serialize()),
+      primaryValid: S.primaryValid, preservePrimary: S.preservePrimary,
+    });
+    if (result.ok) {
       S.primaryValid = true;
       S.savedAt = Date.now();
       S.saveWrites = (S.saveWrites ?? 0) + 1;
       S.saveError = null;
       return true;
-    } catch (e) {
-      // 库层不往 stdout 打印：node --test 的子进程里 console.log 会撞上 runner 的二进制消息流。
-      // 存档失败改成一个可查询的状态，由应用层决定要不要说、怎么说。
-      S.saveError = String(e?.message ?? e).slice(0, 80);
-      return false;
-    } finally {
-      await Promise.allSettled([rm(tmp, { force: true }), rm(backupTmp, { force: true })]);
     }
+    // 库层不往 stdout 打印：node --test 的子进程里 console.log 会撞上 runner 的二进制消息流。
+    S.saveError = result.error;
+    return false;
   });
-  saveChain = run.catch(() => {});
-  return run;
 }
 
 // 合并模式只延迟主档。名字档动作立即写目标营地，避免等待期间被淘汰。
-let actFlushTimer = null;
+function mainCoalescer() {
+  if (!saveCoalescer) saveCoalescer = createCoalescer({ delayMs: ACT_SAVE_COALESCE_MS, run: () => queueWorldWrite(saveMain) });
+  return saveCoalescer;
+}
 async function persistAfterAction(sp) {
   if ((sp.world.campKey && sp.world.campKey !== 'MAIN') || !ACT_SAVE_COALESCE_MS) {
     return {persisted: await saveWorld(sp)};
   }
-  if (!actFlushTimer) {
-    actFlushTimer = setTimeout(() => { actFlushTimer = null; void queueWorldWrite(saveMain); }, ACT_SAVE_COALESCE_MS);
-    actFlushTimer.unref?.();
-  }
+  mainCoalescer().schedule();
   return {persistence:'pending'};
 }
 function takePendingFlush() {
-  if (!actFlushTimer) return;
-  clearTimeout(actFlushTimer);
-  actFlushTimer = null;
-  void queueWorldWrite(saveMain);
+  saveCoalescer?.takeNow();
 }
 // ARCH4-06：关机/测试用 flush；tick 只排队，不等待磁盘。
-export async function flushWrites() { takePendingFlush(); await saveChain; return { ok: !S.saveError, savedAt: S.savedAt, saveError: S.saveError }; }
+export async function flushWrites() {
+  takePendingFlush();
+  await tickChain;            // 先让排队中的 saveMain 真正进入写队列
+  takeTickSave();             // 把本拍还没启动的后台存档立即踢起来
+  await tickSaveChain;        // 营地档 + 主档写入全部落地
+  await writeQueue.flush();   // 再等磁盘/rename 全部落地
+  return { ok: !S.saveError, savedAt: S.savedAt, saveError: S.saveError };
+}
 
 // 在修改任一世界前验证所有 M5 状态，避免半载入及坏档被自动保存覆盖。
 function preflightM5Archive(raw) {
@@ -1244,28 +1195,7 @@ export const host = {
   },
   setBackend: configure,
   // 观众在场打点：只由应用路径调用（/healthz 不算，否则平台健康检查会让"有观众"恒真）
-  touch: (mode, campKey) => {
-    S.lastVisitor = Date.now();
-    // 第三轮 N3：请求里的 camp 先验一次；非法/未登记不得在 campViewers 留永久键。
-    // 第四轮 N4：观看打点只认请求自己带的 camp，绝不兜到 S.campKey（那是"最后一次被打开"的全局读数）。
-    // 否则任何主营地访客的常规轮询都会把别人的分名字营地标成"有人看"，绕过三态调度。
-    const requested = campKey ?? 'MAIN';
-    if (requested !== 'MAIN' && !validCampKey(requested)) return; // SAV-05：失效 key 不打点，避免污染观看判据
-    const key = requested;
-    if (!mode || mode === 'survival') {
-      const watched = key ?? 'MAIN';
-      if (watched === 'MAIN') S.viewers.survival = S.lastVisitor;
-      S.campViewers[watched] = S.lastVisitor;
-    }
-    // P1-3：观众行为推进 lastSeenAt（落盘不推进）
-    const liveCamp = key && S.camps ? S.camps.live.get(key) : null;
-    if (liveCamp) {
-      try { S.camps.markSeen(liveCamp,S.lastVisitor); }
-      catch { /* 本拍和清扫仍使用内存中的真实访问时间。 */ }
-    }
-    if (!mode || mode === 'compare') S.viewers.compare = S.lastVisitor;
-    if (mode === 'comparison') S.viewers.comparison = S.lastVisitor;
-  },
+  touch: (mode, campKey) => viewers.touch(mode, campKey),
   async start() {
     // H-12 / H-31：S 是模块单例，stop→start 之间会带上一次会话的状态。
     // 旧版 start() 不先清 interval（第二次 start 留下一个孤儿定时器：stop() 之后世界仍在跑、
@@ -1285,11 +1215,13 @@ export const host = {
     S.campKey = S.campName = null;
     S.campViewers = {};
     S.mainSurv = S.seedSurv = null;
-    S.lastVisitor = S.viewers.survival = S.viewers.compare = S.viewers.comparison = 0;
+    viewers.reset();
     // BUG-5：装载必须在**副本**上做，全部成功才提交。上一版直接对活 pack 调 applyInto，
     // 任一字段抛错（例如越界的 m3.remaining）就留在半载入状态；catch 又把它当成"没有存档"，
     // 于是下一次 save() 用混合态覆盖掉唯一的历史档 —— 免费创空间没有持久卷，这是唯一的数据丢失路径。
     await tickChain;
+    takeTickSave();
+    await tickSaveChain; // 上一次会话的异步存档必须先落地，再决定从哪份档启动
     shuttingDown = false;
     S.primaryValid = false;
     S.preservePrimary = false;
@@ -1369,6 +1301,7 @@ export const host = {
   // 常驻循环必须能关掉：测试里 import 过 host 之后若不 stop，node --test 会因为计时器还活着而不退出
   stop() {
     takePendingFlush();
+    takeTickSave(); // 已排的后台存档不再等下一拍；start/flush 会 await 它
     if (S.sweepTimer) { clearInterval(S.sweepTimer); S.sweepTimer = null; }
     if (S.timer) clearInterval(S.timer);
     S.timer = null;

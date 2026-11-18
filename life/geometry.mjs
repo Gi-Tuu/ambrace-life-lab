@@ -1,9 +1,9 @@
 // 服务端几何权威（Phase A / 设计 Q2）。room→tile 映射此前只在前端 app.js 硬编码，
 // 这里把它收进服务端共享模块：建筑占地、blockers、角色 tile 位置都以这里为准，前端只读 /world。
 // Phase A 先提供地点几何与地块锚点；建筑/blockers 骨架留空，Phase B 填充。
-import { TOWN_SIZE } from '../web/camp-layout.mjs';
-import { campSite } from '../web/camp-interaction.mjs';
-export { CAMP_SITES as SITES, campSite as siteOf } from '../web/camp-interaction.mjs';
+import { TOWN_SIZE } from '../shared/camp-layout.mjs';
+import { campSite } from '../shared/camp-interaction.mjs';
+export { CAMP_SITES as SITES, campSite as siteOf } from '../shared/camp-interaction.mjs';
 export const worldSite = (world,loc) => world.districts?.[loc]?.at ?? world.peripheralHomes?.[loc] ?? campSite(loc,world.campLayout);
 export const TILE=16;
 export const WORLD_TW=TOWN_SIZE.width, WORLD_TH=TOWN_SIZE.depth;

@@ -1,11 +1,11 @@
-import { findRegionEntity, regionPoint, regionReady } from '../web/camp-region-entities.mjs';
+import { findRegionEntity, regionPoint, regionReady } from '../shared/camp-region-entities.mjs';
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
-import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../shared/camp-interaction.mjs';
 import { worldSite, WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
-import { TIMBER_GROVE } from '../web/camp-layout.mjs';
+import { TIMBER_GROVE } from '../shared/camp-layout.mjs';
 import { doForage, doGather, takeFoodKind } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';

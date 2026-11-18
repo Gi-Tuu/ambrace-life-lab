@@ -1,5 +1,5 @@
-import { findRegionEntity, regionPoint } from '../web/camp-region-entities.mjs';
-import { ANIMAL_ITEMS, campPen, campSite, distanceTo, distanceToRect, pointIn, wildHabitats } from '../web/camp-interaction.mjs';
+import { findRegionEntity, regionPoint } from '../shared/camp-region-entities.mjs';
+import { ANIMAL_ITEMS, campPen, campSite, distanceTo, distanceToRect, pointIn, wildHabitats } from '../shared/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';

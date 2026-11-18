@@ -13,7 +13,7 @@ import { maturePlots } from './worldstate.mjs';
 import { buildDef, gatherResource, forageRule } from './production.mjs';
 
 import { constructionAccess, constructionDestination, residentConstructionAccess, siteRecord } from './construction-access.mjs';
-import { CONSTRUCTION_CODES } from '../web/camp-construction-access.mjs';
+import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseConstructionAccess } from './households.mjs';
 
 export function validate(world, agentId, intent, here = world.loc[agentId]) {

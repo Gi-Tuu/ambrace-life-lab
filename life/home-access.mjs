@@ -1,4 +1,4 @@
-import { residentialSite } from '../web/camp-layout.mjs';
+import { residentialSite } from '../shared/camp-layout.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { isAlive } from './viability.mjs';
 

@@ -59,18 +59,19 @@ async function readBody(req) {
 
 // BUG-19：静态面改**白名单 + realpath**。原来的黑名单挡不住 Windows 的大小写不敏感、
 // %2e%2e%2f、junction，也没列举过 /docs、/.git、/contest.txt —— 本地跑 serve 就能读到仓库内部文件。
-// 镜像里静态资源只有 web/ 一样（Dockerfile 只 COPY 四样），所以只放行 web/ 就够了。
-const STATIC_BASE = join(ROOT, 'web');
+// V7.3 去 3D 后浏览器会 import shared/ 的纯数据/几何，所以白名单只有两棵树：web/ 与 shared/。
+const STATIC_BASES = { web: join(ROOT, 'web'), shared: join(ROOT, 'shared') };
 
 async function serveStatic(res, urlPath) {
   let rel;
   try { rel = decodeURIComponent(String(urlPath)); } catch { return json(res, 400, { error: 'BAD_PATH' }); }
   if (rel === '/index.html') rel = '/web/index.html';
-  if (!rel.startsWith('/web/')) return json(res, 404, { error: 'NOT_FOUND' });
+  const tree = rel.startsWith('/web/') ? 'web' : rel.startsWith('/shared/') ? 'shared' : null;
+  if (!tree) return json(res, 404, { error: 'NOT_FOUND' });
   const target = resolve(ROOT, '.' + rel);
   let real, base;
   try {
-    [real, base] = await Promise.all([realpath(target), realpath(STATIC_BASE)]);
+    [real, base] = await Promise.all([realpath(target), realpath(STATIC_BASES[tree])]);
   } catch { return json(res, 404, { error: 'NOT_FOUND' }); }
   // realpath 之后再比：符号链接 / junction / .. 都已经被展开。Windows 路径不区分大小写，统一小写比。
   const r = real.toLowerCase();

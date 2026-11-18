@@ -1,4 +1,4 @@
-import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../web/camp-interaction.mjs';
+import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../shared/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { noteRes } from './resource-ledger.mjs';
 

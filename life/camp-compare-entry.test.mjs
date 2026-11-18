@@ -8,7 +8,7 @@ process.env.DATA_DIR=mkdtempSync(join(tmpdir(),'ambrace-compare-'));
 process.env.SEED_FILE=join(process.env.DATA_DIR,'none.json');
 process.env.GAME_MODE='game';
 process.env.TICK_MS='1000000';
-const {host}=await import('./host.mjs');
+const {host,flushWrites}=await import('./host.mjs');
 const {PLAYER_UNITS_PER_TICK}=await import('./body.mjs');
 
 test('game mode advances both comparison worlds while the A/B entry is being viewed',async()=>{
@@ -139,6 +139,7 @@ test('A 侧默认通道与相同生存快照的本地运行轨迹完全一致', 
       await host.ctl({action:'step'});
       await host.ctl({mode:'compare', action:'step'});
     }
+    await flushWrites();
     const state = read();
     const { A, B } = state.comparison;
     const compareFile = join(process.env.DATA_DIR,'comparison.json');

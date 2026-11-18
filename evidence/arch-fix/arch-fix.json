@@ -1,48 +1,67 @@
 {
-  "head": "76532b8",
+  "head": "e75615b58e3872484f0374aecef900a2d8bfb09d",
+  "generatedAt": "2026-11-18T19:30:00+08:00",
   "tests": {
-    "total": 916,
-    "pass": 916,
+    "total": 935,
+    "pass": 935,
     "fail": 0
   },
   "steps": {
-    "1": {
+    "1-no-3d-closure": {
       "status": "done",
       "fixed": [
-        "camp-catalog 抽取 PLAYER_TIME/免费表",
-        "rules.validateCamp 检查未知 kind/成本/reach",
-        "survplay camp_* 先 validate 再 campAction",
-        "新增 4 条 camp 校验红测 + 2 条 shared 常量测试"
+        "13 个纯数据/几何模块从 web/ 迁到 shared/，web/ 保留兼容层",
+        "camp-3d-render 纯几何抽到 shared/camp-geometry.mjs；WebGL 渲染器仍只在前端",
+        "life/*（非测试）、host.mjs、serve.mjs 只 import shared/",
+        "serve 静态白名单扩为 web/ + shared/；Dockerfile 复制 shared/"
       ],
-      "unchanged": "合法路径由原 campAction 结算；研究态不改"
+      "evidence": "life/arch-no-3d-closure.test.mjs：host 71 / serve 74 个加载模块，web/、camp-3d-*、WebGL 均为 0",
+      "unchanged": "行为/测试：既有 916 条全部保留；新增闭包闸门 2 条"
     },
-    "2": {
-      "status": "partial",
+    "2-host-split": {
+      "status": "done",
       "fixed": [
-        "flushWrites 导出",
-        "现有 saveChain 异步 + ACT_SAVE_COALESCE_MS 合并保留",
-        "camp-persistence 10/10 通过"
+        "host-budget.mjs：isFreeProvider/modelChannel/breakerOpenAt/budgetTick/observerActive/pickProviderKey + createBudgetDomain",
+        "host-viewers.mjs：touch/campViewers/viewers/campViewerKeys/start 归零",
+        "host-saves.mjs：串行写队列、合并窗口、原子写、读档 M5 回退、坏档隔离",
+        "host 保留单例与全部对外 API，只做 facade 委托"
       ],
-      "not_measured": [
-        "6 营地 tick 阻塞/保存耗时",
-        "崩溃/中断恢复专项"
-      ]
+      "evidence": "life/host-domain-{budget,viewers,saves}.test.mjs + 原 host/camp-persistence/hardening/m5-host 全过",
+      "rollback": "三个域模块可分别退回 host 内联实现；不涉及存档格式/路由契约"
     },
-    "3": {
-      "status": "partial",
+    "3-async-persistence": {
+      "status": "done",
       "fixed": [
-        "host 直接依赖从 web/camp-layout 改为 shared/layout-version；常量一致性测试"
+        "tick 末尾 scheduleTickSave()（setImmediate 单飞 + 后台串行链），不 await save()",
+        "flushWrites/start/stop 收口；写失败只置 saveError",
+        "ARCH_SAVE_STALL_MS 故障注入（仅测试/证据）"
       ],
-      "not_done": [
-        "life/* 仍有多处 ../web 依赖（construction-access 仍 import camp-3d-scene）",
-        "host 单例/领域拆分未做"
-      ],
-      "design": "docs/设计-审计遗留-2026-11-18.md"
+      "measured": {
+        "camps": "6 名字营地 + 主营地",
+        "ticks": 20,
+        "tickMaxMs": 19.52,
+        "tickP95Ms": 19.52,
+        "flushMs": 432.33,
+        "indexEntries": 6,
+        "campArchivesT": [
+          20,
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        "mainSurvivalT": 20,
+        "crashOldArchivesReadable": "6/6",
+        "restartReopened": "6/6"
+      },
+      "evidence": "evidence/arch-fix/multiproc-async.json；life/arch-async-persistence.test.mjs（改回 await save() 时 tick 最大 434.71ms）",
+      "rollback": "tick 末尾一行改回 await save() 即回退同步语义；域模块/存档格式无需回滚"
     }
   },
   "risks": [
-    "server 闭包仍含 3D 模块（life/construction-access）",
-    "异步写 6 营地未压测",
-    "host 单例未拆"
+    "异步 tick 存档在硬退出时可能丢最后一次已排未落盘的 tick（最多 SAVE_EVERY 刻）；需要零丢失时调用 flushWrites()。",
+    "shared/ 只应放纯数据/几何；新闸门会检查服务端闭包与浏览器静态白名单。",
+    "研究态五份基线未改；本轮不 push、不部署、不动 master、不碰真实存档。"
   ]
 }

@@ -72,7 +72,7 @@ test('BUG-19 静态面只放行 web/，仓库内部文件不可读 【变红法�
   const { child, base } = await bootServer();
   try {
     // 正控：页面与前端资源必须照常可读（否则等于把站点锁死）
-    for (const p of ['/', '/index.html', '/web/app.js', '/web/index.html', '/web/assets/manifest.json']) {
+    for (const p of ['/', '/index.html', '/web/app.js', '/web/index.html', '/web/assets/manifest.json', '/shared/camp-layout.mjs']) {
       const r = await get(base, p);
       assert.equal(r.status, 200, `${p} 返回 ${r.status}，静态面被锁过头了`);
     }

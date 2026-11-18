@@ -1,4 +1,4 @@
-import { campBeds, campSite } from '../web/camp-interaction.mjs';
+import { campBeds, campSite } from '../shared/camp-interaction.mjs';
 import { dayOf } from './clock.mjs';
 
 export function restoreFarmPlots(w) {

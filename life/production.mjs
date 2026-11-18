@@ -4,7 +4,7 @@ import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-pr
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
 import { siteOf } from './geometry.mjs';
-import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
+import { constructionLot, overlapsLot } from '../shared/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
 import { noteRes } from './resource-ledger.mjs';

@@ -1,7 +1,7 @@
 import { gatherPlace } from './production.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
-import { residentialSite, HOUSING_PLOTS } from '../web/camp-layout.mjs';
+import { residentialSite, HOUSING_PLOTS } from '../shared/camp-layout.mjs';
 import { isAlive } from './viability.mjs';
 import { worldSite } from './geometry.mjs';
 import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
