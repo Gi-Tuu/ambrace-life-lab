@@ -72,7 +72,8 @@ test('C′ occupied homes move their shutters and wall damage preserves the thre
     counts.push(boxes.filter(b=>b.occluder===p.id).length);
     braces.push(p.parts.get('wall-brace-1').to[1]);
   }
-  assert.deepEqual(counts,[24,23,22]);
+  // 2026-11-18 批量细化：完好柱加柱帽 6/5/4（随破损递减），基数 24/23/22 → 30/28/26。
+  assert.deepEqual(counts,[30,28,26]);
   assert.ok(braces[2]<braces[0]);
 });
 
