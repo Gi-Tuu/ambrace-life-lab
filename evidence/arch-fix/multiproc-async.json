@@ -1,5 +1,5 @@
 {
-  "head": "e75615b58e3872484f0374aecef900a2d8bfb09d",
+  "head": "76548c6",
   "generatedAt": "2026-11-18T11:28:16.466Z",
   "harness": "node scripts/arch-async-probe.mjs measure | crash",
   "closure": {
