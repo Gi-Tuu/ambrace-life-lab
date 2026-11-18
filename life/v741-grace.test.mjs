@@ -61,3 +61,16 @@ test('V741-GRACE m3=off 时设置 M3_GRACE 不改变 1 日哈希', async () => {
   delete process.env.M3_GRACE;
 });
 
+test('V741-GRACE grace=1/2 边界：窗口内保留，超窗才 GRACE_EXPIRED', () => {
+  const g1 = setup(1);
+  g1.a.m3Choose({}, gather);
+  assert.equal(g1.a.m3Last.goal, 'maintain', 'grace=1 第 1 刻保留');
+  assert.equal(g1.a.m3Last.waited, 1);
+  g1.a.m3Choose({}, gather);
+  assert.equal(g1.a.m3Last.interrupted, 'GRACE_EXPIRED', 'grace=1 第 2 刻超窗');
+  const g2 = setup(2);
+  for (let i = 1; i <= 2; i += 1) { g2.a.m3Choose({}, gather); assert.equal(g2.a.m3Last.goal, 'maintain'); assert.equal(g2.a.m3Last.waited, i); }
+  g2.a.m3Choose({}, gather);
+  assert.equal(g2.a.m3Last.interrupted, 'GRACE_EXPIRED', 'grace=2 第 3 刻超窗');
+  delete process.env.M3_GRACE;
+});
