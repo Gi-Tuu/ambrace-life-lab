@@ -12,7 +12,7 @@ import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents,
 import { validate } from './rules.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, clockOf, CHAIN_MAX } from './resident-time.mjs';
 import { costFor } from './action-cost.mjs';
-import { installFairSched } from './fair-sched.mjs';
+import { ensureFairAgents, installFairSched } from './fair-sched.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
@@ -410,6 +410,8 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
     }
   }
   if (w.survival.talk && !talkInRange(w, w.survival.talk)) w.survival.talk = null;
+  // V7.3.3：每刻执行前登记当前在世集合（新生/动态加入不等到下一次 prepare）。
+  if (w.fairSched) ensureFairAgents(w);
   // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
   for (const id of Object.keys(w.agents)) {
     const a = w.agents[id];
@@ -1315,6 +1317,7 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
 
 
 
