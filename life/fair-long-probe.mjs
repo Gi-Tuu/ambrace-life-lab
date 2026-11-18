@@ -1,6 +1,7 @@
 // V7.3.2 长程 FAIR on/off：固定 seeds 7/13/29，正式游戏，玩家闲置；只测不改规则。
 // 用法：node life/fair-long-probe.mjs 100
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { measureIdle } from './idle-probe.mjs';
 
 const DAYS = Number(process.argv[2] ?? 100);
@@ -21,7 +22,14 @@ for (const arm of ['off', 'on']) {
       voluntaryTicks: r.totals.voluntaryTicks, schedulingTicks: r.totals.schedulingTicks,
       voluntaryIdleMin: Number(r.rows.reduce((a, x) => a + x.voluntaryIdleMin, 0).toFixed(1)),
       schedulingIdleMin: Number(r.rows.reduce((a, x) => a + x.schedulingIdleMin, 0).toFixed(1)),
-      actions: r.actions, tickMs: r.tickMs,
+      actions: r.actions, tickMs: r.tickMs, ticksRun: r.ticksRun,
+      popPeak: r.fair?.popPeak ?? null, popAvg: r.fair ? Number((r.fair.popSum / Math.max(1, r.fair.ticks)).toFixed(2)) : null,
+      peakEligible: r.fair?.peakEligible ?? null, underfundedTicks: r.fair?.underfundedTicks ?? null,
+      grantedEpisodes: r.fair?.allowed ?? null,
+      wait: r.fair?.waitSamples?.length ? { n: r.fair.waitSamples.length,
+        mean: Number((r.fair.waitSamples.reduce((a, v) => a + v, 0) / r.fair.waitSamples.length).toFixed(3)),
+        max: Math.max(...r.fair.waitSamples) } : null,
+      head: (() => { try { return execFileSync('git',['rev-parse','--short','HEAD'],{encoding:'utf8'}).trim(); } catch { return 'unknown'; } })(),
       fair: r.fair ? { calls: r.fair.calls, peakCalls: r.fair.peakCalls, peakAllowed: r.fair.peakAllowed,
         blockedTicks: r.fair.blockedTicks, debtMax: r.fair.debtMax, extraEpisodes: r.fair.extraEpisodes } : null,
     };
@@ -36,3 +44,5 @@ mkdirSync('docs', { recursive: true });
 const out = { generatedAt: new Date().toISOString(), seeds: SEEDS, days: DAYS, runs,
   note: 'fixed seeds, formal game, idle player; FAIR_SCHED=1 uses episode cap 8; no rule changes' };
 writeFileSync(`docs/fair-long-${DAYS}-v732.json`, JSON.stringify(out, null, 2));
+
+

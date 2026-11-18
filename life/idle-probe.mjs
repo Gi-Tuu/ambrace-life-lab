@@ -17,7 +17,7 @@ const MOVE = new Set(['move_to', 'look_out', 'move']);
 const REST = new Set(['rest', 'sleep']);
 const SOCIAL = new Set(['talk', 'discuss_open', 'discuss_join', 'discuss_share', 'discuss_decline', 'discuss_leave', 'deafen', 'seclude', 'refuse']);
 
-export async function measureIdle(seed = 7, days = 30) {
+export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = {}) {
   const sp = createSurvPlay(seed, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   const w = sp.world;
   const rows = [];
@@ -52,6 +52,7 @@ export async function measureIdle(seed = 7, days = 30) {
       }
     } });
     const tickMs = performance.now() - tick0; sumTick += tickMs; maxTick = Math.max(maxTick, tickMs); ticksRun += 1;
+    onAfterTick?.(w, ticksRun);
     const day = dayOf(w.t);
     for (const [id, b] of before) {
       if (!b.busy) continue;
@@ -64,7 +65,12 @@ export async function measureIdle(seed = 7, days = 30) {
     }
     if (day >= end) break; // 不把下一日的部分刻算进本窗口
     for (const a of Object.values(w.agents)) {
-      if (a.isPlayer || !isAlive(a)) continue;
+      if (a.isPlayer) continue;
+      if (!isAlive(a)) {
+        const dead = state.get(a.id);
+        if (dead) { rows.push({ ...finishDay(w, a, dead), partial: true, died: true, deathTick: a.death?.t ?? w.t }); state.delete(a.id); }
+        continue;
+      }
       const clock = clockOf(w, a.id);
       const b = before.get(a.id);
       let st = state.get(a.id);
@@ -136,7 +142,7 @@ function finishDay(w, a, st) {
     seed: w.seed, day: st.day, id: a.id, name: a.name,
     age: Math.floor(ageDays(w, a.id)), stage: residentStage(w, a.id),
     goals: a.traits?.goals ?? null, archetype: a.traits?.archetype ?? null,
-    availableMin: 1440, usedMin: st.used, idleMin: idle, ticks: st.ticks,
+    availableMin: 1440, usedMin: st.used, idleMin: idle, ticks: st.ticks, partial: st.ticks < 24, died: !!a.dead, deathTick: a.death?.t ?? null,
     laborMin: st.labor, moveMin: st.move, restMin: st.rest, socialMin: st.social, otherMin: st.other,
     busyTicks: st.busyTicks, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks, otherIdleTicks: st.otherIdleTicks ?? 0,
     voluntaryTicks: st.voluntaryTicks, schedulingTicks: st.schedulingTicks,
@@ -163,6 +169,8 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
 
 
 
