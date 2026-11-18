@@ -116,11 +116,11 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     pair = snapshot().comparison;
     assert.equal(pair.A.t, pair.startTick);
     assert.equal(pair.B.t, pair.startTick);
-    assert.equal(pair.A.agents.a1.layers.m3, 1);
+    assert.equal(pair.A.agents.a1.layers.m3, 0, 'M3 已退出正式对照入口');
     assert.equal(pair.B.agents.a1.layers.m3, 0);
     assert.equal(pair.A.pinv.p1.wood, official.pinv.p1.wood);
     await control('step');
-    assert.equal(snapshot().comparison.A.agents.a1.layers.m3, 1, '生存刻不能清掉实验掩码');
+    assert.equal(snapshot().comparison.A.agents.a1.layers.m3, 0, 'M3 不再进入对照入口');
     assert.equal(snapshot().comparison.B.agents.a1.layers.m3, 0);
     assert.equal(readFileSync(worldFile, 'utf8'), officialFile);
   } finally {
@@ -177,3 +177,5 @@ test('一侧对照档缺失居民状态时提示重开，正式生存档照常�
     host.stop();
   }
 });
+
+

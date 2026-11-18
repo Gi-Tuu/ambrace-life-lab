@@ -478,8 +478,6 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
       const mult = 1 + (w.survival.hungerK ?? 1) * Math.max(0, 1 - w.survival.store / (popH * 3));
       if (mult > 1) a.drives.tick(mult - 1, false);
     }
-    // §17 L3 承诺锁链：survival 居民启用 m3 承诺（锁住收/种链，减少往返振荡）
-    a.ch.m3 = w.residentChannelMask?.m3 ?? Number(w.survival.commitChain === true);
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
@@ -1309,6 +1307,7 @@ export function loadSurv(raw,seed=7,options) {
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
   return sp;
 }
+
 
 
 

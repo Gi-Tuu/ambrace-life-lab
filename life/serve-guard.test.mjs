@@ -197,8 +197,8 @@ test('H-02 CSRF：text/plain 与跨站请求必须被挡住 【变红法：删�
 
     // (c) reset 必须带 confirm
     const noConfirm = await post(base, '/ctl', { action: 'reset' });
-    assert.equal(noConfirm.status, 400, `没有 confirm 的 reset 返回 ${noConfirm.status}`);
-    assert.equal((await noConfirm.json()).error, 'RESET_NEEDS_CONFIRM');
+    assert.equal(noConfirm.status, 401, `无凭据的 reset 先被鉴权拒绝，返回 ${noConfirm.status}`);
+    assert.equal((await noConfirm.json()).error, 'UNAUTHORIZED');
 
     // 三种攻击之后世界必须还在原刻度
     const t1 = (await (await get(base, '/world')).json()).A.t;
@@ -320,3 +320,4 @@ test('SEC-02b 配了 CTL_TOKEN：浏览器交互不被锁；破坏性 /ctl 只�
     assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把令牌姿态打印出来');
   } finally { await stopServer(child); }
 });
+

@@ -7,21 +7,28 @@ export function actionEvent({ actorId, actionId, worldTick, kind, status, actual
 
 export function createActionObserver({ cap = ACTION_EVENT_CAP } = {}) {
   const events = [];
+  const raw = []; // 独立原始流：保留重复完成，供对账使用
   const seen = new Set();
+  const byTick = new Map();
   let dropped = 0;
   return {
     events,
+    raw,
     dropped: () => dropped,
     feed(event) {
       if (!event || !event.actorId || !Number.isFinite(event.worldTick) || !event.kind) return false;
+      raw.push(event);
+      if (raw.length > cap * 2) raw.shift();
       const key = event.actionId
         ? `${event.actionId}|${event.status}`
         : `${event.actorId}|${event.worldTick}|${event.kind}|${event.status}|${event.source}`;
       if (seen.has(key)) return false;
       seen.add(key);
       events.push(event);
+      const bucket = byTick.get(event.worldTick) ?? []; bucket.push(event); byTick.set(event.worldTick, bucket);
       if (events.length > cap) {
         const old = events.shift();
+        const ob = byTick.get(old.worldTick); if (ob) { const i = ob.indexOf(old); if (i >= 0) ob.splice(i, 1); if (!ob.length) byTick.delete(old.worldTick); }
         seen.delete(old.actionId ? `${old.actionId}|${old.status}` : `${old.actorId}|${old.worldTick}|${old.kind}|${old.status}|${old.source}`);
         dropped += 1;
       }
@@ -36,7 +43,9 @@ export function createActionObserver({ cap = ACTION_EVENT_CAP } = {}) {
       }
       return { n: events.length, dropped, byStatus, byKind, byActor };
     },
-    eventsAt(tick) { return events.filter((e) => e.worldTick === tick); },
+    eventsAt(tick) { return (byTick.get(tick) ?? []).slice(); },
   };
 }
+
+
 

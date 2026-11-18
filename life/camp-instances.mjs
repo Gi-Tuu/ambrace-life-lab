@@ -66,7 +66,8 @@ export function readIndex(dataDir) {
   try {
     const raw = JSON.parse(readFileSync(indexFile(dataDir), 'utf8'));
     if (!Array.isArray(raw?.entries)) throw new Error('营地索引格式无效');
-    return { entries: raw.entries };
+    const entries = raw.entries.filter((e) => e && typeof e === 'object' && !Array.isArray(e) && typeof e.key === 'string' && e.key);
+    return { entries, droppedEntries: raw.entries.length - entries.length };
   } catch (error) {
     if (error.code === 'ENOENT') return { entries: [] };
     // 审计 DATA-04：索引坏掉时先保留现场，再以空索引继续服务（否则 /saves、open、sweep 全部 500）。
@@ -100,7 +101,9 @@ export function listSaves(dataDir, now = Date.now()) {
 
 function stageCamp(dataDir, key, survivalDump) {
   mkdirSync(savesDir(dataDir), {recursive:true});
-  const file = campFile(dataDir,key), tmp = file + '.tmp';
+  const file = campFile(dataDir,key);
+  if (existsSync(file + '.tmp') && statSync(file + '.tmp').isDirectory()) throw Object.assign(new Error('EISDIR: camp tmp is a directory'), { code: 'EISDIR' });
+  const tmp = file + '.tmp-' + process.pid + '-' + Math.random().toString(36).slice(2);
   writeFileSync(tmp,gzipSync(Buffer.from(JSON.stringify(survivalDump))));
   return {file,tmp};
 }
@@ -313,3 +316,5 @@ export class CampInstances {
 
   close() { this.live.clear(); }
 }
+
+

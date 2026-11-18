@@ -48,6 +48,12 @@ export function tokenMatches(given, expected) {
   return diff === 0;
 }
 
+export function nonceMatches(req) {
+  const cookie = String(req?.headers?.cookie ?? '').split(';').map((x) => x.trim()).find((x) => x.startsWith('ctl_nonce='))?.slice(10);
+  const given = String(req?.headers?.['x-ctl-nonce'] ?? '');
+  return Boolean(cookie && given && cookie.length === given.length && tokenMatches(given, cookie));
+}
+
 export const bearerOf = (req) => {
   const h = String(req?.headers?.authorization ?? '');
   return h.startsWith('Bearer ') ? h.slice(7) : String(req?.headers?.['x-ctl-token'] ?? '');
@@ -61,7 +67,6 @@ export function mutatingDenied(req, token = '') {
   if (token) return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
   if (!sameOrigin(req)) return 'CROSS_SITE';
   if (browserEvidence(req)) return null;
-  // 反向代理下 remoteAddress 恒为 loopback，不能再把 loopback 当"本机开发者"。
   if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
   return 'UNAUTHORIZED';
 }
@@ -81,9 +86,16 @@ export function interactionDenied(req, token = '') {
 // 其余 /ctl 动作（pause/resume/step/mask/compare_reset 等）仍按普通交互守卫。
 export const DESTRUCTIVE_CTL = Object.freeze(['reset', 'survival_reset', 'catchup', 'brain', 'compare_reset']);
 export function ctlDenied(req, body, token = '') {
-  if (token && DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
+  if (DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
     if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
-    return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
+    if (token && tokenMatches(bearerOf(req), token)) return null;
+    if (!sameOrigin(req)) return 'CROSS_SITE';
+    if (browserEvidence(req) && nonceMatches(req)) return null;
+    return 'UNAUTHORIZED';
   }
   return interactionDenied(req, token);
 }
+
+
+
+

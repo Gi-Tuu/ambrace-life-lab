@@ -621,7 +621,7 @@ const COMPARE_SIDES = ['A', 'B'];
 
 function compareMasks() {
   return {
-    A: Object.fromEntries(Object.entries(S.comparisonMasks).filter(([, on]) => on).map(([key]) => [key, 1])),
+    A: Object.fromEntries(Object.entries(S.comparisonMasks).filter(([key, on]) => on && key !== 'm3').map(([key]) => [key, 1])),
     B: {m3: 0, coupling: 0},
   };
 }
@@ -657,7 +657,7 @@ function comparisonFromSave(saved) {
         [branches.A.world, branches.B.world].some(w => w.seed !== origin.seed || w.mapSeed !== origin.mapSeed) ||
         !Number.isSafeInteger(revision) || revision < 0) throw new Error('对照存档结构无效');
     const formerMasks = S.comparisonMasks;
-    S.comparisonMasks = {m3: saved.masks?.m3 === true, coupling: saved.masks?.coupling === true};
+    S.comparisonMasks = {m3: false, coupling: saved.masks?.coupling === true};
     try { return makeComparison(origin, revision, saved); }
     catch (error) { S.comparisonMasks = formerMasks; throw error; }
   } catch {
@@ -1687,6 +1687,7 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+
 
 
 

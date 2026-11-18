@@ -240,6 +240,10 @@ const ownerHashOf = (token) => createHash('sha256').update(String(token)).digest
 const healthStatus = ({ saveError, tickError }) => saveError || tickError ? 503 : 200;
 
 async function handle(req, res) {
+  // SEC4-01：同源浏览器 nonce。脚本无法读跨站 Cookie；前端 postJson 回填 x-ctl-nonce。
+  if (!cookieValue(req, 'ctl_nonce')) {
+    res.setHeader('set-cookie', 'ctl_nonce=' + randomBytes(16).toString('hex') + '; Path=/; SameSite=Strict');
+  }
   // H-01：new URL 在旧版位于 try 之外。一条 `GET http://[ HTTP/1.1` 就会抛 ERR_INVALID_URL，
   // 变成未捕获 rejection ⇒ 进程 exit 1（已复现）。这里先兜住，任何解析失败一律 400。
   let url;
@@ -482,6 +486,7 @@ console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
 
 
 

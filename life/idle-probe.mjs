@@ -102,10 +102,11 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
         else st.other += mins;
       }
       if (fresh.length) st.decisionTicks += 1;
-      const opportunity = true; // 公平调度实验已移除；普通动态居民行为保留
-      if (opportunity) st.opportunityTicks += 1;
+      const canAct = !clock.busy && (clock.tick?.usedMin ?? 0) < 60; // 真实机会：活着、非 busy、本刻还有时间
+      if (canAct) st.opportunityTicks += 1;
       if (b?.busy || clock.busy) { st.busyTicks += 1; st.busyMin += Math.min(DAY_TICKS, 60 - (clock.tick?.usedMin ?? 0)); }
-      else if (opportunity && acted === 0) st.voluntaryTicks += 1;
+      else if (!canAct) st.schedulingTicks += 1;
+      else if (acted === 0) st.voluntaryTicks += 1;
       st.used += acted; // 按本刻实际观测分钟累计，避免跨日 clock 重置覆盖前一日
       st.clockUsed = clock.usedMin;
       st.energySum += a.drives?.v?.energy ?? 0;
@@ -132,6 +133,7 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
     tickMs: { avg: Number((sumTick / Math.max(1, ticksRun)).toFixed(3)), max: Number(maxTick.toFixed(3)) },
     actions: ledgerStats(w)?.resident ?? null, ledgerBook: w.survival?.actionLedger?.resident ?? null, observer: observer.summary(),
     events: days <= 3 ? observer.events.slice() : undefined,
+    rawEvents: days <= 3 ? observer.raw.slice() : undefined,
     activeDays: new Set(rows.filter((x) => x.decisionTicks > 0).map((x) => x.day)).size,
     births: w.survival.births ?? 0, deaths: (w.survival.deaths ?? []).length, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
     definition: {
@@ -179,6 +181,8 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
 
 
 

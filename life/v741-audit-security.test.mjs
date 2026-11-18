@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { ctlDenied, interactionDenied } from './request-guard.mjs';
+const req = (h = {}) => ({ headers: { 'content-type': 'application/json', host: 'x', ...h }, socket: { remoteAddress: '203.0.113.9' } });
+const cookie = 'ctl_nonce=abc123';
+const reset = { action: 'reset', confirm: true };
+test('SEC4-01 匿名 reset 无 nonce 必须 403', () => assert.equal(ctlDenied(req({ origin: 'https://x' }), reset), 'UNAUTHORIZED'));
+test('SEC4-01 伪造 Origin 仍不能匿名 reset', () => assert.equal(ctlDenied(req({ origin: 'https://x', 'x-forwarded-host': 'x' }), reset), 'UNAUTHORIZED'));
+test('SEC4-01 同源 nonce 可授权浏览器 reset', () => assert.equal(ctlDenied(req({ origin: 'https://x', 'sec-fetch-site': 'same-origin', cookie, 'x-ctl-nonce': 'abc123' }), reset), null));
+test('SEC4-01 nonce 不匹配仍拒 reset', () => assert.equal(ctlDenied(req({ origin: 'https://x', 'sec-fetch-site': 'same-origin', cookie, 'x-ctl-nonce': 'bad' }), reset), 'UNAUTHORIZED'));
+test('SEC4-02 设 token 时 Bearer 可 reset', () => assert.equal(ctlDenied(req({ authorization: 'Bearer tok' }), reset, 'tok'), null));
+test('SEC4-02 ctl reset 有 nonce 放行（浏览器姿态）', () => assert.equal(ctlDenied(req({ origin: 'https://x', 'sec-fetch-site': 'same-origin', cookie, 'x-ctl-nonce': 'abc123' }), reset), null));
+test('SEC4-02 ctl reset 无凭据拒绝', () => assert.equal(ctlDenied(req({ origin: 'https://x' }), reset), 'UNAUTHORIZED'));
+test('SEC4-03 cross-site 一律拒', () => assert.equal(interactionDenied(req({ 'sec-fetch-site': 'cross-site' })), 'CROSS_SITE'));

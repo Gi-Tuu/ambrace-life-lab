@@ -11,7 +11,8 @@ export async function postJson(path, body) {
   if (camp && (path.startsWith('/world') || path.startsWith('/act') || path.startsWith('/ctl'))) {
     url = path + (path.includes('?') ? '&' : '?') + 'camp=' + encodeURIComponent(camp);
   }
-  const res = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  const nonce = typeof document === 'undefined' ? '' : (document.cookie.split(';').map((x) => x.trim()).find((x) => x.startsWith('ctl_nonce=')) ?? '').slice(10);
+  const res = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json', ...(nonce ? { 'x-ctl-nonce': nonce } : {}) }, body: JSON.stringify(body) } : undefined);
   if (res.ok) return res.json();
   const bodyError=await res.json().catch(()=>null);
   const error=new Error(`HTTP ${res.status}`);
@@ -25,3 +26,5 @@ export function persistNotices(result, path) {
   if (result.persisted === true || (path.startsWith('/world') && !result.saveError)) return 'ok';
   return null;
 }
+
+
