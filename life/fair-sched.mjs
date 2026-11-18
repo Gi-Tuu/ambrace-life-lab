@@ -21,7 +21,8 @@ export function createFairState(world, { cap = fairCap() } = {}) {
     t: null, cap, allowed: new Set(), last: {}, debt: {}, denied: {}, episodes: {}, usedEpisodes: 0,
     inTick: false,
     stats: { ticks: 0, allowed: 0, peakAllowed: 0, opportunities: 0, blockedTicks: 0,
-      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0, extraEpisodes: 0 },
+      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0, extraEpisodes: 0,
+      underfundedTicks: 0, popPeak: 0, popSum: 0, peakEligible: 0, waitSamples: [] },
   };
   return world.fairSched;
 }
@@ -45,6 +46,9 @@ function prepare(world, fs) {
   const eligible = eligibleIds(world, fs);
   fs.stats.ticks += 1;
   fs.stats.eligible = eligible.length;
+  const aliveN = Object.values(world.agents).filter((a) => !a.isPlayer && !a.dead).length;
+  fs.stats.popSum += aliveN; fs.stats.popPeak = Math.max(fs.stats.popPeak, aliveN);
+  fs.stats.peakEligible = Math.max(fs.stats.peakEligible, eligible.length);
   fs.usedEpisodes = 0;
   fs.episodes = {};
   fs.allowed = new Set();
@@ -66,9 +70,13 @@ function prepare(world, fs) {
     return l || a.localeCompare(b);
   });
   fs.allowed = new Set(ranked.slice(0, budget));
+  fs.stats.underfundedTicks += 1;
   for (const id of eligible) {
-    if (fs.allowed.has(id)) fs.debt[id] = 0;
-    else { fs.debt[id] = (fs.debt[id] ?? 0) + 1; fs.denied[id] = 'budget'; }
+    if (fs.allowed.has(id)) {
+      fs.stats.waitSamples.push(fs.debt[id] ?? 0); // 获授前的欠账（等待分布）
+      if (fs.stats.waitSamples.length > 10000) fs.stats.waitSamples.shift();
+      fs.debt[id] = 0;
+    } else { fs.debt[id] = (fs.debt[id] ?? 0) + 1; fs.denied[id] = 'budget'; }
   }
   fs.stats.allowed += fs.allowed.size;
   fs.stats.peakAllowed = Math.max(fs.stats.peakAllowed, fs.allowed.size);
@@ -119,5 +127,7 @@ export function installFairSched(world, env = process.env) {
   ensureFairAgents(world, fs);
   return fs;
 }
+
+
 
 

@@ -10,6 +10,7 @@ import { DAY_TICKS, dayOf } from './clock.mjs';
 import { residentStage, ageDays } from './households.mjs';
 import { isAlive } from './body.mjs';
 import { ledgerStats } from './action-ledger.mjs';
+import { actionEvent, createActionObserver } from './action-observer.mjs';
 
 const LABOR = new Set(['gather', 'forage', 'harvest', 'plant', 'water', 'till', 'build', 'repair', 'plan', 'expand', 'road_lay', 'road_remove', 'house_work']);
 const MOVE = new Set(['move_to', 'look_out', 'move']);
@@ -32,18 +33,35 @@ export async function measureIdle(seed = 7, days = 30) {
       return original(...args);
     };
   }
+  const observer = createActionObserver();
   const state = new Map(); // id -> day accumulator
   const end = dayOf(w.t) + days;
   const minutesOf = (kind) => costFor(kind).minutes;
   for (let guard = 0; dayOf(w.t) < end && guard < days * DAY_TICKS * 2; guard += 1) {
     const before = new Map(Object.values(w.agents).filter((a) => !a.isPlayer && isAlive(a)).map((a) => [a.id, {
-      trace: a.trace.length, busy: Boolean(clockOf(w, a.id).busy), energy: a.drives?.v?.energy ?? 0,
+      busy: Boolean(clockOf(w, a.id).busy), busyTotal: clockOf(w, a.id).busy?.totalMin ?? 0, energy: a.drives?.v?.energy ?? 0,
       decisions: decisionCount.get(a.id) ?? 0,
     }]));
     const tick0 = performance.now();
-    await tickSurvPlay(sp);
+    await tickSurvPlay(sp, { onResidentAction: (agent, rows) => {
+      for (const r of rows) {
+        const kind = r.kind ?? r.action?.kind;
+        if (!kind) continue;
+        observer.feed(actionEvent({ actorId: agent.id, worldTick: w.t, kind,
+          status: r.ok === false ? 'failed' : 'completed', actualMinutes: r.ok === false ? 0 : minutesOf(kind), actualEnergy: r.ok === false ? 0 : costFor(kind).energy, source: 'trace' }));
+      }
+    } });
     const tickMs = performance.now() - tick0; sumTick += tickMs; maxTick = Math.max(maxTick, tickMs); ticksRun += 1;
     const day = dayOf(w.t);
+    for (const [id, b] of before) {
+      if (!b.busy) continue;
+      const a2 = w.agents[id], c2 = clockOf(w, id);
+      if (!a2 || c2.busy) continue;
+      const aborted = c2.lastAbort?.at === w.t;
+      observer.feed(actionEvent({ actorId: id, worldTick: w.t, kind: c2.lastAbort?.kind ?? 'busy',
+        status: aborted ? 'aborted' : 'completed', actualMinutes: aborted ? (c2.lastAbort?.progressMin ?? 0) : b.busyTotal,
+        actualEnergy: costFor(c2.lastAbort?.kind ?? 'busy').energy, source: 'busy' }));
+    }
     if (day >= end) break; // 不把下一日的部分刻算进本窗口
     for (const a of Object.values(w.agents)) {
       if (a.isPlayer || !isAlive(a)) continue;
@@ -56,13 +74,12 @@ export async function measureIdle(seed = 7, days = 30) {
           opportunityTicks: 0, voluntaryTicks: 0, schedulingTicks: 0, decisionTicks: 0, energySum: 0, ticks: 0, busyMin: 0 };
         state.set(a.id, st);
       }
-      const fresh = a.trace.slice(b?.trace ?? a.trace.length).filter((r) => r.t === w.t && r.ok !== false);
+      const fresh = observer.eventsAt(w.t).filter((e) => e.actorId === a.id);
       let acted = 0;
-      for (const r of fresh) {
-        const kind = r.kind ?? r.action?.kind;
-        if (!kind) continue;
-        const mins = minutesOf(kind);
+      for (const e of fresh) {
+        const mins = e.actualMinutes ?? 0;
         acted += mins;
+        const kind = e.kind;
         if (LABOR.has(kind)) st.labor += mins;
         else if (MOVE.has(kind)) st.move += mins;
         else if (REST.has(kind)) st.rest += mins;
@@ -95,11 +112,11 @@ export async function measureIdle(seed = 7, days = 30) {
   const idleMin = totals.available - totals.used;
   const idleTicks = totals.voluntaryTicks + totals.schedulingTicks;
   return {
-    seed, days, actualDays: new Set(rows.map((r) => r.day)).size,
+    seed, days, actualDays: new Set(rows.map((r) => r.day)).size, ticksRun,
     rows, totals, idleMin,
     schedulingShare: idleTicks ? Number((totals.schedulingTicks / idleTicks).toFixed(4)) : null,
     tickMs: { avg: Number((sumTick / Math.max(1, ticksRun)).toFixed(3)), max: Number(maxTick.toFixed(3)) },
-    fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null,
+    fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null, observer: observer.summary(),
     births: w.survival.births ?? 0, deaths: (w.survival.deaths ?? []).length, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
     definition: {
       voluntary: '本刻有决策 trace 但未产生动作分钟（自己选择不行动）',
@@ -146,6 +163,8 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
 
 
 
