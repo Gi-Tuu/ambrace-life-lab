@@ -53,39 +53,10 @@
       ]
     }
   },
-  "tiles": {
-    "garden": "/web/assets/room_garden.png",
-    "hall": "/web/assets/room_hall.png",
-    "home": "/web/assets/room_home.png",
-    "store": "/web/assets/room_store.png",
-    "watch": "/web/assets/room_watch.png",
-    "well": "/web/assets/room_well.png",
-    "workshop": "/web/assets/room_workshop.png",
-    "yard": "/web/assets/room_yard.png"
-  },
-  "things": {
-    "beds": "/web/assets/thing_beds.png",
-    "bedsG": "/web/assets/thing_bedsG.png",
-    "bench": "/web/assets/thing_bench.png",
-    "bucket": "/web/assets/thing_bucket.png",
-    "crates": "/web/assets/thing_crates.png"
-  },
-  "icons": {
-    "coin": "/web/assets/icon_coin.png",
-    "energy": "/web/assets/icon_energy.png",
-    "social": "/web/assets/icon_social.png",
-    "viab": "/web/assets/icon_viab.png",
-    "weather": "/web/assets/icon_weather.png"
-  },
+  "tiles": {},
+  "things": {},
+  "icons": {},
   "scenes": {
-    "house_garden": "/web/assets/house_garden.png",
-    "house_hall": "/web/assets/house_hall.png",
-    "house_home": "/web/assets/house_home.png",
-    "house_store": "/web/assets/house_store.png",
-    "house_watch": "/web/assets/house_watch.png",
-    "house_well": "/web/assets/house_well.png",
-    "house_workshop": "/web/assets/house_workshop.png",
-    "house_yard": "/web/assets/house_yard.png",
     "prop_anvil": "/web/assets/prop_anvil.png",
     "prop_banner": "/web/assets/prop_banner.png",
     "prop_barrel": "/web/assets/prop_barrel.png",

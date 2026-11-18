@@ -7,15 +7,16 @@ import { join } from 'node:path';
 import { generate, PALETTE } from '../scripts/gen-pixel-assets.mjs';
 import { pack, decodePNG, validateAsset } from '../scripts/pack-assets.mjs';
 
-test('A1 生成+打包：4 角色×4 帧 / 8 房间 / 5 物件 / 5 图标，manifest 齐全', () => {
+test('A1 生成+打包：4 角色×4 帧＋44 场景皮肤；2D 房间/物件/图标已清理不再产出', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pixel-'));
   generate(dir);
   const m = pack(dir);
   assert.equal(Object.keys(m.chars).length, 4);
   for (const c of Object.values(m.chars)) assert.equal(c.frames.length, 4);
-  assert.equal(Object.keys(m.tiles).length, 8);
-  assert.equal(Object.keys(m.things).length, 5);
-  assert.equal(Object.keys(m.icons).length, 5);
+  assert.equal(Object.keys(m.tiles).length, 0);
+  assert.equal(Object.keys(m.things).length, 0);
+  assert.equal(Object.keys(m.icons).length, 0);
+  assert.equal(Object.keys(m.scenes).length, 44);
 });
 
 test('A2 所有 PNG 颜色 ⊆ PICO-8 色板（+透明），尺寸∈规格', () => {
@@ -23,7 +24,7 @@ test('A2 所有 PNG 颜色 ⊆ PICO-8 色板（+透明），尺寸∈规格', ()
   generate(dir);
   const m = pack(dir); // pack 内部已逐张 validate；这里再独立解码抽查一张角色一张房间
   const allowed = new Set(PALETTE.map((h) => `${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)}`));
-  for (const f of ['char_a1_0.png', 'room_home.png', 'icon_coin.png']) {
+  for (const f of ['char_a1_0.png', 'terrain_grass0.png', 'prop_bed.png']) {
     const img = decodePNG(readFileSync(join(dir, f)));
     for (const c of img.px) if (c !== null) assert.ok(allowed.has(c), `${f} 含色板外颜色 ${c}`);
   }
@@ -32,7 +33,7 @@ test('A2 所有 PNG 颜色 ⊆ PICO-8 色板（+透明），尺寸∈规格', ()
 
 test('A3 校验能红：色板外颜色 / 错尺寸 / 缺帧 都抛错', () => {
   assert.throws(() => validateAsset('char_x_0.png', { w: 16, h: 16, px: ['255,0,255'] }), /色板外/);
-  assert.throws(() => validateAsset('room_home.png', { w: 96, h: 63, px: [] }), /尺寸/);
+  assert.throws(() => validateAsset('terrain_grass0.png', { w: 96, h: 63, px: [] }), /尺寸/);
   assert.throws(() => validateAsset('nope.png', { w: 1, h: 1, px: [] }), /未知资产类型/);
   const dir = mkdtempSync(join(tmpdir(), 'pixel-'));
   generate(dir);

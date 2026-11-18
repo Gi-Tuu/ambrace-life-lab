@@ -145,9 +145,10 @@ async function loadAssets() {
     ACT.index = Object.fromEntries((m.actions ?? []).map((a, i) => [a.id, i]));
     ACT.rows = Object.fromEntries((m.fxRows ?? []).map((r, i) => [r, i]));
     ACT.fps = m.fps ?? 6; ACT.size = m.frame ?? [16, 24]; ACT.directions = m.directions ?? ['down'];
-    for (const [k, v] of Object.entries(m.chars ?? {})) ACT.chars[k] = await load(v);
+    // 2D 动作精灵已清理：缺失时只放弃精灵，不能连坐 UI 头像。
+    for (const [k, v] of Object.entries(m.chars ?? {})) ACT.chars[k] = await load(v).catch(() => null);
     for (const [k, v] of Object.entries(m.portraits ?? {})) ACT.portraits[k] = await load(v);
-    ACT.fx = await load(m.fx);
+    ACT.fx = m.fx ? await load(m.fx).catch(() => null) : null;
     ACT.ready = true;
   } catch {
     ACT.ready = false;
