@@ -1,0 +1,52 @@
+{
+  "head": "11f8413",
+  "generatedAt": "2026-11-18T12:19:14.875Z",
+  "note": "临时 DATA_DIR；每个 server 用完即停；不含任何真实令牌。",
+  "rows": {
+    "noToken": {
+      "selfChosenNonceStatus": 403,
+      "selfChosenNonceError": "UNAUTHORIZED",
+      "serverNonceStatus": 200,
+      "serverNonceOk": true,
+      "sessionCookieNames": [
+        "ctl_nonce",
+        "ctl_sid"
+      ]
+    },
+    "token": {
+      "nonceOnlyStatus": 403,
+      "bearerStatus": 200,
+      "bearerOk": true
+    },
+    "worldOwner": {
+      "openA": true,
+      "openB": true,
+      "worldNoCookieStatus": 403,
+      "worldOwnerStatus": 200,
+      "worldOtherOwnerStatus": 403,
+      "reopenNoCookieStatus": 403,
+      "reopenNoCookieError": "CAMP_OWNED",
+      "reopenIssuedOwnerCookie": false
+    },
+    "quota": {
+      "codes": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        429
+      ],
+      "sixthBlocked": true
+    },
+    "headers": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "xContentTypeOptions": "nosniff",
+      "xFrameOptions": "DENY",
+      "setCookie": [
+        "ctl_sid=f3f6ea09af94127d1151ed8be19b141c; Path=/; HttpOnly; SameSite=Strict",
+        "ctl_nonce=2d5f470a087696e4b03e87736ed9b23c; Path=/; SameSite=Strict"
+      ]
+    }
+  }
+}

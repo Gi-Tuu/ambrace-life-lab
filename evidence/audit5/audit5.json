@@ -1,0 +1,121 @@
+{
+  "head": "11f8413",
+  "baselineHead": "34c1aeb",
+  "generatedAt": "2026-11-18T12:19:29.549Z",
+  "tests": {
+    "files": 178,
+    "total": 967,
+    "pass": 967,
+    "fail": 0,
+    "skipped": 0,
+    "targetedAudit5": 32
+  },
+  "lint": {
+    "files": 423,
+    "engines": 23,
+    "testFiles": 178,
+    "ok": true
+  },
+  "art": {
+    "entries": 95,
+    "ok": true
+  },
+  "securityMatrix": {
+    "noToken": {
+      "selfChosenNonceStatus": 403,
+      "selfChosenNonceError": "UNAUTHORIZED",
+      "serverNonceStatus": 200,
+      "serverNonceOk": true,
+      "sessionCookieNames": [
+        "ctl_nonce",
+        "ctl_sid"
+      ]
+    },
+    "token": {
+      "nonceOnlyStatus": 403,
+      "bearerStatus": 200,
+      "bearerOk": true
+    },
+    "worldOwner": {
+      "openA": true,
+      "openB": true,
+      "worldNoCookieStatus": 403,
+      "worldOwnerStatus": 200,
+      "worldOtherOwnerStatus": 403,
+      "reopenNoCookieStatus": 403,
+      "reopenNoCookieError": "CAMP_OWNED",
+      "reopenIssuedOwnerCookie": false
+    },
+    "quota": {
+      "codes": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        429
+      ],
+      "sixthBlocked": true
+    },
+    "headers": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "xContentTypeOptions": "nosniff",
+      "xFrameOptions": "DENY",
+      "setCookie": [
+        "ctl_sid=f3f6ea09af94127d1151ed8be19b141c; Path=/; HttpOnly; SameSite=Strict",
+        "ctl_nonce=2d5f470a087696e4b03e87736ed9b23c; Path=/; SameSite=Strict"
+      ]
+    }
+  },
+  "asyncPersistence": {
+    "tickMaxMs": 19.21,
+    "flushMs": 423.96,
+    "flushOk": true,
+    "indexEntries": 6,
+    "campsT": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ],
+    "bakReadable": true,
+    "tickDidNotAwaitDisk": true
+  },
+  "items": {
+    "SEC5-01": "fixed",
+    "SEC5-02": "fixed",
+    "SEC5-03": "fixed",
+    "SEC5-04": "partial (session quota)",
+    "SEC5-05": "partial (owner reopen fixed; token-posture MAIN reset not)",
+    "SEC5-06": "fixed",
+    "DATA5-02": "fixed",
+    "DATA5-03": "fixed",
+    "DATA5-04": "fixed",
+    "DATA5-06": "fixed",
+    "ARCH5-01": "fixed",
+    "ARCH5-02": "fixed",
+    "DATA5-09": "fixed",
+    "DATA5-11": "fixed",
+    "DATA5-13": "fixed",
+    "DATA5-14": "fixed (opt-in budget)",
+    "TEST5-02": "fixed",
+    "ARCH5-06": "partial (lanes/tokens unified; calls/attempts pending design)",
+    "camp_* precheck convergence": "design only",
+    "docs/CI drift": "fixed"
+  },
+  "evidence": {
+    "security": "evidence/audit5/security.json",
+    "asyncPersistence": "evidence/audit5/async-persistence.json",
+    "checkLog": "evidence/audit5/check.log",
+    "targetedTests": "evidence/audit5/audit5-tests.log",
+    "report": "docs/回报-审计5修复-2026-11-18.md",
+    "remainingDesign": "docs/设计-审计5剩余-2026-11-18.md"
+  },
+  "notes": [
+    "All probes use temporary DATA_DIR; no real data/ writes.",
+    "Research baselines evidence/{report,sweep,viab,recover,metab}.log and shared/, seed/ unchanged.",
+    "evidence head binds the code commit; this evidence commit is the final HEAD."
+  ]
+}

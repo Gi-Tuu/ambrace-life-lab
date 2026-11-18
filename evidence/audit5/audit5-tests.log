@@ -1,0 +1,40 @@
+✔ ARCH5-01 非 camp 动作返回 NOT_CAMP_ACTION，绝不抛 ReferenceError (0.7518ms)
+✔ ARCH5-02 所有派发的 camp_* 成本都在统一表（注册=扣费同源） (0.2933ms)
+✔ ARCH5-02 未登记成本仍 fail-closed (0.091ms)
+✔ DATA5-09 settlementLife 旧档迁移：rules/survival 都 false 时 districts 仍按证据恢复 (192.5736ms)
+✔ DATA5-11 wool 兑换进 consumed 账本（库存消失有去向） (61.6953ms)
+✔ DATA5-13 deaths 封顶且总数累计（trimDeaths） (0.3546ms)
+✔ DATA5-13 observer 默认上限有界（events 2 万、raw 2×） (25.1116ms)
+✔ ARCH5-07 observerActive 只有 host-budget 一份实现（host/viewers 同引用） (0.1788ms)
+✔ ARCH5-06 addTokens 只记 token，不消耗 /chat 的在途 reserved (0.2263ms)
+✔ DATA5-14 per-camp wall-time 预算：超时跳过剩余营地并显式暴露 (517.7174ms)
+✔ DATA5-06 索引 key 必须是 32hex：穿越 key 被丢弃、saves 外文件不被删 (6.5843ms)
+✔ DATA5-06 非法 key 无法生成路径（saveCamp 抛 BAD_KEY） (1.5133ms)
+✔ DATA5-04 锁超时 fail-fast：不无锁继续写，旧索引保持原样 (64.0753ms)
+✔ DATA5-04 stale lock 回收：owner 时间戳过期后继续写并清锁 (6.5405ms)
+✔ DATA5-04/03 6 进程 × 8 轮：48/48 条目与文件都不丢、索引带代际 (387.7676ms)
+✔ DATA5-02 flushWrites 是硬屏障：没到 t=10 也要有主档 (310.2356ms)
+✔ DATA5-02 营地写失败必须传播：save/flush 都不能报 ok (318.7415ms)
+✔ DATA5-02 SIGTERM：保存失败必须非零退出 (405.6417ms)
+✔ DATA5-02 SIGTERM：成功路径退出 0 且主档已落盘 (259.4615ms)
+✔ SEC5-01 纯函数：自选 nonce（无服务端校验器）永远不能授权 reset (1.6227ms)
+✔ SEC5-01 纯函数：只有服务端校验器认可的一次性 nonce 才放行 (0.2356ms)
+✔ SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 一律不授权，只认令牌 (0.1508ms)
+✔ SEC5-01 HTTP：伪造头 + 自选 nonce 的一条 POST 重置必须 403 (590.7476ms)
+✔ SEC5-01 HTTP：服务端签发 nonce + 会话 cookie 的浏览器路径可重置 (505.7931ms)
+✔ SEC5-01 HTTP：CTL_TOKEN 姿态下无令牌/伪造头一律 403，Bearer 可用 (501.2155ms)
+✔ SEC5-02 HTTP：/world?camp= 无 cookie 403、owner 200、他人 403 (702.403ms)
+✔ SEC5-05 重开已归属营地：不换 owner、不发新 cookie、明确 403 CAMP_OWNED (510.9098ms)
+✔ SEC5-05 MAIN survival_reset：未设令牌时服务端 nonce 可重开一局（浏览器路径） (387.4444ms)
+✔ SEC5-06 安全头/ cookie 标志：CSP、nosniff、DENY、Secure (348.7633ms)
+✔ SEC5-06 saveError 不回显绝对路径 (352.8528ms)
+✔ SEC5-03 MAIN catchup 统一冷却（连点第二次被拒） (365.5147ms)
+✔ SEC5-04 匿名配额：同一会话最多 5 个营地；NaN env 回落而不是 0 (1076.1463ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5437.719
