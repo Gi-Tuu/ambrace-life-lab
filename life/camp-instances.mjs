@@ -76,7 +76,7 @@ export function readIndex(dataDir) {
   }
 }
 
-export function writeIndex(dataDir, index) {
+export function writeIndex(dataDir, index, { merge = false } = {}) {
   const dir = savesDir(dataDir);
   mkdirSync(dir, { recursive: true });
   const tmp = `${indexFile(dataDir)}.tmp`;
@@ -88,7 +88,8 @@ export function writeIndex(dataDir, index) {
     if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
   }
   try {
-    writeFileSync(tmp, JSON.stringify({ entries: index.entries ?? [] }));
+    const entries = merge ? (() => { const disk = readIndex(dataDir).entries; const by = new Map(disk.map((e) => [e.key, e])); for (const e of index.entries ?? []) if (e?.key) by.set(e.key, e); return [...by.values()]; })() : (index.entries ?? []);
+    writeFileSync(tmp, JSON.stringify({ entries }));
     renameSync(tmp, indexFile(dataDir));
   } finally { if (locked) { try { rmSync(lock); } catch { /* ignore */ } } }
 }
@@ -132,7 +133,7 @@ export function touchSave(dataDir, entry, index = readIndex(dataDir)) {
   const next = { ...(i >= 0 ? index.entries[i] : { key: entry.key, name: entry.name }), ...entry, lastSeenAt: entry.lastSeenAt ?? Date.now() };
   if (i >= 0) index.entries[i] = next;
   else index.entries.push(next);
-  writeIndex(dataDir, index);
+  writeIndex(dataDir, index, { merge: true });
   return next;
 }
 
@@ -330,6 +331,7 @@ export class CampInstances {
 
   close() { this.live.clear(); }
 }
+
 
 
 

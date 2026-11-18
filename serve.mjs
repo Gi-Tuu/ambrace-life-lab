@@ -380,7 +380,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
     // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
     const denied = p === '/act' ? interactionDenied(req, CTL_TOKEN) : ctlDenied(req, body, CTL_TOKEN);
-    if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
+    if (denied) return json(res, p === '/ctl' ? 403 : (denied === 'UNAUTHORIZED' ? 401 : 403), { error: denied });
     if (campKey && !ownerAllows(req, campKey) && !(p === '/ctl' && body?.action === 'survival_reset')) {
       return json(res, 403, { error: 'CAMP_NOT_OWNER' });
     }
@@ -501,6 +501,7 @@ console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
 
 
 
