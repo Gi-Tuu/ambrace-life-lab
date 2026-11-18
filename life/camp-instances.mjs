@@ -89,6 +89,73 @@ function safeSavesFile(dataDir, file) {
   } catch { return false; }
 }
 
+// DATA5-05：owner/名字侧车。索引不是唯一真相：索引丢失后靠它恢复归属与显示名。
+const ownerSidecar = (dataDir, key) => join(savesDir(dataDir), `${key}.owner.json`);
+export function readOwnerSidecar(dataDir, key) {
+  try {
+    if (!isCampKey(key)) return null;
+    const raw = JSON.parse(readFileSync(ownerSidecar(dataDir, key), 'utf8'));
+    const ownerHash = /^[0-9a-f]{64}$/.test(String(raw?.ownerHash ?? '')) ? raw.ownerHash : null;
+    const name = typeof raw?.name === 'string' && raw.name ? String(raw.name).slice(0, 64) : null;
+    return { name, ownerHash };
+  } catch { return null; }
+}
+export function writeOwnerSidecar(dataDir, key, { name, ownerHash } = {}) {
+  if (!isCampKey(key)) return false;
+  try {
+    mkdirSync(savesDir(dataDir), { recursive: true });
+    const file = ownerSidecar(dataDir, key);
+    const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    const payload = {
+      name: typeof name === 'string' ? name.slice(0, 64) : null,
+      ownerHash: /^[0-9a-f]{64}$/.test(String(ownerHash ?? '')) ? ownerHash : null,
+      updatedAt: Date.now(),
+    };
+    try {
+      writeFileSync(tmp, JSON.stringify(payload));
+      renameWithRetry(tmp, file);
+    } finally { if (existsSync(tmp)) rmSync(tmp, { force: true }); }
+    return true;
+  } catch { return false; }
+}
+
+// DATA5-05：索引整体丢失（没有 corrupt 备份）时，从 saves/ 的营地档 + 侧车重建索引。
+// 老营地没有侧车：名字退化为 key，ownerHash 为空，继续走“首次 claim”兼容路径。
+export function rebuildIndexFromSaves(dataDir) {
+  const dir = savesDir(dataDir);
+  if (!existsSync(dir) || existsSync(indexFile(dataDir))) return 0;
+  try {
+    if (readdirSync(dir).some((n) => n.startsWith('index.json.corrupt-'))) return 0;
+  } catch { return 0; }
+  const entries = [];
+  let names = [];
+  try { names = readdirSync(dir); } catch { return 0; }
+  for (const name of names) {
+    const m = /^([0-9a-f]{32})\.json\.gz$/.exec(name);
+    if (!m) continue;
+    const key = m[1];
+    let raw;
+    try { raw = loadCamp(dataDir, key); } catch { continue; }
+    if (!validCampArchive(raw)) continue;
+    const side = readOwnerSidecar(dataDir, key);
+    let lastSeenAt = Date.now();
+    try { lastSeenAt = statSync(join(dir, name)).mtimeMs; } catch { /* 保留 now */ }
+    const minds = Object.values(raw.minds ?? {});
+    entries.push({
+      key,
+      name: side?.name ?? key,
+      day: Math.floor((Number.isFinite(raw.t) ? raw.t : 0) / 24),
+      population: Math.max(0, minds.filter((x) => x && !x.dead).length - (raw.minds?.p1 ? 1 : 0)),
+      status: raw.survival?.playerDead ? 'ended' : 'active',
+      lastSeenAt,
+      ...(side?.ownerHash ? { ownerHash: side.ownerHash } : {}),
+    });
+  }
+  if (!entries.length) return 0;
+  writeIndex(dataDir, { entries });
+  return entries.length;
+}
+
 function rotateCorrupt(dataDir, keep = 10) {
   try {
     const dir = savesDir(dataDir);
@@ -426,6 +493,10 @@ export class CampInstances {
       // DATA5-03：先发布文件、再写索引。反过来的窗口会让索引指向不存在的档（名字失效）；
       // 文件先落地时，即使索引没写成，下一次 open 也能从文件自愈并补索引。
       renameSync(tmp,file);
+      // DATA5-05：owner/名字侧车与营地档同一次保存发布；索引丢了也能从这里恢复。
+      const indexed = readIndex(this.dataDir).entries.find((e) => e.key === key);
+      const side = readOwnerSidecar(this.dataDir, key);
+      writeOwnerSidecar(this.dataDir, key, { name, ownerHash: indexed?.ownerHash ?? side?.ownerHash ?? null });
       touchSave(this.dataDir, {
         key, name,
         day: Math.floor((w.t ?? 0) / (w.dayTicks ?? 24)),

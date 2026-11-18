@@ -13,7 +13,8 @@
 - **ARCH5-01/02**：`validateCamp` 非 camp 分支改用字符串返回 `NOT_CAMP_ACTION`；成本注册与运行时统一走 `costFor`/`SHARED_COST`。
 - **DATA5-09**：`settlementLife` 旧档按“分城区证据”显式 OR 迁移，不再因 false 永久丢 districts/peripheralHomes。
 - **DATA5-11/13/14**：wool 兑换/屠宰/喂食记入 consumed；deaths 封顶 200 并累计总数；observer 默认 cap 降到 2 万；分营地 tick 支持墙钟预算。
-- **测试/CI**：`REQUIRE_CHROME=1` 真正驱动浏览器用例失败（新增 `chrome-gate.mjs` 与 Linux Chrome 路径）；CI 显式验证 Chrome；文档测试数、Dockerfile、SECURITY 白名单同步到 178 文件 / 967 条。
+- **测试/CI**：`REQUIRE_CHROME=1` 真正驱动浏览器用例失败（新增 `chrome-gate.mjs` 与 Linux Chrome 路径）；CI 显式验证 Chrome；文档测试数、Dockerfile、SECURITY 白名单同步到 178 文件 / 976 条。
+- **第二轮补齐**：MAIN `survival_reset` 在令牌姿态下可用服务端 nonce（一次性 + 60s TTL + 3 次/分钟 + `[audit] main_reset`）；owner/名字侧车 `saves/<key>.owner.json` 与索引重建；`S.model.calls/attempts/survivalChoices` 统一走预算域；启动基线档 + `SAVE_EVERY` 可配 + `.bak` 回退测试；camp_* 工具/品类前置收敛到 `camp-precheck.mjs`。
 
 ### 外围同权收口（P0）
 

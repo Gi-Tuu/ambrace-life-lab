@@ -83,10 +83,15 @@ export function interactionDenied(req, token = '') {
 // Origin / Sec-Fetch-Site / x-forwarded-host 都是任意脚本可伪造的头，不再单独作为授权证据。
 // nonceValid 缺省 ⇒ 一律拒绝（fail-closed）：纯函数测试不会因为“客户端自选了 nonce 对”而放行。
 export const DESTRUCTIVE_CTL = Object.freeze(['reset', 'survival_reset', 'catchup', 'brain', 'compare_reset']);
-export function ctlDenied(req, body, token = '', nonceValid = null) {
+export function ctlDenied(req, body, token = '', nonceValid = null, { allowNonce = false } = {}) {
   if (DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
     if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
-    if (token) return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
+    if (token) {
+      if (tokenMatches(bearerOf(req), token)) return null;
+      // SEC5-05：只有显式允许的浏览器动作（MAIN survival_reset）可以用服务端会话 nonce。
+      if (allowNonce && String(body?.action ?? '') === 'survival_reset' && typeof nonceValid === 'function' && nonceValid(req)) return null;
+      return 'UNAUTHORIZED';
+    }
     return typeof nonceValid === 'function' && nonceValid(req) ? null : 'UNAUTHORIZED';
   }
   return interactionDenied(req, token);

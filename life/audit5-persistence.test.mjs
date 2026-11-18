@@ -1,7 +1,7 @@
 // 审计5 Batch 0：DATA5-02/03 持久化成功口径（flush 硬屏障 / 营地写失败传播 / SIGTERM）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -24,12 +24,13 @@ async function freshHost(t) {
   return { mod, dir };
 }
 
-test('DATA5-02 flushWrites 是硬屏障：没到 t=10 也要有主档', async (t) => {
+test('DATA5-01 start 立即写一次基线档；flush 硬屏障仍然成立', async (t) => {
   const { mod, dir } = await freshHost(t);
-  assert.equal(existsSync(join(dir, 'world.json')), false, 'start 后尚未排后台存档');
+  assert.equal(existsSync(join(dir, 'world.json')), true, 'start 后必须有基线主档（首个 SAVE_EVERY 窗口可恢复）');
+  assert.equal(mod.host.snapshot().saveWrites, 1, '启动基线只写一次');
   const flushed = await mod.flushWrites();
   assert.equal(flushed.ok, true, JSON.stringify(flushed));
-  assert.ok(existsSync(join(dir, 'world.json')), 'flush 之后必须有主档');
+  assert.equal(mod.host.snapshot().saveWrites, 1, 'flush 在无新状态时不得重复写同一刻');
 });
 
 test('DATA5-02 营地写失败必须传播：save/flush 都不能报 ok', async (t) => {
@@ -97,5 +98,52 @@ test('DATA5-02 SIGTERM：成功路径退出 0 且主档已落盘', async () => {
   const r = await runSignalProbe(script, dir);
   assert.equal(r.code, 0, `成功路径应 0 退出，实测 ${r.code}: ${r.out.slice(-300)}`);
   assert.ok(existsSync(join(dir, 'data', 'world.json')), 'SIGTERM 必须等 flush 完成再退出');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('DATA5-01 主档损坏时启动从 .bak 恢复最近完整档', async (t) => {
+  const { mod, dir } = await freshHost(t);
+  for (let i = 0; i < 10; i += 1) {
+    await mod.host.tickOnce();
+    await new Promise((r) => setImmediate(r));
+  }
+  await mod.flushWrites(); // 第一版 t=10 落盘，主档 = 10
+  for (let i = 0; i < 10; i += 1) {
+    await mod.host.tickOnce();
+    await new Promise((r) => setImmediate(r));
+  }
+  await mod.flushWrites(); // 第二版 t=20：.bak 必须是 t=10
+  const bak = JSON.parse(readFileSync(join(dir, 'world.json.bak'), 'utf8'));
+  const bakT = bak.survival.t;
+  assert.equal(bakT, 10, `备份档应是上一份完整档 t=10，实测 ${bakT}`);
+  mod.host.stop();
+  writeFileSync(join(dir, 'world.json'), 'not-json-at-all');
+  const boot = await mod.host.start();
+  assert.match(boot.note, /备份存档/, `启动必须明确说明从备份恢复：${boot.note}`);
+  assert.equal(mod.host.status().campT, bakT, '恢复后的生存世界刻数必须来自 .bak');
+});
+
+test('DATA5-01 SAVE_EVERY 可配：=2 时硬退出前已落第 2 刻，不再固定丢 10 刻', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit5-save-every-'));
+  const script = `
+    const { host } = await import(${JSON.stringify(HOST_URL)});
+    await host.start();
+    for (let i = 0; i < 3; i += 1) await host.ctl({ action: 'step' });
+    const deadline = Date.now() + 3000;
+    while (host.snapshot().saveWrites < 2 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+    process.exit(0);
+  `;
+  const file = join(dir, 'probe.mjs');
+  writeFileSync(file, script);
+  const r = spawnSync(process.execPath, [file], {
+    env: {
+      ...process.env, DATA_DIR: join(dir, 'data'), SEED_FILE: join(dir, 'missing-seed.json'),
+      GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', BRAIN: 'local', SAVE_EVERY: '2',
+    },
+    encoding: 'utf8', timeout: 60000,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const main = JSON.parse(readFileSync(join(dir, 'data', 'world.json'), 'utf8'));
+  assert.ok(main.survival.t >= 2, `SAVE_EVERY=2 时应已落第 2 刻，实测 ${main.survival.t}`);
   rmSync(dir, { recursive: true, force: true });
 });

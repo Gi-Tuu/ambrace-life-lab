@@ -51,7 +51,7 @@ export function pickProviderKey(keys, i, providerCount = (keys ?? []).length) {
 const dayKeyAt = (now) => new Date(now).toISOString().slice(0, 10);
 
 // host 用：S.model / S.lastVisitor / S.breaker 由调用方注入，模块不持有全局单例。
-export function createBudgetDomain({ getState, budget, nodeBudget = 0, presenceMs, breakerFails, breakerMs, now = Date.now }) {
+export function createBudgetDomain({ getState, budget, nodeBudget = 0, presenceMs, breakerFails, breakerMs, attemptCap = 20, now = Date.now }) {
   const state = () => getState();
   return {
     gate(at = now()) {
@@ -82,6 +82,25 @@ export function createBudgetDomain({ getState, budget, nodeBudget = 0, presenceM
     addTokens(tokens = 0) {
       const s = state();
       s.model.tokens += Number(tokens) || 0;
+    },
+    // ARCH5-06：内部模型路径的成功调用统一在这里记账（calls + 分车道 + token）。
+    // /chat 仍走 gate（预扣）→ charged（转正式），两条路只共享这一份字段写入面。
+    recordCall({ free = false, tokens = 0 } = {}) {
+      const s = state();
+      s.model.calls = (s.model.calls ?? 0) + 1;
+      if (free) s.model.nodeCalls = (s.model.nodeCalls ?? 0) + 1;
+      else s.model.moneyCalls = (s.model.moneyCalls ?? 0) + 1;
+      s.model.tokens = (s.model.tokens ?? 0) + (Number(tokens) || 0);
+    },
+    // 诊断原因队列：统一 push + 截断，host 不再手写 attempts。
+    attempt(note) {
+      const s = state();
+      s.model.attempts.push(String(note).slice(0, 80));
+      if (s.model.attempts.length > attemptCap) s.model.attempts.splice(0, s.model.attempts.length - attemptCap);
+    },
+    choice() {
+      const s = state();
+      s.model.survivalChoices = (s.model.survivalChoices ?? 0) + 1;
     },
     see(free, ok, at = now()) {
       if (!free) return;

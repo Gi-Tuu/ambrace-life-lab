@@ -9,7 +9,7 @@
 ## 一、五份基准读数（已随仓库发布）
 
 ```bash
-npm test                                  # 178 个测试文件 / 967 条断言（2026-11-18，HEAD 见 git log）
+npm test                                  # 178 个测试文件 / 976 条断言（2026-11-18，HEAD 见 git log）
 node life/run.mjs --report > /tmp/report.log    # 四条件消融矩阵
 node life/run.mjs --sweep  > /tmp/sweep.log     # 5 seed 复核
 node life/run.mjs --viab   > /tmp/viab.log      # 受损速度

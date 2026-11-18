@@ -10,6 +10,7 @@ import { doForage, doGather, takeFoodKind } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
+import { campStaticPrecheck } from './camp-precheck.mjs';
 
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
@@ -132,6 +133,9 @@ export function campAction(world,body) {
   const {kind,type:item,target,tool,plot}=body, s=world.survival;
   let site=world.loc.p1, node;
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
+  // 静态前置（工具/品类）与 validateCamp 共用同一实现；位置/容器/库存仍在这里按解析后的 site 判断。
+  const pre = campStaticPrecheck(world, body);
+  if (pre) return pre;
   if (kind==='camp_resident') return interactWithResident(world,body);
   const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);
   if (s.farmLife && kind==='camp_collect' && item!=='water' && !Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');
@@ -197,7 +201,6 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind==='camp_chop') {
-    if (tool!=='axe') return fail('NEED_TOOL');
     const tree=(world.campLayout?.grove??TIMBER_GROVE).find(t=>t.id===target);
     if (!tree || tree.site!==site) return fail('NO_TREE');
     const trees=(s.campTrees??={});
@@ -210,7 +213,6 @@ export function campAction(world,body) {
   }
   if (kind==='camp_craft') {
     if (!['workshop','yard'].includes(site)) return fail('NOT_WORKBENCH');
-    if (item!=='tray') return fail('BAD_ITEM');
     if (amount(bag,'wood')<2) return fail('NO_MATERIAL');
     bag.wood-=2;
     world.observeProduction?.('materialSpent', 'craftWood', 2);
@@ -220,7 +222,6 @@ export function campAction(world,body) {
   }
   if (kind==='camp_plant') {
     if (site!=='garden') return fail('NOT_GARDEN');
-    if (tool!=='hoe') return fail('NEED_TOOL');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
     const done=doPlant(world,'p1',plot);
     if (done.ok) pay(world,SURV_COST.plant); // P0-2：与 AI plant 同价
@@ -228,7 +229,6 @@ export function campAction(world,body) {
   }
   if (kind==='camp_water') {
     if (site!=='garden') return fail('NOT_GARDEN');
-    if (tool!=='bucket') return fail('NEED_TOOL');
     const field = s.plots.find(p => p.id === plot);
     if (plot!==undefined && !field) return fail('BAD_PLOT');
     if (!amount(bag,'water')) return fail('EMPTY');
@@ -244,8 +244,6 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind!=='camp_collect') return fail('UNKNOWN_KIND');
-  if (!Object.hasOwn(TOOLS,item)) return fail('BAD_ITEM');
-  if (tool!==TOOLS[item]) return fail('NEED_TOOL');
   let cost=0.02; // P0-2：与 AI 基础动作同表；crop/berry 分别对齐 harvest/forage，其余营地采集保留小成本
   if (node) {
     const picked=s.regionHarvest??={};

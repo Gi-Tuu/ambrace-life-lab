@@ -7,6 +7,7 @@ import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './househ
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
 import { CAMP_FREE, isCampKind } from './camp-catalog.mjs';
 import { costFor, SHARED_COST } from './action-cost.mjs';
+import { campStaticPrecheck } from './camp-precheck.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
@@ -148,6 +149,9 @@ export function validateCamp(world, body, reachFn = null) {
   if (!free && (cost.shared === 'unknown' || !Object.hasOwn(SHARED_COST, cost.shared))) {
     return fail('UNKNOWN_CAMP_ACTION', '营地动作未登记成本：' + kind);
   }
+  // ARCH5 剩余：工具/品类这类静态前置只有一份实现，validateCamp 与 campAction 共用。
+  const pre = campStaticPrecheck(world, body);
+  if (pre) return pre;
   if (reachFn && world?.independentWorld && world?.gameRules && body?.from && !free) {
     const reach = reachFn(world, body.from);
     if (!reach?.ok) return reach;

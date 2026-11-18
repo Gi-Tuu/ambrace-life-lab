@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readIndex, writeIndex, touchSave, saveCamp, sweepSaves, savesDir } from './camp-instances.mjs';
+import { readIndex, writeIndex, touchSave, saveCamp, sweepSaves, savesDir, writeOwnerSidecar, readOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'audit5-data-'));
 const KEY = '0123456789abcdef0123456789abcdef';
@@ -69,9 +69,27 @@ test('DATA5-04 stale lock 回收：owner 时间戳过期后继续写并清锁', 
   assert.equal(readIndex(d).entries[0].name, 'after');
 });
 
-test('DATA5-04/03 6 进程 × 8 轮：48/48 条目与文件都不丢、索引带代际', async () => {
+test('DATA5-05 侧车：索引缺失时从营地档 + owner 侧车重建（名字/归属都恢复）', () => {
   const d = dir();
-  const mod = pathToFileURL(resolve(import.meta.dirname, 'camp-instances.mjs')).href;
+  const key = 'fedcba9876543210fedcba9876543210';
+  const ownerHash = 'a'.repeat(64);
+  saveCamp(d, key, {
+    t: 5,
+    minds: { p1: { m: {}, drives: {}, viab: { v: 1 } } },
+    survival: { store: 0, plots: [], buildings: {}, inv: {}, playerDead: false },
+  });
+  writeOwnerSidecar(d, key, { name: '侧车营地', ownerHash });
+  assert.deepEqual(readOwnerSidecar(d, key), { name: '侧车营地', ownerHash });
+  assert.equal(rebuildIndexFromSaves(d), 1, '索引缺失时应重建 1 条');
+  const idx = readIndex(d);
+  assert.equal(idx.entries.length, 1);
+  assert.equal(idx.entries[0].name, '侧车营地');
+  assert.equal(idx.entries[0].ownerHash, ownerHash);
+  assert.equal(rebuildIndexFromSaves(d), 0, '索引已存在时不得重复重建');
+});
+
+test('DATA5-04/03 6 进程 × 8 轮：48/48 条目与文件都不丢、索引带代际', async () => {
+  const d = dir();  const mod = pathToFileURL(resolve(import.meta.dirname, 'camp-instances.mjs')).href;
   const script = `
     const { saveCamp, touchSave } = await import(${JSON.stringify(mod)});
     const dir = process.env.DATA_DIR;

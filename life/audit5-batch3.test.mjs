@@ -62,6 +62,36 @@ test('ARCH5-06 addTokens 只记 token，不消耗 /chat 的在途 reserved', () 
   assert.equal(state.model.tokens, 10);
 });
 
+test('ARCH5-06 预算域 recordCall/attempt/choice 与 gate/charged 对账', () => {
+  const state = { lastVisitor: Date.now(), model: { calls: 0, tokens: 0, reserved: 0, attempts: [], dayKey: '' } };
+  const budget = createBudgetDomain({ getState: () => state, budget: 10, presenceMs: 1000, breakerFails: 3, breakerMs: 1000, attemptCap: 3 });
+  // /chat 路径：预扣 1 → 成功转正式
+  assert.equal(budget.gate(), null);
+  budget.charged(5);
+  // 内部路径：成功调用两条
+  budget.recordCall({ free: true, tokens: 2 });
+  budget.recordCall({ free: false, tokens: 3 });
+  assert.deepEqual(
+    { calls: state.model.calls, tokens: state.model.tokens, node: state.model.nodeCalls, money: state.model.moneyCalls, reserved: state.model.reserved },
+    { calls: 3, tokens: 10, node: 1, money: 1, reserved: 0 },
+    '三条路径必须写同一组字段且总量对账',
+  );
+  for (const note of ['a', 'b', 'c', 'd']) budget.attempt(note);
+  assert.deepEqual(state.model.attempts, ['b', 'c', 'd'], 'attempt 队列必须按 cap 截断');
+  budget.choice();
+  budget.choice();
+  assert.equal(state.model.survivalChoices, 2);
+});
+
+test('ARCH5-06 host 不再手写 calls/attempts（统一走预算域）', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('./host.mjs', import.meta.url), 'utf8');
+  assert.ok(!/S\.model\.calls\s*\+=/.test(src), 'host 不得再手写 S.model.calls 自增');
+  assert.ok(!/S\.model\.attempts\.push/.test(src), 'host 不得再手写 attempts.push');
+  assert.match(src, /budget\.recordCall\(/);
+  assert.match(src, /budget\.attempt\(/);
+});
+
 test('DATA5-14 per-camp wall-time 预算：超时跳过剩余营地并显式暴露', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'audit5-budget-'));
   Object.assign(process.env, {

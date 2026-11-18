@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
 import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
-import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson } from './life/request-guard.mjs';
+import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson, DESTRUCTIVE_CTL } from './life/request-guard.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeName } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
@@ -271,11 +271,25 @@ const ownerAllows = (req, key) => {
 // 公开部署应配置 CTL_TOKEN（破坏性动作只认令牌）。
 const CTL_SESSION_TTL_MS = positiveInt(process.env.CTL_SESSION_TTL_MS, 12 * 60 * 60 * 1000);
 const CTL_SESSION_MAX = positiveInt(process.env.CTL_SESSION_MAX, 5000);
+// MAIN reset 用的一次性 nonce 窗口：60s 内有效，用过即轮换；并做全局 3 次/分钟限速。
+const CTL_NONCE_TTL_MS = positiveInt(process.env.CTL_NONCE_TTL_MS, 60_000);
+const MAIN_RESET_LIMIT = positiveInt(process.env.MAIN_RESET_LIMIT, 3);
+const MAIN_RESET_WINDOW_MS = positiveInt(process.env.MAIN_RESET_WINDOW_MS, 60_000);
 const ctlSessions = new Map();
+const mainResetTimes = [];
 const secureCookie = (req) => process.env.COOKIE_SECURE === '1'
   || Boolean(req?.socket?.encrypted)
   || String(req?.headers?.['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase() === 'https';
 const cookieSecureFlag = (req) => secureCookie(req) ? '; Secure' : '';
+const mainResetSid = (req) => String(req?.ctlSid ?? '').slice(0, 8);
+function auditMainReset(req, result) {
+  // 审计事件只落 stderr：时间 / sid 前缀 / 结果。不写令牌、不写 nonce 原文。
+  console.error('[audit] main_reset ' + JSON.stringify({ at: new Date().toISOString(), sid: mainResetSid(req), result: String(result) }));
+}
+function rotateNonce(rec) {
+  rec.nonce = randomBytes(16).toString('hex');
+  rec.nonceAt = Date.now();
+}
 function pruneSessions(now) {
   for (const [sid, rec] of ctlSessions) if (rec.expires <= now) ctlSessions.delete(sid);
   if (ctlSessions.size <= CTL_SESSION_MAX) return;
@@ -290,13 +304,15 @@ function issueCtlSession(req, res) {
   let rec = sid ? ctlSessions.get(sid) : null;
   if (!rec || rec.expires <= now) {
     const freshSid = randomBytes(16).toString('hex');
-    rec = { nonce: randomBytes(16).toString('hex'), expires: now + CTL_SESSION_TTL_MS };
+    rec = { nonce: randomBytes(16).toString('hex'), nonceAt: now, expires: now + CTL_SESSION_TTL_MS };
     ctlSessions.set(freshSid, rec);
     req.ctlSid = freshSid;
     req.ctlNonce = rec.nonce;
     res.appendHeader('set-cookie', `ctl_sid=${freshSid}; Path=/; HttpOnly; SameSite=Strict${cookieSecureFlag(req)}`);
   } else {
     req.ctlSid = sid;
+    // 短 TTL：nonce 过期自动轮换（前端每次请求都会从响应拿到新 cookie）。
+    if (!(now - (rec.nonceAt ?? 0) <= CTL_NONCE_TTL_MS)) rotateNonce(rec);
     req.ctlNonce = rec.nonce;
     rec.expires = now + CTL_SESSION_TTL_MS;
   }
@@ -304,9 +320,16 @@ function issueCtlSession(req, res) {
   res.appendHeader('set-cookie', `ctl_nonce=${rec.nonce}; Path=/; SameSite=Strict${cookieSecureFlag(req)}`);
   return rec;
 }
+function consumeCtlNonce(req, res) {
+  const rec = req.ctlSid ? ctlSessions.get(req.ctlSid) : null;
+  if (!rec) return;
+  rotateNonce(rec);
+  res.appendHeader('set-cookie', `ctl_nonce=${rec.nonce}; Path=/; SameSite=Strict${cookieSecureFlag(req)}`);
+}
 function ctlNonceValid(req) {
   const rec = req.ctlSid ? ctlSessions.get(req.ctlSid) : null;
   if (!rec || rec.expires <= Date.now()) return false;
+  if (!(Date.now() - (rec.nonceAt ?? 0) <= CTL_NONCE_TTL_MS)) return false;
   const cookieNonce = cookieValue(req, 'ctl_nonce');
   const headerNonce = String(req.headers['x-ctl-nonce'] ?? '');
   return Boolean(cookieNonce && headerNonce)
@@ -451,9 +474,19 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
     // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
-    // SEC5-01：破坏性 /ctl 的浏览器路径改认服务端会话 nonce；令牌姿态仍只认令牌。
-    const denied = p === '/act' ? interactionDenied(req, CTL_TOKEN) : ctlDenied(req, body, CTL_TOKEN, () => ctlNonceValid(req));
+    // SEC5-05：只有 MAIN 的 survival_reset 允许“服务端会话 nonce”作为令牌姿态下的浏览器授权；
+    // 全局 reset / 具名营地仍只认 Bearer 或 owner（nonce 不越权）。
+    const isMainCamp = !campKey || campKey === 'MAIN';
+    const allowNonce = p === '/ctl' && body?.action === 'survival_reset' && isMainCamp;
+    const denied = p === '/act'
+      ? interactionDenied(req, CTL_TOKEN)
+      : ctlDenied(req, body, CTL_TOKEN, () => ctlNonceValid(req), { allowNonce });
     if (denied) return json(res, p === '/ctl' ? 403 : (denied === 'UNAUTHORIZED' ? 401 : 403), { error: denied });
+    // nonce 一次性：任何“靠 nonce 放行”的破坏性动作成功后立即轮换（响应里带回新 cookie）。
+    const tokenAuthorized = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+    const nonceAuthorized = !tokenAuthorized && p === '/ctl'
+      && DESTRUCTIVE_CTL.includes(String(body?.action ?? '')) && ctlNonceValid(req);
+    if (nonceAuthorized) consumeCtlNonce(req, res);
     if (campKey && !ownerAllows(req, campKey) && !(p === '/ctl' && body?.action === 'survival_reset')) {
       return json(res, 403, { error: 'CAMP_NOT_OWNER' });
     }
@@ -462,8 +495,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
     // SEC3-02：营地归属。survival_reset 只有 owner cookie 或 CTL_TOKEN 能做；旧营地没 owner 的不得匿名重置。
-    // SEC5-05：MAIN 没有 ownerHash，未设令牌时由 ctlDenied 的服务端会话 nonce 授权（浏览器“新开一局”可用）；
-    // 设了令牌则 ctlDenied 已经要求 Bearer，不会走到这里。
+    // SEC5-05：MAIN 没有 ownerHash，令牌姿态下由上面的 allowNonce 分支授权；未设令牌时同样由 nonce 授权。
     if (p === '/ctl' && body?.action === 'survival_reset') {
       const tokenOk = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
       const isMain = !campKey || campKey === 'MAIN';
@@ -475,9 +507,23 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
         }
       }
     }
+    // SEC5-05 约束：MAIN 重开加频率限制 + 审计事件，防止脚本拿着可获取的 nonce 反复重开。
+    const mainReset = p === '/ctl' && body?.action === 'survival_reset' && isMainCamp;
+    if (mainReset) {
+      const now = Date.now();
+      while (mainResetTimes.length && now - mainResetTimes[0] >= MAIN_RESET_WINDOW_MS) mainResetTimes.shift();
+      if (mainResetTimes.length >= MAIN_RESET_LIMIT) {
+        auditMainReset(req, 'rate_limited');
+        return json(res, 429, { error: 'RESET_RATE_LIMITED' });
+      }
+      mainResetTimes.push(now);
+    }
     try {
-      return json(res,200,await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined)));
+      const out = await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined));
+      if (mainReset) auditMainReset(req, out?.ok ? 'ok' : (out?.error ?? 'rejected'));
+      return json(res,200,out);
     } catch (error) {
+      if (mainReset) auditMainReset(req, error?.code ?? 'error');
       if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
       throw error;
     }

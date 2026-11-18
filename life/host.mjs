@@ -24,7 +24,7 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { parseSay } from './intent.mjs';
-import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex } from './camp-instances.mjs';
+import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex, readOwnerSidecar, writeOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
 import { createSurvPlay, tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy } from './survplay.mjs';
 import { isFreeProvider as freeProvider, modelChannel, breakerOpenAt, budgetTick, observerActive as observerActiveBase, pickProviderKey, createBudgetDomain } from './host-budget.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
@@ -72,7 +72,10 @@ const catchupDayCapMin = () => {
 const ARCHIVE_VERSION = 1;
 // 动作落盘合并窗口（毫秒）。默认 0 ＝ 每个成功动作立即整档落盘（当前行为，逐位不变）。
 const ACT_SAVE_COALESCE_MS = Number(process.env.ACT_SAVE_COALESCE_MS ?? 0) || 0;
-const SAVE_EVERY = 10;
+const SAVE_EVERY = (() => {
+  const n = Number(process.env.SAVE_EVERY ?? 10);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 10;
+})();
 const SERIES_CAP = Number(process.env.SERIES_CAP ?? 720); // 存续曲线保留多少刻（默认 12 分钟实时）
 // BUG-14：每个角色保留多少条 trace。实测 4.19 KB/行、6.49 行/刻 ⇒ 生产 TICK_MS=6000 时
 // 无上限约 628 MB/天。2000 行 ≈ 8 MB/角色，足够页面/装置读取，又不会把容器撑爆。
@@ -174,7 +177,7 @@ const S = { comparison: null, compareView: null, compareSaveError: null, compare
 // 领域模块只拿状态引用，不持有第二份单例；host 保留 facade 与原对外 API。
 budget = createBudgetDomain({
   getState: () => S, budget: BUDGET, nodeBudget: NODE_BUDGET, presenceMs: PRESENCE_MS,
-  breakerFails: BREAKER_FAILS, breakerMs: BREAKER_MS,
+  breakerFails: BREAKER_FAILS, breakerMs: BREAKER_MS, attemptCap: ATTEMPT_CAP,
 });
 const viewers = createViewerDomain({
   getState: () => S, presenceMs: PRESENCE_MS,
@@ -350,19 +353,30 @@ export function listCamps() {
   return listSaves(S.dir, Date.now());
 }
 
-// SEC3-02：营地归属。索引只存所有者令牌的 sha256，不存原值。
+// SEC3-02 / DATA5-05：营地归属。索引是主视图，ownerHash 同时写侧车；索引丢了从侧车恢复。
 export function campOwnerHash(key) {
   const entry = readIndex(S.dir).entries.find((e) => e.key === key);
-  return entry?.ownerHash ?? null;
+  if (entry?.ownerHash) return entry.ownerHash;
+  return readOwnerSidecar(S.dir, key)?.ownerHash ?? null;
 }
 export function claimCamp(key, hash) {
   if (!key || !hash) return { ok: false, code: 'BAD_CLAIM' };
   const idx = readIndex(S.dir);
   const entry = idx.entries.find((e) => e.key === key);
   if (!entry) return { ok: false, code: 'NO_CAMP' };
-  if (entry.ownerHash) return { ok: true, claimed: false, owned: entry.ownerHash === hash };
+  // DATA5-05：索引没有 ownerHash 时先看侧车；有侧车就回填索引，绝不把老 owner 换掉。
+  const side = readOwnerSidecar(S.dir, key);
+  const effective = entry.ownerHash ?? side?.ownerHash ?? null;
+  if (effective) {
+    if (!entry.ownerHash) {
+      entry.ownerHash = effective;
+      writeIndex(S.dir, idx);
+    }
+    return { ok: true, claimed: false, owned: effective === hash };
+  }
   entry.ownerHash = hash;
   writeIndex(S.dir, idx);
+  writeOwnerSidecar(S.dir, key, { name: entry.name, ownerHash: hash });
   return { ok: true, claimed: true, owned: true };
 }
 
@@ -420,9 +434,7 @@ async function postChat(provider, key, body, mdl, ac) {
   const send = (payload) => fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: ac.signal });
   let res = await send(withNoThink(body, mdl));
   if (!res.ok && (res.status === 400 || res.status === 422) && withNoThink(body, mdl).chat_template_kwargs) {
-    S.model.attempts.push('RETRY_NO_KWARGS');
-    if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift();
-    res = await send(withoutNoThink(withNoThink(body, mdl)));
+    budget.attempt('RETRY_NO_KWARGS');    res = await send(withoutNoThink(withNoThink(body, mdl)));
   }
   return res;
 }
@@ -474,8 +486,7 @@ async function modelBrain(args) {
     : observerActive(S.campViewers[campKey], Date.now());
   const lane = modelLaneFor({ campKey, watched, unattendedOn: UNATTENDED_ON });
   if (lane === 'idle') {
-    S.model.attempts.push('LANE:IDLE_CAMP');
-    if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift();
+    budget.attempt('LANE:IDLE_CAMP');
     return null;
   }
   // 无人观看：研究态照旧直接走替身（既有轨迹逐位不变）；游戏态继续上真模型，让世界自洽。
@@ -486,7 +497,7 @@ async function modelBrain(args) {
     : (PER_TICK_CAP > 0 ? Math.min(PER_TICK_CAP, UNATTENDED_ASK_CAP) : UNATTENDED_ASK_CAP);
   if (askCap > 0 && (S.asksThisTick ?? 0) >= askCap) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
-  const note = (msg) => { S.model.attempts.push(msg); if (S.model.attempts.length > ATTEMPT_CAP) S.model.attempts.shift(); };
+  const note = (msg) => budget.attempt(msg);
   const laneOf = (base) => modelChannel({
     watched, free: isFreeProvider(base),
     moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0,
@@ -514,10 +525,8 @@ async function modelBrain(args) {
       const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.85, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 100 }, mdl, ac);
       if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); continue; }
       const j = await res.json();
-      S.model.calls += 1;
-      // ARCH5-06：车道/令牌记账与 /chat 走同一个预算域，不再手写第二套字段。
-      budget.chargeLane(free);
-      budget.addTokens(j.usage?.total_tokens ?? 0);
+      // ARCH5-06：calls/车道/token 统一由预算域记账，host 不再手写字段。
+      budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
       budget.see(free, true);
       const p = JSON.parse(String(j.choices?.[0]?.message?.content ?? '').replace(/^```json?/i, '').replace(/```\s*$/i, '').trim());
       const hit = scored.find((s) => s.id === p.id);
@@ -526,8 +535,8 @@ async function modelBrain(args) {
       // S2 say：只在这里收下；是否说得出口、说了有什么后果，由规则层（converse）裁决。
       const say = parseSay(p);
       if (say) agent.pendingSay = say;
-      else if (p?.act || p?.text) S.model.attempts.push('SAY:INVALID');
-      if (world.survival) S.model.survivalChoices = (S.model.survivalChoices ?? 0) + 1;
+      else if (p?.act || p?.text) budget.attempt('SAY:INVALID');
+      if (world.survival) budget.choice();
       return { id: hit.id };
     } catch (e) {
       note(String(e.message).slice(0, 40));
@@ -579,10 +588,8 @@ async function modelTalk({ npc, world, history, text, trust }) {
       const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
       if (!res.ok) { budget.see(free, false); continue; }
       const j = await res.json();
-      S.model.calls += 1;
-      // ARCH5-06：车道/令牌记账与 /chat 走同一个预算域，不再手写第二套字段。
-      budget.chargeLane(free);
-      budget.addTokens(j.usage?.total_tokens ?? 0);
+      // ARCH5-06：calls/车道/token 统一由预算域记账，host 不再手写字段。
+      budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
       budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
       if (line) return line.slice(0, 80);
@@ -1295,6 +1302,7 @@ export const host = {
     const seedFile = process.env.SEED_FILE ?? resolve('seed/world.json');
     let note = '没有存档，新建世界';
     let loaded = null;
+    let loadedFromPrimary = false;
     let savedComparison;
     let primaryError = null;
     for (const [path, label] of [[worldFile, '存档'], [`${worldFile}.bak`, '备份存档'], [seedFile, '内置种子存档']]) {
@@ -1306,6 +1314,7 @@ export const host = {
         continue;
       }
       S.primaryValid = path === worldFile;
+      if (path === worldFile) loadedFromPrimary = true;
       const minutes = path === seedFile ? 0 : (Date.now() - (loaded.raw.savedAt ?? Date.now())) / 60000;
       S.packs = loaded.packs;
       S.surv = loaded.surv;
@@ -1337,23 +1346,47 @@ export const host = {
     S.comparison = comparisonFromSave(savedComparison);
     publishComparison();
     S.savedAt = Date.now();
+    // DATA5-05：索引整体丢失（无 corrupt 备份）时，从营地档 + owner 侧车重建。
+    try {
+      const rebuilt = rebuildIndexFromSaves(S.dir);
+      if (rebuilt > 0) note += `；已从存档重建营地索引 ${rebuilt} 条`;
+    } catch { /* 重建失败不阻塞启动；/saves 仍可用空索引 */ }
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
     // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
     // 预算闸门失真、modelCalls 少记、A/B 刻数错位（实测 t=23 vs t=20），"世界状态单一写者"这个
     // 隐含不变量同时被破坏。线上 TICK_MS=6000 而部署侧实测约 5.9 秒/刻，已经贴着边界。
-    S.timer = setInterval(autoTick, TICK_MS);
   // 名字存档 TTL：启动先扫一次，之后每小时一次（unref：不拖住进程退出）。
   try { sweepCamps(); } catch { /* 清扫失败不影响世界 */ }
   if (!S.sweepTimer) {
     S.sweepTimer = setInterval(() => { void queueWorldWrite(() => sweepCamps()).catch(()=>{}); }, 60 * 60 * 1000);
     S.sweepTimer.unref?.();
   }
+  // DATA5-01：启动即写一版基线档（只写一次），让"首个 SAVE_EVERY 窗口"至少有第 0 刻可恢复。
+  // 失败不阻塞启动，但必须可见：S.saveError 会让 /healthz 503，note 也会带上原因。
+  // 必须在 setInterval 之前完成：否则慢磁盘会让第一拍在启动收口前跑掉（pending 等状态被 tick 消费）。
+  let baselineSaved = true;
+  if (!loadedFromPrimary) {
+    const archiveFatal = /M5_STATE_INVALID/.test(String(S.saveError ?? ''));
+    // 主档已经可直接载入时不再重写（M5 降级装载也属于“文件必须原封不动”的契约）；
+    // 种子/主档都是坏 M5 时也不写：尊重“坏档不新建世界档案”，启动仍继续（saveError 可见）。
+    // 只有新建/从 .bak 或种子恢复时才需要补写一版基线。
+    if (!archiveFatal) {
+      try { baselineSaved = await save(); }
+      catch (error) { S.saveError = publicSaveError(error); baselineSaved = false; }
+    }
+  }
+  if (!loadedFromPrimary && !baselineSaved) {
+    note += `；启动基线档写入失败（${S.saveError ?? 'SAVE_FAILED'}），世界仍可运行但当前无最新主档`;
+    console.error(`[host] 启动基线档写入失败：${S.saveError ?? 'SAVE_FAILED'}`);
+  }
+  // 启动收口完成后再开始推进世界。
+  S.timer = setInterval(autoTick, TICK_MS);
     if (!sigHandlers) {
       process.on('SIGINT', onSignal);
       process.on('SIGTERM', onSignal);
       sigHandlers = onSignal;
     }
-    return { note, dir: S.dir };
+    return { note, dir: S.dir, baselineSaved, saveError: S.saveError ?? null };
   },
   // 只读句柄：给测试和未来插桩用。写操作仍然只走 ctl/act，避免绕过规则层
   get packs() {

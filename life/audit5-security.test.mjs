@@ -25,9 +25,11 @@ test('SEC5-01 纯函数：只有服务端校验器认可的一次性 nonce 才�
   assert.equal(ctlDenied(unitReq({ origin: 'https://x' }), { action: 'pause' }, '', () => false), null, '同源浏览器非破坏性动作不受 nonce 限制');
 });
 
-test('SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 一律不授权，只认令牌', () => {
+test('SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 默认不授权；仅 allowNonce 的 MAIN reset 例外', () => {
   const req = unitReq({ cookie: 'ctl_sid=s1; ctl_nonce=n1', 'x-ctl-nonce': 'n1', origin: 'https://x', 'sec-fetch-site': 'same-origin' });
   assert.equal(ctlDenied(req, RESET, 'tok', () => true), 'UNAUTHORIZED');
+  assert.equal(ctlDenied(req, { action: 'survival_reset', confirm: true }, 'tok', () => true, { allowNonce: true }), null);
+  assert.equal(ctlDenied(req, { action: 'reset', confirm: true }, 'tok', () => true, { allowNonce: true }), 'UNAUTHORIZED', '全局 reset 不得用 nonce');
   assert.equal(ctlDenied({ ...req, headers: { ...req.headers, authorization: 'Bearer tok' } }, RESET, 'tok', () => true), null);
 });
 
@@ -78,6 +80,85 @@ test('SEC5-01 HTTP：CTL_TOKEN 姿态下无令牌/伪造头一律 403，Bearer �
     const noNonce = await jsonPost(h.base, '/ctl', RESET, { headers: { authorization: 'Bearer top-secret', origin: h.base } });
     assert.equal(noNonce.status, 200, '运维令牌单独可用（令牌本身即凭据）');
   } finally { await stopAudit5(h); }
+});
+
+test('SEC5-05 HTTP：令牌姿态下 MAIN survival_reset 走服务端 nonce（浏览器可用，脚本无凭据 403，3 次/分钟限速 + 审计）', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: 'top-secret' });
+  try {
+    const noCred = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true });
+    assert.equal(noCred.status, 403, '无会话/nonce 的脚本必须 403');
+
+    const jar = {};
+    await openSession(h.base, jar);
+    const statuses = [];
+    for (let i = 0; i < 4; i += 1) {
+      const r = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
+      statuses.push(r.status);
+      cookieJar(r, jar); // 一次性 nonce：响应会带回新的 ctl_nonce
+      if (r.status === 200) assert.equal((await r.json()).ok, true);
+    }
+    assert.deepEqual(statuses, [200, 200, 200, 429], `前 3 次放行、第 4 次限速：${statuses}`);
+    const out = h.out();
+    assert.match(out, /\[audit\] main_reset/, '必须写审计事件');
+    assert.match(out, /"result":"ok"/);
+    assert.match(out, /"result":"rate_limited"/);
+
+    // 全局 reset 仍只认令牌：合法 nonce 也不能 reset
+    const globalReset = await jsonPost(h.base, '/ctl', RESET, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
+    assert.equal(globalReset.status, 403, '全局 reset 不得走 nonce');
+  } finally { await stopAudit5(h); }
+});
+
+test('SEC5-05 HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: 'top-secret', CTL_NONCE_TTL_MS: '80' });
+  try {
+    const jar = {};
+    await openSession(h.base, jar);
+    await new Promise((r) => setTimeout(r, 140));
+    const stale = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
+    assert.equal(stale.status, 403, `过期 nonce 必须拒绝，实测 ${stale.status}`);
+    await openSession(h.base, jar);
+    const fresh = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
+    assert.equal(fresh.status, 200, '重新取 nonce 后应可用');
+  } finally { await stopAudit5(h); }
+});
+
+test('DATA5-05 索引删除后重开仍归原 owner；重启从侧车重建索引', async () => {
+  const { rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const h = await bootAudit5({ CTL_TOKEN: '' });
+  const dir = h.dir;
+  let h2 = null;
+  try {
+    const jarA = {};
+    const rA = await jsonPost(h.base, '/saves/open', { name: '侧车营地' }, { jar: jarA });
+    cookieJar(rA, jarA);
+    const a = await rA.json();
+    assert.ok(a.ok, JSON.stringify(a));
+    const ownerA = jarA.camp_owner;
+    assert.ok(ownerA);
+
+    // 索引整体删除（模拟索引丢失）
+    rmSync(join(dir, 'saves', 'index.json'));
+    await stopAudit5(h);
+
+    // 重启：从 saves/*.json.gz + .owner.json 侧车重建索引
+    h2 = await bootAudit5({ CTL_TOKEN: '', DATA_DIR: dir });
+    const list = await (await jsonGet(h2.base, '/saves')).json();
+    assert.ok(list.entries.some((e) => e.name === '侧车营地'), `重建索引必须恢复显示名：${JSON.stringify(list.entries)}`);
+
+    const rB = await jsonPost(h2.base, '/saves/open', { name: '侧车营地' }, { jar: {} });
+    assert.equal(rB.status, 403, '非 owner 重开必须仍是 CAMP_OWNED');
+    assert.equal((await rB.json()).error, 'CAMP_OWNED');
+    const rA2 = await jsonPost(h2.base, '/saves/open', { name: '侧车营地' }, { jar: { camp_owner: ownerA } });
+    assert.equal(rA2.status, 200, '原 owner 必须能重开');
+    const world = await jsonGet(h2.base, `/world?camp=${a.key}`, { jar: { camp_owner: ownerA } });
+    assert.equal(world.status, 200);
+  } finally {
+    if (h2) await stopAudit5(h2);
+    await stopAudit5(h);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('SEC5-02 HTTP：/world?camp= 无 cookie 403、owner 200、他人 403', async () => {
@@ -186,10 +267,10 @@ test('SEC5-03 MAIN catchup 统一冷却（连点第二次被拒）', async () =>
   try {
     const jar = {};
     await openSession(h.base, jar);
-    const headers = { 'x-ctl-nonce': jar.ctl_nonce };
-    const first = await jsonPost(h.base, '/ctl', { action: 'catchup', minutes: 30 }, { jar, headers });
+    const first = await jsonPost(h.base, '/ctl', { action: 'catchup', minutes: 30 }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
     assert.equal((await first.json()).ok, true);
-    const second = await jsonPost(h.base, '/ctl', { action: 'catchup', minutes: 30 }, { jar, headers });
+    cookieJar(first, jar); // nonce 一次性：第一次用掉后响应下发新的
+    const second = await jsonPost(h.base, '/ctl', { action: 'catchup', minutes: 30 }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
     const body = await second.json();
     assert.equal(body.ok, false, 'MAIN 也必须冷却');
     assert.equal(body.error, 'CATCHUP_COOLDOWN');

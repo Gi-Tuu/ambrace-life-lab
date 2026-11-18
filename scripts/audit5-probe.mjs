@@ -2,6 +2,8 @@
 // SEC5-01/02/05 的放行/拒绝矩阵打成一份可复跑的 JSON。不写仓库 data/。
 // 用法：node scripts/audit5-probe.mjs > evidence/audit5/security.json
 import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { bootAudit5, stopAudit5, openSession, jsonPost, jsonGet, cookieJar } from '../life/audit5-harness.mjs';
 
 const head = (() => {
@@ -54,6 +56,27 @@ rows.token = await withServer({ CTL_TOKEN: 'top-secret' }, async (h) => {
   return { nonceOnlyStatus: nonceOnly.status, bearerStatus: bearer.status, bearerOk: bearerBody.ok ?? null };
 });
 
+// 2b) 令牌姿态的 MAIN survival_reset：会话 nonce 可用；脚本无凭据 403；3 次/分钟限速；审计事件。
+rows.tokenMainReset = await withServer({ CTL_TOKEN: 'top-secret' }, async (h) => {
+  const noCred = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true });
+  const jar = {};
+  await openSession(h.base, jar);
+  const statuses = [];
+  for (let i = 0; i < 4; i += 1) {
+    const r = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
+    statuses.push(r.status);
+    cookieJar(r, jar);
+    if (r.status === 200) await r.json();
+  }
+  const out = h.out();
+  return {
+    scriptNoCredStatus: noCred.status,
+    browserNonceStatuses: statuses,
+    auditOk: /\[audit\] main_reset/.test(out) && /"result":"ok"/.test(out),
+    auditRateLimited: /"result":"rate_limited"/.test(out),
+  };
+});
+
 // 3) /world owner 边界 + 重开不换 owner。
 rows.worldOwner = await withServer({ CTL_TOKEN: '' }, async (h) => {
   const jarA = {};
@@ -79,6 +102,41 @@ rows.worldOwner = await withServer({ CTL_TOKEN: '' }, async (h) => {
     reopenIssuedOwnerCookie: (reopenNoCookie.headers.getSetCookie?.() ?? []).some((c) => c.startsWith('camp_owner=')),
   };
 });
+
+// 3b) DATA5-05：删索引 → 重启 → 侧车恢复名字/owner。
+{
+  const h = await bootAudit5({ CTL_TOKEN: '' });
+  const dir = h.dir;
+  let owner = null;
+  let key = null;
+  let h2 = null;
+  try {
+    const jarA = {};
+    const rA = await jsonPost(h.base, '/saves/open', { name: '证据侧车营地' }, { jar: jarA });
+    cookieJar(rA, jarA);
+    const a = await rA.json();
+    owner = jarA.camp_owner;
+    key = a.key;
+    rmSync(join(dir, 'saves', 'index.json'));
+  } finally { await stopAudit5(h); }
+  try {
+    h2 = await bootAudit5({ CTL_TOKEN: '', DATA_DIR: dir });
+    const list = await (await jsonGet(h2.base, '/saves')).json();
+    const b = await jsonPost(h2.base, '/saves/open', { name: '证据侧车营地' }, { jar: {} });
+    const a2 = await jsonPost(h2.base, '/saves/open', { name: '证据侧车营地' }, { jar: { camp_owner: owner } });
+    const world = await jsonGet(h2.base, `/world?camp=${key}`, { jar: { camp_owner: owner } });
+    rows.ownerSidecar = {
+      rebuiltName: list.entries.some((e) => e.name === '证据侧车营地'),
+      otherStatus: b.status,
+      otherError: (await b.json()).error ?? null,
+      ownerStatus: a2.status,
+      ownerWorldStatus: world.status,
+    };
+  } finally {
+    if (h2) await stopAudit5(h2);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 // 4) 会话配额（同一会话第 6 个营地必须 429；NaN env 回落不是 0）。
 rows.quota = await withServer({ CTL_TOKEN: '', OPEN_SESSION_LIMIT: 'NaN', OPEN_LIMIT: 'NaN', OPEN_LIMIT_GLOBAL: 'NaN', CAMP_TOTAL_MAX: 'NaN' }, async (h) => {
