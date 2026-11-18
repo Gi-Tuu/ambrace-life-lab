@@ -176,8 +176,11 @@ export function advanceResidentBusy(world, id) {
   const a = world.agents?.[id];
   const cost = laborEnergy(b.kind, world);
   if (!a || a.dead) { abortBusy(world, id, clock, 'DEAD'); return { aborted: true, code: 'DEAD' }; }
-  // 体力门：进行中也可能撑不住，撑不住就中止（进度保留）。
-  if (cost > 0 && (a.drives?.v?.energy ?? 0) + 1e-9 < cost) {
+  // 体力门：按“本刻应付 - 已付”判断（不是整段全额），5+25/10+20 只在钱不够本段时中止。
+  const nextChunk = Math.min(TICK_MINUTES - clock.tick.usedMin, b.remainMin);
+  const dueAfter = cost * ((b.progressMin + nextChunk) / Math.max(1, b.totalMin));
+  const payDue = Math.max(0, dueAfter - (b.energyPaid ?? 0));
+  if (cost > 0 && (a.drives?.v?.energy ?? 0) + 1e-9 < payDue) {
     abortBusy(world, id, clock, 'STAMINA');
     return { aborted: true, code: 'STAMINA' };
   }

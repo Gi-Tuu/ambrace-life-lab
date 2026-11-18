@@ -24,7 +24,7 @@ for (const arm of ['off', 'on']) {
       store: last?.store ?? null, population: r.population, births: r.births, deaths: r.deaths, actions: r.actions,
       tickMs: r.tickMs, fair: r.fair, ticksRun: r.ticksRun,
       head: (() => { try { return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })(),
-      fairOn: arm === 'on', cap: Number(process.env.FAIR_DECISION_CAP ?? 6),
+      fairOn: arm === 'on', cap: Number(process.env.FAIR_DECISION_CAP ?? 6), executedEpisodes: r.fair?.executedEpisodes ?? null, activeDays: r.activeDays,
       popAvg: r.fair ? Number((r.fair.popSum / Math.max(1, r.fair.ticks)).toFixed(2)) : null,
       wait: r.fair?.waitSamples?.length ? { n: r.fair.waitSamples.length,
         mean: Number((r.fair.waitSamples.reduce((a, v) => a + v, 0) / r.fair.waitSamples.length).toFixed(3)),
@@ -41,6 +41,8 @@ const out = { generatedAt: new Date().toISOString(), seeds: SEEDS, days: DAYS, c
   note: 'on' ? '' : '' };
 out.note = 'FAIR_SCHED=1 only wraps decideOn for formal game; research and default off unchanged';
 writeFileSync('docs/fair-sched-v732.json', JSON.stringify(out, null, 2));
+
+
 
 
 

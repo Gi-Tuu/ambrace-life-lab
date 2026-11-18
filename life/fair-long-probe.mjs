@@ -25,7 +25,7 @@ for (const arm of ['off', 'on']) {
       actions: r.actions, tickMs: r.tickMs, ticksRun: r.ticksRun,
       popPeak: r.fair?.popPeak ?? null, popAvg: r.fair ? Number((r.fair.popSum / Math.max(1, r.fair.ticks)).toFixed(2)) : null,
       peakEligible: r.fair?.peakEligible ?? null, underfundedTicks: r.fair?.underfundedTicks ?? null,
-      grantedEpisodes: r.fair?.allowed ?? null,
+      grantedEpisodes: r.fair?.executedEpisodes ?? null, activeDays: r.activeDays,
       wait: r.fair?.waitSamples?.length ? { n: r.fair.waitSamples.length,
         mean: Number((r.fair.waitSamples.reduce((a, v) => a + v, 0) / r.fair.waitSamples.length).toFixed(3)),
         max: Math.max(...r.fair.waitSamples) } : null,
@@ -44,5 +44,6 @@ mkdirSync('docs', { recursive: true });
 const out = { generatedAt: new Date().toISOString(), seeds: SEEDS, days: DAYS, runs,
   note: 'fixed seeds, formal game, idle player; FAIR_SCHED=1 uses episode cap 8; no rule changes' };
 writeFileSync(`docs/fair-long-${DAYS}-v732.json`, JSON.stringify(out, null, 2));
+
 
 

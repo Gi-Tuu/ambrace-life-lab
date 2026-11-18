@@ -34,12 +34,15 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
     };
   }
   const observer = createActionObserver();
+  const ordinals = new Map();
   const state = new Map(); // id -> day accumulator
-  const end = dayOf(w.t) + days;
+  const endTick = w.t + days * DAY_TICKS;
   const minutesOf = (kind) => costFor(kind).minutes;
-  for (let guard = 0; dayOf(w.t) < end && guard < days * DAY_TICKS * 2; guard += 1) {
+  for (let guard = 0; w.t < endTick && guard < days * DAY_TICKS * 2; guard += 1) {
     const before = new Map(Object.values(w.agents).filter((a) => !a.isPlayer && isAlive(a)).map((a) => [a.id, {
-      busy: Boolean(clockOf(w, a.id).busy), busyTotal: clockOf(w, a.id).busy?.totalMin ?? 0, energy: a.drives?.v?.energy ?? 0,
+      busy: Boolean(clockOf(w, a.id).busy), busyTotal: clockOf(w, a.id).busy?.totalMin ?? 0,
+      busyStart: clockOf(w, a.id).busy?.startTick ?? null, busyKind: clockOf(w, a.id).busy?.kind ?? null,
+      busyRemain: clockOf(w, a.id).busy?.remainMin ?? 0, energy: a.drives?.v?.energy ?? 0,
       decisions: decisionCount.get(a.id) ?? 0,
     }]));
     const tick0 = performance.now();
@@ -47,23 +50,29 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
       for (const r of rows) {
         const kind = r.kind ?? r.action?.kind;
         if (!kind) continue;
-        observer.feed(actionEvent({ actorId: agent.id, worldTick: w.t, kind,
-          status: r.ok === false ? 'failed' : 'completed', actualMinutes: r.ok === false ? 0 : minutesOf(kind), actualEnergy: r.ok === false ? 0 : costFor(kind).energy, source: 'trace' }));
+        const okey = agent.id + ':' + w.t + ':' + kind;
+        const ordinal = (ordinals.get(okey) ?? 0) + 1; ordinals.set(okey, ordinal);
+        const minutes = r.ok === false ? 0 : minutesOf(kind);
+        observer.feed(actionEvent({ actorId: agent.id, actionId: agent.id + ':' + kind + ':' + w.t + ':' + ordinal,
+          worldTick: w.t, kind, status: r.ok === false ? 'failed' : 'completed', actualMinutes: minutes,
+          actualEnergy: r.ok === false ? 0 : costFor(kind).energy, progressMinutes: minutes, source: 'trace' }));
       }
     } });
     const tickMs = performance.now() - tick0; sumTick += tickMs; maxTick = Math.max(maxTick, tickMs); ticksRun += 1;
     onAfterTick?.(w, ticksRun);
-    const day = dayOf(w.t);
+    const day = dayOf(w.t - 1); // 本刻属于刚执行完的那一日
     for (const [id, b] of before) {
       if (!b.busy) continue;
       const a2 = w.agents[id], c2 = clockOf(w, id);
       if (!a2 || c2.busy) continue;
       const aborted = c2.lastAbort?.at === w.t;
-      observer.feed(actionEvent({ actorId: id, worldTick: w.t, kind: c2.lastAbort?.kind ?? 'busy',
-        status: aborted ? 'aborted' : 'completed', actualMinutes: aborted ? (c2.lastAbort?.progressMin ?? 0) : b.busyTotal,
-        actualEnergy: costFor(c2.lastAbort?.kind ?? 'busy').energy, source: 'busy' }));
+      const kind = b.busyKind ?? c2.lastAbort?.kind ?? 'busy';
+      observer.feed(actionEvent({ actorId: id, actionId: id + ':' + kind + ':' + (b.busyStart ?? w.t) + ':busy',
+        worldTick: w.t, kind, status: aborted ? 'aborted' : 'completed',
+        actualMinutes: Math.max(0, b.busyTotal - b.busyRemain), // 本刻实际推进的分钟（跨刻不重复计入前日）
+        progressMinutes: aborted ? (c2.lastAbort?.progressMin ?? 0) : b.busyTotal,
+        actualEnergy: costFor(kind).energy, source: 'busy' }));
     }
-    if (day >= end) break; // 不把下一日的部分刻算进本窗口
     for (const a of Object.values(w.agents)) {
       if (a.isPlayer) continue;
       if (!isAlive(a)) {
@@ -99,7 +108,8 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
       else if (opportunity && acted === 0) st.voluntaryTicks += 1;
       else if (!opportunity && (w.fairSched?.denied?.[a.id] === 'budget')) st.schedulingTicks += 1;
       else if (!opportunity) st.otherIdleTicks = (st.otherIdleTicks ?? 0) + 1;
-      st.used = clock.usedMin;
+      st.used += acted; // 按本刻实际观测分钟累计，避免跨日 clock 重置覆盖前一日
+      st.clockUsed = clock.usedMin;
       st.energySum += a.drives?.v?.energy ?? 0;
       st.ticks += 1;
     }
@@ -123,6 +133,8 @@ export async function measureIdle(seed = 7, days = 30, { onAfterTick = null } = 
     schedulingShare: idleTicks ? Number((totals.schedulingTicks / idleTicks).toFixed(4)) : null,
     tickMs: { avg: Number((sumTick / Math.max(1, ticksRun)).toFixed(3)), max: Number(maxTick.toFixed(3)) },
     fair: w.fairSched?.stats ?? null, actions: ledgerStats(w)?.resident ?? null, observer: observer.summary(),
+    events: days <= 3 ? observer.events.slice() : undefined,
+    activeDays: new Set(rows.filter((x) => x.decisionTicks > 0).map((x) => x.day)).size,
     births: w.survival.births ?? 0, deaths: (w.survival.deaths ?? []).length, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
     definition: {
       voluntary: '本刻有决策 trace 但未产生动作分钟（自己选择不行动）',
@@ -142,9 +154,9 @@ function finishDay(w, a, st) {
     seed: w.seed, day: st.day, id: a.id, name: a.name,
     age: Math.floor(ageDays(w, a.id)), stage: residentStage(w, a.id),
     goals: a.traits?.goals ?? null, archetype: a.traits?.archetype ?? null,
-    availableMin: 1440, usedMin: st.used, idleMin: idle, ticks: st.ticks, partial: st.ticks < 24, died: !!a.dead, deathTick: a.death?.t ?? null,
+    availableMin: st.ticks * 60, usedMin: st.used, clockUsedMin: st.clockUsed ?? 0, idleMin: idle, ticks: st.ticks, partial: st.ticks < 24, died: !!a.dead, deathTick: a.death?.t ?? null,
     laborMin: st.labor, moveMin: st.move, restMin: st.rest, socialMin: st.social, otherMin: st.other,
-    busyTicks: st.busyTicks, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks, otherIdleTicks: st.otherIdleTicks ?? 0,
+    busyTicks: st.busyTicks, busyMin: st.busyTicks * 60, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks, otherIdleTicks: st.otherIdleTicks ?? 0,
     voluntaryTicks: st.voluntaryTicks, schedulingTicks: st.schedulingTicks,
     voluntaryIdleMin: Number(voluntaryIdleMin.toFixed(1)),
     schedulingIdleMin: Number(schedulingIdleMin.toFixed(1)),
@@ -169,6 +181,11 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
+
+
+
 
 
 

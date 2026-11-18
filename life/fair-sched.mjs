@@ -22,7 +22,7 @@ export function createFairState(world, { cap = fairCap() } = {}) {
     inTick: false,
     stats: { ticks: 0, allowed: 0, peakAllowed: 0, opportunities: 0, blockedTicks: 0,
       blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0, extraEpisodes: 0,
-      underfundedTicks: 0, popPeak: 0, popSum: 0, peakEligible: 0, waitSamples: [] },
+      underfundedTicks: 0, popPeak: 0, popSum: 0, peakEligible: 0, waitSamples: [], executedEpisodes: 0 },
   };
   return world.fairSched;
 }
@@ -107,7 +107,7 @@ export function installFairGuard(world, agent, fs = world.fairSched) {
     fs.usedEpisodes += 1;
     if (used === 0) { fs.debt[agent.id] = 0; }
     fs.last[agent.id] = world.t;
-    fs.stats.opportunities += 1;
+    fs.stats.opportunities += 1; fs.stats.executedEpisodes += 1;
     fs.stats.calls = fs.stats.opportunities;
     fs.inTick = true;
     try { return await originalTick(...args); }
@@ -127,6 +127,8 @@ export function installFairSched(world, env = process.env) {
   ensureFairAgents(world, fs);
   return fs;
 }
+
+
 
 
 
