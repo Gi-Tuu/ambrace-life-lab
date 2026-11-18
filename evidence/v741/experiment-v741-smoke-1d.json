@@ -1,0 +1,2442 @@
+{
+  "tag": "v741-smoke",
+  "generatedAt": "2026-11-18T08:35:02.295Z",
+  "head": "18d8f2d",
+  "days": 1,
+  "groups": [
+    {
+      "head": "18d8f2d",
+      "seed": 7,
+      "days": 1,
+      "ticks": 24,
+      "m3": false,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": false
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": false,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 3,
+          "day": 0,
+          "actor": "a2",
+          "other": "a3",
+          "df": 0.13,
+          "dt": 6,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.15,
+            "trust": 36
+          },
+          "source": "talk",
+          "talk": "active",
+          "inferred": false
+        },
+        {
+          "t": 3,
+          "day": 0,
+          "actor": "a3",
+          "other": "a2",
+          "df": 0.06,
+          "dt": 3,
+          "before": {
+            "familiarity": 0.04,
+            "trust": 31
+          },
+          "after": {
+            "familiarity": 0.1,
+            "trust": 34
+          },
+          "source": "contact(+3/+0.06)",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 12,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0,
+          "dt": -1,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.02,
+            "trust": 29
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "after": {
+            "familiarity": 0.05,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a1",
+          "df": 0.05,
+          "dt": 1,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.07,
+            "trust": 31
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 4,
+        "talk": 1,
+        "contact(+3/+0.06)": 1
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [
+        {
+          "t": 3,
+          "actor": "a2",
+          "target": "a3",
+          "laterSame": null,
+          "laterTarget": null,
+          "available": 2,
+          "initialFamiliarity": 0.02
+        }
+      ],
+      "repeatStats": {
+        "n": 1,
+        "same": 0,
+        "different": 0,
+        "unknown": 1
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 33,
+          "confirmed": 12,
+          "noFollow": 21,
+          "aba": 22,
+          "returnHome": 1,
+          "resourceTrips": 15,
+          "labor": 8,
+          "typicalNoFollow": [
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "deposit@store",
+                "deposit@store",
+                "deposit@store",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "well",
+              "after": [
+                "move_to@well"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 5,
+              "dest": "well",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 6,
+              "dest": "store",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 7,
+              "dest": "store",
+              "after": [
+                "move_to@yard",
+                "move_to@store",
+                "move_to@yard"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 8,
+              "dest": "yard",
+              "after": [
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 9,
+              "dest": "store",
+              "after": [
+                "move_to@yard",
+                "move_to@store",
+                "move_to@yard"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 10,
+              "dest": "yard",
+              "after": [
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 12,
+              "dest": "yard",
+              "after": [
+                "move_to@store",
+                "exchange@store",
+                "move_to@yard"
+              ]
+            }
+          ]
+        },
+        "6": {
+          "denominator": 33,
+          "confirmed": 16,
+          "noFollow": 17,
+          "aba": 25,
+          "returnHome": 1,
+          "resourceTrips": 11,
+          "labor": 11,
+          "typicalNoFollow": [
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "deposit@store",
+                "deposit@store",
+                "deposit@store",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "well",
+              "after": [
+                "move_to@well"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 5,
+              "dest": "well",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 6,
+              "dest": "store",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 7,
+              "dest": "store",
+              "after": [
+                "move_to@yard",
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 8,
+              "dest": "yard",
+              "after": [
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store",
+                "move_to@yard",
+                "move_to@store",
+                "exchange@store"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@garden",
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 13,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@watch"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 17,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 18,
+              "dest": "store",
+              "after": [
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            }
+          ]
+        },
+        "12": {
+          "denominator": 33,
+          "confirmed": 18,
+          "noFollow": 15,
+          "aba": 29,
+          "returnHome": 1,
+          "resourceTrips": 9,
+          "labor": 15,
+          "typicalNoFollow": [
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "deposit@store",
+                "deposit@store",
+                "deposit@store",
+                "move_to@store",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "well",
+              "after": [
+                "move_to@well",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 5,
+              "dest": "well",
+              "after": [
+                "move_to@district-northwest",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 6,
+              "dest": "store",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@garden",
+                "move_to@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 13,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@watch",
+                "gather@watch",
+                "gather@watch",
+                "rest@watch",
+                "rest@watch",
+                "rest@watch",
+                "forage@watch",
+                "move_to@home",
+                "move_to@yard"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 17,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 18,
+              "dest": "store",
+              "after": [
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 19,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 19,
+              "dest": "yard",
+              "after": [
+                "move_to@store",
+                "move_to@hall",
+                "move_to@store",
+                "exchange@store",
+                "exchange@store",
+                "move_to@yard"
+              ]
+            }
+          ]
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "controlHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "repeatHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "head": "18d8f2d",
+      "seed": 13,
+      "days": 1,
+      "ticks": 24,
+      "m3": false,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": false
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": false,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 11,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0,
+          "dt": -3,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 2
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [],
+      "repeatStats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 18,
+          "confirmed": 6,
+          "noFollow": 12,
+          "aba": 4,
+          "returnHome": 0,
+          "resourceTrips": 8,
+          "labor": 5,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "yard",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "yard",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 10,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 10,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 16,
+              "dest": "yard",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 18,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "rest@store",
+                "rest@store",
+                "rest@store",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 21,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            }
+          ]
+        },
+        "6": {
+          "denominator": 18,
+          "confirmed": 6,
+          "noFollow": 12,
+          "aba": 7,
+          "returnHome": 0,
+          "resourceTrips": 8,
+          "labor": 5,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "yard",
+              "after": [
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "yard",
+              "after": [
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 10,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@yard"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 10,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 16,
+              "dest": "yard",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 18,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "rest@store",
+                "rest@store",
+                "rest@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 21,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            }
+          ]
+        },
+        "12": {
+          "denominator": 18,
+          "confirmed": 7,
+          "noFollow": 11,
+          "aba": 14,
+          "returnHome": 0,
+          "resourceTrips": 8,
+          "labor": 6,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "yard",
+              "after": [
+                "move_to@district-northwest",
+                "move_to@yard"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "yard",
+              "after": [
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 10,
+              "dest": "district-northwest",
+              "after": [
+                "gather@well",
+                "gather@well",
+                "gather@well",
+                "move_to@garden",
+                "move_to@store",
+                "rest@store",
+                "rest@store",
+                "rest@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@store",
+                "exchange@store",
+                "move_to@watch",
+                "gather@watch",
+                "gather@watch",
+                "gather@watch",
+                "forage@watch",
+                "gather@watch",
+                "gather@watch",
+                "gather@watch"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 16,
+              "dest": "yard",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 18,
+              "dest": "garden",
+              "after": [
+                "move_to@store",
+                "rest@store",
+                "rest@store",
+                "rest@store",
+                "move_to@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 21,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 22,
+              "dest": "garden",
+              "after": []
+            }
+          ]
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "controlHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "repeatHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "head": "18d8f2d",
+      "seed": 29,
+      "days": 1,
+      "ticks": 24,
+      "m3": false,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": false
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": false,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 5,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.01,
+          "dt": -2,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 28
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 2
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [],
+      "repeatStats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 18,
+          "confirmed": 6,
+          "noFollow": 12,
+          "aba": 5,
+          "returnHome": 0,
+          "resourceTrips": 8,
+          "labor": 5,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 11,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a1",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 13,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 17,
+              "dest": "store",
+              "after": []
+            }
+          ]
+        },
+        "6": {
+          "denominator": 18,
+          "confirmed": 7,
+          "noFollow": 11,
+          "aba": 6,
+          "returnHome": 0,
+          "resourceTrips": 7,
+          "labor": 6,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 11,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@store"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a2",
+              "t": 13,
+              "dest": "district-northwest",
+              "after": []
+            },
+            {
+              "actor": "a3",
+              "t": 17,
+              "dest": "store",
+              "after": [
+                "gather@district-west",
+                "gather@district-west",
+                "gather@district-west"
+              ]
+            }
+          ]
+        },
+        "12": {
+          "denominator": 18,
+          "confirmed": 7,
+          "noFollow": 11,
+          "aba": 15,
+          "returnHome": 0,
+          "resourceTrips": 7,
+          "labor": 6,
+          "typicalNoFollow": [
+            {
+              "actor": "a3",
+              "t": 1,
+              "dest": "yard",
+              "after": [
+                "move_to@garden",
+                "gather@garden",
+                "gather@garden",
+                "gather@garden",
+                "move_to@garden",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 3,
+              "dest": "garden",
+              "after": [
+                "move_to@garden",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "rest@district-northwest",
+                "rest@district-northwest",
+                "rest@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 4,
+              "dest": "garden",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 4,
+              "dest": "garden",
+              "after": [
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "gather@district-northwest",
+                "rest@district-northwest",
+                "rest@district-northwest",
+                "rest@district-northwest",
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 4,
+              "dest": "garden",
+              "after": [
+                "move_to@district-northwest"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 11,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@store",
+                "gather@district-west",
+                "gather@district-west",
+                "gather@district-west"
+              ]
+            },
+            {
+              "actor": "a1",
+              "t": 12,
+              "dest": "district-northwest",
+              "after": [
+                "forage@watch",
+                "gather@watch",
+                "gather@watch",
+                "gather@watch",
+                "gather@watch",
+                "gather@watch",
+                "move_to@well",
+                "plan@well",
+                "forage@well"
+              ]
+            },
+            {
+              "actor": "a2",
+              "t": 13,
+              "dest": "district-northwest",
+              "after": [
+                "move_to@store",
+                "move_to@garden",
+                "till@garden",
+                "move_to@store",
+                "exchange@store",
+                "exchange@store",
+                "exchange@store"
+              ]
+            },
+            {
+              "actor": "a3",
+              "t": 17,
+              "dest": "store",
+              "after": [
+                "gather@district-west",
+                "gather@district-west",
+                "gather@district-west",
+                "move_to@district-west"
+              ]
+            }
+          ]
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "controlHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "repeatHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "head": "18d8f2d",
+      "seed": 7,
+      "days": 1,
+      "ticks": 24,
+      "m3": true,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": true
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": true,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 3,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0,
+          "dt": -3,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "after": {
+            "familiarity": 0.05,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0.05,
+          "dt": 1,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "after": {
+            "familiarity": 0.07,
+            "trust": 28
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a1",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.04,
+            "trust": 31
+          },
+          "after": {
+            "familiarity": 0.06,
+            "trust": 31
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 8
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [],
+      "repeatStats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "6": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "12": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "controlHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "repeatHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "head": "18d8f2d",
+      "seed": 13,
+      "days": 1,
+      "ticks": 24,
+      "m3": true,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": true
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": true,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 3,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0,
+          "dt": -3,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "after": {
+            "familiarity": 0.05,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0.05,
+          "dt": 1,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "after": {
+            "familiarity": 0.07,
+            "trust": 28
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a1",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.04,
+            "trust": 31
+          },
+          "after": {
+            "familiarity": 0.06,
+            "trust": 31
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 8
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [],
+      "repeatStats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "6": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "12": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "controlHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "repeatHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "head": "18d8f2d",
+      "seed": 29,
+      "days": 1,
+      "ticks": 24,
+      "m3": true,
+      "config": {
+        "residentialDecisions": true,
+        "ecosystem": true,
+        "unifiedCooperation": true,
+        "independentWorld": true,
+        "wildFood": true,
+        "autonomousGoals": true,
+        "farmLife": true,
+        "settlementLife": true,
+        "regionalWork": true,
+        "playerRation": true,
+        "gameRules": true,
+        "discussions": true,
+        "eventRulesVersion": 2,
+        "residentChannelMask": {
+          "m3": true
+        },
+        "faIr": false
+      },
+      "population": 3,
+      "goalEnabled": true,
+      "goalEvents": [],
+      "goalCounts": {},
+      "relationEvents": [
+        {
+          "t": 2,
+          "day": 0,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.01,
+          "dt": -0.5,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 3,
+          "day": 0,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0,
+          "dt": -3,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a1",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.03,
+            "trust": 29.5
+          },
+          "after": {
+            "familiarity": 0.05,
+            "trust": 29.5
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a1",
+          "df": 0.05,
+          "dt": 1,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 27
+          },
+          "after": {
+            "familiarity": 0.07,
+            "trust": 28
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a2",
+          "other": "a3",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a1",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.02,
+            "trust": 30
+          },
+          "after": {
+            "familiarity": 0.04,
+            "trust": 30
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        },
+        {
+          "t": 24,
+          "day": 1,
+          "actor": "a3",
+          "other": "a2",
+          "df": 0.02,
+          "dt": 0,
+          "before": {
+            "familiarity": 0.04,
+            "trust": 31
+          },
+          "after": {
+            "familiarity": 0.06,
+            "trust": 31
+          },
+          "source": "unattributed",
+          "talk": null,
+          "inferred": false
+        }
+      ],
+      "relationStats": {
+        "unattributed": 8
+      },
+      "unlinkedGoalEvents": 0,
+      "repeats": [],
+      "repeatStats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "moveAnalysis": {
+        "3": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "6": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        },
+        "12": {
+          "denominator": 0,
+          "confirmed": 0,
+          "noFollow": 0,
+          "aba": 0,
+          "returnHome": 0,
+          "resourceTrips": 0,
+          "labor": 0,
+          "typicalNoFollow": []
+        }
+      },
+      "nonPerturbation": {
+        "observedHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "controlHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "repeatHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    }
+  ],
+  "summary": [
+    {
+      "seed": 7,
+      "m3": false,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 4,
+        "talk": 1,
+        "contact(+3/+0.06)": 1
+      },
+      "repeats": {
+        "n": 1,
+        "same": 0,
+        "different": 0,
+        "unknown": 1
+      },
+      "move3": {
+        "denominator": 33,
+        "confirmed": 12,
+        "noFollow": 21,
+        "aba": 22,
+        "returnHome": 1,
+        "resourceTrips": 15,
+        "labor": 8,
+        "typicalNoFollow": [
+          {
+            "actor": "a1",
+            "t": 3,
+            "dest": "garden",
+            "after": [
+              "move_to@store",
+              "deposit@store",
+              "deposit@store",
+              "deposit@store",
+              "move_to@store"
+            ]
+          },
+          {
+            "actor": "a2",
+            "t": 4,
+            "dest": "well",
+            "after": [
+              "move_to@well"
+            ]
+          },
+          {
+            "actor": "a2",
+            "t": 5,
+            "dest": "well",
+            "after": []
+          },
+          {
+            "actor": "a1",
+            "t": 6,
+            "dest": "store",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 7,
+            "dest": "store",
+            "after": [
+              "move_to@yard",
+              "move_to@store",
+              "move_to@yard"
+            ]
+          },
+          {
+            "actor": "a3",
+            "t": 8,
+            "dest": "yard",
+            "after": [
+              "move_to@store",
+              "move_to@yard",
+              "move_to@store"
+            ]
+          },
+          {
+            "actor": "a3",
+            "t": 9,
+            "dest": "store",
+            "after": [
+              "move_to@yard",
+              "move_to@store",
+              "move_to@yard"
+            ]
+          },
+          {
+            "actor": "a3",
+            "t": 10,
+            "dest": "yard",
+            "after": [
+              "move_to@store",
+              "move_to@yard",
+              "move_to@store"
+            ]
+          },
+          {
+            "actor": "a2",
+            "t": 12,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 12,
+            "dest": "yard",
+            "after": [
+              "move_to@store",
+              "exchange@store",
+              "move_to@yard"
+            ]
+          }
+        ]
+      },
+      "nonPerturbation": {
+        "observedHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "controlHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "repeatHash": "4c89d329b73435abc27d41f617bcaf6d70120c17d23f4517c109eaa85bd36d38",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "seed": 13,
+      "m3": false,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 2
+      },
+      "repeats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "move3": {
+        "denominator": 18,
+        "confirmed": 6,
+        "noFollow": 12,
+        "aba": 4,
+        "returnHome": 0,
+        "resourceTrips": 8,
+        "labor": 5,
+        "typicalNoFollow": [
+          {
+            "actor": "a3",
+            "t": 1,
+            "dest": "yard",
+            "after": [
+              "move_to@garden",
+              "gather@garden",
+              "gather@garden",
+              "gather@garden",
+              "move_to@garden"
+            ]
+          },
+          {
+            "actor": "a1",
+            "t": 4,
+            "dest": "yard",
+            "after": []
+          },
+          {
+            "actor": "a2",
+            "t": 4,
+            "dest": "yard",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 4,
+            "dest": "garden",
+            "after": []
+          },
+          {
+            "actor": "a1",
+            "t": 10,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a2",
+            "t": 10,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 12,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a1",
+            "t": 16,
+            "dest": "yard",
+            "after": []
+          },
+          {
+            "actor": "a2",
+            "t": 18,
+            "dest": "garden",
+            "after": [
+              "move_to@store",
+              "rest@store",
+              "rest@store",
+              "rest@store",
+              "move_to@garden"
+            ]
+          },
+          {
+            "actor": "a2",
+            "t": 21,
+            "dest": "garden",
+            "after": [
+              "move_to@garden"
+            ]
+          }
+        ]
+      },
+      "nonPerturbation": {
+        "observedHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "controlHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "repeatHash": "07d2771a05bbf7e90705415e3540873fea98b31c4f1a00119bd15c508a0d27d2",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "seed": 29,
+      "m3": false,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 2
+      },
+      "repeats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "move3": {
+        "denominator": 18,
+        "confirmed": 6,
+        "noFollow": 12,
+        "aba": 5,
+        "returnHome": 0,
+        "resourceTrips": 8,
+        "labor": 5,
+        "typicalNoFollow": [
+          {
+            "actor": "a3",
+            "t": 1,
+            "dest": "yard",
+            "after": [
+              "move_to@garden",
+              "gather@garden",
+              "gather@garden",
+              "gather@garden",
+              "move_to@garden"
+            ]
+          },
+          {
+            "actor": "a1",
+            "t": 3,
+            "dest": "garden",
+            "after": [
+              "move_to@garden"
+            ]
+          },
+          {
+            "actor": "a2",
+            "t": 3,
+            "dest": "garden",
+            "after": [
+              "move_to@garden"
+            ]
+          },
+          {
+            "actor": "a1",
+            "t": 4,
+            "dest": "garden",
+            "after": []
+          },
+          {
+            "actor": "a2",
+            "t": 4,
+            "dest": "garden",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 4,
+            "dest": "garden",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 11,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a1",
+            "t": 12,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a2",
+            "t": 13,
+            "dest": "district-northwest",
+            "after": []
+          },
+          {
+            "actor": "a3",
+            "t": 17,
+            "dest": "store",
+            "after": []
+          }
+        ]
+      },
+      "nonPerturbation": {
+        "observedHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "controlHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "repeatHash": "c65082a2e4e51cc8bc88551315c2d68c5ff451588b29cac9758153bd5dbfbace",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "seed": 7,
+      "m3": true,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 8
+      },
+      "repeats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "move3": {
+        "denominator": 0,
+        "confirmed": 0,
+        "noFollow": 0,
+        "aba": 0,
+        "returnHome": 0,
+        "resourceTrips": 0,
+        "labor": 0,
+        "typicalNoFollow": []
+      },
+      "nonPerturbation": {
+        "observedHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "controlHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "repeatHash": "b0e363f09345505a9f0394ed273f72311f09920d46c838d252c1febd508863fd",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "seed": 13,
+      "m3": true,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 8
+      },
+      "repeats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "move3": {
+        "denominator": 0,
+        "confirmed": 0,
+        "noFollow": 0,
+        "aba": 0,
+        "returnHome": 0,
+        "resourceTrips": 0,
+        "labor": 0,
+        "typicalNoFollow": []
+      },
+      "nonPerturbation": {
+        "observedHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "controlHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "repeatHash": "21ec10176bcb275115d1a24087381676eac2ade204317fd72f99635d85b25a17",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    },
+    {
+      "seed": 29,
+      "m3": true,
+      "population": 3,
+      "goals": {},
+      "relations": {
+        "unattributed": 8
+      },
+      "repeats": {
+        "n": 0,
+        "same": 0,
+        "different": 0,
+        "unknown": 0
+      },
+      "move3": {
+        "denominator": 0,
+        "confirmed": 0,
+        "noFollow": 0,
+        "aba": 0,
+        "returnHome": 0,
+        "resourceTrips": 0,
+        "labor": 0,
+        "typicalNoFollow": []
+      },
+      "nonPerturbation": {
+        "observedHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "controlHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "repeatHash": "e6e4bc57556107767aebc5bcae4f61cf8d070d8c4ce97951d6d1e031db163849",
+        "equalControl": true,
+        "equalRepeat": true
+      }
+    }
+  ]
+}
