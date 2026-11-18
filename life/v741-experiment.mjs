@@ -31,6 +31,8 @@ export async function runGroup(seed = 7, days = 30, m3 = false) {
   const actions = [];
   const repeats = [];
   const prevGoal = new Map();
+  const goalStart = new Map();
+  const goalLifecycle = [];
   for (const a of residents) prevGoal.set(a.id, null);
   for (let i = 0; i < days * DAY_TICKS; i += 1) {
     const beforeRel = new Map();
@@ -65,6 +67,13 @@ export async function runGroup(seed = 7, days = 30, m3 = false) {
           if (type === 'abort') reason = a.m3Last?.interrupted ?? null;
           const follow = actions.filter((x) => x.actor === a.id && x.t >= t).slice(0, 5).map((x) => x.kind);
           goalEvents.push({ t, day: dayOf(t), actor: a.id, type, from: bId, to: aId, remaining: ag?.remaining ?? null, reused: ag?.reused ?? null, reason, follow, inferred: false });
+          if (type === 'start') goalStart.set(a.id, t);
+          if (type === 'switch' || type === 'abort' || type === 'complete') {
+            const st = goalStart.get(a.id);
+            goalLifecycle.push({ actor: a.id, goal: bId, startTick: st ?? null, endTick: t,
+              duration: st != null ? t - st : null, status: type, from: bId, to: aId, reason, inferred: false });
+            if (type === 'switch') goalStart.set(a.id, t); else goalStart.delete(a.id);
+          }
         }
       }
       // 关系来源分解（当前 actor 的方向）
@@ -100,6 +109,14 @@ export async function runGroup(seed = 7, days = 30, m3 = false) {
   }
   const repeatStats = { n: repeats.length, same: repeats.filter((x) => x.laterSame === true).length,
     different: repeats.filter((x) => x.laterSame === false).length, unknown: repeats.filter((x) => x.laterSame == null).length };
+  for (const a of residents) {
+    const st = goalStart.get(a.id);
+    if (st == null) continue;
+    const dur = w.t - st;
+    const commit = a.m3Planner?.commitment ?? 4;
+    goalLifecycle.push({ actor: a.id, goal: goalOf(a), startTick: st, endTick: w.t, duration: dur,
+      status: dur > commit ? 'over-window' : 'ongoing', inferred: false });
+  }
   // 移动窗口：3/6/12 刻
   const moveAnalysis = {};
   for (const win of [3, 6, 12]) {
@@ -130,6 +147,7 @@ export async function runGroup(seed = 7, days = 30, m3 = false) {
     population: residents.filter((a) => isAlive(a)).length,
     goalEnabled: residents.some((a) => a.ch?.m3),
     goalEvents, goalCounts: goalEvents.reduce((acc, e) => { acc[e.type] = (acc[e.type] ?? 0) + 1; return acc; }, {}),
+    goalLifecycle, goalLifecycleCounts: goalLifecycle.reduce((acc, e) => { acc[e.status] = (acc[e.status] ?? 0) + 1; return acc; }, {}),
     relationEvents, relationStats: relationEvents.reduce((acc, e) => { acc[e.source] = (acc[e.source] ?? 0) + 1; return acc; }, {}),
     unlinkedGoalEvents: goalEvents.filter((e) => e.inferred).length,
     repeats, repeatStats,
@@ -154,4 +172,5 @@ if (process.argv[1] && process.argv[1].endsWith('v741-experiment.mjs')) {
   console.log(JSON.stringify(out.summary.map((s) => ({ seed: s.seed, m3: s.m3, pop: s.population, goals: s.goals,
     rel: s.relations, rep: s.repeats, move3: { d: s.move3.denominator, ok: s.move3.confirmed, no: s.move3.noFollow, aba: s.move3.aba }, hash: s.nonPerturbation.equalControl })), null, 2));
 }
+
 

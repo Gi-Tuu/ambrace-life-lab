@@ -1,0 +1,146 @@
+{
+  "groups": [
+    {
+      "seed": 7,
+      "m3": false,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 63,
+      "unattributed": 168,
+      "repeats": {
+        "n": 72,
+        "same": 12,
+        "different": 16,
+        "unknown": 44
+      },
+      "goalCounts": {},
+      "goalLifecycle": {},
+      "agentErrors": 0,
+      "hash": true
+    },
+    {
+      "seed": 13,
+      "m3": false,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 25,
+      "unattributed": 90,
+      "repeats": {
+        "n": 25,
+        "same": 0,
+        "different": 2,
+        "unknown": 23
+      },
+      "goalCounts": {},
+      "goalLifecycle": {},
+      "agentErrors": 0,
+      "hash": true
+    },
+    {
+      "seed": 29,
+      "m3": false,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 31,
+      "unattributed": 121,
+      "repeats": {
+        "n": 31,
+        "same": 4,
+        "different": 4,
+        "unknown": 23
+      },
+      "goalCounts": {},
+      "goalLifecycle": {},
+      "agentErrors": 0,
+      "hash": true
+    },
+    {
+      "seed": 7,
+      "m3": true,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 17,
+      "unattributed": 107,
+      "repeats": {
+        "n": 17,
+        "same": 2,
+        "different": 1,
+        "unknown": 14
+      },
+      "goalCounts": {
+        "start": 110,
+        "abort": 107
+      },
+      "goalLifecycle": {
+        "abort": 107,
+        "over-window": 1,
+        "ongoing": 2
+      },
+      "agentErrors": 0,
+      "hash": true
+    },
+    {
+      "seed": 13,
+      "m3": true,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 77,
+      "unattributed": 177,
+      "repeats": {
+        "n": 80,
+        "same": 9,
+        "different": 24,
+        "unknown": 47
+      },
+      "goalCounts": {
+        "start": 93,
+        "abort": 90
+      },
+      "goalLifecycle": {
+        "abort": 90,
+        "over-window": 3
+      },
+      "agentErrors": 0,
+      "hash": true
+    },
+    {
+      "seed": 29,
+      "m3": true,
+      "population": 3,
+      "births": null,
+      "store": null,
+      "labor": null,
+      "talk": 47,
+      "unattributed": 151,
+      "repeats": {
+        "n": 49,
+        "same": 5,
+        "different": 11,
+        "unknown": 33
+      },
+      "goalCounts": {
+        "start": 117,
+        "abort": 115,
+        "switch": 6
+      },
+      "goalLifecycle": {
+        "abort": 115,
+        "switch": 6,
+        "over-window": 2
+      },
+      "agentErrors": 0,
+      "hash": true
+    }
+  ],
+  "generatedAt": "2026-11-18T17:05:46.2365591+08:00"
+}

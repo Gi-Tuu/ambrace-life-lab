@@ -236,7 +236,14 @@ export class Organism {
     if (!paths0.length) return null;
     // M3 行为状态：在习惯/审议之前先定功能目标，承诺期内只保留落在该目标上的候选。
     // 只过滤候选集——评分、习惯分支、真模型、驳回重决策、告知都还是原来的链条，所以它"承重"的方式是改变比较而不是加常数。
-    const paths = ch.m3 ? this.m3Choose(world, paths0) : paths0;
+    let paths = ch.m3 ? this.m3Choose(world, paths0) : paths0;
+    if (ch.m3) {
+      // 目标过滤后再兜底一次：每刻最多保留 1 个 talk 候选（仅 m3=on）。
+      const rest = paths.filter((p) => p.kind !== 'talk');
+      const one = paths.find((p) => p.kind === 'talk') ?? paths0.find((p) => p.kind === 'talk');
+      if (one) rest.push(one);
+      paths = rest;
+    }
 
     const mem = this.condition === 'C0' ? { bonus: {}, retrieved: [] } : this.memory.stateBonus(this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights });
     const memBonus = mem.bonus;
@@ -445,7 +452,7 @@ export class Organism {
     });
     if (!planned.length) {
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
-      return paths;
+      return this.m3CapTalk(paths);
     }
     let r;
     try {
@@ -454,7 +461,7 @@ export class Organism {
       // 规划器仍拒绝时退回完整候选集，绝不让 M3 把每拍决策全部吃掉。
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'planner_rejected' };
       this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
-      return paths;
+      return this.m3CapTalk(paths);
     }
     const previous = this.m3PrevGoal;
     this.m3PrevGoal = r.goal;
@@ -468,9 +475,18 @@ export class Organism {
     if (!filtered.length) {
       this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
       this.m3Last.interrupted ??= 'goal_has_no_visible_action';
-      return paths;
+      return this.m3CapTalk(paths);
     }
-    return filtered;
+    return this.m3CapTalk(filtered);
+  }
+
+  // V7.4.1：仅 m3=on 时每刻最多保留 1 个 talk 候选；不改其他 keep 规则。
+  m3CapTalk(paths) {
+    if (!this.ch.m3) return paths;
+    const rest = paths.filter((p) => p.kind !== 'talk');
+    const one = paths.find((p) => p.kind === 'talk');
+    if (one) rest.push(one);
+    return rest;
   }
 
   // M6-L（PLAN §25.6）：相对进度 g∈[0,1]；slow=0（还没样本）时 g=0 ⇒ 不加探索预算。
@@ -657,6 +673,9 @@ export class Organism {
     return { id, ...result };
   }
 }
+
+
+
 
 
 
