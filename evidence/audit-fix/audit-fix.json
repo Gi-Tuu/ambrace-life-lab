@@ -1,5 +1,5 @@
 {
-  "head": "5ef112e",
+  "head": "8a1b1ff",
   "tests": {"total": 907, "pass": 907, "fail": 0},
   "batches": {
     "0": {"fixed": ["恢复 v733-consistency/v734-events/v732-restart 及 audit 测试，测试数 873→907", "observer.raw 独立原始流；DUPLICATE_FINAL/MULTIPLE_FINAL_STATES 可达；缺开始/时间倒置可红", "ctl 破坏性动作 nonce 授权；匿名 reset 403；token Bearer 仍可用；server 下发 ctl_nonce，前端回填 x-ctl-nonce", "索引 null 条目过滤；唯一 tmp + 旧 tmp 故障注入兼容"], "unfixed": ["meat/wool/索食守恒入账", "camp owner 全路由绑定", "catchup 冷却/NaN 校验", "MAIN reset 策略"]},
@@ -9,3 +9,4 @@
   },
   "risks": ["nonce cookie 可能被后续 set-cookie 覆盖（/saves/open 等）", "owner/ catchup/ 守恒未修", "索引多实例只解决 tmp 冲突，未做跨进程锁", "M3 仍为研究能力，未达正式完成"]
 }
+
