@@ -12,7 +12,6 @@ import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents,
 import { validate } from './rules.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, clockOf, CHAIN_MAX } from './resident-time.mjs';
 import { costFor } from './action-cost.mjs';
-import { ensureFairAgents, installFairSched } from './fair-sched.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
@@ -160,7 +159,6 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     s.actClock = {};
     for (const id of Object.keys(world.agents)) s.actClock[id] = { day: 0, usedMin: 0, busy: null };
   }
-  installFairSched(world); // V7.3.2：FAIR_SCHED=1 时只包审议入口；研究态/默认关不动
   return { world, log: [] };
 }
 
@@ -411,7 +409,6 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
   }
   if (w.survival.talk && !talkInRange(w, w.survival.talk)) w.survival.talk = null;
   // V7.3.3：每刻执行前登记当前在世集合（新生/动态加入不等到下一次 prepare）。
-  if (w.fairSched) ensureFairAgents(w);
   // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
   for (const id of Object.keys(w.agents)) {
     const a = w.agents[id];
@@ -1123,7 +1120,7 @@ export function dumpSurv(sp) {
     dead: !!a.dead, death: a.death ?? null, hurtBy: a.hurtBy ?? null, // P0-1：死亡事实入档
     rng: a.rng?.state?.() ?? null, setpoint: { ...a.drives.setpoint }, aloneTicks: a.drives.aloneTicks,
     bankPending: { ...a.bank.pending }, bankM5: a.bank.dumpM5?.() ?? null, counters: { ...a.counters }, dayTally: structuredClone(a.dayTally),
-    m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null, m3GraceWait: a.m3GraceWait ?? 0,
+    m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null,
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null, mealDay: a.mealDay ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
@@ -1132,7 +1129,7 @@ export function dumpSurv(sp) {
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}),
     // V7.3.2：fair 调度的欠账/上次机会随档走，重启后不重置轮转（仅正式游戏）。
-    fairSched: w.fairSched ? { cap: w.fairSched.cap, debt: { ...w.fairSched.debt }, last: { ...w.fairSched.last } } : null };
+ };
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
@@ -1244,7 +1241,6 @@ export function loadSurv(raw,seed=7,options) {
       if (st.dayTally) a.dayTally = structuredClone(st.dayTally);
       if (st.m3Last !== undefined) a.m3Last = structuredClone(st.m3Last);
       if (st.m3PrevGoal !== undefined) a.m3PrevGoal = st.m3PrevGoal;
-      if (Number.isFinite(st.m3GraceWait)) a.m3GraceWait = st.m3GraceWait;
       if (st.m3Planner && typeof a.m3Planner?.load === 'function') a.m3Planner.load(st.m3Planner);
       if (st.coupling && typeof a.coupling?.restore === 'function') a.coupling.restore(st.coupling);
       if (st.informedTick !== undefined) a.informedTick = st.informedTick;
@@ -1311,13 +1307,9 @@ export function loadSurv(raw,seed=7,options) {
       : expected;
   }
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
-  if (raw?.fairSched && sp.world.fairSched) {
-    sp.world.fairSched.debt = { ...(raw.fairSched.debt ?? {}) };
-    sp.world.fairSched.last = { ...(raw.fairSched.last ?? {}) };
-    if (Number.isSafeInteger(raw.fairSched.cap) && raw.fairSched.cap > 0) sp.world.fairSched.cap = raw.fairSched.cap;
-  }
   return sp;
 }
+
 
 
 

@@ -1,0 +1,62 @@
+{
+  "generatedAt": "2026-11-18T17:41:06.1525732+08:00",
+  "head": "19cfbac",
+  "removed": [
+    "fair-sched.mjs",
+    "fair-sched-probe.mjs",
+    "fair-long-probe.mjs",
+    "fairSched dump/load/ensure/wrapper",
+    "M3_GRACE/waited/dump",
+    "model-context.mjs + host selector",
+    "相关 fair/grace/model-context 测试"
+  ],
+  "kept": [
+    "V72_TIME=0 兼容关闸",
+    "M3 research channel residentChannelMask.m3 (research only)"
+  ],
+  "m3Trial": {
+    "seeds": [
+      7,
+      13,
+      29
+    ],
+    "decision": "failed: complete=0, abort 71/71/70; labor whitelist reverted; M3 research-only, no formal default",
+    "groups": [
+      {
+        "seed": 7,
+        "population": 3,
+        "complete": 0,
+        "abort": 71,
+        "overWindow": 2,
+        "switches": 0,
+        "talk": 17,
+        "errors": 0
+      },
+      {
+        "seed": 13,
+        "population": 3,
+        "complete": 0,
+        "abort": 71,
+        "overWindow": 3,
+        "switches": 0,
+        "talk": 77,
+        "errors": 0
+      },
+      {
+        "seed": 29,
+        "population": 3,
+        "complete": 0,
+        "abort": 70,
+        "overWindow": 2,
+        "switches": 2,
+        "talk": 25,
+        "errors": 0
+      }
+    ]
+  },
+  "checks": {
+    "fail": 0,
+    "pass": 873,
+    "tests": 873
+  }
+}

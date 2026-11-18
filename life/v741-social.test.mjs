@@ -9,7 +9,6 @@ import { move } from './body.mjs';
 const sha = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
 test('V741-SOC m3=on 5 日 talk 执行>0', async () => {
-  process.env.FAIR_SCHED = '0';
   const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });
   let talk = 0;
   for (let i = 0; i < 24 * 5; i += 1) {
@@ -37,3 +36,4 @@ test('V741-SOC m3=off 与无 mask 的 1 日 dump 哈希一致', async () => {
   for (let i = 0; i < 24; i += 1) { await tickSurvPlay(a); await tickSurvPlay(b); }
   assert.equal(sha(dumpSurv(a)), sha(dumpSurv(b)));
 });
+

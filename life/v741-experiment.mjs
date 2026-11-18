@@ -143,7 +143,7 @@ export async function runGroup(seed = 7, days = 30, m3 = false) {
   const repeat = await runPlain(seed, days, m3);
   return {
     head, seed, days, ticks: days * DAY_TICKS, m3,
-    config: { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3 }, faIr: process.env.FAIR_SCHED === '1' },
+    config: { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3 } },
     population: residents.filter((a) => isAlive(a)).length,
     goalEnabled: residents.some((a) => a.ch?.m3),
     goalEvents, goalCounts: goalEvents.reduce((acc, e) => { acc[e.type] = (acc[e.type] ?? 0) + 1; return acc; }, {}),
@@ -172,5 +172,6 @@ if (process.argv[1] && process.argv[1].endsWith('v741-experiment.mjs')) {
   console.log(JSON.stringify(out.summary.map((s) => ({ seed: s.seed, m3: s.m3, pop: s.population, goals: s.goals,
     rel: s.relations, rep: s.repeats, move3: { d: s.move3.denominator, ok: s.move3.confirmed, no: s.move3.noFollow, aba: s.move3.aba }, hash: s.nonPerturbation.equalControl })), null, 2));
 }
+
 
 

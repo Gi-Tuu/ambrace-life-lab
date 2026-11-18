@@ -115,7 +115,7 @@ export async function measureBehaviorB(seed = 7, days = 30) {
   const repeat = await runPlain(seed, days);
   return {
     seed, days, ticks: days * DAY_TICKS, actualTicks: w.t - startTick, head,
-    config: { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, m3Enabled, faIr: process.env.FAIR_SCHED === '1', cap: process.env.FAIR_DECISION_CAP ?? null, model: process.env.BRAIN ?? 'local' },
+    config: { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, m3Enabled, model: process.env.BRAIN ?? 'local' },
     season: seasonOf(dayOf(w.t)), observationDays: days,
     population: living.length, births: roster.filter((r) => !r.initial).length, deaths: roster.filter((r) => r.deathTick != null).length,
     store: w.survival.store,
@@ -145,4 +145,5 @@ if (process.argv[1] && process.argv[1].endsWith('behavior-quality-probe-b.mjs'))
   writeFileSync(`evidence/v740b/behavior-${tag}-${days}d.json`, JSON.stringify(out, null, 2));
   console.log(JSON.stringify(out.summary, null, 2));
 }
+
 

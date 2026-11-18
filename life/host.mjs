@@ -20,7 +20,6 @@ import { hashSeed, CURRENT_EVENT_RULES } from './rng.mjs';
 import { DIMS } from './traits.mjs';
 import { preferenceBands } from './model.mjs';
 import { withNoThink, withoutNoThink } from './model-adapter.mjs';
-import { compactEnabled, buildCompactDeliberationPrompt } from './model-context.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
@@ -485,11 +484,9 @@ export function buildDeliberationPrompt({ agent, scored, world, rejected, memori
   return lines.join(String.fromCharCode(10));
 }
 
-// 阶段 4：审议输入边界。默认原版；MODEL_CONTEXT=compact 时走候选（两版复用同一份 args）。
-export function deliberationPrompt(args, mode = compactEnabled() ? 'compact' : 'original') {
-  if (mode !== 'compact') return buildDeliberationPrompt(args);
-  const bands = preferenceBands(args.scored, args.agent.ch);
-  return buildCompactDeliberationPrompt({ ...args, bands });
+// 审议输入边界：仅保留原版构造器（实验态 compact 已移除）。
+export function deliberationPrompt(args) {
+  return buildDeliberationPrompt(args);
 }
 
 async function modelBrain(args) {
@@ -1690,5 +1687,6 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+
 
 

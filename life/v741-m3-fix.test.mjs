@@ -10,7 +10,6 @@ import { move } from './body.mjs';
 const sha = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
 test('V741-M3 m3 on 2 日：errors=0、规划器决策与目标事件真实存在', async () => {
-  process.env.FAIR_SCHED = '0';
   const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });
   const w = sp.world;
   let goalTicks = 0;
@@ -36,9 +35,9 @@ test('V741-M3 m3Choose：重复 id 被 sanitize、未知 kind 不进规划器且
 });
 
 test('V741-M3 m3 off 与不传 mask 的 1 日 dump 哈希一致', async () => {
-  process.env.FAIR_SCHED = '0';
   const a = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: false } });
   const b = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   for (let i = 0; i < 24; i += 1) { await tickSurvPlay(a); await tickSurvPlay(b); }
   assert.equal(sha(dumpSurv(a)), sha(dumpSurv(b)), 'm3=off 不得改变默认行为');
 });
+
