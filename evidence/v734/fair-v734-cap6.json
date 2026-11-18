@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T07:24:32.578Z",
+  "generatedAt": "2026-11-18T07:28:20.232Z",
   "seeds": [
     7,
     13,
@@ -46,14 +46,16 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 1.001,
-        "max": 10.863
+        "avg": 0.953,
+        "max": 9.748
       },
       "fair": null,
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": false,
       "cap": 6,
+      "executedEpisodes": null,
+      "activeDays": 30,
       "popAvg": null,
       "wait": null
     },
@@ -95,14 +97,16 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.577,
-        "max": 2.805
+        "avg": 0.583,
+        "max": 2.935
       },
       "fair": null,
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": false,
       "cap": 6,
+      "executedEpisodes": null,
+      "activeDays": 30,
       "popAvg": null,
       "wait": null
     },
@@ -144,14 +148,16 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.687,
-        "max": 3.164
+        "avg": 0.643,
+        "max": 2.575
       },
       "fair": null,
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": false,
       "cap": 6,
+      "executedEpisodes": null,
+      "activeDays": 30,
       "popAvg": null,
       "wait": null
     },
@@ -193,8 +199,8 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.739,
-        "max": 2.776
+        "avg": 0.691,
+        "max": 3.684
       },
       "fair": {
         "ticks": 701,
@@ -214,12 +220,14 @@
         "popSum": 2305,
         "peakEligible": 4,
         "waitSamples": [],
-        "executedEpisodes": 0
+        "executedEpisodes": 1763
       },
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": true,
       "cap": 6,
+      "executedEpisodes": 1763,
+      "activeDays": 30,
       "popAvg": 3.29,
       "wait": null
     },
@@ -261,8 +269,8 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.431,
-        "max": 2.164
+        "avg": 0.43,
+        "max": 2.405
       },
       "fair": {
         "ticks": 622,
@@ -282,12 +290,14 @@
         "popSum": 1866,
         "peakEligible": 3,
         "waitSamples": [],
-        "executedEpisodes": 0
+        "executedEpisodes": 1154
       },
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": true,
       "cap": 6,
+      "executedEpisodes": 1154,
+      "activeDays": 30,
       "popAvg": 3,
       "wait": null
     },
@@ -329,8 +339,8 @@
         "resources": 0
       },
       "tickMs": {
-        "avg": 0.473,
-        "max": 2.632
+        "avg": 0.478,
+        "max": 2.95
       },
       "fair": {
         "ticks": 631,
@@ -350,12 +360,14 @@
         "popSum": 1893,
         "peakEligible": 3,
         "waitSamples": [],
-        "executedEpisodes": 0
+        "executedEpisodes": 1290
       },
       "ticksRun": 720,
-      "head": "126d534",
+      "head": "40a6253",
       "fairOn": true,
       "cap": 6,
+      "executedEpisodes": 1290,
+      "activeDays": 30,
       "popAvg": 3,
       "wait": null
     }
