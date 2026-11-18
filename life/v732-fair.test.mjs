@@ -59,3 +59,31 @@ test('V732-FAIR 研究态/默认关不安装调度器', () => {
   assert.ok(formal.world.fairSched, '正式游戏开启时应安装');
   process.env.FAIR_SCHED = '0';
 });
+
+test('V732-FAIR debt：欠账高的先拿机会，获授后清零', async () => {
+  const ticks = [];
+  const mk = (id) => ({ id, isPlayer: false, dead: false, energy: 1,
+    async tick() { ticks.push(id); },
+    async decideOn() { return null; } });
+  const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1', 'a2', 'a3', 'a4'].map((id) => [id, mk(id)])) };
+  const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '1' });
+  fs.debt.a3 = 5; fs.debt.a4 = 2; // 手工欠账
+  for (const id of ['a1', 'a2', 'a3', 'a4']) await w.agents[id].tick();
+  assert.deepEqual(ticks, ['a3'], 'debt 最高者优先');
+  assert.equal(fs.debt.a3, 0, '获授后清零');
+  assert.equal(fs.debt.a4, 3, '未获授者欠账 +1');
+});
+
+test('V732-FAIR debt：cap 限制与 20 刻内无饥饿、debt 有界', async () => {
+  const seen = new Map();
+  const mk = (id) => ({ id, isPlayer: false, dead: false, energy: 1,
+    async tick() { seen.set(id, (seen.get(id) ?? 0) + 1); },
+    async decideOn() { return null; } });
+  const w = { t: 0, independentWorld: true, gameRules: true, agents: Object.fromEntries(['a1', 'a2', 'a3', 'a4', 'a5'].map((id) => [id, mk(id)])) };
+  const fs = installFairSched(w, { FAIR_SCHED: '1', FAIR_DECISION_CAP: '2' });
+  for (let t = 0; t < 20; t += 1) { w.t = t; for (const a of Object.values(w.agents)) await a.tick(); }
+  assert.deepEqual([...seen.keys()].sort(), ['a1', 'a2', 'a3', 'a4', 'a5'], '每个可行动者都拿到过机会');
+  for (const n of seen.values()) assert.ok(n >= 6, `20 刻 cap2/5 人应至少 6 次，实测 ${n}`);
+  assert.ok(Math.max(...Object.values(fs.debt)) <= 3, `debt 不得无限增长：${JSON.stringify(fs.debt)}`);
+  assert.equal(fs.stats.blockedTicks, 60);
+});

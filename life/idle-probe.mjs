@@ -74,7 +74,8 @@ export async function measureIdle(seed = 7, days = 30) {
       if (opportunity) st.opportunityTicks += 1;
       if (b?.busy || clock.busy) { st.busyTicks += 1; st.busyMin += Math.min(DAY_TICKS, 60 - (clock.tick?.usedMin ?? 0)); }
       else if (opportunity && acted === 0) st.voluntaryTicks += 1;
-      else if (!opportunity && (clock.tick?.usedMin ?? 0) < 60 && (a.drives?.v?.energy ?? 0) > 0.01) st.schedulingTicks += 1;
+      else if (!opportunity && (w.fairSched?.denied?.[a.id] === 'budget')) st.schedulingTicks += 1;
+      else if (!opportunity) st.otherIdleTicks = (st.otherIdleTicks ?? 0) + 1;
       st.used = clock.usedMin;
       st.energySum += a.drives?.v?.energy ?? 0;
       st.ticks += 1;
@@ -120,7 +121,7 @@ function finishDay(w, a, st) {
     goals: a.traits?.goals ?? null, archetype: a.traits?.archetype ?? null,
     availableMin: 1440, usedMin: st.used, idleMin: idle, ticks: st.ticks,
     laborMin: st.labor, moveMin: st.move, restMin: st.rest, socialMin: st.social, otherMin: st.other,
-    busyTicks: st.busyTicks, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks,
+    busyTicks: st.busyTicks, decisionTicks: st.decisionTicks, opportunityTicks: st.opportunityTicks, otherIdleTicks: st.otherIdleTicks ?? 0,
     voluntaryTicks: st.voluntaryTicks, schedulingTicks: st.schedulingTicks,
     voluntaryIdleMin: Number(voluntaryIdleMin.toFixed(1)),
     schedulingIdleMin: Number(schedulingIdleMin.toFixed(1)),
@@ -145,6 +146,8 @@ if (process.argv[1] && process.argv[1].endsWith('idle-probe.mjs')) {
     schedulingShare: r.schedulingShare, busyTicks: r.totals.busyTicks,
   })) }, null, 2));
 }
+
+
 
 
 

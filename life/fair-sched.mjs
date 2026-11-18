@@ -5,7 +5,7 @@
 // 默认关（FAIR_SCHED=1 才启用），研究态永不启用；生理代谢仍在 survplay 的 drives/viab 循环，不动世界规则。
 export const FAIR_ENV = 'FAIR_SCHED';
 export const FAIR_CAP_ENV = 'FAIR_DECISION_CAP';
-export const DEFAULT_FAIR_CAP = 6;
+export const DEFAULT_FAIR_CAP = 8;
 
 export function fairEnabled(env = process.env) {
   return env?.[FAIR_ENV] === '1';
@@ -20,28 +20,49 @@ export function fairBudget(population, cap = DEFAULT_FAIR_CAP) {
 
 export function createFairState(world, { cap = fairCap() } = {}) {
   world.fairSched = {
-    t: null, cap, allowed: new Set(), last: {}, inTick: false,
+    t: null, cap, allowed: new Set(), last: {}, debt: {}, denied: {}, inTick: false,
     stats: {
       ticks: 0, allowed: 0, peakAllowed: 0, opportunities: 0, blockedTicks: 0,
-      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0,
+      blockedChains: 0, calls: 0, peakCalls: 0, budget: 0, eligible: 0, debtMax: 0,
     },
   };
   return world.fairSched;
 }
 
 function prepare(world, fs) {
-  const ids = Object.values(world.agents)
-    .filter((a) => !a.isPlayer && !a.dead)
-    .map((a) => a.id)
-    .sort((a, b) => (fs.last[a] ?? -1) - (fs.last[b] ?? -1) || a.localeCompare(b));
+  const eligible = [];
+  fs.denied = {};
+  for (const a of Object.values(world.agents)) {
+    if (a.isPlayer || a.dead) continue;
+    const c = world.survival?.actClock?.[a.id];
+    const busy = Boolean(c?.busy);
+    const tickLeft = c ? 60 - (c.tick?.usedMin ?? 0) : 60;
+    const energy = a.drives?.v?.energy ?? 1;
+    if (busy) { fs.denied[a.id] = 'busy'; continue; }
+    if (tickLeft <= 0) { fs.denied[a.id] = 'time'; continue; }
+    if (energy <= 0.01) { fs.denied[a.id] = 'energy'; continue; }
+    eligible.push(a.id);
+  }
   fs.stats.ticks += 1;
   fs.stats.callsThisTick = 0;
-  if (!ids.length) { fs.allowed = new Set(); return; }
-  const budget = fairBudget(ids.length, fs.cap);
-  fs.allowed = new Set(ids.slice(0, budget)); // 久闲优先；last 更新后自然轮转
+  fs.stats.eligible = eligible.length;
+  if (!eligible.length) { fs.allowed = new Set(); return; }
+  const budget = fairBudget(eligible.length, fs.cap);
+  const ranked = [...eligible].sort((a, b) => {
+    const d = (fs.debt[b] ?? 0) - (fs.debt[a] ?? 0); // 欠账多者优先
+    if (d) return d;
+    const l = (fs.last[a] ?? -1) - (fs.last[b] ?? -1); // 久闲优先
+    return l || a.localeCompare(b);
+  });
+  fs.allowed = new Set(ranked.slice(0, budget));
+  for (const id of eligible) {
+    if (fs.allowed.has(id)) fs.debt[id] = 0;
+    else { fs.debt[id] = (fs.debt[id] ?? 0) + 1; fs.denied[id] = 'budget'; }
+  }
   fs.stats.budget = budget;
   fs.stats.allowed += fs.allowed.size;
   fs.stats.peakAllowed = Math.max(fs.stats.peakAllowed, fs.allowed.size);
+  fs.stats.debtMax = Math.max(...Object.values(fs.debt));
 }
 
 export function installFairGuard(world, agent, fs = world.fairSched) {
@@ -73,4 +94,6 @@ export function installFairSched(world, env = process.env) {
   for (const a of Object.values(world.agents)) if (!a.isPlayer) installFairGuard(world, a, fs);
   return fs;
 }
+
+
 
