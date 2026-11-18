@@ -1,0 +1,3057 @@
+{
+  "generatedAt": "2026-11-18T09:22:04.342Z",
+  "days": 30,
+  "groups": [
+    {
+      "seed": 7,
+      "days": 30,
+      "grace": 0,
+      "population": 4,
+      "births": 1,
+      "deaths": 0,
+      "store": 13,
+      "labor": 16090,
+      "errors": 0,
+      "talk": 20,
+      "starts": 1294,
+      "switches": 0,
+      "aborts": 123,
+      "counts": {
+        "start": 1294,
+        "only_coupling_actions": 123
+      },
+      "waits": {
+        "n": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "nonPerturbation": {
+        "observed": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "control": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 5,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 7,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 7,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 13,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 14,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 16,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        }
+      ]
+    },
+    {
+      "seed": 13,
+      "days": 30,
+      "grace": 0,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24715,
+      "errors": 0,
+      "talk": 103,
+      "starts": 1981,
+      "switches": 0,
+      "aborts": 107,
+      "counts": {
+        "start": 1981,
+        "only_coupling_actions": 107
+      },
+      "waits": {
+        "n": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "nonPerturbation": {
+        "observed": "ce182040f7adb1041157f1b808a7e6617f50a37090afd5f7262a09b98650d538",
+        "control": "ce182040f7adb1041157f1b808a7e6617f50a37090afd5f7262a09b98650d538",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 29,
+      "days": 30,
+      "grace": 0,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24055,
+      "errors": 0,
+      "talk": 57,
+      "starts": 2059,
+      "switches": 3,
+      "aborts": 134,
+      "counts": {
+        "start": 2059,
+        "only_coupling_actions": 134,
+        "switch": 3
+      },
+      "waits": {
+        "n": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "nonPerturbation": {
+        "observed": "90dca16475a0a3d69f86807e0999df2083d777e9bacc58fc95d45a2215533bd6",
+        "control": "90dca16475a0a3d69f86807e0999df2083d777e9bacc58fc95d45a2215533bd6",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 11,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 24,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "abort",
+          "code": "only_coupling_actions",
+          "goal": "maintain",
+          "duration": 0,
+          "waited": null
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "days": 30,
+      "grace": 6,
+      "population": 4,
+      "births": 1,
+      "deaths": 0,
+      "store": 13,
+      "labor": 16090,
+      "errors": 0,
+      "talk": 20,
+      "starts": 1294,
+      "switches": 0,
+      "aborts": 0,
+      "counts": {
+        "start": 1294
+      },
+      "waits": {
+        "n": 216,
+        "max": 2,
+        "mean": 1.43
+      },
+      "nonPerturbation": {
+        "observed": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "control": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 7,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 7,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 13,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 14,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 16,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 13,
+      "days": 30,
+      "grace": 6,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24715,
+      "errors": 0,
+      "talk": 103,
+      "starts": 1981,
+      "switches": 0,
+      "aborts": 0,
+      "counts": {
+        "start": 1981
+      },
+      "waits": {
+        "n": 174,
+        "max": 2,
+        "mean": 1.39
+      },
+      "nonPerturbation": {
+        "observed": "46dd3040804dd0c14074f62ae6f9be38a8619a997721a0e8445ad21212b3883b",
+        "control": "46dd3040804dd0c14074f62ae6f9be38a8619a997721a0e8445ad21212b3883b",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 29,
+      "days": 30,
+      "grace": 6,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24055,
+      "errors": 0,
+      "talk": 57,
+      "starts": 2059,
+      "switches": 3,
+      "aborts": 0,
+      "counts": {
+        "start": 2059,
+        "switch": 3
+      },
+      "waits": {
+        "n": 231,
+        "max": 2,
+        "mean": 1.42
+      },
+      "nonPerturbation": {
+        "observed": "db15f475704f3e75802963cca2458c440644e3eceaf084d881edbd66bdd2b4c5",
+        "control": "db15f475704f3e75802963cca2458c440644e3eceaf084d881edbd66bdd2b4c5",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 32,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 32,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "days": 30,
+      "grace": 12,
+      "population": 4,
+      "births": 1,
+      "deaths": 0,
+      "store": 13,
+      "labor": 16090,
+      "errors": 0,
+      "talk": 20,
+      "starts": 1294,
+      "switches": 0,
+      "aborts": 0,
+      "counts": {
+        "start": 1294
+      },
+      "waits": {
+        "n": 216,
+        "max": 2,
+        "mean": 1.43
+      },
+      "nonPerturbation": {
+        "observed": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "control": "ac95bb428ac01ef1ef8b21504f8a371f0d67e2ef6d78e4aca309fe5bdce415fd",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 5,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 6,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 7,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 7,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 8,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 9,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 13,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 14,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 16,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 13,
+      "days": 30,
+      "grace": 12,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24715,
+      "errors": 0,
+      "talk": 103,
+      "starts": 1981,
+      "switches": 0,
+      "aborts": 0,
+      "counts": {
+        "start": 1981
+      },
+      "waits": {
+        "n": 174,
+        "max": 2,
+        "mean": 1.39
+      },
+      "nonPerturbation": {
+        "observed": "eac74c4f83765a4bcbfbc065a7ba20ab35b6c88c5c8a6895f914147d5b792534",
+        "control": "eac74c4f83765a4bcbfbc065a7ba20ab35b6c88c5c8a6895f914147d5b792534",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 10,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 15,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 18,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    },
+    {
+      "seed": 29,
+      "days": 30,
+      "grace": 12,
+      "population": 5,
+      "births": 2,
+      "deaths": 0,
+      "store": 17,
+      "labor": 24055,
+      "errors": 0,
+      "talk": 57,
+      "starts": 2059,
+      "switches": 3,
+      "aborts": 0,
+      "counts": {
+        "start": 2059,
+        "switch": 3
+      },
+      "waits": {
+        "n": 231,
+        "max": 2,
+        "mean": 1.42
+      },
+      "nonPerturbation": {
+        "observed": "69c26b3fd7c99b1f2588ef6a4c3129b1b489ba7d70a8aff6c509dc6b505b9a87",
+        "control": "69c26b3fd7c99b1f2588ef6a4c3129b1b489ba7d70a8aff6c509dc6b505b9a87",
+        "equal": true
+      },
+      "events": [
+        {
+          "tick": 1,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 1,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 2,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 3,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 4,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 11,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 12,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 17,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 19,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 20,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 21,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 22,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 23,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 24,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 25,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 26,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 27,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 28,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 29,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 30,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 31,
+          "actor": "a3",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 32,
+          "actor": "a1",
+          "type": "start",
+          "goal": "maintain"
+        },
+        {
+          "tick": 32,
+          "actor": "a2",
+          "type": "start",
+          "goal": "maintain"
+        }
+      ]
+    }
+  ]
+}

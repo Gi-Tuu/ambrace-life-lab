@@ -37,6 +37,8 @@ export class Organism {
     this.name = name;
     this.condition = condition;
     this.ch = channelsFor(condition, channelMask);
+    this.m3GraceTicks = Math.max(0, Number(process.env.M3_GRACE ?? 0) || 0);
+    this.m3GraceWait = 0;
     // M5 只能显式加在 C2；C2-neg 不得被重新接通状态通道。
     if (condition !== 'C2' && this.ch.m5) this.ch.m5 = 0;
     this.rng = rng ?? makeRng(seed);
@@ -451,9 +453,24 @@ export class Organism {
       rev.set(id, p.id);
     });
     if (!planned.length) {
+      const grace = this.m3GraceTicks ?? 0;
+      if (grace > 0 && this.m3PrevGoal) {
+        this.m3GraceWait = (this.m3GraceWait ?? 0) + 1;
+        if (this.m3GraceWait <= grace) {
+          this.m3Last = { previous: this.m3PrevGoal, goal: this.m3PrevGoal, remaining: this.m3Planner.remaining,
+            reused: true, interrupted: null, waited: this.m3GraceWait, grace };
+          return this.m3CapTalk(paths);
+        }
+        this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining,
+          reused: false, interrupted: 'GRACE_EXPIRED', waited: this.m3GraceWait, grace };
+        this.m3PrevGoal = null;
+        this.m3GraceWait = 0;
+        return this.m3CapTalk(paths);
+      }
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
       return this.m3CapTalk(paths);
     }
+    this.m3GraceWait = 0;
     let r;
     try {
       r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
@@ -673,6 +690,7 @@ export class Organism {
     return { id, ...result };
   }
 }
+
 
 
 

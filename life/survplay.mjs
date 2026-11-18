@@ -1123,7 +1123,7 @@ export function dumpSurv(sp) {
     dead: !!a.dead, death: a.death ?? null, hurtBy: a.hurtBy ?? null, // P0-1：死亡事实入档
     rng: a.rng?.state?.() ?? null, setpoint: { ...a.drives.setpoint }, aloneTicks: a.drives.aloneTicks,
     bankPending: { ...a.bank.pending }, bankM5: a.bank.dumpM5?.() ?? null, counters: { ...a.counters }, dayTally: structuredClone(a.dayTally),
-    m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null,
+    m3Last: a.m3Last ? structuredClone(a.m3Last) : null, m3PrevGoal: a.m3PrevGoal ?? null, m3GraceWait: a.m3GraceWait ?? 0,
     m3Planner: a.m3Planner?.dump?.() ?? null, coupling: a.coupling?.dump?.() ?? null, mealDay: a.mealDay ?? null,
     informedTick: a.informedTick ?? null, lpFast: a.lpFast ?? null, lpSlow: a.lpSlow ?? null, plasticGateNow: a.plasticGateNow ?? null,
   }]));
@@ -1244,6 +1244,7 @@ export function loadSurv(raw,seed=7,options) {
       if (st.dayTally) a.dayTally = structuredClone(st.dayTally);
       if (st.m3Last !== undefined) a.m3Last = structuredClone(st.m3Last);
       if (st.m3PrevGoal !== undefined) a.m3PrevGoal = st.m3PrevGoal;
+      if (Number.isFinite(st.m3GraceWait)) a.m3GraceWait = st.m3GraceWait;
       if (st.m3Planner && typeof a.m3Planner?.load === 'function') a.m3Planner.load(st.m3Planner);
       if (st.coupling && typeof a.coupling?.restore === 'function') a.coupling.restore(st.coupling);
       if (st.informedTick !== undefined) a.informedTick = st.informedTick;
@@ -1317,6 +1318,7 @@ export function loadSurv(raw,seed=7,options) {
   }
   return sp;
 }
+
 
 
 
