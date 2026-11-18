@@ -1,12 +1,67 @@
 {
-  "head": "8a1b1ff",
-  "tests": {"total": 907, "pass": 907, "fail": 0},
-  "batches": {
-    "0": {"fixed": ["恢复 v733-consistency/v734-events/v732-restart 及 audit 测试，测试数 873→907", "observer.raw 独立原始流；DUPLICATE_FINAL/MULTIPLE_FINAL_STATES 可达；缺开始/时间倒置可红", "ctl 破坏性动作 nonce 授权；匿名 reset 403；token Bearer 仍可用；server 下发 ctl_nonce，前端回填 x-ctl-nonce", "索引 null 条目过滤；唯一 tmp + 旧 tmp 故障注入兼容"], "unfixed": ["meat/wool/索食守恒入账", "camp owner 全路由绑定", "catchup 冷却/NaN 校验", "MAIN reset 策略"]},
-    "1": {"fixed": ["M3 退出正式入口：host 对照 mask 忽略 m3、survival.commitChain 不再每刻重写 ch.m3", "idle-probe opportunity 改为真实（alive/non-busy/有时间），schedulingTicks 可增", "V732-IDLE 口径测试恢复"], "unfixed": ["M3 研究能力仍存在，仅 research mask"]},
-    "2": {"fixed": ["坏索引 null 不过滤→过滤、listSaves 不崩", "索引/营地唯一 tmp，避免多实例同名 tmp 互覆盖", "旧 .tmp 目录故障注入仍可红"], "unfixed": ["ownerHash 重建", "born/rules 旧档迁移", "多实例全锁/6 进程不丢档验证", "quarantine 上限/启动清 tmp"]},
-    "3": {"fixed": ["observer eventsAt 按 tick 索引，cap 后不再 O(n²)", "CI 显式 REQUIRE_CHROME/CI_CHROME 标注"], "design_only": ["camp_* 全量走 validate", "持久化异步化", "host 单例/服务端去 3D"]}
+  "head": "PENDING",
+  "tests": {
+    "total": 910,
+    "pass": 910,
+    "fail": 0
   },
-  "risks": ["nonce cookie 可能被后续 set-cookie 覆盖（/saves/open 等）", "owner/ catchup/ 守恒未修", "索引多实例只解决 tmp 冲突，未做跨进程锁", "M3 仍为研究能力，未达正式完成"]
+  "batches": {
+    "0": {
+      "fixed": [
+        "恢复 v733-consistency/v734-events/v732-restart 及 audit 测试，测试数 873→907",
+        "observer.raw 独立原始流；DUPLICATE_FINAL/MULTIPLE_FINAL_STATES 可达；缺开始/时间倒置可红",
+        "ctl 破坏性动作 nonce 授权；匿名 reset 403；token Bearer 仍可用；server 下发 ctl_nonce，前端回填 x-ctl-nonce",
+        "索引 null 条目过滤；唯一 tmp + 旧 tmp 故障注入兼容",
+        "守恒 meat/wool/索食/provider standing 入账",
+        "owner 路由/catchup 冷却/NaN/nonce cookie 合并"
+      ],
+      "unfixed": [
+        "meat/wool/索食守恒入账",
+        "camp owner 全路由绑定",
+        "catchup 冷却/NaN 校验",
+        "MAIN reset 策略"
+      ]
+    },
+    "1": {
+      "fixed": [
+        "M3 退出正式入口：host 对照 mask 忽略 m3、survival.commitChain 不再每刻重写 ch.m3",
+        "idle-probe opportunity 改为真实（alive/non-busy/有时间），schedulingTicks 可增",
+        "V732-IDLE 口径测试恢复"
+      ],
+      "unfixed": [
+        "M3 研究能力仍存在，仅 research mask"
+      ]
+    },
+    "2": {
+      "fixed": [
+        "坏索引 null 不过滤→过滤、listSaves 不崩",
+        "索引/营地唯一 tmp，避免多实例同名 tmp 互覆盖",
+        "旧 .tmp 目录故障注入仍可红",
+        "索引 .lock 重试/quarantine 上限/rules 优先级"
+      ],
+      "unfixed": [
+        "ownerHash 重建",
+        "born/rules 旧档迁移",
+        "多实例全锁/6 进程不丢档验证",
+        "quarantine 上限/启动清 tmp"
+      ]
+    },
+    "3": {
+      "fixed": [
+        "observer eventsAt 按 tick 索引，cap 后不再 O(n²)",
+        "CI 显式 REQUIRE_CHROME/CI_CHROME 标注"
+      ],
+      "design_only": [
+        "camp_* 全量走 validate",
+        "持久化异步化",
+        "host 单例/服务端去 3D"
+      ]
+    }
+  },
+  "risks": [
+    "nonce cookie 可能被后续 set-cookie 覆盖（/saves/open 等）",
+    "owner/ catchup/ 守恒未修",
+    "索引多实例只解决 tmp 冲突，未做跨进程锁",
+    "M3 仍为研究能力，未达正式完成"
+  ]
 }
-
