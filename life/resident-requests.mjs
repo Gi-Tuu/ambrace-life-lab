@@ -4,6 +4,7 @@
 
 import { householdAccess } from './home-access.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
+import { noteConsumed } from './resource-ledger.mjs';
 
 function recordRequest(world, req, result, delivered, reason) {
   const to = req.to ?? 'p1';
@@ -115,6 +116,7 @@ export function respondRequest(world, body) {
       const item = bin && FOOD_KINDS.find((k) => (bin[k] ?? 0) > 0);
       if (!item) return { ok: false, code: 'NO_FOOD' };
       bin[item] -= 1;
+      noteConsumed(world, item, 'residentRequest', 1);
       delivered = { item, amount: 1 };
       npc.viab?.regen?.(0.5);
       npc.drives?.reward?.('energy', 0.35);

@@ -1641,7 +1641,12 @@ export const host = {
         // 负数被照收；无限次 360 分钟补时能把三个人的 drives 压到 0。
         const m = Number(body.minutes ?? 30);
         if (!Number.isFinite(m) || m <= 0) return { ...this.status(), ok: false, error: 'BAD_MINUTES' };
-      if (m > 720) return { ...this.status(), ok: false, error: 'TOO_MANY_MINUTES' }; // 审计 SEC-05
+        if (m > 720) return { ...this.status(), ok: false, error: 'TOO_MANY_MINUTES' }; // 审计 SEC-05
+        const ck = campKey || 'MAIN';
+        const now = Date.now();
+        S.catchupAt ??= {};
+        if (ck !== 'MAIN' && now - (S.catchupAt[ck] ?? 0) < 5000) return { ...this.status(), ok: false, error: 'CATCHUP_COOLDOWN' };
+        S.catchupAt[ck] = now;
         if (campKey && campKey !== 'MAIN') {
           const target=campSurv(campKey);
           if (!target) return {...this.status(),ok:false,error:'NO_SURV'};
@@ -1687,6 +1692,7 @@ export const host = {
 };
 
 export const DIMS_LIST = DIMS;
+
 
 
 

@@ -159,10 +159,11 @@ const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
 // 第七轮更正：**不能按 remoteAddress 分桶**——创空间网关把所有访客都送到同一个地址，
 // 按 IP 限等于给整站设一个"每分钟 5 人建档"的总闸（第 6 人起 429）。现在按**营地名**分桶，
 // 另设一个显式的全局桶当防滥用层；两层都是限速，回显的错误码不区分是哪一层挡的（不透露内部阈值）。
-const OPEN_LIMIT = Number(process.env.OPEN_LIMIT ?? 5);          // 同一个营地名，每分钟最多这么多次
-const OPEN_LIMIT_GLOBAL = Number(process.env.OPEN_LIMIT_GLOBAL ?? 60); // 整站每分钟总量（防刷名造营地）
+const positiveInt = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : d; };
+const OPEN_LIMIT = positiveInt(process.env.OPEN_LIMIT, 5);          // 同一个营地名，每分钟最多这么多次
+const OPEN_LIMIT_GLOBAL = positiveInt(process.env.OPEN_LIMIT_GLOBAL, 60); // 整站每分钟总量（防刷名造营地）
 const OPEN_WINDOW_MS = 60_000;
-const CAMP_TOTAL_MAX = Number(process.env.CAMP_TOTAL_MAX ?? 50);
+const CAMP_TOTAL_MAX = positiveInt(process.env.CAMP_TOTAL_MAX, 50);
 const openBuckets = new Map();
 function openAllowed(bucket, limit) {
   const now = Date.now();
@@ -236,6 +237,18 @@ function cookieValue(req, name) {
     .find((x) => x.startsWith(`${name}=`))?.slice(name.length + 1) ?? null;
 }
 const ownerHashOf = (token) => createHash('sha256').update(String(token)).digest('hex');
+const ownerAllows = (req, key) => {
+  const hash = host.campOwnerHash(key || 'MAIN');
+  if (!hash) {
+    const owner = cookieValue(req, 'camp_owner');
+    if (owner) { try { host.claimCamp(key || 'MAIN', ownerHashOf(owner)); } catch { /* ignore */ } return true; }
+    return true; // 旧档无 owner：保留可读，重置仍走显式策略
+  }
+  const tokenOk = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+  if (tokenOk) return true;
+  const owner = cookieValue(req, 'camp_owner');
+  return Boolean(owner) && ownerHashOf(owner) === hash;
+};
 
 const healthStatus = ({ saveError, tickError }) => saveError || tickError ? 503 : 200;
 
@@ -272,7 +285,7 @@ async function handle(req, res) {
     const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     const back = await backToMainCamp();
-    res.setHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
+    res.appendHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
     return json(res, 200, back);
   }
   if (p === '/saves/open' && req.method === 'POST') {
@@ -290,10 +303,8 @@ async function handle(req, res) {
     // SEC3-02：创建者拿 camp_owner（HttpOnly）；索引只存 sha256。
     const ownerToken = cookieValue(req, 'camp_owner') || randomBytes(16).toString('hex');
     host.claimCamp(opened.key, ownerHashOf(ownerToken));
-    res.setHeader('set-cookie', [
-      `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`,
-      `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
-    ]);
+    res.appendHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
+    res.appendHeader('set-cookie', `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
@@ -343,6 +354,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     return json(res, out.code === 'REPLAY_STALE' ? 409 : 200, out);
   }
   if (req.method === 'GET' && p === '/world') {
+    if (campKey && cookieValue(req, 'camp_owner') && !ownerAllows(req, campKey)) return json(res, 403, { error: 'CAMP_NOT_OWNER' });
     try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
     catch (error) {
       if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
@@ -369,6 +381,9 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
     const denied = p === '/act' ? interactionDenied(req, CTL_TOKEN) : ctlDenied(req, body, CTL_TOKEN);
     if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
+    if (campKey && !ownerAllows(req, campKey) && !(p === '/ctl' && body?.action === 'survival_reset')) {
+      return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+    }
     // H-02c：reset 是唯一会把整段历史丢掉的动作，必须显式确认，避免误点与 CSRF 成功。
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
@@ -486,6 +501,10 @@ console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
+
+
+
 
 
 

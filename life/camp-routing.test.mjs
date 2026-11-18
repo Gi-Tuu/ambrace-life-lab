@@ -37,17 +37,23 @@ const get = async (base, path) => (await fetch(base + path)).json();
 test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则主营地', async () => {
   const { child, base } = await boot();
   try {
-    const a = await (await post(base, '/saves/open', { name: '甲' })).json();
-    const b = await (await post(base, '/saves/open', { name: '乙' })).json();
+    const aRes = await post(base, '/saves/open', { name: '甲' });
+    const a = await aRes.json();
+    const aOwner = /camp_owner=([^;]+)/.exec(aRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
+    const bRes = await post(base, '/saves/open', { name: '乙' });
+    const b = await bRes.json();
+    const bOwner = /camp_owner=([^;]+)/.exec(bRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
+    const auth = (owner) => ({ cookie: 'camp_owner=' + owner });
+    const postAuth = (path, body, owner) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...auth(owner) }, body: JSON.stringify(body) });
     assert.ok(a.ok && b.ok);
     assert.notEqual(a.key, b.key);
 
     // 只对甲发动作（query 指定营地，完全不带 cookie）
-    const act = await (await post(base, `/act?camp=${a.key}`, { mode: 'survival', kind: 'move', room: 'garden' })).json();
+    const act = await (await postAuth(`/act?camp=${a.key}`, { mode: 'survival', kind: 'move', room: 'garden' }, aOwner)).json();
     assert.ok(act.ok, JSON.stringify(act));
 
-    const wa = await get(base, `/world?camp=${a.key}`);
-    const wb = await get(base, `/world?camp=${b.key}`);
+    const wa = await (await fetch(base + `/world?camp=${a.key}`, { headers: auth(aOwner) })).json();
+    const wb = await (await fetch(base + `/world?camp=${b.key}`, { headers: auth(bOwner) })).json();
     const wm = await get(base, '/world');
     assert.equal(wa.camp?.key, a.key, '带 camp 应返回该营地');
     assert.equal(wa.camp?.name, '甲', 'camp.name 必须是名字而不是哈希（P2-a）');
@@ -89,3 +95,4 @@ test('SA11 非法/未登记 camp 回落主营地：survival 不为空、不回�
     await new Promise((r) => setTimeout(r, 300));
   }
 });
+

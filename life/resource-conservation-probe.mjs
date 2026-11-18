@@ -15,7 +15,9 @@ export const CONS_OPTIONS = Object.freeze({
 
 export const CONSERVATION_KINDS = Object.freeze(['crop', 'berry', 'fruit', 'egg', 'milk', 'meat', 'wool', 'wood', 'stone']);
 // 开边界：产出/消耗发生在未被“库存快照”覆盖的野外/畜群 standing stock 上。
-const OPEN_KINDS = new Set(['berry', 'fruit', 'egg', 'milk', 'wood', 'stone']);
+// wool 与蛋奶同属 standing 产出：gross 记 addStanding 收进 produce，但 standing 仍可留存，
+// 故按开边界报告；meat 由屠宰直接进背包，属闭合品类。
+const OPEN_KINDS = new Set(['berry', 'fruit', 'egg', 'milk', 'wool', 'wood', 'stone']);
 const n = (v) => Number(v ?? 0);
 
 // 所有会被转移的位置一起计入：公共仓计数、公共容器、玩家/居民背包、私人容器。
@@ -30,6 +32,7 @@ export function snapshotStocks(w) {
     }
   };
   add(w.survival.inv);
+  add(w.survival.produce); // 产出账（wool/egg/milk 等）也纳入库存快照，否则 gross 与期末无法同口径
   add(w.survival.food);
   add(w.survival.campContainers ? Object.values(w.survival.campContainers) : null);
   for (const bag of Object.values(w.pinv ?? {})) add(bag);
@@ -104,5 +107,7 @@ if (process.argv[1] && process.argv[1].endsWith('resource-conservation-probe.mjs
     worst: Math.max(...runs.map((r) => r.worstResidual ?? 0)) }, null, 2));
   if (!out.allBalanced) process.exitCode = 1;
 }
+
+
 
 

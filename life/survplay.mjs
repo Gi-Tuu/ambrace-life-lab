@@ -1131,7 +1131,7 @@ export function dumpSurv(sp) {
 }
 export function loadSurv(raw,seed=7,options) {
   const sp=createSurvPlay(Number.isSafeInteger(raw?.seed) ? raw.seed : seed,
-    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), regionalWork: (options?.adoptArchivedRules && raw?.rules?.regionalWork) ?? options?.regionalWork ?? raw?.regionalWork, eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
+    { ...options, ...(options?.adoptArchivedRules ? (raw?.rules ?? {}) : {}), regionalWork: options?.regionalWork ?? raw?.regionalWork ?? (options?.adoptArchivedRules ? raw?.rules?.regionalWork : undefined), eventRulesVersion: raw ? (raw.eventRulesVersion ?? (options?.upgradeLegacyEventRules ? options?.eventRulesVersion : null) ?? LEGACY_EVENT_RULES) : options?.eventRulesVersion,
       mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
@@ -1307,6 +1307,8 @@ export function loadSurv(raw,seed=7,options) {
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
   return sp;
 }
+
+
 
 
 

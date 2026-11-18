@@ -244,11 +244,13 @@ test('H-30 超长 body 映射成 413（不是 400）【变红法：把 readBody 
 test('存档故障通过 GET 和 HEAD 探活报告 503，恢复写入后返回 200', async () => {
   const {child,base,dir}=await bootServer({GAME_MODE:'game',CTL_TOKEN:'',ACT_SAVE_COALESCE_MS:'0',TICK_MS:'1000000'});
   try {
-    const camp=await (await post(base,'/saves/open',{name:'探活回归'})).json();
+    const campRes=await post(base,'/saves/open',{name:'探活回归'});
+    const camp=await campRes.json();
+    const campOwner=/camp_owner=([^;]+)/.exec(campRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
     assert.ok(camp.ok);
     const tempPath=join(dir,'saves',camp.key+'.json.gz.tmp');
     mkdirSync(tempPath);
-    const act=room=>post(base,'/act?camp='+camp.key,{mode:'survival',kind:'move',room}).then(r=>r.json());
+    const act=room=>fetch(base+'/act?camp='+camp.key,{method:'POST',headers:{'content-type':'application/json',cookie:'camp_owner='+campOwner},body:JSON.stringify({mode:'survival',kind:'move',room})}).then(r=>r.json());
     assert.equal((await act('yard')).persisted,false);
     const health=await get(base,'/healthz');
     assert.equal(health.status,503);
@@ -320,4 +322,5 @@ test('SEC-02b 配了 CTL_TOKEN：浏览器交互不被锁；破坏性 /ctl 只�
     assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把令牌姿态打印出来');
   } finally { await stopServer(child); }
 });
+
 

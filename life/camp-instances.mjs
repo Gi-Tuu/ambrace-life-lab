@@ -7,7 +7,7 @@
 //  · 名字只作为字段进索引，**永不进路径**；路径由 sha256(归一化名字) 派生。
 //  · 只在 saves/ 目录内读写；拒绝一切越界名字，且拒绝时不得产生任何文件写入。
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
@@ -80,8 +80,17 @@ export function writeIndex(dataDir, index) {
   const dir = savesDir(dataDir);
   mkdirSync(dir, { recursive: true });
   const tmp = `${indexFile(dataDir)}.tmp`;
-  writeFileSync(tmp, JSON.stringify({ entries: index.entries ?? [] }));
-  renameSync(tmp, indexFile(dataDir));
+  const lock = indexFile(dataDir) + '.lock';
+  let locked = false;
+  for (let i = 0; i < 40 && !locked; i += 1) {
+    try { const fd = openSync(lock, 'wx'); closeSync(fd); locked = true; }
+    catch (e) { if (e.code !== 'EEXIST') throw e; }
+    if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
+  try {
+    writeFileSync(tmp, JSON.stringify({ entries: index.entries ?? [] }));
+    renameSync(tmp, indexFile(dataDir));
+  } finally { if (locked) { try { rmSync(lock); } catch { /* ignore */ } } }
 }
 
 // 公开列表：只投影五项（§0-9），不泄露背包/关系/对话。
@@ -166,6 +175,11 @@ export function sweepSaves(dataDir, { now = Date.now(), ttlMs = SAVE_TTL_MS, las
       renameSync(file, join(qdir, name));
       quarantined.push(m[1]);
     }
+    // DATA4-09：quarantine 目录上限 100，超出按 mtime 删最旧。
+    try {
+      const qs = readdirSync(qdir).map((n) => ({ n, m: statSync(join(qdir, n)).mtimeMs })).sort((a, b) => a.m - b.m);
+      for (let i = 0; i < qs.length - 100; i += 1) rmSync(join(qdir, qs[i].n), { force: true });
+    } catch { /* ignore */ }
   } catch { /* 清扫尽力而为 */ }
   if (removed.length) writeIndex(dataDir, { entries: kept });
   return { removed, kept: kept.length, quarantined, indexUnhealthy: false };
@@ -316,5 +330,8 @@ export class CampInstances {
 
   close() { this.live.clear(); }
 }
+
+
+
 
 

@@ -3,6 +3,7 @@ import { ANIMAL_ITEMS, campPen, campSite, distanceTo, distanceToRect, pointIn, w
 import { DAY_TICKS } from './clock.mjs';
 import { WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
+import { noteRes } from './resource-ledger.mjs';
 
 export const animalAfraid=(w,id)=>(w.survival.frightenedAnimals?.[id]??0)>w.t;
 const fail=code=>({ok:false,code});
@@ -45,5 +46,7 @@ export function animalAction(w,body) {
   }
   delete fright[target];
   bag.meat=(bag.meat??0)+meat;
+  noteRes(w,'gross','meat',meat);
   return {ok:true,code:'OK',meat};
 }
+

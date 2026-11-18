@@ -1,5 +1,6 @@
 import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../web/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
+import { noteRes } from './resource-ledger.mjs';
 
 const GROUPS = { fruit: 'orchards', egg: 'chickens', milk: 'cows', wool: 'sheep' };
 export const MATURE_DAYS = Object.freeze({ orchards: 6, chickens: 4 });
@@ -96,6 +97,7 @@ export function addStanding(w, item, units, cap, eligible) {
     s.produce[item] += 1;
     accepted += 1;
   }
+  if (accepted > 0 && item === 'wool') noteRes(w, 'gross', 'wool', accepted);
   return accepted;
 }
 
@@ -138,3 +140,4 @@ export function takeBerry(s, site, target) {
   }
   s.wildBerries[site] -= 1;
 }
+
