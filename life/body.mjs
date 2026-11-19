@@ -20,7 +20,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
-import { GAME_BASE_UNITS_PER_TICK } from './space.mjs';
+import { GAME_RESIDENT_UNITS_PER_TICK, travelTicks } from './space.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -196,11 +196,10 @@ export function spawn(world, id, loc) {
 
 // Distant trips consume world time. Occupancy changes once, when the resident arrives.
 // 旧路径（研究态 / actTimeModel=false）仍用 12 与 10，保证旧档与研究面逐位不变。
-// P2 正式游戏统一常数已由 space.mjs 导出：基础 22.5/刻、玩家含冲刺 39.375/刻；
-// 本刀只接玩家，居民 startMove 仍用 12（P2b 接居民移动时再切 GAME_RESIDENT_UNITS_PER_TICK）。
+// P2b：正式游戏居民与玩家共用 space.speedBudget('sprint') ⇒ 同一路径同一刻数口径。
 export const RESIDENT_UNITS_PER_TICK = 12;
 export const PLAYER_UNITS_PER_TICK = 10;
-export const GAME_RESIDENT_UNITS_PER_TICK = GAME_BASE_UNITS_PER_TICK;
+export { GAME_RESIDENT_UNITS_PER_TICK };
 export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
@@ -214,10 +213,15 @@ export function startMove(world,id,to) {
   }
   const start=worldSite(world,from), end=worldSite(world,to);
   const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
-  // P2 第一刀：居民移动/寻路保持旧路径（P2b 再接）；统一常数已从 space.mjs 导出，
-  // 等居民移动接入时把 RESIDENT_UNITS_PER_TICK 换成 GAME_RESIDENT_UNITS_PER_TICK。
-  const units=RESIDENT_UNITS_PER_TICK;
-  const ticks=Math.max(2,Math.ceil(distance/units)+1);
+  // P2b：正式游戏按 space 的速度预算推导刻数；研究态/旧档保持 12/刻逐位不变。
+  // P2B_RESIDENT_LEGACY=1 只用于证据归因（金样/长程 A/B），正常游戏不要设置。
+  const formal = world.survival?.actTimeModel === true && process.env.P2B_RESIDENT_LEGACY !== '1';
+  // 居民按同一 speedBudget 的 walk 档出行（玩家移动上报可冲刺，冲刺倍率也在同一张表里）。
+  // P2B_RESIDENT_SPEED=sprint 只用于长程对照探针（证明"居民也跑冲刺"会破坏 100/200 日平衡）。
+  const kind = process.env.P2B_RESIDENT_SPEED === 'sprint' ? 'sprint' : 'walk';
+  const ticks = formal
+    ? travelTicks(distance,kind)
+    : Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
   (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks,
     ...(access?.destination && {at:access.destination})};
 }

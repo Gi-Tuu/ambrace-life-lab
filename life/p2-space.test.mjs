@@ -3,12 +3,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay, survView, dumpSurv, loadSurv } from './survplay.mjs';
 import { startMove, RESIDENT_UNITS_PER_TICK, PLAYER_UNITS_PER_TICK } from './body.mjs';
+import { GAME_RESIDENT_UNITS_PER_TICK } from './body.mjs';
 import { playerReach } from './survplay-camp.mjs';
 import { constructionSpace, spaceQueriesEnabled } from './construction-access.mjs';
 import { campSite, campEntrance } from '../shared/camp-interaction.mjs';
 import { campBridgeBounds } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, unitsForRealMs } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, unitsForRealMs, travelTicks, unitsPerTick } from './space.mjs';
 
 const FORMAL = {
   gameRules: true, mapSeed: 13, layoutVersion: 2, settlementLife: true, regionalWork: true,
@@ -26,7 +27,7 @@ test('P2-01 正式游戏视图预算 = 冲刺预算 39.375/刻；研究态仍是
   assert.equal(survView(lab).playerUnitsPerTick, PLAYER_UNITS_PER_TICK);
 });
 
-test('P2-02 居民移动保持旧路径（P2b 再接）；统一常数已导出待接', () => {
+test('P2b-02 正式游戏居民 startMove 接同一 speedBudget；研究态仍 12/刻', () => {
   const sp = start(), w = sp.world;
   const loc = Object.keys(w.districts)[0];
   const from = w.loc.p1;
@@ -36,10 +37,27 @@ test('P2-02 居民移动保持旧路径（P2b 再接）；统一常数已导出�
   startMove(w, 'a1', loc);
   const trip = w.survival.districtTravel.a1;
   assert.ok(trip, '应产生 districtTravel');
-  const expected = Math.max(2, Math.ceil(Math.hypot(toPt[0] - fromPt[0], toPt[1] - fromPt[1]) / RESIDENT_UNITS_PER_TICK) + 1);
-  assert.equal(trip.arrive - w.t, expected, 'P2b 前居民仍 12/刻，避免同时改两边');
-  assert.equal(GAME_BASE_UNITS_PER_TICK, 22.5);
-  assert.equal(RESIDENT_UNITS_PER_TICK, 12, '旧常量保留给居民 fallback');
+  const dist = Math.hypot(toPt[0] - fromPt[0], toPt[1] - fromPt[1]);
+  const expected = travelTicks(dist, 'walk');
+  assert.equal(trip.arrive - w.t, expected, '居民刻数必须由同一 space 预算（walk 档）推导');
+  assert.equal(GAME_RESIDENT_UNITS_PER_TICK, unitsPerTick('walk'), '居民预算来自同一函数');
+  assert.equal(GAME_RESIDENT_UNITS_PER_TICK, 22.5, '步行预算 22.5/刻');
+  assert.equal(unitsPerTick('sprint'), GAME_PLAYER_UNITS_PER_TICK, '玩家移动冲刺仍 39.375/刻');
+  assert.equal(travelTicks(100, 'walk'), Math.ceil(100 / 22.5) + 1);
+  // 同一预算函数：玩家按 walk 走完的刻数与居民推导完全一致；冲刺是同一张表里的显式倍率。
+  assert.equal(travelTicks(dist, 'walk'), trip.arrive - w.t);
+  assert.ok(travelTicks(dist, 'sprint') <= trip.arrive - w.t, '冲刺不改变居民到达刻数');
+  // 研究态/旧时间模型不受影响：仍是 12/刻。
+  const legacy = createSurvPlay(13, { ...FORMAL, actTimeModel: false });
+  const lw = legacy.world;
+  const lloc = Object.keys(lw.districts)[0];
+  lw.loc.a1 = lw.loc.p1;
+  startMove(lw, 'a1', lloc);
+  const lfrom = campSite(lw.loc.p1, lw.campLayout), lto = lw.districts[lloc].at;
+  const ldist = Math.hypot(lto[0] - lfrom[0], lto[1] - lfrom[1]);
+  assert.equal(lw.survival.districtTravel.a1.arrive - lw.t,
+    Math.max(2, Math.ceil(ldist / RESIDENT_UNITS_PER_TICK) + 1), '旧路径仍 12/刻');
+  assert.equal(RESIDENT_UNITS_PER_TICK, 12, '旧常量保留给研究态');
   assert.equal(PLAYER_UNITS_PER_TICK, 10, '旧常量保留给非正式路径');
 });
 

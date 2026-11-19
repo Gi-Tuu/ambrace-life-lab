@@ -15,15 +15,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromeGate } from '../life/chrome-gate.mjs';
 import { createSurvPlay } from '../life/survplay.mjs';
-import { constructionSpace } from '../life/construction-access.mjs';
-import { campSurface, createSpace } from '../life/space.mjs';
+import { constructionSpace, sceneSpace } from '../life/construction-access.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
-import { campBridgeBounds, generateCampLayout, TOWN_SIZE } from '../shared/camp-layout.mjs';
-import { CAMP_SITES, campSite } from '../shared/camp-interaction.mjs';
-import { outdoorStage } from '../shared/camp-scene.mjs';
+import { campBridgeBounds, generateCampLayout } from '../shared/camp-layout.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = join(ROOT, 'evidence', 'redo-p2');
+const OUT = join(ROOT, 'evidence', 'redo-p2b');
 mkdirSync(OUT, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const logLines = [];
@@ -147,14 +144,9 @@ function serverSpace(seed, version) {
     gameRules: true, mapSeed: seed, layoutVersion: version, settlementLife: true,
     regionalWork: true, independentWorld: true, residentialDecisions: true, unifiedCooperation: true, actTimeModel: true,
   });
-  const viaAccess = constructionSpace(sp.world);
-  if (viaAccess) return viaAccess;
-  const layout = sp.world.campLayout ?? null;
-  const sites = layout?.sites ?? Object.fromEntries(Object.keys(CAMP_SITES).map((room) => [room, campSite(room, null)]));
-  const { riverCenter, riverHalfWidth } = campTerrain(seed, true, version);
-  const bridges = layout ? [campBridgeBounds(layout.crossZ - 1, layout.crossZ + 1, riverCenter, riverHalfWidth)] : [];
-  const stage = outdoorStage({ tw: TOWN_SIZE.width, th: TOWN_SIZE.depth, sites, trees: [], grass: [], layoutSeed: layout ? seed : null }, bridges, []);
-  return createSpace({ camp: campSurface({ mapSeed: seed, layoutVersion: version, layout, stage }) });
+  // P2b：正式世界走 constructionSpace；无 campLayout 的宿主世界（layout 0）用同一份
+  // sceneGeometry/Stage 的只读空间（sceneSpace），不再手工传 trees:[]。
+  return constructionSpace(sp.world) ?? sceneSpace(sp.world);
 }
 
 function compare(label, seed, version, client, server, points) {
@@ -283,9 +275,14 @@ try {
 
   for (const c of cases) {
     if (c.result.diffs.terrain) process.exitCode = 2;
-    if (c.buckets.terrain.length) process.exitCode = 3;
-    if (c.portalDiffs.length) process.exitCode = 4;
-    if (c.bridgeHeightDiffs.length) process.exitCode = 5;
+    if (c.result.diffs.walk) process.exitCode = 3;
+    if (c.result.diffs.height) process.exitCode = 4;
+    if (c.result.diffs.portal) process.exitCode = 5;
+    if (c.bridgeHeightDiffs.length) process.exitCode = 6;
+    if (!c.result.diffs.terrain && !c.result.diffs.walk && !c.result.diffs.height &&
+        !c.result.diffs.portal && !c.bridgeHeightDiffs.length) {
+      log(`[${c.result.label}] PASS：${c.result.samples} 点 terrain/walk/height/portal 全 0 差异`);
+    }
   }
 } finally {
   try { chromeCtl?.kill(); } catch { /* noop */ }

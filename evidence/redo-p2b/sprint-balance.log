@@ -1,0 +1,40 @@
+✖ B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显不繁荣 (30824.1524ms)
+✖ B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁荣 (36917.2693ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 68596.7791
+
+✖ failing tests:
+
+test at life\v72-balance.test.mjs:14:1
+✖ B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显不繁荣 (30824.1524ms)
+  AssertionError [ERR_ASSERTION]: 100 日平均人口应在 [4,7]（B120），实测 9（[10,9,9,8,9]）
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/.agents/worktrees/v7-1-lifecycle/life/v72-balance.test.mjs:21:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v72-balance.test.mjs:28:1
+✖ B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁荣 (36917.2693ms)
+  AssertionError [ERR_ASSERTION]: 200 日灭绝种子数应在 [1,3]（B120 目标 2–3，实测 1/5，闸门先按 1–3 记录未达标），实测 0：[[7,7,false],[13,4,false],[29,4,false],[41,1,false],[53,4,false]]
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/.agents/worktrees/v7-1-lifecycle/life/v72-balance.test.mjs:36:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

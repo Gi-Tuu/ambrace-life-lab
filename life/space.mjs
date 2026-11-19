@@ -28,10 +28,23 @@ export const WALK_UNITS_PER_GAME_MINUTE = 3 / 8;
 export const SPRINT_FACTOR = 1.75;
 export const GAME_BASE_UNITS_PER_TICK = WALK_UNITS_PER_GAME_MINUTE * GAME_MINUTES_PER_TICK;
 export const GAME_PLAYER_UNITS_PER_TICK = GAME_BASE_UNITS_PER_TICK * SPRINT_FACTOR;
-
 export const unitsForGameMinutes = (minutes) => WALK_UNITS_PER_GAME_MINUTE * minutes;
 export const unitsForTick = (sprint = false) =>
   unitsForGameMinutes(GAME_MINUTES_PER_TICK) * (sprint ? SPRINT_FACTOR : 1);
+// P2b：唯一“每游戏分钟多少单位”的预算表。玩家移动上报、居民旅行、客户端步长全部从这里派生。
+export const SPEED_BUDGET_UNITS_PER_GAME_MINUTE = Object.freeze({
+  walk: WALK_UNITS_PER_GAME_MINUTE,
+  sprint: WALK_UNITS_PER_GAME_MINUTE * SPRINT_FACTOR,
+});
+export const speedBudget = (kind = 'walk') =>
+  kind === 'sprint' ? SPEED_BUDGET_UNITS_PER_GAME_MINUTE.sprint : SPEED_BUDGET_UNITS_PER_GAME_MINUTE.walk;
+export const unitsPerTick = (kind = 'walk') => speedBudget(kind) * GAME_MINUTES_PER_TICK;
+// 同一路径的刻数：居民旅行与玩家移动用同一函数。+1 是到点缓冲（旧 startMove 的保守口径）。
+export const travelTicks = (distance, kind = 'sprint', min = 2) =>
+  Math.max(min, Math.ceil(Math.max(0, distance) / unitsPerTick(kind)) + 1);
+// 正式游戏居民与玩家共用同一预算表：居民按 walk（22.5/刻）出行；玩家移动上报可冲刺
+// （sprint 39.375/刻）。两者都由 speedBudget/unitsPerTick 派生，不再有独立常数 12。
+export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
 // tickMs 只决定“一刻的真实时长”；游戏分钟→真实时间的换算必须与宿主一致。
 export const unitsForRealMs = (ms, tickMs = 7500, sprint = false) => {
   const minutes = GAME_MINUTES_PER_TICK * (Number.isFinite(ms) ? ms : 0) /

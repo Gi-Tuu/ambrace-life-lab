@@ -156,7 +156,11 @@ test('F9 渲染连续失败必须只记一次日志、到上限停试、且提�
 test('F10 树生成必须排除田块（田里长树是可见的常识错误）', () => {
   // 苗床坐标来自 campBeds（garden 站点南侧 12 块），而树循环原先只排除站点与车位。
   // 实测：去掉这条排除后，同一世界有 15 棵树落在田块内；加上后为 0。
-  assert.match(APP, /onFarm\(tx \+ \.5, ty \+ \.5, 2\)/, '树循环缺少田块排除（树会长进田里）');
+  // P2b：树/岩/山丘生成抽到 shared/camp-scene-content.mjs（客户端与服务端同源）；
+  // 闸门改为钉共享实现 + app.js 必须委托它，防止有人把树循环抄回 app.js 时丢掉田块排除。
+  const CONTENT = readFileSync('shared/camp-scene-content.mjs', 'utf8');
+  assert.match(CONTENT, /onFarm\(tx \+ \.5, ty \+ \.5, 2\)/, '树循环缺少田块排除（树会长进田里）');
+  assert.match(APP, /campSceneContent\(\{/, 'app.js 必须使用共享场景内容生成器');
 });
 
 test('F11 首次进入三步引导：只出现一次、可跳过、动作能推进', () => {

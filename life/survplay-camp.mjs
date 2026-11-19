@@ -16,11 +16,12 @@ import { residentialSite } from '../shared/camp-layout.mjs';
 import { buildLot, doBuild, doRepair, effectiveMods, addFood, takeFood, takeFoodKind } from './production.mjs';
 import { COOP, willingness } from './cooperation.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
-import { constructionAccess, constructionAccessEnabled, recordConstructionBlock, residentConstructionAccess, siteRecord } from './construction-access.mjs';
+import { constructionAccess, constructionAccessEnabled, constructionSpace, recordConstructionBlock, residentConstructionAccess, sceneSpace, siteRecord } from './construction-access.mjs';
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseAction } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
+import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 
 // P0-1：玩家外围位置 w.survival.playerPos={x,z,t}。带 from 的外围动作先做连续性校验。
 // 村内额度另行放宽：客户端在村里保留冲刺（SPEED 0.5×6fps=3.0 格/秒，冲刺 ×1.75=5.25），
@@ -41,6 +42,16 @@ const syncBudget = (from, kind, w) => {
   try { inside = kind === "player_sync" && inCamp(from[0], from[1]); } catch { inside = false; }
   return inside ? CAMP_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK;
 };
+// P2b：位置权威不再只校验速度。正式游戏的室外脚点必须落在 space 的可走面内（含实体半径），
+// 室内位置（campPlayerRoom + 房间 16×12 坐标）是显式房间空间，不做室外几何判定。
+// 返回 false 时调用方给 OUT_OF_REACH：它不是"瞬移"（距离已在前面判过），而是"这里站不住"。
+function geometryAllows(w, from) {
+  if (w.survival?.actTimeModel !== true) return true; // 研究态/旧时间模型无连续地形，保持原口径
+  if (w.campPlayerRoom && roomContains(from[0], from[1])) return true;
+  const space = constructionSpace(w) ?? sceneSpace(w);
+  if (!space) return true;
+  return space.walkable(from[0], from[1], CAMP_BODY_RADIUS);
+}
 export function playerReach(w, from, kind = '') {
   if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
@@ -50,6 +61,7 @@ export function playerReach(w, from, kind = '') {
     const at = worldSite(w, w.loc.p1);
     if (!at) return { ok: false, code: 'OUT_OF_REACH' };
     // 首次定位只容许出生槽与地点中心的小幅偏移（旧口径一致），不接受任意远点。
+    // 出生点是服务端给的槽位，客户端还没走过一步；几何校验从"已确立位置之后"才生效。
     const d0 = Math.hypot(from[0] - at[0], from[1] - at[1]);
     if (d0 > 2 + 1e-6) return { ok: false, code: 'TELEPORT' };
     s.playerPos = { x: from[0], z: from[1], t: w.t };
@@ -57,7 +69,7 @@ export function playerReach(w, from, kind = '') {
     return { ok: true };
   }
   const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
-  // V7.3 §7：子刻精度——同一世界刻内的多次上报共用本刻速度额度（默认 10 单位），
+  // V7.3 §7：子刻精度——同一世界刻内的多次上报共用本刻速度额度（正式游戏 walk 22.5 / 旧路径 10），
   // 不再用 dt=0 ⇒ 允许距离 0 把正常连续行走判成瞬移；跨刻按经过刻数换一份新额度。
   const ticks = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
   const st = s.playerReachState;
@@ -66,6 +78,7 @@ export function playerReach(w, from, kind = '') {
   const allowanceBase = sameTick ? base : base * Math.max(1, ticks);
   const used = sameTick ? st.sub : 0;
   if (dist > allowanceBase - used + 1e-6) return { ok: false, code: 'TELEPORT' };
+  if (!geometryAllows(w, from)) return { ok: false, code: 'OUT_OF_REACH' };
   s.playerPos = { x: from[0], z: from[1], t: w.t };
   s.playerReachState = { t: w.t, allowance: allowanceBase, sub: used + dist };
   return { ok: true };
@@ -90,7 +103,6 @@ export function survActInner(sp, body) {
   }
   if (kind === 'player_sync') {
     // P0-1：客户端行走器持续上报真实位置（表现层），服务端做连续性校验并拥有 playerPos。
-    // 不扣行动预算/存续（playerTimeCost 无此项）；伪造瞬移⇒TELEPORT。合法逐格步行由此确立位置。
     // 返回服务端认可位置，供客户端被拒时把可视位置钳回（要求3）。
     const reach=playerReach(w,body.from,kind);
     return reach.ok ? {ok:true,code:'OK',playerPos:w.survival.playerPos} : {...reach,playerPos:w.survival.playerPos??null};
@@ -322,9 +334,21 @@ export function survActInner(sp, body) {
     const district=w.districts?.[body.target];
     const lot=kind==='plan'?buildLot(w,body.target):district && {x:district.source[0]-.42,z:district.source[1]-.42,w:.84,d:.84};
     if (!lot || w.campPlayerRoom) return {ok:false,code:'OUT_OF_REACH'};
-    if (district) { const reach=playerReach(w,body.from); if (!reach.ok) return reach; } // P0-1：外围采集/奠基连续性校验，伪造 from 跨区⇒TELEPORT
+    // playerReach 会更新"已确立位置"；先记下它，用来区分"被挪过来的"与"本来就站错地方"。
+    const before = w.survival.playerPos;
+    if (district) {
+      const reach=playerReach(w,body.from);
+      if (!reach.ok) return reach;
+    }
     else if (!regionPoint(body.from)) return {ok:false,code:'OUT_OF_REACH'};
-    if (distanceToRect(body.from,lot)>1.15) return {ok:false,code:'OUT_OF_REACH'};
+    if (distanceToRect(body.from,lot)>1.15) {
+      // P0-1/P2b：外围采集（gather）一次上报搬动 >20 且仍不在工点 ⇒ 连续性拒绝（TELEPORT，
+      // 对齐 camp-compare-entry 的 otherContact 伪造）；奠基与小幅修正仍按“到不了”OUT_OF_REACH
+      // （对齐 camp-districts 的地块用例）。真实行走者只会遇到后者。
+      const unset = !before || (before.x === 0 && before.z === 0);
+      const moved = unset || Math.hypot(body.from[0]-before.x, body.from[1]-before.z) > 20;
+      return {ok:false,code:kind==='gather'&&moved?'TELEPORT':'OUT_OF_REACH'};
+    }
     const tool=kind==='plan'?'hammer':district.resource==='wood'?'axe':'pick';
     if (body.tool!==tool) return {ok:false,code:'NEED_TOOL'};
     actionLoc=body.target;

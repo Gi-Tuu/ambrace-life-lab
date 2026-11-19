@@ -8,6 +8,7 @@ import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { campSurface, createSpace, wildSurface } from './space.mjs';
+import { campSceneContent, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
@@ -19,16 +20,61 @@ export function siteRecord(w, loc, type, lot = constructionFootprint(loc,w.campL
   return {loc,type,lot};
 }
 
+const sceneCache = new WeakMap();
+// P2b：服务端 stage 与客户端 buildWorld 用同一份内容生成器。无 campLayout 的旧世界（layout 0）
+// 也走这里，供空间一致性闸门与只读查询使用；施工可达性仍只对 constructionAccessEnabled 生效。
+function sceneGeometry(w) {
+  const layout = w.campLayout ?? null;
+  let g = sceneCache.get(w);
+  if (g && g.layout === layout && g.districts === w.districts) return g;
+  const landmarks = Object.fromEntries(['home','hall','store','yard','workshop','garden','watch','well']
+    .map(loc => [loc,campSite(loc,layout)]));
+  const liveSites = campSitesOf({ rooms:w.locs, districts:w.districts, layout, peripheralHomes:w.peripheralHomes });
+  const sites = staticCampSites(liveSites, w.districts, w.peripheralHomes);
+  const content = campSceneContent({
+    mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout,
+    camp:true, timber:true, sites,
+    districts:w.districts, peripheralHomes:w.peripheralHomes,
+    households:w.survival?.households, homeRoads:w.survival?.homeRoads,
+  });
+  const stage = outdoorStage({
+    tw:TOWN_SIZE.width, th:TOWN_SIZE.depth, sites,
+    trees:content.trees, grass:[], hills:content.landscape ? [] : content.hills,
+    height:content.landscape?.height, layoutSeed:layout ? w.mapSeed : null,
+  }, content.bridges, content.rocks);
+  g = { layout, districts:w.districts, landmarks, sites, content, stage };
+  sceneCache.set(w,g);
+  return g;
+}
+
+// 只读空间查询（含无 campLayout 的世界）：与客户端 world.space 同一份 stage/floors。
+// 按世界缓存：playerReach 每次上报都会问它，不能每次重建 wildLandscape。
+const spaceCache = new WeakMap();
+export function sceneSpace(w) {
+  if (!w?.survival) return null;
+  const hit = spaceCache.get(w);
+  if (hit && hit.layout === (w.campLayout ?? null) && hit.districts === w.districts) return hit.space;
+  const g = sceneGeometry(w);
+  const layout = g.layout;
+  const pads = districtPads(w.districts);
+  const terrain = wildLandscape(w.mapSeed,w.layoutVersion,{joined:true,flats:pads,clearing:pads});
+  const space = createSpace({
+    camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage }),
+    wild: wildSurface(terrain, { crossing:layout?.crossZ ?? 24 }),
+  });
+  spaceCache.set(w, { layout: layout ?? null, districts: w.districts, space });
+  return space;
+}
+
 function mapFor(w) {
   const layout = w.campLayout;
   const s = w.survival;
   let map = cache.get(w);
   if (!map || map.layout !== layout || map.districts !== w.districts) {
-    const landmarks = Object.fromEntries(['home','hall','store','yard','workshop','garden','watch','well']
-      .map(loc => [loc,campSite(loc,layout)]));
+    const g = sceneGeometry(w);
+    const { landmarks, stage } = g;
     const {riverCenter,riverHalfWidth} = campTerrain(w.mapSeed,true,w.layoutVersion);
     const bridge = campBridgeBounds(layout.crossZ-1, layout.crossZ+1, riverCenter, riverHalfWidth);
-    const stage = outdoorStage({tw:TOWN_SIZE.width,th:TOWN_SIZE.depth,sites:landmarks,trees:[],grass:[],layoutSeed:w.mapSeed},[bridge],[]);
     const [x,z,X,Z] = bridge;
     const ground = (px,pz) => px>=x && px<=X && pz>=z && pz<=Z ||
       Math.abs(px-riverCenter(pz*16)/16) > riverHalfWidth(pz*16)/16;
@@ -36,6 +82,7 @@ function mapFor(w) {
     const terrain = wildLandscape(w.mapSeed,w.layoutVersion,{joined:true,flats:pads,clearing:pads});
     const anchor = [landmarks.hall[0]+.5,landmarks.hall[1]+2.7];
     // P2：服务端与客户端共用同一套空间查询；旧 ground 保留给 SPACE_V1=0 fallback。
+    // P2b：campSurface 的桥默认值必须与客户端一致（无 layout 时不带桥；有 layout 时用 crossZ ±1）。
     const space = createSpace({
       camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion, layout, stage }),
       wild: wildSurface(terrain, { crossing:layout.crossZ }),

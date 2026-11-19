@@ -10,12 +10,13 @@ import { districtPads } from './camp-districts.mjs';
 import { roomExposure } from './camp-lighting.mjs';
 import { solarLight } from './camp-sun.mjs';
 import { createCampOutskirts, joinedRoute, moveJoinedWalker } from './camp-outskirts.mjs';
-import { forestDensity, inCamp, WILDS } from './wild-landscape.mjs';
+import { inCamp, WILDS } from './wild-landscape.mjs';
 import { facilityGate, FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
-import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, campPlants, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
-import { campTerrain, reliefAt, floorContains, hash2 } from './camp-terrain.mjs';
+import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
+import { floorContains, hash2 } from './camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
-import { campBridgeBounds, constructionLot, overlapsLot, residentialSite, HOUSING_PLOTS, TIMBER_GROVE, TOWN_SIZE } from './camp-layout.mjs';
+import { constructionLot, residentialSite, HOUSING_PLOTS, TOWN_SIZE } from './camp-layout.mjs';
+import { campSitesOf, staticCampSites, campSceneContent, tileKey } from '../shared/camp-scene-content.mjs';
 import { CONSTRUCTION_CODES, CONSTRUCTION_REACH } from './camp-construction-access.mjs';
 import * as audio from './audio.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
@@ -207,28 +208,9 @@ const ZOOM = 2;                                                // 整数倍放�
 
 // 避难聚落沿河两岸展开：西岸的居所与公仓由连廊相接，南侧是菜畦和物资棚；
 // 土路跨桥通往东岸的井台、工坊与瞭台。地图坐标只属于表现层。
-const SITE_FALLBACK = [[22, 20], [34, 16], [52, 20], [64, 30], [26, 42], [46, 44], [70, 10], [56, 38]];
-const ROAD_LINKS = [
-  ['home','hall',[]],['hall','store',[]],['home','yard',[[22,28],[20,31]]],
-  ['yard','garden',[[23,37]]],['hall','crossing',[[33,28],[37,32]]],
-  ['garden','crossing',[[36,39],[38,37]]],['crossing','well',[]],
-  ['well','workshop',[[55,35],[59,33]]],['workshop','watch',[[67,29],[71,23],[72,17],[70,14]]],
-];
-
-// 确定性 hash（不用 Math.random：地图每次刷新必须逐位相同）。
-const distSeg = (px, py, ax, ay, bx, by) => {
-  const dx = bx - ax, dy = by - ay;
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-};
-const tileKey = (x, y) => `${x},${y}`;
-// 河从北到南穿过村落中部，随 y 蜿蜒；路与河相交处架桥。
-const riverX = (ty) => 40 + Math.sin(ty * 0.085) * 4 + Math.sin(ty * 0.031) * 2;
+// 地点表与场景内容生成统一在 shared/camp-scene-content.mjs（客户端/服务端同源）。
 function sitesOf(w) {
-  const keys = Object.keys(w.rooms ?? LOCS);
-  const out = {};
-  keys.forEach((r, i) => { out[r] = w.districts?.[r]?.at ?? w.layout?.sites[r] ?? SITES[r] ?? residentialSite(r,w.peripheralHomes) ?? SITE_FALLBACK[i % SITE_FALLBACK.length]; });
-  return out;
+  return campSitesOf({ rooms: w.rooms ?? LOCS, districts: w.districts, layout: w.layout, peripheralHomes: w.peripheralHomes });
 }
 function slotsOf(w, sites) {
   const slots = {};
@@ -444,10 +426,11 @@ function stampSceneCollision(walk, width, height, scene) {
 }
 
 function buildWorld(w) {
-  const liveSites = sitesOf(w);
+  const liveSites = campSitesOf({
+    rooms: w.rooms, districts: w.districts, layout: w.layout, peripheralHomes: w.peripheralHomes,
+  });
   const mapSeed=w.mapSeed??0;
-  const staticSites=Object.fromEntries(Object.entries(liveSites).filter(([room])=>
-    !w.districts?.[room] && !residentialSite(room,w.peripheralHomes)));
+  const staticSites=staticCampSites(liveSites, w.districts, w.peripheralHomes);
   const pads=districtPads(w.districts);
   const sites=staticSites;
   const sig=JSON.stringify([w.compareSide??'survival',w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,true,Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
@@ -456,160 +439,30 @@ function buildWorld(w) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
   }
-  const { river, riverCenter:streamCenter, riverHalfWidth:streamHalfWidth, hills: candidates }=
-    campTerrain(mapSeed, Boolean(w.camp), w.layoutVersion);
-  const grove=w.layout?.grove??TIMBER_GROVE;
-  const terrainHash=mapSeed ? (x,z,s)=>hash2(x,z,s+mapSeed) : hash2;
-  const blockers = new Set(), movementBlockers = new Set();
-  const occupy = (x, y) => { blockers.add(tileKey(x, y)); };
+  // P2b：树/岩/山丘/桥与地形/植被输入的**唯一生成器**（shared/camp-scene-content.mjs）。
+  // 服务端 construction-access 用同源参数调用同一函数，stage 几何因此逐位一致。
+  const content = campSceneContent({
+    mapSeed, layoutVersion:w.layoutVersion??0, layout:w.layout,
+    camp:w.camp, timber:Boolean(w.camp?.timber), sites:staticSites,
+    districts:w.districts, peripheralHomes:w.peripheralHomes,
+    households:w.households, homeRoads:w.homeRoads, ecoSources:w.ecoSources,
+  });
+  const { trees, hills, bridges, bridgeCells, rocks, landscape, blockers, roads, beds, grove, river,
+    flatLand, roadDistance, plantClearance, harvestNodes, terrainHash, streamCenter, streamHalfWidth } = content;
+  const { onRoad, onRiver, byBridge, nearSite, nearLot, nearGrove, onFarm, inPen, highGround } = content.helpers;
+  const movementBlockers = new Set();
+  const chimneys = [];
   // fx 锚点：树冠 / 烟囱 / 屋舍，世界 tile 坐标。场景动画必须贴在这些真实物件上，
   // 而不是随机撒点 —— 否则「草被吹动」会长到河面或屋顶上。
-  const trees = [];
-  const chimneys = [];
-  // 高个可遮挡物（树 / 屋舍）不再烘进静态底图，而是各自记录为对象，交给 drawViewport 按脚底 Y 深度排序绘制。
-  const bridges = [], rocks = [];
+  const occupy = (x, y) => { blockers.add(tileKey(x, y)); };
+  const terrain = terrainKinds((x,z)=>content.roadDist(x,z,true), beds, streamCenter, streamHalfWidth, terrainHash), grass=[];
 
-  // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
-  const roads=[],bins=new Map(),binSize=64;
-  const addSegment=(a,b,hidden)=>{
-    const r=[...a,...b,hidden];roads.push(r);
-    for(let y=Math.floor((Math.min(a[1],b[1])-40)/binSize);y<=Math.floor((Math.max(a[1],b[1])+40)/binSize);y++)
-      for(let x=Math.floor((Math.min(a[0],b[0])-40)/binSize);x<=Math.floor((Math.max(a[0],b[0])+40)/binSize);x++){
-        const key=tileKey(x,y);if(!bins.has(key))bins.set(key,[]);bins.get(key).push(r);
-      }
-  };
-  const routeSites=w.layout?{...w.layout.sites,...w.layout.nodes}:{...sites};
-  const links=w.layout?[...w.layout.links]:[...ROAD_LINKS];
-  if (!w.layout) {
-    if(sites.well)routeSites.crossing=[Math.round(river(34))-4,34];
-    const homes=w.households?Object.keys(HOUSING_PLOTS):Object.keys(liveSites).filter(residentialSite);
-    if (homes.length) {
-      Object.assign(routeSites,{residential:[75,38],northLane:[89,43],southLane:[89,56],edgeLane:[89,69]});
-      links.push(['workshop','residential',[[68,33]]],['residential','northLane',[[79,40]]],['northLane','southLane',[]]);
-      if (w.households) links.push(['southLane','edgeLane',[]]);
-      for (const room of homes) {
-        routeSites[room]=residentialSite(room);
-        const z=routeSites[room][1];
-        links.push([z<50?'northLane':z<62?'southLane':'edgeLane',room,[]]);
-      }
-    }
-    if (w.camp?.timber && sites.yard) {
-      routeSites.grove=[15,42];
-      links.push(['yard','grove',[[19,37],[17,40]]]);
-    }
-    if(!sites.well&&sites.store&&sites.watch){routeSites.crossing=[Math.round(river(34))-4,34];links.push(['store','crossing',[[38,28]]],['crossing','watch',[[49,34],[61,32],[71,23],[72,17],[70,14]]]);}
-  }
-  for (const [loc,district] of Object.entries(w.districts??{})) {
-    const home='house-'+loc;
-    if (!district.home || !w.households?.deeds[home] || !w.homeRoads?.[home]?.present) continue;
-    const [x,z]=district.home;
-    const [sx,sz]=district.at;
-    addSegment([(x+.5)*TILE,(z-1.1)*TILE],[(x+.5)*TILE,(sz+2.6)*TILE]);
-    addSegment([(x+.5)*TILE,(sz+2.6)*TILE],[(sx+.5)*TILE,(sz+2.6)*TILE]);
-  }
-  for(const [u,v,mids] of links){
-    if(!routeSites[u]||!routeSites[v])continue;
-    const points=[routeSites[u],...mids,routeSites[v]].map(p=>p.map(n=>n*TILE+8));
-    for(let j=0;j<points.length-1;j++){
-      const p0=points[Math.max(0,j-1)],p1=points[j],p2=points[j+1],p3=points[Math.min(points.length-1,j+2)];
-      const steps=Math.max(1,Math.ceil(Math.hypot(p2[0]-p1[0],p2[1]-p1[1])/8));let prev=p1;
-      for(let i=1;i<=steps;i++){
-        const t=i/steps,pt=[0,1].map(k=>.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*t*t+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*t*t*t));
-        addSegment(prev,pt,w.homeRoads?.[v]?.present===false);prev=pt;
-      }
-    }
-  }
-  const roadDist=(px,py,paint=false)=>(bins.get(tileKey(Math.floor(px/binSize),Math.floor(py/binSize)))??[]).reduce((d,r)=>paint && r[4] ? d : Math.min(d,distSeg(px,py,r[0],r[1],r[2],r[3])),80);
-  const onRoad=(tx,ty)=>roadDist(tx*TILE+8,ty*TILE+8)<23;
-  const nearSite = (tx, ty, pad = 2) => Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < pad && Math.abs(ty - sy) < pad);
-  const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - streamCenter(ty*TILE+8)) < 34;
-
-  // 1–3) 邻接材质统一烘焙草/土/水/岸/路；桥保持原来几何。
-  const beds=[];
-  const land=campBeds(sites.garden,mapSeed,w.layoutVersion);
-  const pen=penLayout(sites);
-  const onFarm=(x,z,pad=0)=>land.some(b=>x>=b.x-pad && x<b.x+b.w+pad && z>=b.z-pad && z<b.z+b.d+pad);
-  const inPen=(tx,tz)=>pen && tx+.5>=pen.x-1 && tx+.5<=pen.x+pen.w+1 &&
-    tz+.5>=pen.z-1 && tz+.5<=pen.z+pen.d+1;
-  const reserved=Object.keys(sites).map(room=>constructionLot(room,w.layout)).filter(Boolean);
-  if (w.households) for (const [x,z] of Object.keys(HOUSING_PLOTS).map(room=>w.layout?.sites[room]??HOUSING_PLOTS[room])) reserved.push({x:x-3.15,z:z-6.5,w:6.3,d:6.8});
-  const flatLand=[
-    ...reserved,...pads,
-    ...Object.values(sites).map(([x,z])=>({x:x-4.5,z:z-8,w:9,d:11})),
-    ...land,
-    ...grove.map(({x,z})=>({x:x-1,z:z-1,w:2,d:2})),
-    ...(pen?[pen]:[]),
-  ];
-  const hills=candidates.filter(hill=>{
-    const {x,z,rx,rz}=hill;
-    const footprint={x:x-rx-1,z:z-rz,w:2*rx+2,d:2*rz};
-    return !flatLand.some(lot=>overlapsLot(footprint,lot)) &&
-      Array.from({length:2*rz+1},(_,i)=>z-rz+i).every(y=>Math.abs(x-river(y))>rx+3.5);
-  });
-  const roadDistance=(x,z)=>roadDist(x*TILE,z*TILE,true)/TILE;
-  const highGround=(x,z)=>hills.some(hill=>reliefAt(hill,x+.5,z+.5)>.055);
-  const nearLot=(x,z,pad=.85)=>reserved.some(lot=>overlapsLot({x,z,w:1,d:1},lot,pad));
-  const nearGrove=(x,z)=>Boolean(w.camp?.timber) && grove.some(t=>Math.hypot(x+.5-t.x,z+.5-t.z)<1.7);
-  const plantClearance=(x,z)=>{
-    const tx=Math.floor(x),tz=Math.floor(z);
-    return !inPen(tx,tz) && !nearLot(tx,tz,0) && !nearGrove(tx,tz) && !onFarm(x,z,.8) &&
-      !nearSite(x,z,2.5) && roadDistance(x,z)>1.3 &&
-      !blockers.has(tileKey(tx,tz)) && !flatLand.some(lot=>
-        x>=lot.x && x<lot.x+lot.w && z>=lot.z && z<lot.z+lot.d);
-  };
-  const harvestNodes=w.camp ? campPlants(w.layout,12,mapSeed,w.layoutVersion,w.ecoSources ?
-    {...w.ecoSources,fruit:Array.from({length:12},(_,slot)=>({id:`fruit:${slot}`,slot}))} : undefined) : [];
-  const landscape=w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
-    {flatLand,hills,roadDistance,plantClearance,harvestNodes,districtPads:pads}) : null;
-  const terrain = terrainKinds((x,z)=>roadDist(x,z,true), beds, streamCenter, streamHalfWidth, terrainHash), grass=[];
   // 草簇只落在草地，避免长到路肩/岸线/田里；它们是 3D 草地实例的输入，观感由渲染器生成。
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     const px = tx * TILE, py = ty * TILE, h = terrainHash(tx, ty, 1);
     if (terrain[(py + 8) * WORLD_W + px + 8] !== GROUND.grass || highGround(tx,ty)) continue;
     if (h > .91 && !nearLot(tx,ty,0) && !nearGrove(tx,ty) && !onFarm(tx+.5,ty+.5)) grass.push([tx+.5,ty+.5]);
   }
-  // 一次跨河对应一座完整木桥；同一组 bridgeCells 同时决定绘制与可走范围。
-  const bridgeCells=new Set(),bridgeRows=[];
-  if (w.layout) bridgeRows.push(w.layout.crossZ);
-  else for(let ty=1;ty<WORLD_TH-1;ty++)if(roadDist(river(ty+.5)*TILE,ty*TILE+8)<14)bridgeRows.push(ty);
-  const groups=[];
-  for (const row of bridgeRows) {
-    const first=Math.max(0,row-1), last=Math.min(WORLD_TH-1,row+1), prior=groups.at(-1);
-    if (prior && first<=prior[1]+1) prior[1]=Math.max(prior[1],last);
-    else groups.push([first,last]);
-  }
-  for(const [first,last] of groups){
-    // 两侧坡道均伸过河岸，留出角色和推车的上桥余量。
-    const bounds=campBridgeBounds(first,last,streamCenter,streamHalfWidth);
-    const [x0,y0,x1,y1]=bounds.map(v=>v*TILE);
-    bridges.push(bounds);
-    for(let ty=first;ty<=last;ty++)for(let tx=x0/TILE;tx<x1/TILE;tx++)bridgeCells.add(tileKey(tx,ty));
-  }
-
-  const watch = sites.watch ?? SITES.watch;
-  for (let ty = watch[1] - 6; ty <= watch[1] + 6; ty += 1) for (let tx = watch[0] - 8; tx <= watch[0] + 8; tx += 1) {
-    if (highGround(tx,ty) || onRoad(tx, ty) || nearLot(tx,ty)) continue;
-    const d = Math.hypot((tx - watch[0]) / 7, (ty - watch[1]) / 5);
-    if (d > 1.25 || (d <= 1 && terrainHash(tx, ty, 3) > 0.82)) continue;
-    if (d > 1) continue;
-    rocks.push([tx,ty]);
-    occupy(tx, ty);
-  }
-
-  const byBridge=(x,z)=>bridges.some(([x0,z0,x1,z1])=>x>=x0-1 && x<=x1 && z>=z0-1 && z<=z1);
-  // 5) 树林：边缘密、村落内部疏；避开道路、河、田、岩与屋舍。树冠双 tone + 树干。
-  for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
-    if (highGround(tx,ty) || onRoad(tx, ty) || onRiver(tx, ty) || byBridge(tx,ty) || inPen(tx,ty) || nearLot(tx,ty) || nearGrove(tx,ty) || blockers.has(tileKey(tx, ty))) continue;
-    const edge = Math.min(tx, WORLD_TW - 1 - tx, ty, WORLD_TH - 1 - ty);
-    const density = landscape ? forestDensity(mapSeed,tx+.5,ty+.5)*.76 :
-      edge < 6 ? 0.20 : edge < 14 ? 0.10 : 0.038;
-    if(trees.some(([x,y])=>Math.hypot(x-tx,(y-ty)*1.25)<2.8)||beds.some(b=>insideBed(tx*TILE+8,ty*TILE+8,b,28)))continue;
-    if (terrainHash(tx, ty, 4) > density || nearSite(tx, ty, 4) || onFarm(tx + .5, ty + .5, 2) || Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
-    occupy(tx, ty);
-    trees.push([tx, ty]);
-
-  }
-
   // 世界植被：果树棵数与服务器 livestock.orchards 同源绑定（改量#12 遗项⑤），其余植被确定性哈希。
   const cands = [];
   for (let ty = 0; !landscape && ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
