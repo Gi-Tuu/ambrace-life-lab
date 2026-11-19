@@ -4,6 +4,7 @@ import { itemBoxes } from './camp-items.mjs';
 import { CAMP_BODY_RADIUS } from './camp-3d-physics.mjs';
 import { WALK_DIRECTIONS } from './walk.mjs';
 import { contactShadowMesh, groundContactMesh, materialGrain } from './camp-lighting.mjs';
+import { bakeVertexAO } from '../shared/camp-ao.mjs';
 import { beam, boxVertices, cyl, modelBounds, beamRing, dot, cross, norm, rotate, rotateXZ } from '../shared/camp-geometry.mjs';
 export { beam, boxVertices, cyl, modelBounds };
 
@@ -612,9 +613,6 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
       shelter=max(shelter,smoothstep(-.05,.19,min(edge.x,edge.y)));
     }
     lit*=1.-shelter*.27;
-      // contact AO：竖直面靠近地面的一圈压暗，替代完整 SSAO 的接地感（不采样深度）。
-      float contactAO=(1.-smoothstep(0.,.75,vHeight))*smoothstep(.15,.8,1.-abs(vUp));
-      lit*=1.-.20*contactAO;
     float hardGround=uTexture || uRegionTexture || finish>0. || (color.r<color.g*1.2 && color.b>color.g*.7) ? 1. : .22;
     float wet=water<.5 ? uWetness*hardGround*(1.-shelter*.92)*(.26+.74*max(0.,vUp)) : 0.;
     lit*=1.-wet*.26;
