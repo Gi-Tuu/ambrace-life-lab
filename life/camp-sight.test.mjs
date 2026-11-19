@@ -38,6 +38,14 @@ test('ungrouped solid geometry and a grazing ray across a bin corner block sight
   assert.equal(sightScene(()=>0,[]).clear([.14,1,.16],[4.14,1,4.21]),true);
 });
 
+test('low crops/fences below eye level do not blank the view; tall walls still do', ()=>{
+  const base={x:128.3,y:0,z:-15,w:1.2,d:1.2};
+  const crop={...base,h:1.06,occluder:'plot:crop'};
+  const wall={...base,h:2.6,occluder:'work:wall'};
+  assert.equal(campSight(sightScene(()=>0,[[crop]]),128.3,-17,11).sees(128.3,-12),true);
+  assert.equal(campSight(sightScene(()=>0,[[wall]]),128.3,-17,11).sees(128.3,-12),false);
+});
+
 test('terrain picking returns the foreground hill before the object behind it',()=>{
   const origin=[0,8,0], ray=[1,-1,0];
   assert.equal(terrainHit(origin,ray,()=>0,20),8.25);

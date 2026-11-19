@@ -69,10 +69,10 @@ export function campSight(scene,x,z,radius) {
   for (let row=0;row<size;row++) for (let col=0;col<size;col++) {
     const px=origin[0]+(col+.5)*CELL, pz=origin[1]+(row+.5)*CELL;
     if (Math.hypot(px-x,pz-z)<=limit+.4 &&
-        scene.clear(from,[px,scene.height(px,pz)+.43,pz])) bytes[row*size+col]=255;
+        scene.clear(from,[px,scene.height(px,pz)+1.15,pz])) bytes[row*size+col]=255;
   }
   return {origin,size,extent:size*CELL,bytes,
-    sees(px,pz,y=scene.height(px,pz)+.65,ownModel) {
+    sees(px,pz,y=scene.height(px,pz)+1.15,ownModel) {
       return Math.hypot(px-x,pz-z)<=limit && scene.clear(from,[px,y,pz],ownModel);
     },
   };
