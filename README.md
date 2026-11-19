@@ -4,7 +4,7 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
-**版本 `0.1.5`** · 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+**版本 `0.1.6`** · 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 它不是什么
 
