@@ -1,0 +1,22 @@
+globalThis.PIXEL_CATALOG = [
+  "actions/portrait_a1.png",
+  "actions/portrait_a2.png",
+  "actions/portrait_a3.png",
+  "actions/portrait_p1.png",
+  "terrain_dirt0.png",
+  "terrain_dirt1.png",
+  "terrain_dirt2.png",
+  "terrain_dirt3.png",
+  "terrain_grass0.png",
+  "terrain_grass1.png",
+  "terrain_grass2.png",
+  "terrain_grass3.png",
+  "terrain_stone0.png",
+  "terrain_stone1.png",
+  "terrain_stone2.png",
+  "terrain_stone3.png",
+  "terrain_water0.png",
+  "terrain_water1.png",
+  "terrain_water2.png",
+  "terrain_water3.png"
+];

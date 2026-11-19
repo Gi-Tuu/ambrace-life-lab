@@ -1,107 +1,11 @@
 {
-  "version": "v2",
-  "frame": [
-    32,
-    48
-  ],
-  "anchor": [
-    16,
-    48
-  ],
-  "directions": [
-    "down",
-    "left",
-    "right",
-    "up"
-  ],
-  "framesPerAction": 4,
+  "version": "v3-portraits",
+  "_说明": "P0：动作图集(4 角色 + fx)已无运行时读取，随 2D 精灵一起删除；HUD 只加载 4 张头像。",
   "fps": 6,
-  "fxCell": [
-    32,
-    32
-  ],
-  "fxRows": [
-    "grass",
-    "water",
-    "tree",
-    "smoke"
-  ],
-  "palette": "/web/assets/palette.json",
-  "clock": "independent render clock; A/B share the same frame index; never derived from w.t",
   "portraits": {
     "a1": "/web/assets/actions/portrait_a1.png",
     "a2": "/web/assets/actions/portrait_a2.png",
     "a3": "/web/assets/actions/portrait_a3.png",
     "p1": "/web/assets/actions/portrait_p1.png"
-  },
-  "actions": [
-    {
-      "id": "idle",
-      "label": "待机"
-    },
-    {
-      "id": "walk",
-      "label": "行走"
-    },
-    {
-      "id": "move_to",
-      "label": "走过去"
-    },
-    {
-      "id": "eat",
-      "label": "吃点存粮"
-    },
-    {
-      "id": "talk",
-      "label": "说话"
-    },
-    {
-      "id": "rest",
-      "label": "靠着歇一会儿"
-    },
-    {
-      "id": "work",
-      "label": "在工坊干活"
-    },
-    {
-      "id": "look_out",
-      "label": "往外看"
-    },
-    {
-      "id": "take_shared",
-      "label": "去拿一份"
-    },
-    {
-      "id": "trade",
-      "label": "接济/交换"
-    },
-    {
-      "id": "buy",
-      "label": "用铜币换粮"
-    },
-    {
-      "id": "companion",
-      "label": "结伴"
-    },
-    {
-      "id": "deafen",
-      "label": "捂住耳朵"
-    },
-    {
-      "id": "seclude",
-      "label": "躲进里屋"
-    },
-    {
-      "id": "refuse",
-      "label": "别理他"
-    },
-    {
-      "id": "rej",
-      "label": "被规则驳回"
-    },
-    {
-      "id": "hail",
-      "label": "被喊住"
-    }
-  ]
+  }
 }

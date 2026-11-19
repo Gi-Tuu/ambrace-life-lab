@@ -70,10 +70,10 @@ async function readBody(req) {
 
 // BUG-19：静态面改**白名单 + realpath**。原来的黑名单挡不住 Windows 的大小写不敏感、
 // %2e%2e%2f、junction，也没列举过 /docs、/.git、/contest.txt —— 本地跑 serve 就能读到仓库内部文件。
-// V7.3 去 3D 后浏览器会 import shared/ 的纯数据/几何，所以白名单只有两棵树：web/ 与 shared/。
+// 去掉旧 2D 后浏览器直接 import shared/ 的纯数据/几何，所以白名单只有两棵树：web/ 与 shared/。
 const STATIC_BASES = { web: join(ROOT, 'web'), shared: join(ROOT, 'shared') };
 
-async function serveStatic(res, urlPath) {
+async function serveStatic(req, res, urlPath, search = '') {
   let rel;
   try { rel = decodeURIComponent(String(urlPath)); } catch { return json(res, 400, { error: 'BAD_PATH' }); }
   if (rel === '/index.html') rel = '/web/index.html';
@@ -94,7 +94,18 @@ async function serveStatic(res, urlPath) {
     const info = await stat(real);
     if (info.isDirectory()) return json(res, 404, { error: 'NOT_FOUND' });
     const buf = await readFile(real);
-    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': MIME[extname(real)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
+    // 缓存（P0）：不再全站 no-store。静态文本/素材带内容 ETag，刷新走 304（只花一个 RTT，不重传）；
+    // 带 ?v=<指纹> 的请求按内容寻址，可以长缓存 immutable。HTML/JS 没有指纹 ⇒ no-cache 每次复验。
+    const etag = '"' + createHash('sha256').update(buf).digest('hex').slice(0, 32) + '"';
+    const immutable = /(?:^|&)v=[\w.-]{6,}/.test(search.startsWith('?') ? search.slice(1) : search);
+    const cacheControl = immutable ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate';
+    const headers = { ...SECURITY_HEADERS, etag, 'cache-control': cacheControl };
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { ...headers, 'content-type': MIME[extname(real)] ?? 'application/octet-stream', 'content-length': buf.length });
     res.end(buf);
   } catch {
     json(res, 404, { error: 'NOT_FOUND' });
@@ -585,7 +596,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   }
 
   if (req.method !== 'GET') return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
-  return serveStatic(res, p === '/' ? '/web/index.html' : p);
+  return serveStatic(req, res, p === '/' ? '/web/index.html' : p, url.search);
 }
 
 const server = createServer((req, res) => {

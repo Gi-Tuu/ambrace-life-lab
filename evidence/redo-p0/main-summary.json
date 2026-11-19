@@ -1,0 +1,277 @@
+{
+  "baseline": "31f67e7",
+  "p0Source": "205989e",
+  "at": "2026-11-19T12:15:48.591Z",
+  "node": "v24.18.0",
+  "assets": {
+    "before": {
+      "files": 73,
+      "bytes": 1952111,
+      "png": 64
+    },
+    "after": {
+      "files": 25,
+      "bytes": 964494,
+      "png": 20
+    }
+  },
+  "buildWorld": [
+    {
+      "seed": 0,
+      "beforeMs": 0.2,
+      "afterMs": 0.1
+    },
+    {
+      "seed": 7,
+      "beforeMs": 713.1,
+      "afterMs": 313.9
+    },
+    {
+      "seed": 123456,
+      "beforeMs": 712.2,
+      "afterMs": 305.7
+    },
+    {
+      "seed": 654321,
+      "beforeMs": 785.2,
+      "afterMs": 306.1
+    }
+  ],
+  "first3d": {
+    "survival": [
+      1582.7999999523163,
+      989.5
+    ],
+    "title": [
+      1216.699999988079,
+      642.5999999642372
+    ]
+  },
+  "resources": {
+    "survival": [
+      {
+        "count": 124,
+        "transferBytes": 2306992,
+        "encodedBytes": 2269792,
+        "assetCount": 69,
+        "pngCount": 64,
+        "slowest": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            40
+          ],
+          [
+            "/web/camp-3d-physics.mjs",
+            22
+          ],
+          [
+            "/web/hall-front.mjs",
+            22
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            22
+          ],
+          [
+            "/web/camp-3d-scene.mjs",
+            21
+          ],
+          [
+            "/web/net.mjs",
+            19
+          ],
+          [
+            "/web/player-move.mjs",
+            19
+          ],
+          [
+            "/web/asset-collision.mjs",
+            19
+          ]
+        ]
+      },
+      {
+        "count": 78,
+        "transferBytes": 2199752,
+        "encodedBytes": 2176352,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            49
+          ],
+          [
+            "/web/hall-front.mjs",
+            23
+          ],
+          [
+            "/web/camp-3d-physics.mjs",
+            23
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            22
+          ],
+          [
+            "/web/asset-collision.mjs",
+            21
+          ],
+          [
+            "/web/collision.mjs",
+            21
+          ],
+          [
+            "/web/camp-3d-scene.mjs",
+            21
+          ],
+          [
+            "/web/player-move.mjs",
+            20
+          ]
+        ]
+      }
+    ]
+  },
+  "canvasSha": {
+    "survival": [
+      "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5",
+      "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5"
+    ],
+    "compareA": [
+      "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5",
+      "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5"
+    ],
+    "compareB": [
+      "0013a9bab2307b5485eb98d8e0275fbf25e282cb8e381b05bad00561b8d2db2b",
+      "0013a9bab2307b5485eb98d8e0275fbf25e282cb8e381b05bad00561b8d2db2b"
+    ],
+    "title": [
+      "39ec66680bea96f6cf6a0d9b4e7c8dae79068465d2036b900a3e51fc8dc45ba1",
+      "39ec66680bea96f6cf6a0d9b4e7c8dae79068465d2036b900a3e51fc8dc45ba1"
+    ]
+  },
+  "worldHashDiffCount": 0,
+  "cache": {
+    "before": {
+      "/web/app.js": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 291131,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/web/assets/manifest.json": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 3546,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/web/assets/terrain_grass0.png": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 286,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/shared/camp-layout.mjs": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 5925,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "immutableProbe": {
+        "status": 200,
+        "cacheControl": "no-store"
+      }
+    },
+    "after": {
+      "/web/app.js": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"1fee2d51a82596f88d619543db95fbc9\"",
+        "contentEncoding": null,
+        "bytes": 268997,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/web/assets/manifest.json": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"9f82a3ad583ad23058b93934062e7956\"",
+        "contentEncoding": null,
+        "bytes": 1143,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/web/assets/terrain_grass0.png": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+        "contentEncoding": null,
+        "bytes": 286,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/shared/camp-layout.mjs": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+        "contentEncoding": null,
+        "bytes": 5925,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "immutableProbe": {
+        "status": 200,
+        "cacheControl": "public, max-age=31536000, immutable"
+      }
+    }
+  },
+  "researchMd5": [
+    {
+      "face": "report",
+      "before": "de764430c8bc88cd8dbbc24512621e4f",
+      "after": "de764430c8bc88cd8dbbc24512621e4f",
+      "same": true
+    },
+    {
+      "face": "sweep",
+      "before": "aadd4895e84ae657d5a1e22c132228b1",
+      "after": "aadd4895e84ae657d5a1e22c132228b1",
+      "same": true
+    },
+    {
+      "face": "viab",
+      "before": "b923787830eb26c3853ecf959987cf9d",
+      "after": "b923787830eb26c3853ecf959987cf9d",
+      "same": true
+    },
+    {
+      "face": "recover",
+      "before": "fe198109386d048356f2fa69312e5183",
+      "after": "fe198109386d048356f2fa69312e5183",
+      "same": true
+    },
+    {
+      "face": "metab",
+      "before": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "after": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "same": true
+    }
+  ],
+  "checks": {
+    "check": "1030/1030",
+    "quickstart": "PASS"
+  }
+}

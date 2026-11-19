@@ -467,9 +467,9 @@ void main(){
 `;
 const FRAGMENT = `
   precision mediump float;
-  uniform sampler2D uGround, uFog, uWater, uGrain;
+  uniform sampler2D uGround, uFog, uGrain;
   uniform vec4 uFogBounds;
-  uniform bool uTexture, uVisibility, uHasWater;
+  uniform bool uVisibility;
   uniform vec3 uSight;
   uniform vec3 uViewDirection;
   uniform mediump vec4 uSunRay;
@@ -524,7 +524,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
 
 
   void main(){
-    vec3 color=uTexture ? texture2D(uGround,vUV).rgb*vColor : vColor;
+    vec3 color=vColor;
     if (uRegionTexture && vUV.y>=0.) {
       vec2 pixel=floor(vWorld*32.);
       float fleck=fract(sin(dot(mod(pixel,257.),vec2(.93,1.71)))*105.7);
@@ -549,7 +549,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
     }
     bool river=uRegionTexture && vGlow<-.5 && vGlow>-1.5 && vUV.y<0.;
     bool basin=!uRegionTexture && vGlow<-.5 && vGlow>-1.5;
-    float water=(river||basin)?1.:(uTexture && uHasWater ? texture2D(uWater,vUV).r : 0.);
+    float water=(river||basin)?1.:0.;
     if (river) {
       vec2 pixel=floor(vWorld*32.);
       vec2 sampleAt=(mod(pixel+vec2(0.,-floor(uWeather.x*5.)),32.)+.5)/128.;
@@ -563,7 +563,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
     if (green && water<.5) {
       if (uSeason==1.) color*=vec3(1.08,1.03,.93);
       if (uSeason==2.) color=mix(color,vec3(.64,.38,.15)*(.6+color.g*.7),.61);
-      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),(uTexture || uRegionTexture)?.68:.37);
+      if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),uRegionTexture?.68:.37);
     }
     if (uWeather.z>.5 && water<.5 && !uShadow && vGlow<=0.) {
       // Cold-snap rime clings to exposed surfaces. Break up the edge at pixel scale.
@@ -599,7 +599,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
     vec3 sunlight=vec3(.27,.123,.046)*uSunStrength;
     float baked=fract(vFinish)*2.;
     float finish=floor(vFinish);
-    if (uPhysical && finish>0. && !uTexture && !uRegionTexture) {
+    if (uPhysical && finish>0. && !uRegionTexture) {
       vec2 grain=vec2(vWorld.x+vWorld.y*.53,vHeight+vWorld.y*.73);
       float row=finish>1.5?.5:0.;
       float tone=texture2D(uGrain,vec2(fract(grain.x*.82),fract(grain.y*1.21)*.48+.01+row)).r;
@@ -614,7 +614,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
       shelter=max(shelter,smoothstep(-.05,.19,min(edge.x,edge.y)));
     }
     lit*=1.-shelter*.27;
-    float hardGround=uTexture || uRegionTexture || finish>0. || (color.r<color.g*1.2 && color.b>color.g*.7) ? 1. : .22;
+    float hardGround=uRegionTexture || finish>0. || (color.r<color.g*1.2 && color.b>color.g*.7) ? 1. : .22;
     float wet=water<.5 ? uWetness*hardGround*(1.-shelter*.92)*(.26+.74*max(0.,vUp)) : 0.;
     lit*=1.-wet*.26;
     vec2 wetCell=floor(vWorld*8.);
@@ -737,7 +737,7 @@ export function createCampRenderer() {
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','Ground','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   
     const postProgram=gl.createProgram();
     {
@@ -780,7 +780,7 @@ export function createCampRenderer() {
 
     gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
-  const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
+  const stages=new WeakMap(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
   const createTexture=(unit)=>{
     const t=gl.createTexture();
     gl.activeTexture(unit);gl.bindTexture(gl.TEXTURE_2D,t);
@@ -788,35 +788,28 @@ export function createCampRenderer() {
       [gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,key,value);
     return t;
   };
-  const blank=createTexture(gl.TEXTURE0), fog=createTexture(gl.TEXTURE1), water=createTexture(gl.TEXTURE2);
+  const blank=createTexture(gl.TEXTURE0), fog=createTexture(gl.TEXTURE1);
   gl.activeTexture(gl.TEXTURE1);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-  gl.activeTexture(gl.TEXTURE2);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,1,1,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,new Uint8Array(1));
   createTexture(gl.TEXTURE3);
   const grain=materialGrain();
   gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,64,64,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,grain);
   gl.uniform1i(uniform.Grain,3);
-  gl.uniform1i(uniform.Water,2);
-  gl.uniform1i(uniform.Ground,0);gl.uniform1i(uniform.Fog,1);
+  gl.uniform1i(uniform.Fog,1);
   // 两个采样器始终绑定完整纹理，室内和全景也能正常绘制。
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,blank);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
-  const terrainTextures=new Map(), maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  let groundSize='', visibilityImage=null, waterImage=null;
+  const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
   const groundContactBuffer=gl.createBuffer();
-  let shadowData=null, contactData=null;
-  function terrainTexture(source) {
-    let texture=terrainTextures.get(source);
-    if (texture) {
-      terrainTextures.delete(source);
-      terrainTextures.set(source,texture);
-      return texture;
-    }
-    texture=createTexture(gl.TEXTURE0);
+  let atlasTexture=null, atlasSource=null, visibilityImage=null, shadowData=null, contactData=null;
+  // regionAtlas 是 3D 地面唯一的活纹理（16 张地形 tile 拼的 128×128 图集）。
+  function atlasUpload(source) {
+    if (atlasSource===source && atlasTexture) return atlasTexture;
+    if (atlasTexture) gl.deleteTexture(atlasTexture);
+    const texture=createTexture(gl.TEXTURE0);
     let image=source;
     const scale=Math.min(1,maxTexture/Math.max(source.width,source.height));
     if (scale<1) {
@@ -826,11 +819,7 @@ export function createCampRenderer() {
       g.imageSmoothingEnabled=false;g.drawImage(source,0,0,image.width,image.height);
     }
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);
-    terrainTextures.set(source,texture);
-    if(terrainTextures.size>4) {
-      const old=terrainTextures.keys().next().value;
-      gl.deleteTexture(terrainTextures.get(old));terrainTextures.delete(old);
-    }
+    atlasSource=source;atlasTexture=texture;
     return texture;
   }
   let lost=false;
@@ -843,8 +832,8 @@ export function createCampRenderer() {
     gl.vertexAttribPointer(aMaterial,3,gl.FLOAT,false,MODEL_STRIDE*4,32);
     gl.vertexAttribPointer(aNormal,4,gl.FLOAT,false,MODEL_STRIDE*4,44);
   }
-  function paint(buffer,count,textured,from=0) {
-    bind(buffer);gl.uniform1i(uniform.Texture,Number(textured));gl.drawArrays(gl.TRIANGLES,from,count);
+  function paint(buffer,count,from=0) {
+    bind(buffer);gl.drawArrays(gl.TRIANGLES,from,count);
   }
   // 仅保留当前几种场景的缓冲，地图/对照切换时释放长期不用的资源。
   const lru=[], workMeshes=new WeakMap();
@@ -868,44 +857,44 @@ export function createCampRenderer() {
     }
     return item;
   }
-  function paintStage({b,count,ranges,terrainCount}, covered, faded, terrain=false, cutout=null) {
-    if (terrainCount) paint(b,terrainCount,terrain);
+  function paintStage({b,count,ranges,terrainCount}, covered, faded, cutout=null) {
+    if (terrainCount) paint(b,terrainCount);
     let from=terrainCount;
     for (const r of ranges) {
       const isRoof=/^(roof|room-roof):/.test(r.id);
       if (isRoof && cutout) {
-        if (from<r.from) paint(b,r.from-from,false,from);
+        if (from<r.from) paint(b,r.from-from,from);
         gl.uniform4f(uniform.Cutout,cutout[0],cutout[1],cutout[2],1);
-        paint(b,r.count,false,r.from);
+        paint(b,r.count,r.from);
         gl.uniform4f(uniform.Cutout,0,0,0,0);
         from=r.from+r.count;
         continue;
       }
       if (!covered.has(r.id) || !isRoof) continue;
-      if (from<r.from) paint(b,r.from-from,false,from);
+      if (from<r.from) paint(b,r.from-from,from);
       faded.push({b,...r});
       from=r.from+r.count;
     }
-    if (from<count) paint(b,count-from,false,from);
+    if (from<count) paint(b,count-from,from);
   }
   function paintFaded(ranges) {
     if (!ranges.length) return;
     // 先保留最近的表面，再混合一次，避免同一屋顶的各层累积成不透明。
     gl.colorMask(false,false,false,false);
-    for (const r of ranges) paint(r.b,r.count,false,r.from);
+    for (const r of ranges) paint(r.b,r.count,r.from);
     gl.colorMask(true,true,true,true);
     gl.depthFunc(gl.EQUAL);
     gl.depthMask(false);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(uniform.Alpha,.28);
-    for (const r of ranges) paint(r.b,r.count,false,r.from);
+    for (const r of ranges) paint(r.b,r.count,r.from);
     gl.disable(gl.BLEND);
     gl.depthMask(true);
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null }) {
+    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -941,14 +930,6 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       if (covers.length) gl.uniform4fv(uniform['Shelters[0]'],covers.flat());
       gl.uniform1i(uniform.RegionTexture,0);
       gl.uniform1i(uniform.Wild,Number(Boolean(regions?.length)));
-      gl.uniform1i(uniform.HasWater,Number(Boolean(waterMask)));
-      if (waterMask && waterMask!==waterImage) {
-        gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,water);
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-        gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,waterMask.width,waterMask.height,0,
-          gl.LUMINANCE,gl.UNSIGNED_BYTE,waterMask.bytes);
-        waterImage=waterMask;
-      }
       gl.uniform1f(uniform.Alpha,1);
       gl.uniform1i(uniform.Visibility,Number(Boolean(visibility)));
       if (visibility) gl.uniform4f(uniform.FogBounds,...visibility.origin,visibility.extent,visibility.extent);
@@ -958,23 +939,11 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,visibility.size,visibility.size,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,visibility.bytes);
         visibilityImage=visibility;
       }
-      if(terrain) {
-        const texture=terrainTexture(terrain), size=stage.width+':'+stage.depth;
-        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
-        if(groundSize!==size){
-          const data=[];
-          quad(data,[0,-.012,0],[stage.width,-.012,0],[stage.width,-.012,stage.depth],[0,-.012,stage.depth],
-            [1,1,1],[[0,0],[1,0],[1,1],[0,1]]);
-          bind(groundBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
-          groundSize=size;
-        }
-        paint(groundBuffer,6,true);
-      }
       const faded=[];
       const cacheLimit=regions?.length ? 48 : 12;
       if (regions?.length) {
         if (regionAtlas) {
-          const texture=terrainTexture(regionAtlas);
+          const texture=atlasUpload(regionAtlas);
           gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
         }
         for (const region of regions) {
@@ -983,14 +952,10 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
           paintStage(stageBuffer(region,cacheLimit),covered,faded);
         }
         gl.uniform1i(uniform.RegionTexture,0);
-        if (terrain) {
-          const texture=terrainTexture(terrain);
-          gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
-        }
       }
-      paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain),cutout);
-      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded,false,cutout);
-      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded,false,cutout);
+      paintStage(stageBuffer(stage,cacheLimit),covered,faded,cutout);
+      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded,cutout);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded,cutout);
       if (physical && shadows) {
         const base=groundContactMesh(shadows);
         const cast=sun?.direct ? contactShadowMesh(shadows,sun,{soft:true}) : null;
@@ -1001,14 +966,14 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
           if (cast!==shadowData) {
             gl.bufferData(gl.ARRAY_BUFFER,cast,gl.DYNAMIC_DRAW);shadowData=cast;
           }
-          paint(shadowBuffer,cast.length/MODEL_STRIDE,false);
+          paint(shadowBuffer,cast.length/MODEL_STRIDE);
         }
         if (base.length) {
           bind(groundContactBuffer);
           if (base!==contactData) {
             gl.bufferData(gl.ARRAY_BUFFER,base,gl.DYNAMIC_DRAW);contactData=base;
           }
-          paint(groundContactBuffer,base.length/MODEL_STRIDE,false);
+          paint(groundContactBuffer,base.length/MODEL_STRIDE);
         }
         gl.uniform1i(uniform.Shadow,0);gl.depthMask(true);gl.disable(gl.BLEND);
       }
@@ -1034,7 +999,7 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       for(const person of people)actor(moving,person,frame);
       for (const box of impacts) prism(moving,box);
       bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(moving),gl.DYNAMIC_DRAW);
-      paint(movingBuffer,moving.length/MODEL_STRIDE,false);
+      paint(movingBuffer,moving.length/MODEL_STRIDE);
       if (translucent.length) {
         bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(translucent),gl.DYNAMIC_DRAW);
         faded.push({b:movingBuffer,from:0,count:translucent.length/MODEL_STRIDE});

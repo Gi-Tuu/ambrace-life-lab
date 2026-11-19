@@ -2,6 +2,15 @@
 
 ## [未发布]
 
+### 渲染 P0 并入主线（2026-11-19）：删掉“死的但还在跑”的 2D 烘焙与死资产
+
+- `web/app.js` 的 `paintTerrain` 收窄为 `terrainKinds()`：只算水/岸/路/土/草分类（判定顺序与阈值逐字保留），返回 `Uint8Array`；不再建 3840×2560 RGBA canvas、不再 `getImageData`/`putImageData`、不再取地形纹理。主线的 `walk`/`movementWalk`/`terrainWalk3d`/`assetWalk`/树/桥/阻挡/`scene3d` 在 P0 前后逐位相同（主线基线 `31f67e7` 对比，证据 `evidence/redo-p0/main-before.json` / `main-after.json`）。
+- 删除 `?view=2d` 入口与 2D 兜底：`paintForestFloor`、`drawFogTerrain`、`drawProp`、`outdoorDetail`、`corridorDetail`、`roomNavigation`、`contactProfile`/`BLD_*`、`DUST`、`SITE_THING`、`OV_*`、`placement`/`assetMasks`/`maskCache`、`ART`、`world.canvas/groundPixels/shadeTiles/shadeColors/waterMask`；没有 WebGL 现在是硬失败（保留 F9 的连续失败计数与提示）。渲染器删 `uTexture/uGround(2D 底图)/uWater/uHasWater` 与地形纹理 LRU，保留 128×128 `regionAtlas`（3D 地面唯一活纹理），主线的 `cutout`/`wetness`/`shelters`/软阴影/后处理分支原样保留。
+- 资产：主线已有 64 张指纹，本次再删 44 张无消费者 PNG（char 16 / prop 21 / tree 3 / terrain_wood 4），保留 16 张地形 tile + 4 张 HUD 头像，共 20 张；`pixel-editor.html`、`editor-catalog.js`、`pixel-overrides.json`、`asset-collisions.json`、`manifest.example.json` 移到 `tools/pixel-editor/`；`manifest.json`/`actions/manifest.json` 重写为只含活素材；`art-hashes.json` 重钉到 20 张。
+- 加载：`loadAssets` 从串行逐张改为 6 并发；启动不再等素材，先起轮询/标题场景/动画时钟，素材就绪后补一帧。`fillOcc`/`portraitSource` 改用主线居民头像并去掉已删的 `ASSETS.chars` 兜底。
+- 缓存：`serve.mjs` 静态文件从全站 `no-store` 改为内容 ETag + `no-cache, must-revalidate`（带 `?v=` 指纹的请求 `immutable` 长缓存），刷新走 304；动态 JSON 仍 `no-store`。
+- 闸门：新增 `life/redo-p0.test.mjs`（5 条）与 `scripts/redo-p0-golden.mjs`；`npm run check`、quickstart 真 Chrome、五份研究面 md5 见 `docs/回报-P0-主线整合-2026-11-19.md`。
+
 ### 雨夜湿润高光与屋顶分缝
 
 - `rivulet` 从 `sin(x+y)` 斜线改为逐格 hash 湿润闪点：雨夜不再出现等距斜纹。

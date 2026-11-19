@@ -1,0 +1,309 @@
+{
+  "generatedAt": "2026-11-19T11:57:41.659Z",
+  "method": "scripts/redo-p0-golden.mjs; Chrome headless=new SwiftShader, prefers-reduced-motion=reduce; 同一台机器/同一 seed",
+  "timing": [
+    {
+      "seed": 7,
+      "beforeMs": 768.9,
+      "afterMs": 275,
+      "sameData": true
+    },
+    {
+      "seed": 123456,
+      "beforeMs": 821.1,
+      "afterMs": 290.4,
+      "sameData": true
+    },
+    {
+      "seed": 654321,
+      "beforeMs": 835.3,
+      "afterMs": 280.5,
+      "sameData": true
+    }
+  ],
+  "first3d": {
+    "beforeSurvivalMs": 1420.3999999761581,
+    "afterSurvivalMs": 842.8000000119209,
+    "beforeTitleMs": 1250.6000000238419,
+    "afterTitleMs": 599,
+    "targetMs": 800,
+    "survivalMet": false,
+    "titleMet": true
+  },
+  "longtasks": {
+    "before": [
+      [
+        99,
+        122
+      ],
+      [
+        405,
+        1017
+      ]
+    ],
+    "after": [
+      [
+        89,
+        109
+      ],
+      [
+        223,
+        621
+      ],
+      [
+        870,
+        530
+      ]
+    ]
+  },
+  "resources": {
+    "before": {
+      "count": 146,
+      "transferBytes": 2339198,
+      "encodedBytes": 2295398,
+      "assetCount": 100,
+      "pngCount": 95,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          46
+        ],
+        [
+          "/web/camp-3d-physics.mjs",
+          19
+        ],
+        [
+          "/web/hall-front.mjs",
+          19
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          18
+        ],
+        [
+          "/web/player-move.mjs",
+          17
+        ],
+        [
+          "/web/camp-3d-scene.mjs",
+          17
+        ],
+        [
+          "/web/collision.mjs",
+          17
+        ],
+        [
+          "/web/net.mjs",
+          16
+        ]
+      ]
+    },
+    "after": {
+      "count": 69,
+      "transferBytes": 2105249,
+      "encodedBytes": 2084549,
+      "assetCount": 23,
+      "pngCount": 20,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          47
+        ],
+        [
+          "/web/hall-front.mjs",
+          18
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          18
+        ],
+        [
+          "/web/asset-collision.mjs",
+          17
+        ],
+        [
+          "/web/camp-3d-scene.mjs",
+          17
+        ],
+        [
+          "/web/camp-3d-physics.mjs",
+          17
+        ],
+        [
+          "/web/audio.mjs",
+          14
+        ],
+        [
+          "/web/audio-events.mjs",
+          14
+        ]
+      ]
+    }
+  },
+  "screenshots": {
+    "survival": {
+      "before": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f",
+      "after": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f",
+      "equal": true
+    },
+    "compareA": {
+      "before": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f",
+      "after": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f",
+      "equal": true
+    },
+    "compareB": {
+      "before": "ac578830147f71af1cadcefa18e36402c11ed08f545cf310ecdfc84a3c659c80",
+      "after": "ac578830147f71af1cadcefa18e36402c11ed08f545cf310ecdfc84a3c659c80",
+      "equal": true
+    },
+    "title": {
+      "before": "09dfa008a606d5d07f2a3266620dafb9e7c1559b808d2761e717c25c7c2b9b9d",
+      "after": "09dfa008a606d5d07f2a3266620dafb9e7c1559b808d2761e717c25c7c2b9b9d",
+      "equal": true
+    }
+  },
+  "kindsProbe": {
+    "note": "before2/after2 用同一段临时 FNV 探针（已从提交代码删除）",
+    "before": null,
+    "after": [
+      {
+        "n": 2457600,
+        "h": 2918879821
+      },
+      {
+        "n": 2457600,
+        "h": 2172004961
+      },
+      {
+        "n": 2457600,
+        "h": 426882735
+      },
+      {
+        "n": 2457600,
+        "h": 3632447290
+      }
+    ],
+    "equal": false
+  },
+  "cache": {
+    "before": {
+      "/web/app.js": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 273072,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/web/assets/manifest.json": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 4766,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/web/assets/terrain_grass0.png": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 286,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "/shared/camp-layout.mjs": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "etag": null,
+        "contentEncoding": null,
+        "bytes": 5925,
+        "revalidateStatus": null,
+        "revalidateBytes": null
+      },
+      "immutableProbe": {
+        "status": 200,
+        "cacheControl": "no-store"
+      }
+    },
+    "after": {
+      "/web/app.js": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"00bc87971455ce38ba8681b060b92822\"",
+        "contentEncoding": null,
+        "bytes": 251064,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/web/assets/manifest.json": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"0c9f46ff24e558a6f31fa73f878e222f\"",
+        "contentEncoding": null,
+        "bytes": 1120,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/web/assets/terrain_grass0.png": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+        "contentEncoding": null,
+        "bytes": 286,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "/shared/camp-layout.mjs": {
+        "status": 200,
+        "cacheControl": "no-cache, must-revalidate",
+        "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+        "contentEncoding": null,
+        "bytes": 5925,
+        "revalidateStatus": 304,
+        "revalidateBytes": 0
+      },
+      "immutableProbe": {
+        "status": 200,
+        "cacheControl": "public, max-age=31536000, immutable"
+      }
+    }
+  },
+  "debug": {
+    "animals": [],
+    "renderer": "3d",
+    "ratio": 1,
+    "span": 24.714285714285715,
+    "people": 3,
+    "stageBoxes": 3452,
+    "stageFxs": 4,
+    "chimneys": 2,
+    "acts": [
+      "a1:repair",
+      "c2:idle",
+      "p1:discussion"
+    ],
+    "climate": {
+      "storm": false,
+      "drought": false,
+      "rain": true,
+      "snow": false,
+      "season": 1
+    },
+    "sun": "夜晚",
+    "focus": [
+      30.5,
+      22
+    ],
+    "hover": false,
+    "wildRegions": 35,
+    "unifiedGround": true,
+    "p1": [
+      30.5,
+      0.11586206896551676,
+      24.5
+    ]
+  }
+}

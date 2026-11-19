@@ -1,91 +1,14 @@
 {
-  "chars": {
-    "a1": {
-      "frames": [
-        "/web/assets/char_a1_0.png",
-        "/web/assets/char_a1_1.png",
-        "/web/assets/char_a1_2.png",
-        "/web/assets/char_a1_3.png"
-      ],
-      "fps": 4,
-      "anchor": [
-        8,
-        16
-      ]
-    },
-    "a2": {
-      "frames": [
-        "/web/assets/char_a2_0.png",
-        "/web/assets/char_a2_1.png",
-        "/web/assets/char_a2_2.png",
-        "/web/assets/char_a2_3.png"
-      ],
-      "fps": 4,
-      "anchor": [
-        8,
-        16
-      ]
-    },
-    "a3": {
-      "frames": [
-        "/web/assets/char_a3_0.png",
-        "/web/assets/char_a3_1.png",
-        "/web/assets/char_a3_2.png",
-        "/web/assets/char_a3_3.png"
-      ],
-      "fps": 4,
-      "anchor": [
-        8,
-        16
-      ]
-    },
-    "p1": {
-      "frames": [
-        "/web/assets/char_p1_0.png",
-        "/web/assets/char_p1_1.png",
-        "/web/assets/char_p1_2.png",
-        "/web/assets/char_p1_3.png"
-      ],
-      "fps": 4,
-      "anchor": [
-        8,
-        16
-      ]
-    }
-  },
-  "tiles": {},
-  "things": {},
-  "icons": {},
+  "_说明": "P0：只保留 3D 地面图集真正采样的 16 张地形 tile；角色/房间/家具/物件/图标/树木的 2D 精灵已随 2D 烘焙管线删除。",
   "scenes": {
-    "prop_anvil": "/web/assets/prop_anvil.png",
-    "prop_banner": "/web/assets/prop_banner.png",
-    "prop_barrel": "/web/assets/prop_barrel.png",
-    "prop_bed": "/web/assets/prop_bed.png",
-    "prop_bench": "/web/assets/prop_bench.png",
-    "prop_boulder": "/web/assets/prop_boulder.png",
-    "prop_bucket": "/web/assets/prop_bucket.png",
-    "prop_cart": "/web/assets/prop_cart.png",
-    "prop_crate": "/web/assets/prop_crate.png",
-    "prop_fence": "/web/assets/prop_fence.png",
-    "prop_furnace": "/web/assets/prop_furnace.png",
-    "prop_hearth": "/web/assets/prop_hearth.png",
-    "prop_longTable": "/web/assets/prop_longTable.png",
-    "prop_planter": "/web/assets/prop_planter.png",
-    "prop_rug": "/web/assets/prop_rug.png",
-    "prop_shelf": "/web/assets/prop_shelf.png",
-    "prop_table": "/web/assets/prop_table.png",
-    "prop_telescope": "/web/assets/prop_telescope.png",
-    "prop_trellis": "/web/assets/prop_trellis.png",
-    "prop_well": "/web/assets/prop_well.png",
-    "prop_workbench": "/web/assets/prop_workbench.png",
-    "terrain_dirt0": "/web/assets/terrain_dirt0.png",
-    "terrain_dirt1": "/web/assets/terrain_dirt1.png",
-    "terrain_dirt2": "/web/assets/terrain_dirt2.png",
-    "terrain_dirt3": "/web/assets/terrain_dirt3.png",
     "terrain_grass0": "/web/assets/terrain_grass0.png",
     "terrain_grass1": "/web/assets/terrain_grass1.png",
     "terrain_grass2": "/web/assets/terrain_grass2.png",
     "terrain_grass3": "/web/assets/terrain_grass3.png",
+    "terrain_dirt0": "/web/assets/terrain_dirt0.png",
+    "terrain_dirt1": "/web/assets/terrain_dirt1.png",
+    "terrain_dirt2": "/web/assets/terrain_dirt2.png",
+    "terrain_dirt3": "/web/assets/terrain_dirt3.png",
     "terrain_stone0": "/web/assets/terrain_stone0.png",
     "terrain_stone1": "/web/assets/terrain_stone1.png",
     "terrain_stone2": "/web/assets/terrain_stone2.png",
@@ -93,14 +16,7 @@
     "terrain_water0": "/web/assets/terrain_water0.png",
     "terrain_water1": "/web/assets/terrain_water1.png",
     "terrain_water2": "/web/assets/terrain_water2.png",
-    "terrain_water3": "/web/assets/terrain_water3.png",
-    "terrain_wood0": "/web/assets/terrain_wood0.png",
-    "terrain_wood1": "/web/assets/terrain_wood1.png",
-    "terrain_wood2": "/web/assets/terrain_wood2.png",
-    "terrain_wood3": "/web/assets/terrain_wood3.png",
-    "tree_oak0": "/web/assets/tree_oak0.png",
-    "tree_oak1": "/web/assets/tree_oak1.png",
-    "tree_oak2": "/web/assets/tree_oak2.png"
+    "terrain_water3": "/web/assets/terrain_water3.png"
   },
   "palette": "palette.json",
   "scale": 3

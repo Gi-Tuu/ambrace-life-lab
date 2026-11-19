@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0web\pixel-editor.html"
+start "" "%~dp0tools\pixel-editor\pixel-editor.html"

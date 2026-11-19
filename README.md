@@ -74,7 +74,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  └─ camp-construction-access.mjs …           # 规则/物理/物品纯函数
 ├─ web/                   # 前端：零依赖 canvas，纯表现层（不写世界状态）
 │  ├─ index.html          #   HUD / 双世界对照面板 / 实验开关
-│  ├─ app.js              #   渲染器：连续大地图 / 8 室内 / 镜头 / 特效 / WASD+点击控制
+│  ├─ app.js              #   3D WebGL 渲染入口：世界构建 / 8 室内 / 镜头 / 特效 / WASD+点击控制（无 2D 视图）
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
 │  ├─ camp-3d-scene.mjs   #   兼容层：re-export shared/camp-scene.mjs（实现已迁到 shared/）
 │  ├─ camp-lighting.mjs / camp-sun.mjs   # 受光与日照（接触阴影，纯表现）
@@ -82,8 +82,8 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ camp-districts.mjs / camp-region-entities.mjs   # 兼容层：外围资源点 / 区域实体
 │  ├─ camp-sight.mjs / camp-facility.mjs   # 视野 / 设施几何
 │  ├─ audio.mjs           #   程序化声音：状态驱动 SFX / 环境声 / BGM（离聚落越远越稀疏）
-│  ├─ pixel-editor.html   #   本地手工像素工作台（配合 scripts/pixel-overrides.mjs）
-│  └─ assets/             #   生成的像素资产 + palette.json + manifest + OFL 字体 + art-hashes 指纹
+│  └─ assets/             #   16 张地形 tile + 4 张 HUD 头像 + palette.json + OFL 字体 + art-hashes 指纹
+├─ tools/pixel-editor/    # 开发工具：像素工作台 + 覆盖稿/碰撞稿/素材目录（不进镜像，不在 /web/ 下）
 ├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
 │  ├─ gen-pixel-assets.mjs / gen-actions.mjs / pack-assets.mjs
 │  ├─ editor-catalog.mjs / pixel-overrides.mjs

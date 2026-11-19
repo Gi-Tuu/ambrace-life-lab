@@ -30,7 +30,7 @@ import {
   COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
   overrideWalk, pathFromWalker, roomAllows,
 } from './collision.mjs';
-import { expandWalk, fillCollisionRect, findAssetMask, pixelPath, stampMask } from './asset-collision.mjs';
+import { expandWalk, fillCollisionRect, pixelPath } from './asset-collision.mjs';
 import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
@@ -103,67 +103,52 @@ const GOALS = { recover: '补给', connect: '联结', explore: '外探', maintai
 const INTERRUPTS = { committed_goal_unavailable: '目标这刻没动作', goal_has_no_visible_action: '看不到能干的事', only_coupling_actions: '此刻只剩耦合动作', no_eligible_action: '没有合格动作' };
 const COUPLING_VARS = ['input', 'available', 'refuse'];
 const $ = (id) => document.getElementById(id);
+// 唯一渲染路径：WebGL 3D。创建失败就是硬失败，没有第二套 2D 画面可退。
 let campRenderer = null;
-if (new URLSearchParams(location.search).get('view') !== '2d') {
-  try { campRenderer = createCampRenderer(); }
-  catch (error) { console.warn('3D 初始化失败，使用像素视图', error); }
-}
+try { campRenderer = createCampRenderer(); }
+catch (error) { console.warn('3D 初始化失败：此设备无法进入世界', error); }
 
-// 全套动作精灵 / 场景小动画：独立清单在 web/assets/actions/manifest.json（不动主 manifest schema）。
-// 帧号由独立动画循环递增，A/B 严格共用同一个值；不读 w.t、不消费 rng、不写世界状态 ⇒ 不污染研究读数。
-const ACT = { ready: false, chars: {}, portraits: {}, fx: null, index: {}, rows: {}, fps: 6, frame: 0 };
+// 动作时钟与 HUD 头像：帧号由独立动画循环递增，A/B 严格共用同一个值；
+// 不读 w.t、不消费 rng、不写世界状态 ⇒ 不污染研究读数。
+const ACT = { ready: false, portraits: {}, fps: 6, frame: 0 };
 const ACTIONS_MANIFEST = '/web/assets/actions/manifest.json';
 
-// 素材可选：没有 web/assets/manifest.json 就继续用程序化矩形（当前状态可用），有就自动替换。
-// manifest 形状：{ chars: { a1: "url" | ["url","url"], ... }, tiles: { home: "url" }, icons: { energy: "url" } }
-const ASSETS = { ready: false, chars: {}, tiles: {}, things: {}, icons: {}, scenes: {}, palette: [] };
-let assetMasks = {};
-const maskCache = new WeakMap();
-function placement(key, x, y, w, h) {
-  const image = ASSETS.scenes[key];
-  if (!image) return null;
-  if (!maskCache.has(image)) maskCache.set(image, findAssetMask(assetMasks, image));
-  const mask = maskCache.get(image);
-  return mask ? { mask, x, y, w, h } : null;
+// 素材可选：没有 web/assets/manifest.json 就继续用程序化色块（当前状态可用），有就自动替换。
+// P0 后只剩 3D 地形图集的 16 张 tile：manifest 形状 { scenes: { terrain_grass0: "url", ... } }。
+const ASSETS = { ready: false, scenes: {} };
+// 6 并发：串行逐张 await 时 99 个请求实测 1.46s；世界必需素材只有 16 张地形 tile + 4 张头像。
+const ASSET_CONCURRENCY = 6;
+async function fetchLimit(items, limit, worker) {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next; next += 1; await worker(items[i], i); }
+  }));
 }
-
 async function loadAssets() {
-  try { assetMasks = await api('/web/assets/asset-collisions.json'); }
-  catch { assetMasks = {}; }
   const load = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+  // 世界必需：地形图集。失败是正常状态（outskirtsAtlas 有程序化兜底色）。
   try {
     const m = await api('/web/assets/manifest.json');
-    ASSETS.palette = await api('/web/assets/palette.json');
-    for (const [k, v] of Object.entries(m.scenes ?? {})) ASSETS.scenes[k] = await load(v);
-    for (const [k, v] of Object.entries(m.tiles ?? {})) ASSETS.tiles[k] = await load(v);
-    for (const [k, v] of Object.entries(m.things ?? {})) ASSETS.things[k] = await load(v);
-    for (const [k, v] of Object.entries(m.icons ?? {})) ASSETS.icons[k] = await load(v);
-    for (const [k, v] of Object.entries(m.chars ?? {})) {
-      const frames = Array.isArray(v) ? v : (v.frames ?? []);
-      ASSETS.chars[k] = { frames: await Promise.all(frames.map(load)), fps: v.fps ?? 4 };
-    }
+    await fetchLimit(Object.entries(m.scenes ?? {}), ASSET_CONCURRENCY,
+      async ([k, v]) => { ASSETS.scenes[k] = await load(v); });
     ASSETS.ready = true;
   } catch {
-    ASSETS.ready = false; // 没素材是正常状态，不是错误
+    ASSETS.ready = false;
   }
-  // 动作表独立加载：失败只退回原来的 4 帧 idle/walk，不影响页面与世界。
+  // HUD 头像：独立清单；失败只影响角色卡，不挡世界与菜单。
   try {
     const m = await api(ACTIONS_MANIFEST);
-    ACT.index = Object.fromEntries((m.actions ?? []).map((a, i) => [a.id, i]));
-    ACT.rows = Object.fromEntries((m.fxRows ?? []).map((r, i) => [r, i]));
-    ACT.fps = m.fps ?? 6; ACT.size = m.frame ?? [16, 24]; ACT.directions = m.directions ?? ['down'];
-    // 2D 动作精灵已清理：缺失时只放弃精灵，不能连坐 UI 头像。
-    for (const [k, v] of Object.entries(m.chars ?? {})) ACT.chars[k] = await load(v).catch(() => null);
-    for (const [k, v] of Object.entries(m.portraits ?? {})) ACT.portraits[k] = await load(v);
-    ACT.fx = m.fx ? await load(m.fx).catch(() => null) : null;
+    ACT.fps = m.fps ?? 6;
+    await fetchLimit(Object.entries(m.portraits ?? {}), ASSET_CONCURRENCY,
+      async ([k, v]) => { ACT.portraits[k] = await load(v); });
     ACT.ready = true;
   } catch {
     ACT.ready = false;
   }
+  // 素材晚到时补一帧：首帧用的是程序化兜底色/空头像位，图集就绪后重画一次，
+  // 保证「首屏不阻塞」不以画面永久停在兜底稿为代价（reduced-motion 下也只补这一帧）。
+  if (ASSETS.ready || ACT.ready) repaintAfterAssets();
 }
-
-// 角色当前动作行：载荷里的 a.last.kind 是世界事实，不是前端猜的；找不到回退 idle。
-const actionRow = (a) => ACT.index[a?.last?.kind] ?? ACT.index.idle ?? 0;
 
 const launch = new URLSearchParams(location.search);
 const ui = { menu: !launch.has('room') && launch.get('full')!=='1' &&
@@ -207,19 +192,15 @@ function comparisonContact(body) {
 // 载荷字段一个不动；这里只在表现层把地点摆进一张连续的自然地形，用相机视口取局部放大画面。
 // 世界地图与视口分开；旧地形坐标保持原位，住宅区向东南扩展。
 
-const ART = 2;
 const WORLD_TW=TOWN_SIZE.width, WORLD_TH=TOWN_SIZE.depth;
 const WORLD_W=WORLD_TW*TILE, WORLD_H=WORLD_TH*TILE;
-let VIEW_TW = 28, VIEW_TH = 14;                             // 常规视口上限 28×14 tile
-let VIEW_W = VIEW_TW * TILE, VIEW_H = VIEW_TH * TILE;        // 视口逻辑像素，按地点和容器调整
+// 旧 2D 相机视口尺寸：只保留给"首帧前点击"的兜底换算（campPoint 有投影时不会走这里）。
+const VIEW_W = 28 * TILE, VIEW_H = 14 * TILE;
 const ZOOM = 2;                                                // 整数倍放大
-const OV_W = 256, OV_H = 170;                                  // 全景微缩逻辑像素 → ×2 = 512×340 CSS
-const OV_SX = OV_W / WORLD_W, OV_SY = OV_H / WORLD_H;         // 世界 → 全景的换算比例
 
 // 避难聚落沿河两岸展开：西岸的居所与公仓由连廊相接，南侧是菜畦和物资棚；
 // 土路跨桥通往东岸的井台、工坊与瞭台。地图坐标只属于表现层。
 const SITE_FALLBACK = [[22, 20], [34, 16], [52, 20], [64, 30], [26, 42], [46, 44], [70, 10], [56, 38]];
-const SITE_THING = { home: 'beds', store: 'crates', workshop: 'bench', garden: 'bedsG', well: 'bucket' };
 const ROAD_LINKS = [
   ['home','hall',[]],['hall','store',[]],['home','yard',[[22,28],[20,31]]],
   ['yard','garden',[[23,37]]],['hall','crossing',[[33,28],[37,32]]],
@@ -274,43 +255,16 @@ function farmBeds(w) {
 }
 const insideBed=(x,y,b,pad=0)=>x>=b.x-pad&&x<b.x+b.w+pad&&y>=b.y-pad&&y<b.y+b.h+pad;
 const GROUND = { grass: 0, water: 1, bank: 2, road: 3, soil: 4 };
-function paintTerrain(g, roadDist, sites, beds, hash2, streamCenter, streamHalfWidth) {
+// P0（2026-11-19）：只产出地形分类数据，不再烘焙 3840×2560 的 2D 底图。
+// 分类顺序与阈值是等价闸门的对象（evidence/redo-p0/）：动这里任何一个条件都必须重跑 before/after 金样。
+// walk / terrainWalk3d / 草点 / 树种排除都只消费这份 Uint8Array；没有 canvas、没有 ImageData、没有纹理采样。
+function terrainKinds(roadDist, beds, streamCenter, streamHalfWidth, terrainHash) {
   const kinds = new Uint8Array(WORLD_W * WORLD_H);
-  // 地形配色重做：草地不再分「亮草 / 林下暗块」两档硬切。
-  // 先按到最近树的距离 + 低频噪声算连续绿度，再用 Bayer 有序抖动在相邻色阶间过渡。
-  const shade = new Uint8Array(WORLD_W * WORLD_H);
-  {
-    // 注意：paintTerrain 在树生成之前调用，这里按同一套 hash 规则近似算树位（只用于配色，不进世界状态）。
-    const approx = [];
-    for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
-      const edge = Math.min(tx, WORLD_TW - 1 - tx, ty, WORLD_TH - 1 - ty);
-      const density = edge < 6 ? .20 : edge < 14 ? .10 : .038;
-      if (hash2(tx, ty, 4) > density) continue;
-      if (Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
-      approx.push([tx, ty]);
-    }
-    const tw = WORLD_TW, th = WORLD_TH, dist = new Float32Array(tw * th).fill(99);
-    for (const [tx, ty] of approx) for (let dy = -14; dy <= 14; dy += 1) for (let dx = -14; dx <= 14; dx += 1) {
-      const x = tx + dx, y = ty + dy;
-      if (x < 0 || y < 0 || x >= tw || y >= th) continue;
-      const d = Math.hypot(dx, dy * 1.15), i = y * tw + x;
-      if (d < dist[i]) dist[i] = d;
-    }
-    for (let ty = 0; ty < th; ty += 1) for (let tx = 0; tx < tw; tx += 1) {
-      const d = dist[ty * tw + tx];
-      const near = Math.max(0, Math.min(1, (13 - d) / 13));
-      const n = hash2(Math.floor(tx / 3), Math.floor(ty / 3), 11);
-      const level = Math.max(0, Math.min(1, near * .56 + n * .30 - .12));
-      for (let y = ty * TILE; y < (ty + 1) * TILE; y += 1)
-        for (let x = tx * TILE; x < (tx + 1) * TILE; x += 1) shade[y * WORLD_W + x] = Math.round(level * 15);
-    }
-  }
-  const waterDepth = new Float32Array(kinds.length), roadDepth = new Float32Array(kinds.length);
-  // 低频噪声的控制点只算一次；每像素只插值，避免反复 hash。
+  // 水岸轮廓的唯一噪声场：低频噪声的控制点只算一次；每像素只插值，避免反复 hash。
   const noiseField = scale => {
     const width = Math.ceil(WORLD_W / scale) + 1, height = Math.ceil(WORLD_H / scale) + 1;
     const values = new Float32Array(width * height);
-    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) values[y * width + x] = hash2(x, y, 11);
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) values[y * width + x] = terrainHash(x, y, 11);
     const columns = Array.from({ length: WORLD_W }, (_, x) => { const f = x / scale % 1; return [Math.floor(x / scale), f * f * (3 - 2 * f)]; });
     return (x, y) => {
       const [ix, u] = columns[x], fy = y / scale % 1, v = fy * fy * (3 - 2 * fy), i = Math.floor(y / scale) * width + ix;
@@ -318,7 +272,7 @@ function paintTerrain(g, roadDist, sites, beds, hash2, streamCenter, streamHalfW
       return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
     };
   };
-  const edgeNoise = noiseField(24), grassNoise = noiseField(64);
+  const edgeNoise = noiseField(24);
   // 道路距离在 2px 采样格上缓存，再线性插值；轮廓仍逐像素描绘。
   const stride = WORLD_W / 2 + 1, distances = new Float32Array(stride * (WORLD_H / 2 + 1));
   for (let y = 0; y <= WORLD_H; y += 2) for (let x = 0; x <= WORLD_W; x += 2) distances[y / 2 * stride + x / 2] = roadDist(x, y);
@@ -333,7 +287,6 @@ function paintTerrain(g, roadDist, sites, beds, hash2, streamCenter, streamHalfW
       const i = y * WORLD_W + x;
       const wet = half - Math.abs(x - center), road = distance(x, y);
       const rough = edgeNoise(x, y) * 2 - 1;
-      waterDepth[i] = wet; roadDepth[i] = road;
       if (wet >= 0) kinds[i] = GROUND.water;
       else if (wet > -3 - rough) kinds[i] = GROUND.bank;
       else if (road < 12 + rough) kinds[i] = GROUND.road;
@@ -342,78 +295,7 @@ function paintTerrain(g, roadDist, sites, beds, hash2, streamCenter, streamHalfW
       }
     }
   }
-  const image = g.createImageData(WORLD_W * ART, WORLD_H * ART), pixels = image.data;
-  const textures = {};
-  for (const material of ['grass', 'dirt', 'water']) for (let v = 0; v < 4; v++) {
-    const tile = document.createElement('canvas'); tile.width = 32; tile.height = 32;
-    const ctx = tile.getContext('2d'); const source = ASSETS.scenes[`terrain_${material}${v}`];
-    if (source) ctx.drawImage(source, 0, 0); textures[`${material}${v}`] = source ? ctx.getImageData(0, 0, 32, 32).data : null;
-  }
-  const rgb = Object.fromEntries(['#008751', '#00E436', '#1D2B53', '#29ADFF', '#FFCCAA', '#C2C3C7', '#FFF1E8', '#AB5236', '#7E2553', '#5F574F', '#FFA300'].map(c => [c, [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16))]));
-  const ramps = { '#008751': [86,141,62], '#00E436': [152,189,81], '#1D2B53': [30,61,75], '#29ADFF': [69,137,150], '#FFCCAA': [237,199,135], '#C2C3C7': [185,184,161], '#AB5236': [216,166,103], '#7E2553': [186,135,82], '#5F574F': [114,81,59] };
-  const at = (x, y, fallback) => x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H ? fallback : kinds[y * WORLD_W + x];
-  const isDirt = k => k === GROUND.road || k === GROUND.soil;
-  for (let y = 0; y < WORLD_H; y += 1) for (let x = 0; x < WORLD_W; x += 1) {
-    const i = y * WORLD_W + x, k = kinds[i], q = BAYER[(y % 4) * 4 + x % 4];
-    const n = at(x, y - 1, k), e = at(x + 1, y, k), south = at(x, y + 1, k), west = at(x - 1, y, k);
-    // N/E/S/W 的邻接掩码让连片地形共享轮廓，不在每块 tile 上重复画框。
-    const dirt = isDirt(k), sameN = n === k || (dirt && isDirt(n)), sameE = e === k || (dirt && isDirt(e));
-    const sameS = south === k || (dirt && isDirt(south)), sameW = west === k || (dirt && isDirt(west));
-    const mask = (sameN ? 1 : 0) | (sameE ? 2 : 0) | (sameS ? 4 : 0) | (sameW ? 8 : 0);
-    let color = '#008751';
-    if (k === GROUND.water) {
-      color = '#1D2B53';
-      if (waterDepth[i] < 4 && q < 8) color = '#29ADFF';
-      if (mask !== 15 && (!sameN || !sameW)) color = q < 6 ? '#C2C3C7' : '#29ADFF';
-      if (waterDepth[i] > 4 && y % 13 === 0 && (x + Math.floor(y / 13) * 3) % 19 < 6) color = '#29ADFF';
-    } else if (k === GROUND.bank) {
-      color = q < 5 ? '#C2C3C7' : '#FFCCAA';
-      if (south === GROUND.water || e === GROUND.water) color = '#5F574F';
-      if ((n === GROUND.grass || west === GROUND.grass) && q < 6) color = '#008751';
-    } else if (isDirt(k)) {
-      color = '#AB5236';
-      if (k === GROUND.soil && y % 9 < 2) color = '#7E2553';
-      if (k === GROUND.road && roadDepth[i] < 3 && q < 3) color = '#7E2553';
-      if (mask !== 15) {
-        if (!sameN || !sameW) color = q < 10 ? '#FFCCAA' : '#AB5236';
-        else if (!sameS || !sameE) color = '#7E2553';
-      } else if (hash2(Math.floor(x / 3), Math.floor(y / 3), 12) > 0.985 && q < 2) color = '#FFA300';
-    } else {
-      const patch = grassNoise(x, y);
-      if (patch > 0.7 && hash2(x, y, 12) > .99) color = '#00E436';
-      // 外侧 1–2px 路肩/田缘：零 alpha 的有序抖动，转角同时看斜邻居。
-      const inner = isDirt(n) || isDirt(e) || isDirt(south) || isDirt(west);
-      const outer = inner || isDirt(at(x - 2, y, k)) || isDirt(at(x + 2, y, k)) || isDirt(at(x, y - 2, k)) || isDirt(at(x, y + 2, k)) || isDirt(at(x - 1, y - 1, k)) || isDirt(at(x + 1, y + 1, k));
-      if (outer && q < (inner ? 9 : 3)) color = '#AB5236';
-      const bank = n === GROUND.bank || e === GROUND.bank || south === GROUND.bank || west === GROUND.bank;
-      if (bank && q < 5) color = '#C2C3C7';
-    }
-
-    const c = ramps[color] ?? rgb[color], material = k === GROUND.grass && color === '#008751' ? 'grass' : isDirt(k) && color === '#AB5236' ? 'dirt' : k === GROUND.water && color === '#1D2B53' ? 'water' : null;
-    const texture = material && textures[`${material}${Math.floor(hash2(Math.floor(x / TILE), Math.floor(y / TILE), 19) * 4)}`];
-    for (let dy = 0; dy < ART; dy++) for (let dx = 0; dx < ART; dx++) {
-      const offset = ((y * ART + dy) * WORLD_W * ART + x * ART + dx) * 4, ti = (((y * ART + dy) % 32) * 32 + (x * ART + dx) % 32) * 4;
-      const deep = k === GROUND.grass && q < shade[i];
-      pixels[offset] = deep ? 49 : texture ? texture[ti] : c[0];
-      pixels[offset + 1] = deep ? 84 : texture ? texture[ti + 1] : c[1];
-      pixels[offset + 2] = deep ? 49 : texture ? texture[ti + 2] : c[2];
-      pixels[offset + 3] = 255;
-    }
-  }
-  g.putImageData(image, 0, 0);
   return kinds;
-}
-function paintForestFloor(g, trees, blockers, terrain) {
-  // 只补确定性林下细节散点；连续绿阶已在 paintTerrain 里完成，这里绝不再整块盖色。
-  const image = g.getImageData(0, 0, WORLD_W * ART, WORLD_H * ART), pixels = image.data;
-  for (let y = 0; y < WORLD_H; y += 1) for (let x = 0; x < WORLD_W; x += 1) {
-    if (terrain[y * WORLD_W + x] !== GROUND.grass || hash2(x, y, 23) >= .06) continue;
-    for (let sy = 0; sy < ART; sy += 1) for (let sx = 0; sx < ART; sx += 1) {
-      const off = ((y * ART + sy) * WORLD_W * ART + x * ART + sx) * 4;
-      pixels[off] = 63; pixels[off + 1] = 112; pixels[off + 2] = 54;
-    }
-  }
-  g.putImageData(image, 0, 0);
 }
 
 let worldCache = null;
@@ -437,11 +319,11 @@ function outskirtsAtlas() {
   return terrainAtlas;
 }
 function campOutskirts(w, world) {
-  const key=world.canvas;
-  let terrain=outskirtsCache.get(key);
+  // key 用世界缓存对象本身，不再借 2D canvas 当 token。
+  let terrain=outskirtsCache.get(world);
   if (!terrain) {
     terrain=world.landscape??createCampOutskirts(w.mapSeed??0,w.layoutVersion??0,w.layout?.crossZ??34,world);
-    outskirtsCache.set(key,terrain);
+    outskirtsCache.set(world,terrain);
   }
   return terrain;
 }
@@ -558,11 +440,11 @@ function buildWorld(w) {
   const liveSites = sitesOf(w);
   const mapSeed=w.mapSeed??0;
   const staticSites=Object.fromEntries(Object.entries(liveSites).filter(([room])=>
-    !w.districts?.[room] && (!campRenderer || !residentialSite(room,w.peripheralHomes))));
+    !w.districts?.[room] && !residentialSite(room,w.peripheralHomes)));
   const pads=districtPads(w.districts);
   const sites=staticSites;
-  const sig=JSON.stringify([w.compareSide??'survival',w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,Boolean(campRenderer),Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
-    .map(([k])=>k).sort(),campRenderer?null:farmBeds(w).map(b=>({...b,growth:b.growth>=1?2:Number(b.growth>0),moisture:0}))]);
+  const sig=JSON.stringify([w.compareSide??'survival',w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,true,Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
+    .map(([k])=>k).sort(),null]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -571,16 +453,8 @@ function buildWorld(w) {
     campTerrain(mapSeed, Boolean(w.camp), w.layoutVersion);
   const grove=w.layout?.grove??TIMBER_GROVE;
   const terrainHash=mapSeed ? (x,z,s)=>hash2(x,z,s+mapSeed) : hash2;
-  const cv = document.createElement('canvas');
-  cv.width = WORLD_W * ART; cv.height = WORLD_H * ART;
-  const g = cv.getContext('2d');
-  g.setTransform(ART, 0, 0, ART, 0, 0); g.imageSmoothingEnabled = false;
-  const blockers = new Set(), movementBlockers = new Set(), masks = [];
-  const occupy = (x, y, mask) => {
-    const key = tileKey(x, y);
-    blockers.add(key);
-    if (!mask && !campRenderer) movementBlockers.add(key);
-  };
+  const blockers = new Set(), movementBlockers = new Set();
+  const occupy = (x, y) => { blockers.add(tileKey(x, y)); };
   // fx 锚点：树冠 / 烟囱 / 屋舍，世界 tile 坐标。场景动画必须贴在这些真实物件上，
   // 而不是随机撒点 —— 否则「草被吹动」会长到河面或屋顶上。
   const trees = [];
@@ -644,9 +518,9 @@ function buildWorld(w) {
   const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - streamCenter(ty*TILE+8)) < 34;
 
   // 1–3) 邻接材质统一烘焙草/土/水/岸/路；桥保持原来几何。
-  const beds=campRenderer?[]:farmBeds(w);
+  const beds=[];
   const land=campBeds(sites.garden,mapSeed,w.layoutVersion);
-  const pen=campRenderer?penLayout(sites):null;
+  const pen=penLayout(sites);
   const onFarm=(x,z,pad=0)=>land.some(b=>x>=b.x-pad && x<b.x+b.w+pad && z>=b.z-pad && z<b.z+b.d+pad);
   const inPen=(tx,tz)=>pen && tx+.5>=pen.x-1 && tx+.5<=pen.x+pen.w+1 &&
     tz+.5>=pen.z-1 && tz+.5<=pen.z+pen.d+1;
@@ -678,22 +552,14 @@ function buildWorld(w) {
   };
   const harvestNodes=w.camp ? campPlants(w.layout,12,mapSeed,w.layoutVersion,w.ecoSources ?
     {...w.ecoSources,fruit:Array.from({length:12},(_,slot)=>({id:`fruit:${slot}`,slot}))} : undefined) : [];
-  const landscape=campRenderer && w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
+  const landscape=w.camp ? createCampOutskirts(mapSeed,w.layoutVersion??0,w.layout?.crossZ??34,
     {flatLand,hills,roadDistance,plantClearance,harvestNodes,districtPads:pads}) : null;
-  const terrain = paintTerrain(g, (x,z)=>roadDist(x,z,true), sites, beds, terrainHash, streamCenter, streamHalfWidth), grass=[];
-  // 草簇与野花只落在草地，避免覆盖路肩和岸线。
+  const terrain = terrainKinds((x,z)=>roadDist(x,z,true), beds, streamCenter, streamHalfWidth, terrainHash), grass=[];
+  // 草簇只落在草地，避免长到路肩/岸线/田里；它们是 3D 草地实例的输入，观感由渲染器生成。
   for (let ty = 0; ty < WORLD_TH; ty += 1) for (let tx = 0; tx < WORLD_TW; tx += 1) {
     const px = tx * TILE, py = ty * TILE, h = terrainHash(tx, ty, 1);
     if (terrain[(py + 8) * WORLD_W + px + 8] !== GROUND.grass || highGround(tx,ty)) continue;
-    if (campRenderer && h > .91 && !nearLot(tx,ty,0) && !nearGrove(tx,ty) && !onFarm(tx+.5,ty+.5)) grass.push([tx+.5,ty+.5]);
-    if (h > 0.72) { g.fillStyle = '#00E436'; g.fillRect(px + 4, py + 8, 1, 2); g.fillRect(px + 3, py + 7, 1, 1); }
-    if (h > 0.97) { g.fillStyle = '#FFEC27'; g.fillRect(px + 10, py + 5, 1, 1); }
-    else if (h < 0.02) { g.fillStyle = '#FF77A8'; g.fillRect(px + 7, py + 11, 1, 1); }
-    // 野花/浆果点：确定性散点，让 2D 兜底视图也能读到新增的世界内容。
-    const fh = terrainHash(tx, ty, 31);
-    if (fh > 0.965) { g.fillStyle = '#FFF0CC'; g.fillRect(px + 12, py + 9, 2, 2); g.fillStyle = '#FFA300'; g.fillRect(px + 12, py + 9, 1, 1); }
-    else if (fh > 0.94) { g.fillStyle = '#FF77A8'; g.fillRect(px + 3, py + 3, 2, 2); }
-    else if (fh < 0.012) { g.fillStyle = '#315431'; g.fillRect(px + 5, py + 6, 5, 3); }
+    if (h > .91 && !nearLot(tx,ty,0) && !nearGrove(tx,ty) && !onFarm(tx+.5,ty+.5)) grass.push([tx+.5,ty+.5]);
   }
   // 一次跨河对应一座完整木桥；同一组 bridgeCells 同时决定绘制与可走范围。
   const bridgeCells=new Set(),bridgeRows=[];
@@ -710,43 +576,17 @@ function buildWorld(w) {
     const bounds=campBridgeBounds(first,last,streamCenter,streamHalfWidth);
     const [x0,y0,x1,y1]=bounds.map(v=>v*TILE);
     bridges.push(bounds);
-    if (!campRenderer) {
-      g.fillStyle='#514134';g.fillRect(x0,y0,x1-x0,y1-y0);
-      for(let x=x0+1;x<x1-1;x+=5){g.fillStyle='#BA8752';g.fillRect(x,y0+2,4,y1-y0-4);g.fillStyle='#EDC787';g.fillRect(x,y0+2,1,y1-y0-4);}
-      for(const y of [y0,y1-2]){g.fillStyle='#72513B';g.fillRect(x0,y,x1-x0,2);g.fillStyle='#D8A667';g.fillRect(x0,y,x1-x0,1);}
-    }
     for(let ty=first;ty<=last;ty++)for(let tx=x0/TILE;tx<x1/TILE;tx++)bridgeCells.add(tileKey(tx,ty));
   }
 
-  // 成排菜畦、泥土垄沟和留出的通行埂；植株仅为环境表现，不捏造收获状态。
-  for(const b of beds){
-    g.fillStyle='#72513B';g.fillRect(b.x,b.y,b.w,b.h);g.fillStyle='#BA8752';g.fillRect(b.x,b.y,b.w,1);
-    for(let y=b.y+4;y<b.y+b.h-2;y+=7){
-      g.fillStyle='#482D2B';g.fillRect(b.x+2,y+4,b.w-4,2);
-      if (!b.growth) continue;
-      for(let x=b.x+5;x<b.x+b.w-2;x+=9){
-        if(terrainHash(x,y,81)<.1)continue;
-        g.fillStyle='#315431';g.fillRect(x-2,y,5,3);g.fillRect(x,y-3,2,5);
-        g.fillStyle=b.growth>=1?'#D6AE69':'#98BD51';g.fillRect(x-3,y-1,3,1);g.fillRect(x+1,y-2,3,1);
-        g.fillStyle='#73A747';g.fillRect(x-1,y-2,2,2);
-        if(b.growth>=1){g.fillStyle='#D27A4A';g.fillRect(x+1,y+1,2,2);}
-      }
-    }
-    for(const x of [b.x-1,b.x+b.w]){g.fillStyle='#514134';g.fillRect(x,b.y,1,b.h);}
-  }
   const watch = sites.watch ?? SITES.watch;
   for (let ty = watch[1] - 6; ty <= watch[1] + 6; ty += 1) for (let tx = watch[0] - 8; tx <= watch[0] + 8; tx += 1) {
     if (highGround(tx,ty) || onRoad(tx, ty) || nearLot(tx,ty)) continue;
     const d = Math.hypot((tx - watch[0]) / 7, (ty - watch[1]) / 5);
     if (d > 1.25 || (d <= 1 && terrainHash(tx, ty, 3) > 0.82)) continue;
-    const px = tx * TILE, py = ty * TILE;
-    if (d > 1) { if (terrainHash(tx, ty, 3) > 0.55) { g.fillStyle = '#6D7165'; g.fillRect(px + 6, py + 7, 4, 3); } continue; }
+    if (d > 1) continue;
     rocks.push([tx,ty]);
-    const boulder = ASSETS.scenes.prop_boulder;
-    if (boulder && !campRenderer) g.drawImage(boulder, px - 2, py - 4, 20, 20);
-    const mask = campRenderer ? null : placement('prop_boulder', px - 2, py - 4, 20, 20);
-    if (mask) masks.push(mask);
-    occupy(tx, ty, mask);
+    occupy(tx, ty);
   }
 
   const byBridge=(x,z)=>bridges.some(([x0,z0,x1,z1])=>x>=x0-1 && x<=x1 && z>=z0-1 && z<=z1);
@@ -758,9 +598,7 @@ function buildWorld(w) {
       edge < 6 ? 0.20 : edge < 14 ? 0.10 : 0.038;
     if(trees.some(([x,y])=>Math.hypot(x-tx,(y-ty)*1.25)<2.8)||beds.some(b=>insideBed(tx*TILE+8,ty*TILE+8,b,28)))continue;
     if (terrainHash(tx, ty, 4) > density || nearSite(tx, ty, 4) || onFarm(tx + .5, ty + .5, 2) || Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < 5 && ty > sy - 10 && ty < sy + 1)) continue;
-    const mask = campRenderer ? null : placement(treeAsset(tx, ty), tx * TILE - 24, ty * TILE - 64, 64, 80);
-    if (mask) masks.push(mask);
-    occupy(tx, ty, mask);
+    occupy(tx, ty);
     trees.push([tx, ty]);
 
   }
@@ -780,7 +618,6 @@ function buildWorld(w) {
   }
   cands.sort((a, b) => a[3] - b[3] || a[2] - b[2]);
   const flora=cands.map(([tx,ty,h])=>[tx,ty,h]);
-  paintForestFloor(g, trees, blockers, terrain);
 
   // 6) 建筑群：居所—连廊—公仓共线相接；其余地点按各自用途绘制设施；
   //    屋前摆对应设施 sprite。屋舍挡视线，周边留空地给角色站。
@@ -788,21 +625,19 @@ function buildWorld(w) {
   Object.entries(sites).forEach(([r, [sx, sy]], i) => {
     // 连廊在 3D 下由平台、栏杆和柱子的真实投影决定通行。
     if (campRenderer && r === 'hall') return;
-    const mask = campRenderer ? null : placement('house_' + r, (sx - 4) * TILE, (sy - 9) * TILE, 128, 128);
-    if (mask) masks.push(mask);
     for (let dx = -4; dx <= 3; dx += 1) for (let dy = -8; dy <= -2; dy += 1) {
       if (r === 'hall') continue; // 走廊改用站台占位模板（下方）
       if(['well','yard','garden'].includes(r) && (dx<0 || dy<-6))continue;
-      occupy(sx + dx, sy + dy, mask);
+      occupy(sx + dx, sy + dy);
     }
     if (r === 'hall') {
       // §14 用户规格：站台四周横棍＋四柱实碰撞，仅正面入口可上（占位）
-      for (let dx = -4; dx <= 3; dx += 1) for (let dy = -8; dy <= -6; dy += 1) occupy(sx + dx, sy + dy, mask); // 顶梁
+      for (let dx = -4; dx <= 3; dx += 1) for (let dy = -8; dy <= -6; dy += 1) occupy(sx + dx, sy + dy); // 顶梁
       for (let dx = -4; dx <= 3; dx += 1) for (let dy = -4; dy <= -1; dy += 1) {
         if (dx === -1 || dx === 0) continue; // 正面入口通道
-        occupy(sx + dx, sy + dy, mask);
+        occupy(sx + dx, sy + dy);
       }
-      for (const [px,py] of [[-4,-4],[3,-4],[-4,-1],[3,-1]]) occupy(sx + px, sy + py, mask); // 四柱
+      for (const [px,py] of [[-4,-4],[3,-4],[-4,-1],[3,-1]]) occupy(sx + px, sy + py); // 四柱
     }
     const chimney = r === 'workshop';
 
@@ -829,7 +664,7 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = campRenderer ? outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass:landscape?[]:grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks) : null;
+  const scene3d = outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass:landscape?[]:grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks);
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -847,14 +682,12 @@ function buildWorld(w) {
     }
     if (best) wildlife.push(best);
   }
-  const assetWalk = masks.length || scene3d ? new Uint8Array(WORLD_W * WORLD_H).fill(1) : null;
-  for (const mask of masks) stampMask(assetWalk, WORLD_W, WORLD_H, mask);
-  if (scene3d) stampSceneCollision(assetWalk, WORLD_W, WORLD_H, scene3d);
+  const assetWalk = new Uint8Array(WORLD_W * WORLD_H).fill(1);
+  stampSceneCollision(assetWalk, WORLD_W, WORLD_H, scene3d);
 
-  const waterMask=scene3d ? {width:WORLD_W,height:WORLD_H,bytes:terrain.map(k=>k===GROUND.water?255:0)} : null;
-  const terrainWalk3d=scene3d ? terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
-    bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE))))) : null;
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], canvas: cv, waterMask, terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, groundPixels: g.getImageData(0, 0, cv.width, cv.height).data, shadeTiles: new Map(), shadeColors: new Map(), blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  const terrainWalk3d=terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
+    bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE)))));
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -873,28 +706,6 @@ let camSmooth = null;
 // 全屏＝原样放大：取景逻辑像素不变，只把整数倍放大到屏幕能容纳的最大值（不裁切、不拉伸）。
 const fullZoom = (lw, lh) => Math.max(1, Math.min(Math.floor((window.innerWidth - 8) / lw), Math.floor((window.innerHeight - 64) / lh)));
 
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-
-// 接触阴影读取精灵底部的实际不透明轮廓；透明留白不是地面锚点。
-// 所有地面阴影合成一次，再画树、屋与人，避免后画的阴影压到前面的实体上。
-const CONTACT_PROFILES=new WeakMap(),GROUND_SHADE_COLORS=new Map();
-function contactProfile(image){
-  if(CONTACT_PROFILES.has(image))return CONTACT_PROFILES.get(image);
-  const c=document.createElement('canvas');c.width=image.width;c.height=image.height;
-  const g=c.getContext('2d');g.drawImage(image,0,0);
-  const pixels=g.getImageData(0,0,c.width,c.height).data,edge=new Int16Array(c.width).fill(-1);
-  for(let x=0;x<c.width;x++)for(let y=c.height-1;y>=Math.floor(c.height*.8);y--){
-    if(pixels[(y*c.width+x)*4+3]===255){edge[x]=y+1;break;}
-  }
-  CONTACT_PROFILES.set(image,edge);return edge;
-}
-const treeAsset = (x, y) => `tree_oak${Math.floor(hash2(x, y, 6) * 3)}`;
-// 生存建筑实体：素材钩子 bld_<type> 优先（美术到货即生效），缺省程序化像素兜底（色板内）。
-const BLD_ROOF = { shelter: '#FF004D', granary: '#83769C', workshop: '#008751', wall: '#D8A667' };
-
-
-const BLD_LABEL = { shelter: '住所', granary: '储粮', workshop: '工坊', wall: '防护' };
-const BLD_LABOR = { shelter: 6, granary: 6, workshop: 8, wall: 8 };
 // 环境光由世界相位决定，过渡只使用共享渲染时钟；每一输出颜色仍在固定色板内。
 const TONE_CACHE=new Map();
 // ── 点哪走哪（纯表现层）───────────────────────────────────────────────────────
@@ -1079,47 +890,6 @@ function ensureWalker(cvId, who, world, slots) {
   }
   return s;
 }
-// 脚步尘：每个画布一小撮瞬态粒子，纯渲染层，由动画循环推进/老化；不入世界状态、不消费 rng。
-const DUST = {};        // cvId -> [{x, y, age}]（tile 坐标）
-
-function drawFogTerrain(g, world, cam, visible, night, tx0, ty0) {
-  const neighbors = [[0,-1],[1,0],[0,1],[-1,0],[-1,-1],[1,-1],[1,1],[-1,1]], size = TILE * ART;
-  const palette = ASSETS.palette.map(h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)));
-  for(let ty=ty0;ty<=ty0+VIEW_TH;ty++)for(let tx=tx0;tx<=tx0+VIEW_TW;tx++){
-    if(tx<0||ty<0||tx>=WORLD_TW||ty>=WORLD_TH||visible.has(tileKey(tx,ty)))continue;
-    let mask=0;neighbors.forEach(([dx,dy],i)=>{if(visible.has(tileKey(tx+dx,ty+dy)))mask|=1<<i;});
-    const key=`${tx},${ty}:${mask}:${night?1:0}`;let tile=world.shadeTiles.get(key);
-    if(!tile){
-      tile=document.createElement('canvas');tile.width=size;tile.height=size;
-      const ctx=tile.getContext('2d'),image=ctx.createImageData(size,size),pixels=image.data;
-      for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-        let distance=size*2;
-        if(mask&1)distance=Math.min(distance,y+1);if(mask&2)distance=Math.min(distance,size-x);if(mask&4)distance=Math.min(distance,size-y);if(mask&8)distance=Math.min(distance,x+1);
-        if(mask&16)distance=Math.min(distance,Math.hypot(x+1,y+1));if(mask&32)distance=Math.min(distance,Math.hypot(size-x,y+1));
-        if(mask&64)distance=Math.min(distance,Math.hypot(size-x,size-y));if(mask&128)distance=Math.min(distance,Math.hypot(x+1,size-y));
-        const t=Math.min(1,distance/(size*1.12)),shade=night?.48:.72;
-        const factor=Math.max(shade,Math.min(1,1-(1-shade)*t*t*(3-2*t)+(hash2(tx*size+x,ty*size+y,71)-.5)*.02));
-        const source=((ty*size+y)*WORLD_W*ART+tx*size+x)*4,packed=(world.groundPixels[source]<<16)|(world.groundPixels[source+1]<<8)|world.groundPixels[source+2];
-        const level=Math.round(factor*32),colorKey=packed*33+level;let color=world.shadeColors.get(colorKey);
-        if(!color){
-          const target=[world.groundPixels[source]*level/32,world.groundPixels[source+1]*level/32,world.groundPixels[source+2]*level/32];let best=Infinity;
-          for(const c of palette){const d=(c[0]-target[0])**2+(c[1]-target[1])**2+(c[2]-target[2])**2;if(d<best){best=d;color=c;}}
-          color??=[38,61,41];world.shadeColors.set(colorKey,color);
-        }
-        const i=(y*size+x)*4;pixels[i]=color[0];pixels[i+1]=color[1];pixels[i+2]=color[2];pixels[i+3]=255;
-      }
-      ctx.putImageData(image,0,0);if(world.shadeTiles.size>2000)world.shadeTiles.clear();world.shadeTiles.set(key,tile);
-    }
-    g.drawImage(tile,tx*TILE-cam.x,ty*TILE-cam.y,TILE,TILE);
-  }
-}
-
-
-
-// 世界全景：把完整地图压成微缩总览，证明「全局依旧是完整一大片在运行」；
-// 当前相机窗口用黄虚线框标出，玩家位置用金点标出。
-
-
 // ── 室内场景（独立画面 + 门转场，8 处全部可进）──────────────────────────────
 // 纯表现层：室内只是把「某地点 occupancy 里的人」搬进一间画好的屋子里展示。
 // 进入 = 点地图建筑（沿用既有 /act move，引擎把人挪进该地点）或点地点按钮；退出 = 点门 / 再点当前按钮 / 世界全景。
@@ -1136,55 +906,6 @@ const INTERIORS = {
   well: { props: [['well',5,4],['bucket',10,6],['crate',2,3],['planter',2,7],['barrel',11,2]] },
   yard: { props: [['fence',2,2],['fence',6,2],['cart',6,5],['crate',10,3],['barrel',2,7],['planter',11,7]] },
 };
-// 家具：每种画在 32×32 单元内，硬像素、锁色板内。
-function drawProp(g, kind, x, y) {
-  const art = ASSETS.scenes[`prop_${kind}`];
-  if (art) { g.drawImage(art, x, y, 64, 64); return; }
-  const r = (dx, dy, w, h, c) => { g.fillStyle = c; g.fillRect(x + dx, y + dy, w, h); };
-  switch (kind) {
-    case 'bed': r(2,6,26,20,'#000000'); r(4,8,22,16,'#AB5236'); r(4,8,8,10,'#FFF1E8'); r(12,10,14,14,'#FF004D'); r(4,8,22,2,'#FFCCAA'); break;
-    case 'table': r(3,8,26,12,'#000000'); r(5,10,22,8,'#AB5236'); r(6,18,3,8,'#7E2553'); r(23,18,3,8,'#7E2553'); r(12,12,8,4,'#FFEC27'); break;
-    case 'longTable': r(2,10,28,10,'#000000'); r(4,12,24,6,'#AB5236'); r(5,18,3,8,'#7E2553'); r(24,18,3,8,'#7E2553'); break;
-    case 'bench': r(4,12,24,6,'#000000'); r(6,14,20,3,'#AB5236'); r(7,17,3,6,'#7E2553'); r(22,17,3,6,'#7E2553'); break;
-    case 'hearth': r(6,6,20,22,'#000000'); r(8,8,16,18,'#5F574F'); r(11,16,10,8,'#FFA300'); r(13,18,6,4,'#FFEC27'); r(8,8,16,2,'#C2C3C7'); break;
-    case 'rug': r(3,10,26,16,'#7E2553'); r(3,10,26,1,'#FFEC27'); r(3,25,26,1,'#FFEC27'); r(5,12,22,12,'#83769C'); break;
-    case 'shelf': r(4,2,24,28,'#000000'); r(6,4,20,24,'#7E2553'); r(6,10,20,2,'#5F574F'); r(6,18,20,2,'#5F574F'); r(8,6,4,4,'#FFEC27'); r(14,6,4,4,'#29ADFF'); r(20,14,4,4,'#00E436'); r(8,14,4,4,'#FFA300'); break;
-    case 'crate': r(6,8,20,20,'#000000'); r(8,10,16,16,'#AB5236'); r(6,17,20,2,'#7E2553'); r(15,8,2,20,'#7E2553'); break;
-    case 'barrel': r(8,6,16,22,'#000000'); r(10,8,12,18,'#7E2553'); r(8,11,16,2,'#C2C3C7'); r(8,19,16,2,'#C2C3C7'); break;
-    case 'telescope': r(14,22,4,8,'#5F574F'); r(8,10,18,5,'#83769C'); r(6,8,6,4,'#C2C3C7'); r(24,12,4,3,'#29ADFF'); break;
-    case 'furnace': r(4,4,24,24,'#000000'); r(6,6,20,20,'#5F574F'); r(10,14,12,10,'#1D2B53'); r(12,18,8,5,'#FFA300'); r(14,20,4,3,'#FFEC27'); r(6,6,20,2,'#C2C3C7'); break;
-    case 'anvil': r(8,16,16,6,'#5F574F'); r(6,12,20,4,'#83769C'); r(12,20,8,6,'#5F574F'); break;
-    case 'planter': r(4,14,24,14,'#000000'); r(6,16,20,10,'#AB5236'); r(8,8,4,8,'#008751'); r(14,6,4,10,'#00E436'); r(20,8,4,8,'#008751'); r(13,4,3,3,'#FFEC27'); break;
-    case 'trellis': r(6,4,2,24,'#7E2553'); r(24,4,2,24,'#7E2553'); r(6,8,20,2,'#7E2553'); r(6,16,20,2,'#7E2553'); r(10,6,3,6,'#00E436'); r(18,14,3,6,'#008751'); break;
-    case 'well': r(6,16,20,12,'#5F574F'); r(8,18,16,8,'#1D2B53'); r(6,16,20,2,'#C2C3C7'); r(10,4,2,12,'#7E2553'); r(20,4,2,12,'#7E2553'); r(8,4,16,3,'#AB5236'); break;
-    case 'bucket': r(10,14,12,12,'#83769C'); r(10,14,12,2,'#C2C3C7'); r(12,10,8,2,'#5F574F'); break;
-    case 'fence': r(4,10,3,18,'#AB5236'); r(14,10,3,18,'#AB5236'); r(24,10,3,18,'#AB5236'); r(2,14,28,3,'#AB5236'); r(2,20,28,3,'#7E2553'); break;
-    case 'cart': r(4,12,22,8,'#AB5236'); r(2,10,26,3,'#7E2553'); r(6,20,6,6,'#5F574F'); r(18,20,6,6,'#5F574F'); break;
-    case 'banner': r(14,2,4,4,'#5F574F'); r(10,6,12,20,'#29ADFF'); r(10,6,12,2,'#1D2B53'); r(14,12,4,6,'#FFEC27'); break;
-    default: r(6,10,20,16,'#000000'); r(8,12,16,12,'#5F574F'); break;
-  }
-}
-function outdoorDetail(g,site){
-  const grass=ASSETS.scenes.terrain_grass0;
-  for(let y=0;y<192;y+=16)for(let x=0;x<256;x+=16)if(grass)g.drawImage(grass,x,y,16,16);
-  g.fillStyle='#BA8752';g.fillRect(111,20,34,172);g.fillRect(22,143,213,25);
-  if(site==='garden'){
-    for(const y of [49,95])for(const x of [26,151]){
-      g.fillStyle='#72513B';g.fillRect(x,y,77,35);g.fillStyle='#EDC787';g.fillRect(x,y,77,1);
-      for(let r=0;r<3;r++)for(let c=0;c<7;c++){
-        const px=x+7+c*10,py=y+7+r*9;g.fillStyle='#482D2B';g.fillRect(px-3,py+3,7,2);
-        g.fillStyle='#315431';g.fillRect(px-2,py,5,3);g.fillRect(px,py-3,1,5);
-        g.fillStyle='#98BD51';g.fillRect(px-3,py-2,3,2);g.fillRect(px+1,py-3,3,2);
-        if(r%2){g.fillStyle='#D27A4A';g.fillRect(px+1,py+1,2,2);}
-      }
-    }
-  } else if (site === 'well') {
-    g.fillStyle='#939584';g.fillRect(71,59,114,86);
-    for(let y=62;y<143;y+=12){g.fillStyle='#6D7165';g.fillRect(73,y,110,1);}
-  }
-  for (const [kind, x, y] of yardProps(site)) drawProp(g, kind, x, y);
-}
-
 function yardProps(site) {
   const props = {
     garden: [['barrel',178,56],['bucket',195,110],['trellis',44,66],['planter',110,106]],
@@ -1210,7 +931,6 @@ function campRoom(site,w=S.view) {
   return campRooms.get(key);
 }
 function roomBounds(site) {
-  if (!campRenderer) return ROOM_BOUNDS;
   if (!campRoomBounds.has(site)) {
     const {left,right,top,bottom}=campRoom(site).walkBounds;
     campRoomBounds.set(site,{left:Math.ceil(left*TILE),right:Math.floor(right*TILE),
@@ -1219,45 +939,17 @@ function roomBounds(site) {
   return campRoomBounds.get(site);
 }
 function roomPixelWalk(site) {
-  const key = site + '|' + Boolean(campRenderer) + '|' + (campCart?.site===site?'cart':'');
+  const key = site + '|' + (campCart?.site===site?'cart':'');
   if (!roomMasks.has(key)) {
     const { width, height } = ROOM_GRID;
-    const props = ['garden', 'well', 'yard'].includes(site)
-      ? yardProps(site) : (INTERIORS[site]?.props ?? []).map(([kind, x, y]) => [kind, x * TILE, y * TILE]);
-    const masks = campRenderer ? [] : props.map(([kind,x,y])=>placement('prop_'+kind,x,y,64,64)).filter(Boolean);
-    const walk = masks.length || site === 'hall' || campRenderer ? new Uint8Array(width * height).fill(1) : null;
-    if (campRenderer) stampSceneCollision(walk,width,height,roomRenderStage(site));
+    const walk = new Uint8Array(width * height).fill(1);
+    stampSceneCollision(walk,width,height,roomRenderStage(site));
     if (site === 'hall') {
       for (const rail of hallFront.rails) fillCollisionRect(walk, width, height, ...rail, 0);
     }
-    for (const mask of masks) stampMask(walk, width, height, mask);
     roomMasks.set(key, walk);
   }
   return roomMasks.get(key);
-}
-function corridorDetail(g){
-  // 连廊朝院子敞开，横向地板通向左右侧翼；没有独立房间的四面围墙。
-  const grass=ASSETS.scenes.terrain_grass0,wood=ASSETS.scenes.terrain_wood0;
-  for(let y=0;y<192;y+=16)for(let x=0;x<256;x+=16)if(grass)g.drawImage(grass,x,y,16,16);
-  const tree=ASSETS.scenes.tree_oak0;if(tree){g.drawImage(tree,12,-35,64,80);g.drawImage(tree,178,-21,64,80);}
-  g.fillStyle='#514134';g.fillRect(0,52,256,95);
-  for(let y=55;y<146;y+=16)for(let x=0;x<256;x+=16)if(wood)g.drawImage(wood,x,y,16,16);
-  g.fillStyle='#3F7036';g.fillRect(0,23,256,24);g.fillStyle='#98BD51';g.fillRect(0,24,256,2);
-  for(let x=0;x<256;x+=9){g.fillStyle='#315431';g.fillRect(x,26,1,21);}
-  g.fillStyle='#72513B';g.fillRect(0,47,256,6);g.fillStyle='#D8A667';g.fillRect(0,47,256,1);
-  for(const x of [6,57,194,245]){g.fillStyle='#514134';g.fillRect(x,47,5,103);g.fillStyle='#D8A667';g.fillRect(x,49,1,99);}
-  g.fillStyle = '#72513B';
-  for (const rail of hallFront.rails) g.fillRect(...rail);
-  const [x, y, w, h] = hallFront.stair;
-  g.fillStyle = '#BA8752'; g.fillRect(x, y, w, h);
-  g.fillStyle = '#EDC787'; g.fillRect(x, y + 7, w, 1); g.fillRect(x, y + 16, w, 1);
-}
-function roomNavigation(g,w,site){
-  if(site!=='hall')return;
-  g.font='6px fusion-pixel, monospace';
-  for(const [room,x,label] of [['home',0,'← 居所'],['store',218,'公仓 →']])if(w.rooms?.[room]){
-    g.fillStyle='#514134';g.fillRect(x,104,38,22);g.fillStyle='#EDC787';g.fillRect(x,104,38,1);g.fillStyle='#FFF0CC';g.fillText(label,x+4,118);
-  }
 }
 let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
@@ -1269,11 +961,11 @@ const campShadowSources=new WeakMap();
 function campShadows(world,regions) {
   const layers=[world.scene3d.boxes,world.work3d,world.homes3d?.boxes,
     ...regions.flatMap(region=>region.boxes?[region.boxes]:[])].filter(Boolean);
-  const old=campShadowSources.get(world.canvas);
+  const old=campShadowSources.get(world);
   if (old?.layers.length===layers.length && layers.every((layer,i)=>old.layers[i]===layer)) return old.source;
   const source=layers.flatMap(layer=>layer.filter(b=>b.castShadow || b.solid && b.w*b.d>.10)
     .map(b=>b.bounds??modelBounds(b)));
-  campShadowSources.set(world.canvas,{layers,source});
+  campShadowSources.set(world,{layers,source});
   return source;
 }
 
@@ -1288,8 +980,8 @@ function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   const radius=sightRadius(phase);
   const lists=[world.scene3d.boxes,world.homes3d?.boxes,world.work3d,world.life3d?.boxes,regional?.boxes,
     ...regions.flatMap(r=>r.boxes && r!==regional?[r.boxes]:[])].filter(Boolean);
-  let views=campFog.get(world.canvas);
-  if (!views) { views=new Map(); campFog.set(world.canvas,views); }
+  let views=campFog.get(world);
+  if (!views) { views=new Map(); campFog.set(world,views); }
   const previous=views.get(cvId);
   const sameScene=previous?.lists.length===lists.length && lists.every((boxes,i)=>boxes===previous.lists[i]);
   x=Math.round(x*4)/4;z=Math.round(z*4)/4;
@@ -1514,6 +1206,8 @@ const titleWindows=['home','store','workshop'].flatMap(room=>{
   }));
 });
 let titleWorld, titleFrame=-Infinity, titleTime=0;
+// 素材并发加载完成后由 loadAssets() 调用：补一帧，并把标题场景的"已画过"标记清掉。
+function repaintAfterAssets() { forceRepaint = true; titleFrame = -Infinity; }
 function drawTitleScene(now,reduced) {
   const canvas=$('startScene'), frame=canvas.parentElement;
   const scale=Math.min(1,800/frame.clientWidth);
@@ -1524,9 +1218,11 @@ function drawTitleScene(now,reduced) {
   if (!reduced && Number.isFinite(titleFrame)) titleTime+=Math.min(.1,(now-titleFrame)/1000);
   titleFrame=now;
   if (resized) { canvas.width=width; canvas.height=height; }
+  // 没有 WebGL 就不该先付一次 buildWorld：硬失败提示在构建之前。
+  if (!campRenderer) { showGfxUnavailable(true); return; }
   titleWorld??=buildWorld(titleVillage);
   const g=canvas.getContext('2d'), time=reduced?0:titleTime;
-  if (campRenderer && titleWorld.scene3d) {
+  if (titleWorld.scene3d) {
     const landscape=titleWorld.landscape, x=29,z=28, span=height/width<.62?47:50;
     const camera=campCamera({x,z,width,height,span,yaw:.30,pitch:.69,targetY:.9});
     const regions=landscape.regions(x,z);
@@ -1541,8 +1237,7 @@ function drawTitleScene(now,reduced) {
       return;
     }
   }
-  if (!campRenderer) showGfxUnavailable(true);
-canvas.dataset.renderer='none';
+  showGfxUnavailable(false);
 }
 
 // 拾取点：4 个角括号，不画整圈，避免和贴地光圈抢视觉。
@@ -1748,7 +1443,7 @@ function drawCamp(cv,w,historical=false) {
   const aspect=ui.fullscreen?Math.max(1.18,(innerWidth-12)/(innerHeight-80)):room?1.65:1.9;
   const {width,height}=campViewport(cv,aspect);
   const overview=ui.overview&&!room;
-  let stage, life, homes, exterior, terrain, visibility, sight, waterMask, people=[], animals=[], residentHint, work=[], hearth, regions, extended, targetY, x,z,span;
+  let stage, life, homes, exterior, visibility, sight, people=[], animals=[], residentHint, work=[], hearth, regions, extended, targetY, x,z,span;
   const playerId=cv.id==='cvFull'?'cvA':cv.id;
   if (room) {
     stage=historical||right?campRoom(site,w):roomRenderStage(site,w);
@@ -1783,10 +1478,9 @@ function drawCamp(cv,w,historical=false) {
       }
     }
   } else {
-    // 首帧不在绘制任务里同步建地形：paintTerrain 实测 ≈600ms 且是**纯计算**（2.46M 像素多趟扫描），
-    // 它的产物 terrain 同时喂碰撞与 3D 可行走性，所以不能只延后贴图。
+    // 首帧不在绘制任务里同步建世界：terrainKinds 仍要扫 2.46M 格，场景构建也在同一任务里。
     // 这里让步一个任务：先让浏览器把「正在生成地形…」画出来，再同步构建。
-    // 600ms 的 CPU 仍在，但玩家看到的是加载态，而不是画面卡死。
+    // 玩家看到的是加载态，而不是画面卡死。
     if (!historical && !campWorlds.has(playerId) && !ui.terrainDeferred) {
       // 一次性让步：只推迟一次，下个任务必定进入同步构建。
       // （若在 timeout 里复位这个标志，就会"延迟→复位→再延迟"无限弹跳。）
@@ -1799,7 +1493,7 @@ function drawCamp(cv,w,historical=false) {
     const world=buildWorld(w);
     exterior=world;
     if (!historical) campWorlds.set(playerId,world);
-    stage=world.scene3d;life=world.life3d;homes=world.homes3d;terrain=world.canvas;waterMask=world.waterMask;
+    stage=world.scene3d;life=world.life3d;homes=world.homes3d;
     const slots=slotsOf(w,world.sites);
     if (!historical) for (const who of Object.keys(slots)) ensureWalker(playerId,who,world,slots);
     const pw=historical?null:WALK[walkKey(playerId,'p1')];
@@ -1814,7 +1508,6 @@ function drawCamp(cv,w,historical=false) {
     const [playerX,playerZ]=focus;
     if (connected) {
       extended=campOutskirts(w,world);
-      terrain=null; waterMask=null;
       if (overview) {
         x=(WILDS.west+WILDS.east)/2;
         z=(WILDS.north+WILDS.south)/2;
@@ -1893,9 +1586,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
         const bridge=inCamp(px,pz) && landscape.isBridge(px,pz,w.layout?.crossZ??34);
         return bridge?{y:stage.heightAt(px,pz),water:false}:{y:water?surface:extended.height(px,pz),water};
       }
-      const mask=waterMask;
-      const water=Boolean(mask?.bytes[Math.floor(pz*TILE)*mask.width+Math.floor(px*TILE)]);
-      return {y:stage.heightAt(px,pz),water};
+      // 没有外围地形就没有水面：2D 水掩码已随 P0 删除，不再用旧底图近似。
+      return {y:stage.heightAt(px,pz),water:false};
     }});
   const weatherGeometry=impacts.length;
   if (time && !S.replay && active.length) {
@@ -1943,11 +1635,11 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     ? sceneGuidance(cv._cam,w,player,hoverHit,right) : [];
   const guideHeight=surfaceHeight;
   if (hints.length) impacts.push(...guideGeometry(hints,guideHeight));
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight,
-      interior: Boolean(room),frame,light,sun,visibility,sight,waterMask,season:open?climate.season:-1,weather,shadows,
+      interior: Boolean(room),frame,light,sun,visibility,sight,season:open?climate.season:-1,weather,shadows,
     physical:physicalLighting,animateParts}))return false;
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   if (!historical && exterior && playerId==='cvA' && S.playing) advanceOutdoorIntent(cv._cam,w,player);
@@ -1979,7 +1671,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
       campBadge(g,camera,[px,hit.labelHeight??Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??0)+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended && !terrain),p1:player?[player.x,player.y,player.z]:null};
+  cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null};
   cv.dataset.renderer='3d';
   return true;
 }
@@ -2054,7 +1746,8 @@ function showGfxUnavailable(hard, custom) {
 
 function draw(cv, w) {
   cv._anim = ACT.frame;   // 渲染元数据：验收可核对 A/B 是否共用同一动画帧号
-  if (!campRenderer || gfxGaveUp) { showGfxUnavailable(!campRenderer); return; }
+  if (!campRenderer) { showGfxUnavailable(true); return; }
+  if (gfxGaveUp) { showGfxUnavailable(false); return; }
   if (cv.id==='cvB' && !ui.compare) return;
   const historical=ui.compare && S.replay!=null;
   const scene=historical?S.replayScenes?.[cv.id==='cvB'?'B':'A']:w;
@@ -2203,7 +1896,7 @@ function lookForResident(agent) {
 }
 function portraitSource(agent) {
   return agent ? residentPortrait(agent,lookForResident(agent)) ||
-    (ACT.portraits[agent.id]??ASSETS.chars[agent.id]?.frames?.[0])?.src : '';
+    ACT.portraits[agent.id]?.src : '';
 }
 function portraitImage(agent) {
   const source=portraitSource(agent);
@@ -3862,6 +3555,7 @@ async function refresh() {
       btn.title = `${btn.dataset.base}｜${on ? `已叠在 A 侧（${hint(S.layer?.[key === 'm3' ? 'commitment' : 'tau'] ?? '?')}）` : '未叠'}·点击切换：两个世界都回到本次会话起点重放`;
     }
   } catch (e) {
+    console.warn('世界刷新失败', e);
     if (!current()) return;
     refreshApplied=id;
     $('log').innerHTML=`<div class="rej">与服务端断开：${esc(e.message)}</div>`;
@@ -4799,7 +4493,8 @@ function pickRoom(ev, cv) {
     }
     return;
   }
-  const v = (campRenderer && cv.id === 'cvB' ? S.viewB : S.view) ?? {};
+  if (!campRenderer) return;
+  const v = (cv.id === 'cvB' ? S.viewB : S.view) ?? {};
   const sites = sitesOf(v);
   const cam = cv._cam ?? lastCam;
   const rect = cv.getBoundingClientRect();
@@ -4918,13 +4613,15 @@ async function poll() {
   refreshing = true;
   try { await refresh(); } finally { refreshing = false; }
 }
-loadAssets().finally(() => {
-  const rq = new URLSearchParams(location.search).get('room');   // 深链进某室内（便于直达与验收）
-  if (rq && Object.hasOwn(INTERIORS,rq)) { ui.interior = rq; ui.room = rq; ui.camRoom = rq; }
-  poll();
-  if (new URLSearchParams(location.search).get('full') === '1') setFull(true);   // 深链直达全屏全景（便于分享与验收）
-  setInterval(poll, 900);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+// P0：首屏不再等素材串行加载完。轮询、标题场景与动画时钟立即启动，菜单可交互；
+// 16 张地形 tile / 4 张头像在后台 6 并发补齐（缺图时图集用程序化兜底色，头像位留空）。
+const bootRoom = new URLSearchParams(location.search).get('room');   // 深链进某室内（便于直达与验收）
+if (bootRoom && Object.hasOwn(INTERIORS,bootRoom)) { ui.interior = bootRoom; ui.room = bootRoom; ui.camRoom = bootRoom; }
+poll();
+if (new URLSearchParams(location.search).get('full') === '1') setFull(true);   // 深链直达全屏全景（便于分享与验收）
+setInterval(poll, 900);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+loadAssets();
   // 独立动画时钟：只推进帧号并重绘两个画布，与 900ms 的数据轮询完全解耦。
   // 不读 w.t、不发请求、不消费 rng、不写世界状态；A/B 共用同一帧号；
   // 后台标签页停绘，沿用「省额度 / 不空转」纪律。
@@ -5041,12 +4738,8 @@ loadAssets().finally(() => {
       } else stepWalker(walker,mstep);
       walker.direction=walkDirection(walker.x-oldX,walker.y-oldZ,walker.direction);
       if (dx) walker.face=dx>0?1:-1;
-      if (changed && walker.moving && !reduced.matches) {
-        (DUST[cvId] ??= []).push({ x: walker.x, y: walker.y + 0.8, age: 0 });
-      }
     }
-    if (changed) for (const cvId in DUST) DUST[cvId] = DUST[cvId].map(p => ({ ...p, age: p.age + 1 })).filter(p => p.age < 6);
-    if (campRenderer && !repaint3d) return;
+    if (!repaint3d) return;
   forceRepaint = false;
     if (ui.fullscreen) {
       if (S.viewB) draw($('cvB'), S.viewB);
@@ -5054,7 +4747,6 @@ loadAssets().finally(() => {
     } else { draw($('cvA'), S.view); if (S.viewB) draw($('cvB'), S.viewB); }
   }
   requestAnimationFrame(animate);
-});
 // 验收钩子补挂：WALK/ui 在模块后段声明，顶部对象字面量引用会 TDZ 炸掉整个模块
 if (!campRenderer) showGfxUnavailable(true);
 // 阶段 5：时间轴/事件点选/返回实时。拖动时只在 change 发请求，避免每像素打一次接口。

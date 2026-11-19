@@ -1,0 +1,147 @@
+✔ before 金样已写入 evidence/redo-p0/before.json
+{
+  "survival": {
+    "first3d": 1582.7999999523163,
+    "longtasks": [
+      [
+        91,
+        169
+      ],
+      [
+        443,
+        1142
+      ]
+    ],
+    "resources": {
+      "count": 124,
+      "transferBytes": 2306992,
+      "encodedBytes": 2269792,
+      "assetCount": 69,
+      "pngCount": 64,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          40
+        ],
+        [
+          "/web/camp-3d-physics.mjs",
+          22
+        ],
+        [
+          "/web/hall-front.mjs",
+          22
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          22
+        ],
+        [
+          "/web/camp-3d-scene.mjs",
+          21
+        ],
+        [
+          "/web/net.mjs",
+          19
+        ],
+        [
+          "/web/player-move.mjs",
+          19
+        ],
+        [
+          "/web/asset-collision.mjs",
+          19
+        ]
+      ]
+    }
+  },
+  "compare": {
+    "rendererA": "3d",
+    "rendererB": "3d"
+  },
+  "title": {
+    "first3d": 1216.699999988079,
+    "resources": {
+      "count": 123,
+      "transferBytes": 2161090,
+      "encodedBytes": 2124190,
+      "assetCount": 69,
+      "pngCount": 64,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          31
+        ],
+        [
+          "/web/hall-front.mjs",
+          20
+        ],
+        [
+          "/web/collision.mjs",
+          18
+        ],
+        [
+          "/web/camp-3d-scene.mjs",
+          18
+        ],
+        [
+          "/web/asset-collision.mjs",
+          18
+        ],
+        [
+          "/web/camp-3d-physics.mjs",
+          18
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          18
+        ],
+        [
+          "/web/net.mjs",
+          17
+        ]
+      ]
+    }
+  },
+  "cache": {
+    "/web/app.js": {
+      "status": 200,
+      "cacheControl": "no-store",
+      "etag": null,
+      "contentEncoding": null,
+      "bytes": 291131,
+      "revalidateStatus": null,
+      "revalidateBytes": null
+    },
+    "/web/assets/manifest.json": {
+      "status": 200,
+      "cacheControl": "no-store",
+      "etag": null,
+      "contentEncoding": null,
+      "bytes": 3546,
+      "revalidateStatus": null,
+      "revalidateBytes": null
+    },
+    "/web/assets/terrain_grass0.png": {
+      "status": 200,
+      "cacheControl": "no-store",
+      "etag": null,
+      "contentEncoding": null,
+      "bytes": 286,
+      "revalidateStatus": null,
+      "revalidateBytes": null
+    },
+    "/shared/camp-layout.mjs": {
+      "status": 200,
+      "cacheControl": "no-store",
+      "etag": null,
+      "contentEncoding": null,
+      "bytes": 5925,
+      "revalidateStatus": null,
+      "revalidateBytes": null
+    },
+    "immutableProbe": {
+      "status": 200,
+      "cacheControl": "no-store"
+    }
+  }
+}

@@ -1,0 +1,445 @@
+{
+  "label": "after",
+  "at": "2026-11-19T11:56:58.438Z",
+  "node": "v24.18.0",
+  "port": 9412,
+  "scenarios": {
+    "survival": {
+      "rendererA": "3d",
+      "rendererB": null,
+      "rendererTitle": null,
+      "debugA": {
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 3452,
+        "stageFxs": 4,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "climate": {
+          "storm": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ]
+      },
+      "debugB": null,
+      "first3d": 842.8000000119209,
+      "longtasks": [
+        [
+          89,
+          109
+        ],
+        [
+          223,
+          621
+        ],
+        [
+          870,
+          530
+        ]
+      ],
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      },
+      "resources": {
+        "count": 69,
+        "transferBytes": 2105249,
+        "encodedBytes": 2084549,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            47
+          ],
+          [
+            "/web/hall-front.mjs",
+            18
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            18
+          ],
+          [
+            "/web/asset-collision.mjs",
+            17
+          ],
+          [
+            "/web/camp-3d-scene.mjs",
+            17
+          ],
+          [
+            "/web/camp-3d-physics.mjs",
+            17
+          ],
+          [
+            "/web/audio.mjs",
+            14
+          ],
+          [
+            "/web/audio-events.mjs",
+            14
+          ]
+        ]
+      },
+      "worlds": {
+        "runs": [
+          {
+            "mapSeed": 0,
+            "buildWorldMs": 0.1,
+            "walk": "14bafb0483a011e2c16aaf96fa5e2919ef26ec8d3642998a11f8533d75685683",
+            "movementWalk": "5d1d314a0cdbc5b3d9b14356195bb4b59a4a3ae38fda3ec4383e12ba5d13239c",
+            "terrainWalk3d": "1ea7580e86703932f42a2a5c04a3fbacb97bdcb5772a358d6973b44ea002c0ce",
+            "assetWalk": "192c13213202aeecb40207a3b821edecc46f48a51e74e17d53d074da84358441",
+            "trees": "16801a0ac6ab6a081a41a6d162e16ceb44b489a2c4d17d14585d9e9d465310f0",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "7a2951ff1ed2dd0fd8fbd24bd8d925f36a541f0974e4aecaf1a67002be5aebc6",
+            "grassPlots": 4,
+            "scene3d": "a4e22a0fac4053e1dab33717af847aacb5ae11e989b340b08756ed13fcc25dc0",
+            "counts": {
+              "blockers": 842,
+              "trees": 430,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 7,
+            "buildWorldMs": 275,
+            "walk": "f62d80b2ce4ff7954e8706dfc88cab8eaca6cde0d4d2c0ca0ed0825e0ab8e109",
+            "movementWalk": "0ca0a841ee193cbae05e5039215080133796b4140b9921d981181d6c629e1b6b",
+            "terrainWalk3d": "c1a5751c2ab604e874d37b6f1584c7a0a5bca05a9962336ad12ae5c5f5f1fb4c",
+            "assetWalk": "b3ae0d53adc5a6ee6cca8de6c8b8353c4d7346192dffb359ecda6f558c2f2f10",
+            "trees": "02b4f345df06c13f355840844bd6693ebf77b6ca9b78bcdf652146f906438ccc",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "0587fb9655ac13d6f8ecce46305d453e54b1e8a863bd9501d0fd9482c3c4d2a5",
+            "grassPlots": 4,
+            "scene3d": "93e6344a624f85a611ae86e9953cf4025f63f02c05cf1ae73177984ae574bf66",
+            "counts": {
+              "blockers": 706,
+              "trees": 292,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 123456,
+            "buildWorldMs": 290.4,
+            "walk": "72b5cc3280f47adb6d104333b061bff9a171a00006a07feef4218ae4152a1267",
+            "movementWalk": "99652a4a2d271311144a4ae01aa3d7b262e609c8697cc319d5571fe3bd36c17d",
+            "terrainWalk3d": "f5d799fabaa1d51435061387e0a235ec2d4c50e9a8d3e85ac385bcc0bacf9644",
+            "assetWalk": "5ee2995e967428f3565084cae88ef44913611544aada0504cfc49e50db3bc0ff",
+            "trees": "def60b47f7d5bd20f4fdb1b813d7846bee95cb12aecaf8e2765a5e852501ff8b",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "22561496811aae3469c1c253df60c7ecadcc5b33049db3a3a700cddb85be4059",
+            "grassPlots": 4,
+            "scene3d": "3d86f5cd888dc79fc35b886c1b6895cd43b0a40c37bf98c1d358c9c48a4fdd88",
+            "counts": {
+              "blockers": 878,
+              "trees": 461,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 654321,
+            "buildWorldMs": 280.5,
+            "walk": "8d506427fc82300a7cb40616d4c601c796fad6339bb0981d811bef4a5687f23d",
+            "movementWalk": "bc465b0d24c37ff264da0384a1e6b7198bb4e6bc356e973412168afb05b85a46",
+            "terrainWalk3d": "edd9e0092a5371157fe8d8a8df00e3ba893f35af4e171656e594c9cfa1f344d2",
+            "assetWalk": "e5521c0e6eb5b82316f00e1630743490d16cb57125aa7f042f4e28aa9ad0c158",
+            "trees": "f5f5bb1fb178b5d3d7ec01cc6f3a2a1b47fd81138a808efa9ade1aea45e592cd",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "4c3c57b761c93ccac50a540076fe9d50f8b55e45394769d097e4c7180b03ab54",
+            "grassPlots": 4,
+            "scene3d": "e4bd45056dddbf05445de2f450496c43bdec87bb966ba351fe33b0423643f399",
+            "counts": {
+              "blockers": 858,
+              "trees": 440,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          }
+        ],
+        "kindsHash": null
+      },
+      "canvasSha": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f"
+    },
+    "compare": {
+      "rendererA": "3d",
+      "rendererB": "3d",
+      "rendererTitle": null,
+      "debugA": {
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 3452,
+        "stageFxs": 4,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "climate": {
+          "storm": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ]
+      },
+      "debugB": {
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 3452,
+        "stageFxs": 4,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "climate": {
+          "storm": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ]
+      },
+      "first3d": 745.3999999761581,
+      "longtasks": [
+        [
+          94,
+          652
+        ],
+        [
+          747,
+          559
+        ],
+        [
+          1307,
+          55
+        ],
+        [
+          1379,
+          54
+        ],
+        [
+          1467,
+          992
+        ],
+        [
+          2469,
+          53
+        ]
+      ],
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      },
+      "resources": {
+        "count": 71,
+        "transferBytes": 1034112,
+        "encodedBytes": 2517011,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            42
+          ],
+          [
+            "/web/hall-front.mjs",
+            15
+          ],
+          [
+            "/web/camp-3d-scene.mjs",
+            14
+          ],
+          [
+            "/web/camp-3d-physics.mjs",
+            14
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            14
+          ],
+          [
+            "/web/player-move.mjs",
+            13
+          ],
+          [
+            "/web/net.mjs",
+            13
+          ],
+          [
+            "/web/collision.mjs",
+            13
+          ]
+        ]
+      },
+      "canvasShaA": "2d72dbc5a43809a57b7b63156002e22edb127c3c1fd777f67c5589cf66b6e84f",
+      "canvasShaB": "ac578830147f71af1cadcefa18e36402c11ed08f545cf310ecdfc84a3c659c80"
+    },
+    "title": {
+      "rendererTitle": "3d",
+      "first3d": 599,
+      "longtasks": [
+        [
+          91,
+          509
+        ]
+      ],
+      "resources": {
+        "count": 68,
+        "transferBytes": 455666,
+        "encodedBytes": 1939465,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            44
+          ],
+          [
+            "/web/camp-3d-physics.mjs",
+            12
+          ],
+          [
+            "/web/hall-front.mjs",
+            12
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            12
+          ],
+          [
+            "/web/camp-3d-scene.mjs",
+            11
+          ],
+          [
+            "/web/asset-collision.mjs",
+            11
+          ],
+          [
+            "/web/assets/manifest.json",
+            11
+          ],
+          [
+            "/web/walk.mjs",
+            10
+          ]
+        ]
+      },
+      "canvasSha": "09dfa008a606d5d07f2a3266620dafb9e7c1559b808d2761e717c25c7c2b9b9d",
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      }
+    }
+  },
+  "cache": {
+    "/web/app.js": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"00bc87971455ce38ba8681b060b92822\"",
+      "contentEncoding": null,
+      "bytes": 251064,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/manifest.json": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"0c9f46ff24e558a6f31fa73f878e222f\"",
+      "contentEncoding": null,
+      "bytes": 1120,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/terrain_grass0.png": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+      "contentEncoding": null,
+      "bytes": 286,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/shared/camp-layout.mjs": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+      "contentEncoding": null,
+      "bytes": 5925,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "immutableProbe": {
+      "status": 200,
+      "cacheControl": "public, max-age=31536000, immutable"
+    }
+  }
+}
