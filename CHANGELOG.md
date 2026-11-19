@@ -2,6 +2,13 @@
 
 ## [未发布]
 
+### 电影化后处理第一档
+
+- 离屏 HDR 帧缓冲 + 单 pass bloom/ACES tone mapping/冷暗部暖高光分级/暗角/胶片颗粒；WebGL 不支持 FBO 时自动回退直绘。
+- web/camp-3d-render.mjs 场景先渲染到 texture，再由全屏 shader 合成；不改变世界与测试口径。
+
+
+
 ### 山体/岩壁材质：去掉逐面砖格
 
 - web/camp-3d-render.mjs 对坡度陡的岩壁/山体改用世界坐标连续噪声 + 层理 + 细颗粒，覆盖逐面图集变体（4 个 variant 在 1×1 面上轮换会读成砖格）。

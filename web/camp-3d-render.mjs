@@ -681,6 +681,42 @@ export function regionOnScreen(bounds,camera,width,height) {
   return right>=0 && bottom>=0 && left<=width && top<=height;
 }
 
+
+const POST_VERTEX=`
+attribute vec2 aPosition;
+varying vec2 vUV;
+void main(){ vUV=aPosition*.5+.5; gl_Position=vec4(aPosition,0.,1.); }
+`;
+const POST_FRAGMENT=`
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uScene;
+uniform vec2 uResolution;
+float postHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
+void main(){
+  vec3 c=texture2D(uScene,vUV).rgb;
+  vec3 bloom=vec3(0.);
+  float r=4.0/uResolution.y;
+  for(int i=0;i<8;i++){
+    float a=float(i)*0.785398;
+    vec2 o=vec2(cos(a),sin(a))*r*(1.0+float(i)*0.55);
+    bloom+=max(texture2D(uScene,vUV+o).rgb-vec3(0.58),0.0);
+  }
+  bloom/=8.0;
+  c+=bloom*vec3(0.62,0.48,0.30)*0.55;
+  c*=1.12;
+  c=aces(c);
+  float l=dot(c,vec3(.2126,.7152,.0722));
+  c=mix(c*vec3(.90,1.0,1.08),c*vec3(1.07,1.0,.91),smoothstep(.32,.78,l));
+  vec2 q=vUV-.5;
+  float vig=1.0-smoothstep(.42,.86,length(q))*0.34;
+  c*=vig;
+  c+=(postHash(gl_FragCoord.xy)-.5)*.016;
+  gl_FragColor=vec4(clamp(c,0.,1.),1.);
+}
+`;
+
 export function createCampRenderer() {
   const canvas=document.createElement('canvas');
   const gl=canvas.getContext('webgl',{alpha:false,antialias:false,depth:true});
@@ -699,7 +735,47 @@ export function createCampRenderer() {
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
   const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
-  gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
+  
+    const postProgram=gl.createProgram();
+    {
+      const pv=shader(gl.VERTEX_SHADER,POST_VERTEX), pf=shader(gl.FRAGMENT_SHADER,POST_FRAGMENT);
+      gl.attachShader(postProgram,pv);gl.attachShader(postProgram,pf);gl.linkProgram(postProgram);
+      gl.deleteShader(pv);gl.deleteShader(pf);
+      if(!gl.getProgramParameter(postProgram,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(postProgram));
+    }
+    const postPos=gl.getAttribLocation(postProgram,'aPosition');
+    const postScene=gl.getUniformLocation(postProgram,'uScene');
+    const postRes=gl.getUniformLocation(postProgram,'uResolution');
+    const postBuffer=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,postBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    let sceneFbo=null,sceneTex=null,sceneDepth=null,fboSize='';
+    function ensureSceneTarget(width,height){
+      const size=width+'x'+height;
+      if(sceneFbo && fboSize===size) return true;
+      if(sceneFbo) gl.deleteFramebuffer(sceneFbo);
+      if(sceneTex) gl.deleteTexture(sceneTex);
+      if(sceneDepth) gl.deleteRenderbuffer(sceneDepth);
+      sceneFbo=gl.createFramebuffer();sceneTex=gl.createTexture();sceneDepth=gl.createRenderbuffer();
+      gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,width,height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.bindRenderbuffer(gl.RENDERBUFFER,sceneDepth);
+      gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,width,height);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,sceneTex,0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,sceneDepth);
+      const ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      if(!ok){ gl.deleteFramebuffer(sceneFbo);gl.deleteTexture(sceneTex);gl.deleteRenderbuffer(sceneDepth);sceneFbo=sceneTex=sceneDepth=null;fboSize='';return false; }
+      fboSize=size;
+      return true;
+    }
+
+    gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
   for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
   const stages=new WeakMap(), groundBuffer=gl.createBuffer(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
   const createTexture=(unit)=>{
