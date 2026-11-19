@@ -616,7 +616,8 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
     float hardGround=uTexture || uRegionTexture || finish>0. || (color.r<color.g*1.2 && color.b>color.g*.7) ? 1. : .22;
     float wet=water<.5 ? uWetness*hardGround*(1.-shelter*.92)*(.26+.74*max(0.,vUp)) : 0.;
     lit*=1.-wet*.26;
-    float rivulet=smoothstep(.58,.96,sin(vWorld.x*6.7+vWorld.y*11.2));
+    vec2 wetCell=floor(vWorld*8.);
+      float rivulet=smoothstep(.86,.97,fract(sin(dot(wetCell,vec2(127.1,311.7)))*43758.5453));
     lit+=vec3(.065,.099,.107)*wet*rivulet*vUp*vUp;
     if (water>.5) {
       vec3 reflected=reflect(-uSunRay.xyz,vec3(0.,1.,0.));

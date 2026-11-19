@@ -1114,9 +1114,10 @@ function timberGable(s, x, y, z, w, d, color, damaged, openEnds = false) {
     const pivot = [left + width / 2, y + rise / 2, ridge + side * half / 2];
     const transform = { rot: [side * slope, 0, 0], pivot };
     const start = pivot[2] - length / 2;
-    for (let panel = 0; panel < 4; panel++) {
+    const panels=4; // 保留屋顶木板分缝；白斜线是雨丝，不是这些接缝
+    for (let panel = 0; panel < panels; panel++) {
       const broken=damaged && side===1 && panel===1;
-      const px = left + panel * width / 4, panelWidth=width/4, remaining=length*(broken?.54:1);
+      const px = left + panel * width / 4, panelWidth=width/panels, remaining=length*(broken?.54:1);
       s.box(px, pivot[1] - .065, start, panelWidth, .13, remaining, color, false, false, transform);
       if (panel > 0) s.box(px, pivot[1] + .065, start + .03, .045, .035, remaining - .06, WOOD, false, false, transform);
       if (broken) for (const [offset,tail] of [[.04,.18],[.44,.33],[.8,.12]]) {
