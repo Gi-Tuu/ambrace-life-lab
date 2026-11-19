@@ -108,7 +108,7 @@ function survAct(sp, body) {
         return { ok: true, code: 'BUSY_START', remainMin: cost.minutes - left, why: '本刻只剩这些分钟，剩下的下一拍继续' };
       }
     } else if (!spendTime(w, cost.minutes)) {
-      return failTime('ACTION_BUDGET', '本世界刻的行动时间已用完，等下一拍');
+      return failTime('ACTION_BUDGET', '本世界刻的可用时间已用完，等下一拍');
     }
   }
   const r = survActInner(sp, body);
