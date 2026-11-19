@@ -866,6 +866,8 @@ function sightRadius(phase) {
   return phase === '夜' ? 5 : phase === '昼' ? 11 : 8;
 }
 let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
+// 相机跟随平滑（be23b5e 的意图）：室外指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
+let camSmooth = null;
 // 相机：默认跟随玩家所在地点（A/B 共用同一锚点，保证双世界在同一镜头下对照）；
 // 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
 // 全屏＝原样放大：取景逻辑像素不变，只把整数倍放大到屏幕能容纳的最大值（不裁切、不拉伸）。
@@ -1526,10 +1528,6 @@ function drawTitleScene(now,reduced) {
   const g=canvas.getContext('2d'), time=reduced?0:titleTime;
   if (campRenderer && titleWorld.scene3d) {
     const landscape=titleWorld.landscape, x=29,z=28, span=height/width<.62?47:50;
-    // 相机跟随平滑：室外视角指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
-    const smoothKey=historical?'replay':overview?'overview':room?'room:'+site:'outdoor';
-    if(!camSmooth||camSmooth.key!==smoothKey||Math.hypot(x-camSmooth.x,z-camSmooth.z)>9) camSmooth={key:smoothKey,x,z};
-    else { const k=.28; camSmooth.x+=(x-camSmooth.x)*k; camSmooth.z+=(z-camSmooth.z)*k; x=camSmooth.x; z=camSmooth.z; }
     const camera=campCamera({x,z,width,height,span,yaw:.30,pitch:.69,targetY:.9});
     const regions=landscape.regions(x,z);
     const weather=[time,.65,0,Math.max(.57,titleSun.glow)];
@@ -1850,6 +1848,10 @@ function drawCamp(cv,w,historical=false) {
     }
     work=[...(historical?world.work3d??[]:animatedConstruction(world)),...world.districtResources];
   }
+  // 相机跟随平滑：室外视角指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
+  const smoothKey=historical?'replay':overview?'overview':room?'room:'+site:'outdoor';
+  if(!camSmooth||camSmooth.key!==smoothKey||Math.hypot(x-camSmooth.x,z-camSmooth.z)>9) camSmooth={key:smoothKey,x,z};
+  else { const k=.28; camSmooth.x+=(x-camSmooth.x)*k; camSmooth.z+=(z-camSmooth.z)*k; x=camSmooth.x; z=camSmooth.z; }
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
   const climate=campClimate(w);
   const open=!room || ['hall','yard','garden','well','watch'].includes(site);
