@@ -11,6 +11,7 @@ import { facilityOf } from '../shared/camp-facility.mjs';
 import { homeEntry } from './home-access.mjs';
 import { SURV } from './worldstate.mjs';
 import { LEGACY_EVENT_RULES } from './rng.mjs';
+import { adoptTravels, migratePositions, rebuildOccupancy, removeActor, setLocOnly, setPlayerRoom } from './actor-pos.mjs';
 
 export function createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit = 200, resetSimCursor = null }) {
   const SURV_LOG_LIMIT = logLimit;
@@ -40,6 +41,8 @@ function dumpSurv(sp) {
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
   const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+    // P2c：位置唯一事实只在正式游戏入档（研究态 dumpSurv 逐位不变）。
+    ...(w.survival?.actTimeModel === true && w.pos ? { pos: w.pos } : {}),
     // P1：连续时钟只随正式游戏入档；研究态没有 simClock ⇒ 哈希逐位不变。
     ...(w.simClock ? { clock: { rate: w.simClock.rate, msPerGameMinute: w.simClock.msPerGameMinute, gameMinutes: w.simClock.nowMinutes(), t: w.t } } : {}),
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}),
@@ -100,7 +103,7 @@ function loadSurv(raw,seed=7,options) {
     w.weather = weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.pending = structuredClone(raw.pending ?? []);
-    if (raw.residentTravel) w.residentTravel = structuredClone(raw.residentTravel);
+    if (raw.residentTravel) adoptTravels(w, raw.residentTravel, null);
     if (raw.locs) sp.world.locs = { ...sp.world.locs, ...raw.locs };
     if (raw.outdoor) sp.world.outdoor = raw.outdoor.slice();
     if (raw.stash) sp.world.stash = { ...sp.world.stash, ...raw.stash };
@@ -109,13 +112,8 @@ function loadSurv(raw,seed=7,options) {
     if (Number.isFinite(raw.riskyPortion)) sp.world.riskyPortion = raw.riskyPortion;
     if (typeof raw.weatherEnabled === 'boolean') sp.world.weatherEnabled = raw.weatherEnabled;
     sp.world.secrets = (raw.secrets ?? []).map((x) => ({ ...x, known: new Set(x.known ?? []) }));
-    // occupancy 是派生数据但顺序进感知/候选：dumpSurv 不存它，读档必须按 loc 重建，
-    // 否则创建期的 spawn 占位与存档位置错位，下一次 move() 取 occupancy[from] 落空。
-    sp.world.occupancy = {};
-    for (const id of Object.keys(sp.world.agents)) {
-      const l = sp.world.loc[id];
-      if (l) (sp.world.occupancy[l] ??= []).push(id);
-    }
+    // occupancy 是派生索引：读档先按 loc 重建，随即用存档顺序（若自洽）恢复顺序。
+    rebuildOccupancy(sp.world);
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
     // 证据优先：坏 rules/survival 的 false 不能把已经证明存在的分城区吞掉。
     if (settlementEvidence && !sp.world.survival.settlementLife) sp.world.survival.settlementLife = true;
@@ -203,7 +201,7 @@ function loadSurv(raw,seed=7,options) {
     }
     // P0-1：死者读档后仍移出占位（与死亡时一致），不被感知/交谈/组队。
     for (const a of Object.values(sp.world.agents)) {
-      if (a.dead) { const l = sp.world.loc[a.id]; if (l) sp.world.occupancy[l] = (sp.world.occupancy[l] ?? []).filter((x) => x !== a.id); }
+      if (a.dead) removeActor(sp.world, a.id);
     }
     settleMarriages(w);
     // 历史 agentError 属于旧引擎的故障读数，不是世界事实；随档带回来会让面板永远显示旧红字。
@@ -212,35 +210,20 @@ function loadSurv(raw,seed=7,options) {
     if (w.survival.settlementLife && !w.agents.p1.dead && typeof raw.campPlayerRoom==='string') {
       const room=raw.campPlayerRoom, building=facilityOf(w,room);
       if (room===w.loc.p1 && homeEntry(w,'p1',room).ok || building?.loc===w.loc.p1 && building.integrity>0)
-        w.campPlayerRoom=room;
+        setPlayerRoom(w,room);
     }
     if (w.survival.settlementLife) {
       for (const id of Object.keys(w.loc)) {
-        if (isAlive(w.agents[id]) && !homeEntry(w,id,w.loc[id]).ok) w.loc[id]='hall';
+        if (isAlive(w.agents[id]) && !homeEntry(w,id,w.loc[id]).ok) setLocOnly(w,id,'hall');
       }
     }
     if (w.independentWorld) sp.log = sp.log.slice(-SURV_LOG_LIMIT);
 
     // C3：占位顺序会进入感知/候选（crowd[0]）；存档带 occupancy 且与 loc 一致就沿用原顺序。
-    const expected = {};
-    for (const [id, l] of Object.entries(sp.world.loc)) {
-      const a = sp.world.agents[id];
-      if (!l || a?.dead) continue;
-      (expected[l] ??= []).push(id);
-    }
-    const rawOcc = raw.occupancy;
-    let occOk = Boolean(rawOcc) && typeof rawOcc === 'object';
-    if (occOk) {
-      const keys = Object.keys(rawOcc).filter((k) => (rawOcc[k] ?? []).length);
-      occOk = keys.length === Object.keys(expected).length;
-      if (occOk) for (const k of keys) {
-        const arr = rawOcc[k];
-        if (!Array.isArray(arr) || arr.length !== (expected[k] ?? []).length || new Set(arr).size !== arr.length || !arr.every((x) => sp.world.loc[x] === k && !sp.world.agents[x]?.dead)) { occOk = false; break; }
-      }
-    }
-    sp.world.occupancy = occOk
-      ? Object.fromEntries(Object.entries(rawOcc).map(([k, arr]) => [k, Array.isArray(arr) ? arr.slice() : []]))
-      : expected;
+    rebuildOccupancy(sp.world, raw.occupancy);
+    // P2c：位置唯一事实。新档带 pos 就原样恢复；旧档没有 pos 时按 loc/槽位确定性补齐
+    // （p1 优先用 survival.playerPos，室内坐标按 room:<campPlayerRoom> 解释）。
+    migratePositions(sp.world, raw.pos);
     // P1：装载本身会消耗真实毫秒；在最后再重锚一次，保证"读档后的世界分钟 = 存档分钟"，
     // 不让读档磁盘/反序列化的耗时偷偷写进世界时间。
     if (w.simClock) {

@@ -3,7 +3,7 @@
 // 这里只保留 HTTP 面需要的请求整形（snapshot/act/ctl）与原导出，避免主路径继续膨胀。
 import { CURRENT_LAYOUT } from '../shared/layout-version.mjs';
 import { randomInt } from 'node:crypto';
-import { LOCS, workUsedToday, hail } from './body.mjs';
+import { LOCS, workUsedToday, hail, move } from './body.mjs';
 import { worldSite } from './geometry.mjs';
 import { classifySay } from './speech.mjs';
 import { tell } from './gossip.mjs';
@@ -237,9 +237,7 @@ export const host = {
         // 房间名必须真实存在：上一版这里不校验，脚本传了个 undefined 就把玩家从 loc 里写没了
         // （JSON 会丢掉 undefined 键），整局之后都找不到"你"。
         if (kind === 'move' && w.loc.p1 !== body.room) {
-          w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
-          w.loc.p1 = body.room;
-          (w.occupancy[body.room] ??= []).push('p1');
+          move(w, 'p1', body.room);
         }
         if (kind === 'say') {
           // PLAN §28 D：town 下按关键词意图映射为评价事件与信任增量；lab 保持旧的固定接触事件。

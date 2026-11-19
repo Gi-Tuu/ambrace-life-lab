@@ -17,10 +17,12 @@ import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecastDisasters } from './worldstate.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
-import { constructionDestination, residentConstructionAccess } from './construction-access.mjs';
+import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
-import { GAME_RESIDENT_UNITS_PER_TICK, travelTicks } from './space.mjs';
+import { GAME_RESIDENT_UNITS_PER_TICK, unitsPerTick } from './space.mjs';
+import { advanceTravelPos, beginTravel, clearTravel, defaultActorPos, isInteriorLoc, isRoomSpace, moveActor, noteArrival, placeActor, posOf, roomOfSpace, roomSpaceId, setPlayerRoom, spawnActor, travelStartWorld, WORLD_SPACE } from './actor-pos.mjs';
+import { routeLength, worldRoute } from '../shared/asset-collision.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -187,19 +189,104 @@ export function scanSecrets(world) {
 }
 
 export function spawn(world, id, loc) {
-  world.loc[id] = loc;
   world.stash[id] = world.stash[id] ?? world.stashInitial ?? 3;
   world.expect[id] = world.stash[id];
   world.coins[id] = world.coins[id] ?? 0;
-  (world.occupancy[loc] ??= []).push(id);
+  spawnActor(world, id, loc, { roomSpace: roomSpaceOf });
 }
 
 // Distant trips consume world time. Occupancy changes once, when the resident arrives.
 // 旧路径（研究态 / actTimeModel=false）仍用 12 与 10，保证旧档与研究面逐位不变。
-// P2b：正式游戏居民与玩家共用 space.speedBudget('sprint') ⇒ 同一路径同一刻数口径。
+// P2c：正式游戏居民沿 space 的 A* 路径逐段走；到达刻数由路径长度 / 同一 speedBudget 推导。
 export const RESIDENT_UNITS_PER_TICK = 12;
 export const PLAYER_UNITS_PER_TICK = 10;
 export { GAME_RESIDENT_UNITS_PER_TICK };
+
+// 路径缓存：同一 (起点,终点) 只算一次。A* 是纯函数；缓存只省时间，不改变结果。
+const routeCache = new WeakMap();
+// 每刻寻路预算：单刻阻塞必须远低于"慢磁盘"闸门的 300ms。超预算的旅行退回无路径出行，
+// 已缓存的可走性格子让下一次尝试更快；预算按世界+刻重置。
+const ROUTE_BUDGET_MS = Number(process.env.P2C_ROUTE_BUDGET_MS ?? 120);
+// 预算是"宿主一刻"级别的：同一刻里 7 个世界（营地主 + A/B + 6 营地）共享一份，
+// 否则每个世界各花 120ms，单刻阻塞会叠到 800ms+。
+let globalRouteBudget = { t: null, spent: 0 };
+function routeBudgetState(world) {
+  if (globalRouteBudget.t !== world.t) globalRouteBudget = { t: world.t, spent: 0 };
+  return globalRouteBudget;
+}
+function cachedRoute(world, key, compute) {
+  let cache = routeCache.get(world);
+  if (!cache) { cache = new Map(); routeCache.set(world, cache); }
+  if (cache.has(key)) return cache.get(key);
+  const budget = routeBudgetState(world);
+  const left = ROUTE_BUDGET_MS - budget.spent;
+  if (left <= 0) return null; // 本刻预算用尽：不缓存，下一刻再试
+  const started = Date.now();
+  const value = compute(started + left);
+  budget.spent += Date.now() - started;
+  if (cache.size > 400) cache.clear();
+  // 超时也缓存 null：几何在同一空间里是静态的；反复重试只会让每刻都烧满预算。
+  // 不可达/超时的行程退回旧的无路径到达，世界不被寻路卡住。
+  cache.set(key, value);
+  return value;
+}
+
+// 路径可走性缓存：space 是静态几何（树/岩/桥/河）；A* 会反复问同一批点，
+// 按 0.5 单位格缓存 walkable，跨路线共享。这样没有"每世界先扫整张图"的固定开销，
+// 又不会在每次唯一路线里重算 sin/noise + 碰撞索引。
+const walkCaches = new WeakMap();
+function navAllows(world, space) {
+  if (!space) return () => true;
+  let cache = walkCaches.get(space);
+  if (!cache) { cache = new Map(); walkCaches.set(space, cache); }
+  return (x, z) => {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    const key = Math.round(x * 2) + ',' + Math.round(z * 2);
+    let value = cache.get(key);
+    if (value === undefined) {
+      value = space.walkable(x, z, 0) ? 1 : 0;
+      if (cache.size > 300000) cache.clear();
+      cache.set(key, value);
+    }
+    return value === 1;
+  };
+}
+
+// 正式游戏的出行路径：起点是角色当前 pos（室内则先出门），终点是目的地门/工点。
+// 返回 { route, start, destination, length } 或 null（无法连通时退回直线，与旧口径同）。
+export function residentRoute(world, id, to, access = null) {
+  // 只有正式施工空间（layout ≥2）才值得建整张 sceneSpace；layout 0 的旧/宿主世界
+  // 没有树/岩/桥同源几何，居民路径按直线（worldRoute 的 clear 直接通过），
+  // 避免在第一个旅行刻为每个营地现造一份场景（实测 6 营地同刻阻塞 270ms）。
+  const space = constructionSpace(world);
+  const startInfo = travelStartWorld(world, id, { roomDoor: (room) => roomDoorPoint(world, room) });
+  const prev = posOf(world, id);
+  const start = startInfo.point ?? (prev && prev.space === WORLD_SPACE ? [prev.x, prev.z] : null);
+  const interiorTarget = isInteriorLoc(world, to) && id !== 'p1';
+  const destination = access?.destination
+    ?? (interiorTarget
+      ? (roomDoorPoint(world, to) ?? worldSite(world, to)?.map((v) => v + .5) ?? null)
+      : (worldSite(world, to)?.map((v) => v + .5) ?? null));
+  if (!start || !destination) return null;
+  // 寻路用地面谓词（半径 0），与 constructionAccess 的距离口径一致；体半径在逐帧/逐段推进时
+  // 由客户端 step 与 playerReach 负责，不参与路径搜索（否则窄门口会频繁失败并触发大窗口搜索）。
+  const allows = space ? navAllows(world, space) : () => true;
+  const key = [start[0].toFixed(2), start[1].toFixed(2), destination[0].toFixed(2), destination[1].toFixed(2)].join(',');
+  // 居民只试 14/60 两档窗口：目的地在河对岸等真实不可达情形下，135/320 档会扫数十万格
+  // 并把一次决策拖到十几秒；不可达时应快速退回"无路径旅行"，而不是卡住世界。
+  const route = cachedRoute(world, key, (deadline) => {
+    const t0 = Date.now();
+    const result = worldRoute(start, destination, allows, { margins: [14, 60], deadline });
+    if (process.env.P2C_ROUTE_TRACE === '1') process.stderr.write(`route ${Date.now()-t0}ms ${key} ${result ? 'ok' : 'null'}\n`);
+    return result;
+  }) ?? (access?.route ?? null);
+  if (!route) return null;
+  return {
+    route, start, destination, fromRoom: startInfo.fromRoom,
+    length: routeLength(route, start),
+  };
+}
+
 export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
@@ -211,32 +298,107 @@ export function startMove(world,id,to) {
     move(world,id,to);
     return;
   }
-  const start=worldSite(world,from), end=worldSite(world,to);
-  const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
-  // P2b：正式游戏按 space 的速度预算推导刻数；研究态/旧档保持 12/刻逐位不变。
+  // P2b 的口径保留：正式游戏按 space 的速度预算；研究态/旧档保持 12/刻逐位不变。
   // P2B_RESIDENT_LEGACY=1 只用于证据归因（金样/长程 A/B），正常游戏不要设置。
   const formal = world.survival?.actTimeModel === true && process.env.P2B_RESIDENT_LEGACY !== '1';
-  // 居民按同一 speedBudget 的 walk 档出行（玩家移动上报可冲刺，冲刺倍率也在同一张表里）。
-  // P2B_RESIDENT_SPEED=sprint 只用于长程对照探针（证明"居民也跑冲刺"会破坏 100/200 日平衡）。
+  // 居民按同一 speedBudget 的 walk 档出行（冲刺是同一张表里的显式倍率，不是第二套预算）。
   const kind = process.env.P2B_RESIDENT_SPEED === 'sprint' ? 'sprint' : 'walk';
-  const ticks = formal
-    ? travelTicks(distance,kind)
-    : Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
-  (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks,
-    ...(access?.destination && {at:access.destination})};
+  if (formal) {
+    const trip = residentRoute(world, id, to, access);
+    const start = worldSite(world, from), end = worldSite(world, to);
+    const straight = start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0;
+    const length = trip?.length ?? access?.distance ?? straight;
+    // 逐段推进的实际到达刻：走完路径所需刻数 +1 到点缓冲（与 P2b/旧 travelTicks 同口径，
+    // 避免把居民整体出行时间缩短一截而改写长程轨迹）。
+    const ticks = Math.max(2, Math.ceil(length / unitsPerTick(kind)) + 1);
+    const path = trip?.route ?? [];
+    beginTravel(world, id, {
+      from, to, arrive: world.t + ticks, kind, length,
+      ...(trip ? { start: trip.start, path, index: 0, cursor: { x: trip.start[0], z: trip.start[1] }, destination: trip.destination } : {}),
+      ...(access?.destination && { at: access.destination }),
+    });
+    // 从室内出发：位置在出门那一刻切到世界空间（loc 仍留到到达时结算）。
+    if (trip && trip.fromRoom) placeActor(world, id, { x: trip.start[0], z: trip.start[1], space: WORLD_SPACE });
+    return;
+  }
+  const start=worldSite(world,from), end=worldSite(world,to);
+  const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
+  const ticks = Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
+  beginTravel(world, id, {from,to,arrive:world.t+ticks, ...(access?.destination && {at:access.destination})});
+}
+
+// 正式游戏：每刻沿路径推进所有旅行。到达时一次性结算 loc/occupancy 与落点。
+export function advanceTravels(w) {
+  if (w.survival?.actTimeModel !== true) return 0;
+  const travels = w.survival?.districtTravel;
+  if (!travels) return 0;
+  let arrived = 0;
+  for (const id of Object.keys(travels)) {
+    const row = travels[id];
+    if (!row) continue;
+    if (!Array.isArray(row.path)) {
+      // 没有路径的旧/退化旅行：到点瞬移（与旧口径一致，不让居民卡死）。
+      if (w.t < row.arrive) continue;
+      if (settleTravel(w, id, row)) arrived += 1;
+      continue;
+    }
+    const budget = unitsPerTick(row.kind === 'sprint' ? 'sprint' : 'walk');
+    const step = advanceTravelPos(w, id, row, budget);
+    // 路径走完也等到达刻（+1 到点缓冲），与 P2b 的旅行时长口径一致。
+    if (step.arrived && w.t >= row.arrive && settleTravel(w, id, row)) arrived += 1;
+  }
+  return arrived;
+}
+
+// 到达结算：再次校验目的地可达性，然后写唯一位置 + loc/occupancy + residentTravel。
+export function settleTravel(w, id, row) {
+  const site = constructionDestination(w, row.to);
+  const access = site && residentConstructionAccess(w, id, site);
+  if (access && !access.ok) {
+    recordConstructionBlock(w, id, row.to, 'move_to', access.code);
+    clearTravel(w, id);
+    return false;
+  }
+  if (!homeEntry(w, id, row.to).ok) { clearTravel(w, id); return false; }
+  const space = roomSpaceOf;
+  const pos = isInteriorLoc(w, row.to) && id !== 'p1'
+    ? defaultActorPos(w, id, row.to, { roomSpace: space, index: (w.occupancy?.[row.to] ?? []).length })
+    : { x: (row.destination ?? row.cursor ?? [0, 0])[0], z: (row.destination ?? row.cursor ?? [0, 0])[1], space: WORLD_SPACE };
+  moveActor(w, id, row.to, { pos });
+  // constructionArrivals 读取的是 residentTravel.at（到点后仍是目的地工点）。
+  noteArrival(w, id, row.from, row.to);
+  if (access?.destination && w.residentTravel?.[id]) w.residentTravel[id].at = access.destination;
+  clearTravel(w, id);
+  return true;
 }
 
 export function move(world, id, to) {
   const from = world.loc[id];
   if (from === to) return false;
-  // 防御：from 可能已不在 occupancy（旧档/占位错位），不能对 undefined 直接 .filter，
-  // 否则每拍每角色抛 agentError、整条决策环被 catch 吞掉（实测 survplay 因此全线不动）。
-  world.occupancy[from] = (world.occupancy[from] ?? []).filter((x) => x !== id);
-  if (world.survival && !world.agents[id]?.isPlayer) {
-    (world.residentTravel ??= {})[id] = { from, to, t:world.t };
+  // P2c：正式游戏位置由 pos 唯一决定；研究态/旧时间模型不创建 pos，保持旧语义。
+  let pos = null;
+  if (world.survival?.actTimeModel === true) {
+    const prev = posOf(world, id);
+    if (isInteriorLoc(world, to)) {
+      pos = id === 'p1'
+        ? { x: 8, z: 11.5, space: roomSpaceId(to) }
+        : defaultActorPos(world, id, to, { roomSpace: roomSpaceOf, index: (world.occupancy?.[to] ?? []).length });
+    } else if (prev && isRoomSpace(prev.space)) {
+      const door = roomDoorPoint(world, roomOfSpace(prev.space));
+      pos = door ? { x: door[0], z: door[1], space: WORLD_SPACE } : null;
+    } else if (prev) {
+      pos = { x: prev.x, z: prev.z, space: prev.space ?? WORLD_SPACE };
+    } else {
+      const at = worldSite(world, to);
+      pos = at ? { x: at[0]-1, z: at[1], space: WORLD_SPACE } : null;
+    }
   }
-  world.loc[id] = to;
-  (world.occupancy[to] ??= []).push(id);
+  moveActor(world, id, to, { pos, roomSpace: roomSpaceOf });
+  // 玩家镜像的 campPlayerRoom 跟随位置空间；playerPos 仍只由 playerReach/portal 写。
+  if (id === 'p1' && world.survival) {
+    setPlayerRoom(world, pos && isRoomSpace(pos.space) ? roomOfSpace(pos.space) : null);
+  }
+  if (world.survival && !world.agents[id]?.isPlayer) noteArrival(world, id, from, to);
   return true;
 }
 

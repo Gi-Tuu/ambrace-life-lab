@@ -1,10 +1,10 @@
 import { astar, isWalkable } from './walk.mjs';
 import { pixelPath } from './asset-collision.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
+import { ROOM_BOUNDS, ROOM_GRID } from '../shared/room-layout.mjs';
 
 export const COLLISION_CELL = 1;
-export const ROOM_BOUNDS = { left: 32, right: 224, top: 50, bottom: 192 };
-export const ROOM_GRID = { width: 256, height: 192, cell: COLLISION_CELL };
+export { ROOM_BOUNDS, ROOM_GRID };
 
 export function collisionIndex(grid, x, y) {
   if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return -1;

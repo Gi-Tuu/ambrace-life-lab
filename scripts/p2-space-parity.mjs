@@ -20,7 +20,7 @@ import { campTerrain } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, generateCampLayout } from '../shared/camp-layout.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = join(ROOT, 'evidence', 'redo-p2b');
+const OUT = join(ROOT, 'evidence', process.env.PARITY_OUT || 'redo-p2b');
 mkdirSync(OUT, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const logLines = [];

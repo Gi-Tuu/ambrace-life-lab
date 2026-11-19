@@ -5,6 +5,7 @@ import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
 import { orchardAppearance, orchardWeather } from './camp-orchard-look.mjs';
 import { itemBoxes } from './camp-items.mjs';
+import { ROOM_DOOR_PX } from './room-layout.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
 
@@ -1022,7 +1023,7 @@ export function roomStage(site, props, front, width, depth, style) {
     }
     s.box(width*.5,.62,rear+.04,.16,.12,.12,'#FFA300',false,true);
   }
-  const door = site === 'hall' ? front.door : [112,176,32,16];
+  const door = site === 'hall' ? front.door : ROOM_DOOR_PX;
   const [dx,dz,dw,dd] = door.map(v=>v/16);
   s.floor(dx,dz,dw,dd,.025,'#EDC787');
   if (site === 'hall') {

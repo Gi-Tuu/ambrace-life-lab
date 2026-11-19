@@ -36,8 +36,8 @@ import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
-import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
-import { campSurface, createSpace, unitsForRealMs } from '../life/space.mjs';
+import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD } from './hall-front.mjs';
+import { campSurface, createSpace, roomSurface, unitsForRealMs } from '../life/space.mjs';
 
 // P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
 // 隐私模式写不进 localStorage 时，首轮重定向之后的轮询仍然带得上 camp。
@@ -707,6 +707,27 @@ function applyPositionSync(walker, result) {
   }
 }
 
+// P2c：室内位置也上报（房间局部 0..16/0..12），服务端用 roomSurface 做几何校验。
+// 进门/出门是 portal 迁移，服务端 playerPos 已经切到对应空间；这里只做节流同步与拒绝钳位。
+let roomSyncInFlight=false, lastRoomSync=null;
+function scheduleRoomSync() {
+  if (roomSyncInFlight) return;
+  const snapshot=S.view;
+  if (!snapshot || !ui.interior || snapshot.campPlayerRoom!==ui.interior) return;
+  const px=(IPOS.x+8)/TILE, pz=(IPOS.y+16)/TILE, now=performance.now();
+  if (lastRoomSync && now-lastRoomSync.t<900 && Math.hypot(px-lastRoomSync.x,pz-lastRoomSync.z)<.5) return;
+  lastRoomSync={x:px,z:pz,t:now};
+  roomSyncInFlight=true;
+  api('/act',{mode:'survival',kind:'player_sync',from:[px,pz]}).then((r)=>{
+    if (!ui.interior) return;
+    const pos=r?.playerPos;
+    if (pos && !r.ok && Number.isFinite(pos.x) && Number.isFinite(pos.z)) {
+      IPOS.x=pos.x*TILE-8; IPOS.y=pos.z*TILE-16;
+      lastRoomSync={x:pos.x,z:pos.z,t:performance.now()};
+    }
+  }).catch(()=>{}).finally(()=>{ roomSyncInFlight=false; });
+}
+
 const outingKey=w=>`ambrace:outing:${campKeyNow??'MAIN'}:${w?.layoutVersion??0}:${w?.mapSeed??0}`;
 function savedOuting(w,world) {
   try {
@@ -781,38 +802,17 @@ function ensureWalker(cvId, who, world, slots) {
 // 纯表现层：室内只是把「某地点 occupancy 里的人」搬进一间画好的屋子里展示。
 // 进入 = 点地图建筑（沿用既有 /act move，引擎把人挪进该地点）或点地点按钮；退出 = 点门 / 再点当前按钮 / 世界全景。
 // 不新增世界状态字段、不消费 rng、不动读数；A/B 各画自己世界的屋内人，保持对照。
-const personalInterior={props:[['bed',3,2],['hearth',10,2],['shelf',2,7],['table',8,5],['rug',6,7]]};
-const INTERIORS = {
-  ...Object.fromEntries(Object.keys(HOUSING_PLOTS).map(room=>[room,personalInterior])),
-  home: { props: [['bed',2,2],['hearth',10,2],['table',7,4],['rug',6,6],['shelf',2,7],['planter',11,7]] },
-  hall: { props: [['bench',4,4],['banner',10,2]] },
-  store: { props: [['shelf',2,2],['shelf',7,2],['crate',11,3],['crate',2,7],['crate',7,7],['barrel',11,7]] },
-  watch: { props: [['telescope',4,2],['crate',10,6],['banner',2,2],['barrel',11,2],['rug',6,7]] },
-  workshop: { props: [['furnace',2,2],['workbench',8,2],['anvil',6,7],['crate',10,7],['barrel',2,7]] },
-  garden: { props: [['planter',2,3],['planter',6,3],['planter',10,3],['planter',2,7],['trellis',10,7],['barrel',6,7]] },
-  well: { props: [['well',5,4],['bucket',10,6],['crate',2,3],['planter',2,7],['barrel',11,2]] },
-  yard: { props: [['fence',2,2],['fence',6,2],['cart',6,5],['crate',10,3],['barrel',2,7],['planter',11,7]] },
-};
-function yardProps(site) {
-  const props = {
-    garden: [['barrel',178,56],['bucket',195,110],['trellis',44,66],['planter',110,106]],
-    well: [['well',94,57],['bucket',151,100],['barrel',35,93],['barrel',190,45]],
-    yard: [['cart',49,66],['crate',153,49],['barrel',191,89],['workbench',147,91]],
-  }[site];
-  return props ? [...props, ...[5,61,176].map(x => ['fence',x,144])] : [];
-}
-
 const hallFront = hallFrontGeometry();
-const roomDoor = site => site === 'hall' ? hallFront.door : [112,176,32,16];
+const roomDoor = site => roomDoorPx(site === 'hall' ? hallFront : null);
 const roomMasks = new Map(), campRooms = new Map(), campRoomBounds = new Map();
 function campRoom(site,w=S.view) {
   const style=residentialSite(site,w?.peripheralHomes) ? homeStyle(site,w?.layout?w.mapSeed:0) : null;
   const key=style ? site+'|'+style.id : site;
   if (!campRooms.has(key)) {
     const facility=facilityOf(w??{},site);
-    const spec=INTERIORS[site]??(w?.peripheralHomes?.[site] && personalInterior);
-    const props = FACILITY_PROPS[facility?.type] ?? (['garden','well','yard'].includes(site) ? yardProps(site)
-      : (spec?.props ?? []).map(([kind,x,y])=>[kind,x*TILE,y*TILE]));
+    // P2c：家具规格来自 shared/room-layout.mjs（服务端房间空间用同一份）。
+    const personal=Boolean(w?.peripheralHomes?.[site]) || Object.hasOwn(HOUSING_PLOTS,site);
+    const props=roomPropsPx(site,{personal,facility:facility?.type??null});
     campRooms.set(key,roomStage(site,props,hallFront,ROOM_GRID.width/TILE,ROOM_GRID.height/TILE,style));
   }
   return campRooms.get(key);
@@ -837,6 +837,30 @@ function roomPixelWalk(site) {
     roomMasks.set(key, walk);
   }
   return roomMasks.get(key);
+}
+// P2c：正式室内移动走显式 16×12 世界空间（与服端 roomSurface 同一份 stage/门数据）；
+// 像素掩码 roomPixelWalk/moveRoomFeet 只在 ?space=legacy 与绘制里保留。
+const roomSpaces = new Map();
+function roomSpaceFor(site) {
+  const key = site + '|' + (campCart?.site===site && campCart.prop ? campCart.prop.id : '');
+  if (!roomSpaces.has(key)) {
+    const stage = roomRenderStage(site);
+    const extras = site === 'hall'
+      ? hallFront.rails.map(([x,z,w,d]) => ({ x:x/TILE, z:z/TILE, w:w/TILE, d:d/TILE }))
+      : [];
+    roomSpaces.set(key, roomSurface({ room:site, stage, bounds:stage.walkBounds, door:ROOM_DOOR_WORLD, extraSolids:extras }));
+  }
+  return roomSpaces.get(key);
+}
+function moveRoomSurface(space, x, z, dx, dz, fits) {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz))));
+  let footX = x, footZ = z;
+  for (let i = 0; i < steps; i += 1) {
+    const nx = footX + dx / steps, nz = footZ + dz / steps;
+    if (space.walkable(nx / TILE, footZ / TILE, CAMP_BODY_RADIUS) && (!fits || fits(footX, footZ, nx, footZ))) footX = nx;
+    if (space.walkable(footX / TILE, nz / TILE, CAMP_BODY_RADIUS) && (!fits || fits(footX, footZ, footX, nz))) footZ = nz;
+  }
+  return [footX, footZ];
 }
 let campAngle=0;
 const CAMP_ANGLES=[.29,-.29,0];
@@ -1158,6 +1182,11 @@ let campHover=null, outdoorIntent=null, guidance=null;
 function roomCrowd(w,site) {
   const ids=(w.occupancy?.[site]??[]).filter(who=>who!=='p1');
   const slots=[[6,9],[9.6,9],[5.65,5.4],[9.45,5.4],[4,9],[11.7,9],[6.7,7.3],[9.6,7.3]];
+  if (!SPACE_LEGACY) {
+    const space=roomSpaceFor(site);
+    return slots.filter(([x,z])=>space.walkable(x,z,CAMP_BODY_RADIUS)).slice(0,ids.length)
+      .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
+  }
   const pixels=roomPixelWalk(site), cells=collisionEditor.cells(site), bounds=roomBounds(site);
   return slots.filter(([x,z])=>roomBodyFits(site,cells,pixels,bounds,x*TILE,z*TILE)).slice(0,ids.length)
     .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
@@ -3893,16 +3922,22 @@ function walkInside(site,x,z,prop=null,exit=false) {
   const cell=4, tw=ROOM_GRID.width/cell, th=ROOM_GRID.height/cell;
   const cells=collisionEditor.cells(site), pixels=roomPixelWalk(site), bounds=roomBounds(site);
   const crowd=roomCrowd(S.view,site), walk=new Uint8Array(tw*th), goals=[];
+  const space=SPACE_LEGACY?null:roomSpaceFor(site);
   const start=[Math.floor((IPOS.x+8)/cell),Math.min(th-1,Math.floor((IPOS.y+16)/cell))];
   const [dx,dz,dw,dd]=roomDoor(site);
+  const door=SPACE_LEGACY?{x:dx,z:dz,w:dw,d:dd}:ROOM_DOOR_WORLD;
   for (let row=0;row<th;row+=1) for (let col=0;col<tw;col+=1) {
     const px=(col+.5)*cell,pz=(row+.5)*cell;
-    if (!roomBodyFits(site,cells,pixels,bounds,px,pz) ||
+    const clear=space
+      ? space.walkable(px/TILE,pz/TILE,CAMP_BODY_RADIUS)
+      : roomBodyFits(site,cells,pixels,bounds,px,pz);
+    if (!clear ||
         !cartAllows(site,cells,pixels,bounds,px,pz,px,pz,crowd) ||
         !separates(px/TILE,pz/TILE,px/TILE,pz/TILE,crowd)) continue;
     walk[row*tw+col]=1;
     const gap=prop?rectGap(px/TILE,pz/TILE,prop.x,prop.z,prop.w,prop.d):0;
-    if ((prop && gap>PROP_REACH-.1) || (exit && rectGap(px,pz,dx,dz,dw,dd)>5)) continue;
+    const doorGap=SPACE_LEGACY?rectGap(px,pz,door.x,door.z,door.w,door.d):rectGap(px/TILE,pz/TILE,door.x,door.z,door.w,door.d);
+    if ((prop && gap>PROP_REACH-.1) || (exit && doorGap>(SPACE_LEGACY?5:.35))) continue;
     goals.push({col,row,distance:(px-x)**2+(pz-z)**2});
   }
   goals.sort((a,b)=>a.distance-b.distance);
@@ -4549,11 +4584,13 @@ loadAssets();
         pairedDX=dx; pairedDZ=dz; pairedStep=step;
         const cells=collisionEditor.cells(site), pixels=roomPixelWalk(site), bounds=roomBounds(site);
         const crowd=campRenderer?roomCrowd(S.view,site):[];
+        const space=SPACE_LEGACY?null:roomSpaceFor(site);
         const fits=campRenderer?(x,z,nx,nz)=>
-          roomBodyFits(site,cells,pixels,bounds,nx,nz) &&
           cartAllows(site,cells,pixels,bounds,x,z,nx,nz,crowd) &&
           separates(x/TILE,z/TILE,nx/TILE,nz/TILE,crowd):undefined;
-        const [footX, footY]=moveRoomFeet(cells,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,pixels,fits,bounds);
+        const [footX, footY]=space
+          ? moveRoomSurface(space,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,fits)
+          : moveRoomFeet(cells,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,pixels,fits,bounds);
         IPOS.moving = footX !== IPOS.x + 8 || footY !== IPOS.y + 16;
         if (campCart?.attached && campCart.site===site) {
           campCart.x+=(footX-IPOS.x-8)/TILE;
@@ -4563,13 +4600,16 @@ loadAssets();
         IPOS.x = footX - 8;
         IPOS.y = footY - 16;
         if (dx) IPOS.face=dx>0?1:-1;
+        if (!SPACE_LEGACY && S.playing) scheduleRoomSync();
         if (routeMove && step>.01 && !IPOS.moving) {
           roomRoute=null;
           guidance={site,blockedAt:[(footX+step*dx/n)/TILE,(footY+step*dy/n)/TILE],until:now+5000};
           forceRepaint=true;
           toast('路上有障碍，换个方向试试。');
         }
-        if (!campCart?.attached && atRoomDoor(ui.interior,true)) { closeRoom(); return; }
+        if (!campCart?.attached && (space
+          ? Boolean(space.portalAt((IPOS.x+8)/TILE,(IPOS.y+16)/TILE,0.35))
+          : atRoomDoor(ui.interior,true))) { closeRoom(); return; }
       } else { IPOS.moving = false; pairedDX=pairedDZ=0; }
     }
     const siteB=S.viewB?.campPlayerRoom;
@@ -4579,10 +4619,14 @@ loadAssets();
       if (length>0) {
         const cells=collisionEditor.cells(siteB), pixels=roomPixelWalk(siteB), bounds=roomBounds(siteB);
         const crowd=campRenderer?roomCrowd(S.viewB,siteB):[];
-        const fits=campRenderer ? (x,z,nx,nz)=>roomBodyFits(siteB,cells,pixels,bounds,nx,nz) &&
+        const space=SPACE_LEGACY?null:roomSpaceFor(siteB);
+        const fits=campRenderer ? (x,z,nx,nz)=>
+          (space || roomBodyFits(siteB,cells,pixels,bounds,nx,nz)) &&
           separates(x/TILE,z/TILE,nx/TILE,nz/TILE,crowd) : undefined;
         const oldX=pos.x+8, oldZ=pos.y+16;
-        const [x,z]=moveRoomFeet(cells,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,pixels,fits,bounds);
+        const [x,z]=space
+          ? moveRoomSurface(space,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,fits)
+          : moveRoomFeet(cells,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,pixels,fits,bounds);
         pos.moving=x!==oldX || z!==oldZ;
         pos.direction=walkDirection(x-oldX,z-oldZ,pos.direction);
         pos.x=x-8; pos.y=z-16;
@@ -4653,11 +4697,18 @@ if (!campRenderer) showGfxUnavailable(true);
 }
 
 Object.assign(window.__lifeDebug, {
-  WALK, ui, S,
+  WALK, ui, S, IPOS,
   survFlash: () => survFlash,
   interact: () => survInteract(),
   pointedEntity,
   hallFront: () => structuredClone(hallFront),
+  // P2c：室内正式移动走同一 roomSurface；这两个调试口给真实浏览器验收用（不参与游戏逻辑）。
+  roomSpaceFor: (site) => roomSpaceFor(site),
+  moveRoomSurface: (site, x, z, dx, dz, radius) => {
+    const space = roomSpaceFor(site);
+    return { allowed: space.walkable(x / TILE, z / TILE, radius ?? CAMP_BODY_RADIUS), moved: moveRoomSurface(space, x, z, dx, dz) };
+  },
+  roomDoorWorld: () => ({ ...ROOM_DOOR_WORLD }),
   hallWalkable: (x,y) => roomAllows(collisionEditor.cells('hall'),x,y,roomPixelWalk('hall'),roomBounds('hall')),
   replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
     actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },

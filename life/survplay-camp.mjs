@@ -16,12 +16,13 @@ import { residentialSite } from '../shared/camp-layout.mjs';
 import { buildLot, doBuild, doRepair, effectiveMods, addFood, takeFood, takeFoodKind } from './production.mjs';
 import { COOP, willingness } from './cooperation.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
-import { constructionAccess, constructionAccessEnabled, constructionSpace, recordConstructionBlock, residentConstructionAccess, sceneSpace, siteRecord } from './construction-access.mjs';
+import { constructionAccess, constructionAccessEnabled, constructionSpace, recordConstructionBlock, residentConstructionAccess, sceneSpace, siteRecord, roomSpaceOf, roomDoorPoint } from './construction-access.mjs';
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseAction } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
 import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
+import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId, WORLD_SPACE } from './actor-pos.mjs';
 
 // P0-1：玩家外围位置 w.survival.playerPos={x,z,t}。带 from 的外围动作先做连续性校验。
 // 村内额度另行放宽：客户端在村里保留冲刺（SPEED 0.5×6fps=3.0 格/秒，冲刺 ×1.75=5.25），
@@ -47,10 +48,19 @@ const syncBudget = (from, kind, w) => {
 // 返回 false 时调用方给 OUT_OF_REACH：它不是"瞬移"（距离已在前面判过），而是"这里站不住"。
 function geometryAllows(w, from) {
   if (w.survival?.actTimeModel !== true) return true; // 研究态/旧时间模型无连续地形，保持原口径
-  if (w.campPlayerRoom && roomContains(from[0], from[1])) return true;
+  if (w.campPlayerRoom) {
+    // P2c：室内按房间自己的 16×12 空间校验（家具/墙/门），不再只判 0..16/0..12。
+    if (!roomContains(from[0], from[1])) return false;
+    const room = roomSpaceOf(w, w.campPlayerRoom);
+    return !room || room.walkable(from[0], from[1], CAMP_BODY_RADIUS);
+  }
   const space = constructionSpace(w) ?? sceneSpace(w);
   if (!space) return true;
   return space.walkable(from[0], from[1], CAMP_BODY_RADIUS);
+}
+function commitPlayerPos(w, from) {
+  const space = w.campPlayerRoom ? roomSpaceId(w.campPlayerRoom) : WORLD_SPACE;
+  placeActor(w, 'p1', { x: from[0], z: from[1], space }, { mirror: true });
 }
 export function playerReach(w, from, kind = '') {
   if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
@@ -64,7 +74,7 @@ export function playerReach(w, from, kind = '') {
     // 出生点是服务端给的槽位，客户端还没走过一步；几何校验从"已确立位置之后"才生效。
     const d0 = Math.hypot(from[0] - at[0], from[1] - at[1]);
     if (d0 > 2 + 1e-6) return { ok: false, code: 'TELEPORT' };
-    s.playerPos = { x: from[0], z: from[1], t: w.t };
+    commitPlayerPos(w, from);
     s.playerReachState = { t: w.t, allowance: syncBudget(from, kind, w), sub: 0 };
     return { ok: true };
   }
@@ -79,7 +89,7 @@ export function playerReach(w, from, kind = '') {
   const used = sameTick ? st.sub : 0;
   if (dist > allowanceBase - used + 1e-6) return { ok: false, code: 'TELEPORT' };
   if (!geometryAllows(w, from)) return { ok: false, code: 'OUT_OF_REACH' };
-  s.playerPos = { x: from[0], z: from[1], t: w.t };
+  commitPlayerPos(w, from);
   s.playerReachState = { t: w.t, allowance: allowanceBase, sub: used + dist };
   return { ok: true };
 }
@@ -97,7 +107,14 @@ export function survActInner(sp, body) {
   if (!w.independentWorld && (w.survival.failed || w.survival.ended)) return { ok: false, code: 'CAMP_ENDED', error: 'GAME_OVER' };
   if (kind === 'respond_request') return respondRequest(w, body); // SOC-01：免费的社交回应
   if (kind === 'camp_exit') {
-    w.campPlayerRoom=null;
+    // P2c：出门 = portal 迁移，把唯一位置从房间空间原子切到门外世界点；
+    // 否则下一次 player_sync 会拿室内坐标和世界位置比距离，被判 TELEPORT。
+    const leaving = w.campPlayerRoom;
+    const door = leaving ? roomDoorPoint(w, leaving) : null;
+    if (door) {
+      w.survival.playerReachState = null;
+      placeActor(w, 'p1', { x: door[0], z: door[1], space: WORLD_SPACE }, { mirror: true });
+    } else detachPlayerRoom(w);
     if (w.survival.talk?.contact?.room) w.survival.talk=null;
     return {ok:true};
   }
@@ -203,7 +220,9 @@ export function survActInner(sp, body) {
         if (!reach.ok) return reach;
       }
       move(w,'p1',building.loc);
-      w.campPlayerRoom=room;
+      // 房间空间与室内门：唯一位置写成 room:<facility id>，玩家镜像同步。
+      w.survival.playerReachState=null;
+      placeActor(w,'p1',{x:8,z:11.5,space:roomSpaceId(room)},{mirror:true});
       playerViabSpend(w, SURV_COST.move_to);
       return {ok:true,code:'OK'};
     }
@@ -232,10 +251,19 @@ export function survActInner(sp, body) {
           if (!reach.ok) return reach;
         }
       }
-      w.campPlayerRoom=room;
-    } else w.campPlayerRoom=null;
-    w.occupancy[w.loc.p1] = (w.occupancy[w.loc.p1] ?? []).filter((x) => x !== 'p1');
-    w.loc.p1 = room; (w.occupancy[room] ??= []).push('p1');
+    }
+    // P2c：地点/占用由唯一写入口同步；进门时位置切到房间空间的门口，
+    // 非 entrance（旧 2D/抽象地点）留在世界空间，campPlayerRoom 保持旧语义(null)。
+    if (body.entrance) {
+      w.survival.playerReachState = null;
+      move(w,'p1',room);
+      placeActor(w,'p1',{x:8,z:11.5,space:roomSpaceId(room)},{mirror:true});
+    } else {
+      move(w,'p1',room);
+      const at=worldSite(w,room);
+      if (at) placeActor(w,'p1',{x:at[0]-1,z:at[1],space:WORLD_SPACE});
+      detachPlayerRoom(w);
+    }
     playerViabSpend(w, SURV_COST.move_to); // P0-2：移动与 AI move_to 同价
     return { ok: true };
   }

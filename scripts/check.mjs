@@ -10,6 +10,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const rel = (p) => p.split(sep).join('/');
@@ -36,10 +37,26 @@ const sources = [
   join(ROOT, 'serve.mjs'),
 ];
 let checked = 0;
+// 语法检查默认每个文件 spawn 一个 `node --check`。Windows 上偶发子进程被安全软件拖住
+// （单文件 30s+，465 个文件不可用）；`CHECK_INPROCESS=1 node --experimental-vm-modules scripts/check.mjs`
+// 用同一 V8 解析器在进程内检查 ESM，语义等价、无子进程。
+const INPROCESS = process.env.CHECK_INPROCESS === '1' && typeof vm.SourceTextModule === 'function';
 for (const f of sources) {
+  if (INPROCESS) {
+    try {
+      new vm.SourceTextModule(readFileSync(f, 'utf8'), { identifier: pathToFileURL(f).href });
+    } catch (error) {
+      fail(`语法检查失败 ${rel(f).replace(rel(ROOT) + '/', '')}: ${String(error?.message ?? error).split('\n')[0]}`);
+    }
+    checked += 1;
+    continue;
+  }
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   checked += 1;
   if (r.status !== 0) fail(`语法检查失败 ${rel(f).replace(rel(ROOT) + '/', '')}: ${String(r.stderr).split('\n')[0]}`);
+}
+if (process.env.CHECK_INPROCESS === '1' && !INPROCESS) {
+  fail('CHECK_INPROCESS=1 需要 --experimental-vm-modules（vm.SourceTextModule 不可用）');
 }
 
 // 2) 相对 import 解析

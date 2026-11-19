@@ -1,13 +1,15 @@
 import { campEntrance, campSite } from '../shared/camp-interaction.mjs';
-import { campBridgeBounds, TOWN_SIZE, overlapsLot } from '../shared/camp-layout.mjs';
+import { campBridgeBounds, TOWN_SIZE, overlapsLot, HOUSING_PLOTS, residentialSite } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
 import { districtPads } from '../shared/camp-districts.mjs';
-import { outdoorStage, timberStage } from '../shared/camp-scene.mjs';
+import { outdoorStage, roomStage, homeStyle, timberStage } from '../shared/camp-scene.mjs';
+import { facilityGate, facilityOf } from '../shared/camp-facility.mjs';
+import { hallFrontGeometry, roomPropsPx, ROOM_DOOR_WORLD } from '../shared/room-layout.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
-import { campSurface, createSpace, wildSurface } from './space.mjs';
+import { campSurface, createSpace, roomSurface, wildSurface } from './space.mjs';
 import { campSceneContent, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
 
 const cache = new WeakMap();
@@ -117,6 +119,47 @@ function groundQuery(w, map) {
     : (x, z) => inCamp(x, z) ? map.ground(x, z) : map.terrain.walkable(x, z, w.campLayout.crossZ);
 }
 
+// P2c：房间是显式 16×12 世界空间；服务端与客户端用同一份 roomStage/家具规格。
+// 只统计 solid 盒子（含 hall 栏杆），门是 room-layout 的唯一 portal 数据。
+const roomSpaceCache = new WeakMap();
+export function roomSpaceOf(w, room) {
+  if (!w?.survival || typeof room !== 'string' || !room) return null;
+  let cache = roomSpaceCache.get(w);
+  if (!cache) { cache = new Map(); roomSpaceCache.set(w, cache); }
+  const key = [room, w.mapSeed ?? 0, w.layoutVersion ?? 0, w.campLayout ? 1 : 0, w.peripheralHomes?.[room] ? 1 : 0].join('|');
+  if (cache.has(key)) return cache.get(key);
+  const facility = facilityOf(w, room);
+  const facilityType = facility?.type ?? (room.startsWith('facility:') ? room.split(':')[2] : null);
+  const personal = Boolean(w.peripheralHomes?.[room]) || Object.hasOwn(HOUSING_PLOTS, room);
+  const props = roomPropsPx(room, { personal, facility: facilityType });
+  const style = residentialSite(room, w.peripheralHomes) ? homeStyle(room, w.mapSeed ?? 0) : null;
+  const front = hallFrontGeometry();
+  const stage = roomStage(room, props, front, 16, 12, style);
+  const extras = room === 'hall'
+    ? front.rails.map(([x, z, width, height]) => ({ x: x / 16, z: z / 16, w: width / 16, d: height / 16 }))
+    : [];
+  const space = roomSurface({ room, stage, bounds: stage.walkBounds, door: ROOM_DOOR_WORLD, extraSolids: extras });
+  cache.set(key, space);
+  return space;
+}
+
+// 房间在世界里的落点：室内坐标 → 世界坐标不作为几何事实（房间是独立空间），
+// 但"从哪扇门出去/进来"必须唯一：用服务端的 campEntrance 门矩形中心（与客户端同一条 campEntrance）。
+export function roomDoorPoint(w, room) {
+  if (typeof room === 'string' && room.startsWith('facility:')) {
+    const building = facilityOf(w, room);
+    const gate = building && facilityGate(building, w.campLayout);
+    if (gate) return [gate.x + gate.w / 2, gate.z + gate.d * .82];
+  }
+  const at = worldSiteOf(w, room);
+  const gate = at ? campEntrance(room, at, w.peripheralHomes) : null;
+  if (!gate) return null;
+  return [gate.x + gate.w / 2, gate.z + gate.d / 2];
+}
+function worldSiteOf(w, room) {
+  return w.districts?.[room]?.at ?? w.peripheralHomes?.[room] ?? campSite(room, w.campLayout);
+}
+
 export function constructionAccess(w, record, { proposed = false, from, entrance = false } = {}) {
   if (!constructionAccessEnabled(w)) return ok;
   if (!record.lot) return fail('NO_LOT');
@@ -220,7 +263,9 @@ export function residentConstructionAccess(w, id, record) {
   // A logical indoor location has no outdoor foot position; its exit is the start of the route.
   let result = fail('BUILD_PATH_BLOCKED');
   for (const point of starts) {
-    const route = joinedRoute(point,destination,allows);
+    // 居民施工行程都在营地/外围一圈，60 格窗口足够；320 格窗口是玩家出村远行的口径，
+    // 放在每个居民到点上会扫数十万格（实测单刻阻塞 700ms+）。
+    const route = joinedRoute(point,destination,allows,{margins:[14,60]});
     if (!route) continue;
     let length=0, prev=point;
     for (const next of route) { length+=Math.hypot(next[0]-prev[0],next[1]-prev[1]); prev=next; }

@@ -3,8 +3,9 @@ import { campDistricts, districtHomes } from '../shared/camp-districts.mjs';
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 // 2026-11-18 拆分：动作预算在 survplay-actions，营地动作入口在 survplay-camp，存档在 survplay-save。
-import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, PLAYER_UNITS_PER_TICK } from './body.mjs';
+import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, PLAYER_UNITS_PER_TICK, advanceTravels } from './body.mjs';
 import { GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
+import { initPositions, placeActor, removeActor, travelOf, clearTravel, detachPlayerRoom } from './actor-pos.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { facilityOf } from '../shared/camp-facility.mjs';
@@ -22,7 +23,7 @@ import { effectiveMods, buildingsFor, initFoodStore, produceYield, DEFAULT_LIVES
 import { finishCooperation } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
 import { recordStormWarning } from './settlement-events.mjs';
-import { constructionAccessEnabled, constructionDestination, recordConstructionBlock, residentConstructionAccess } from './construction-access.mjs';
+import { constructionAccessEnabled, constructionDestination, recordConstructionBlock, residentConstructionAccess, roomDoorPoint } from './construction-access.mjs';
 import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
@@ -190,6 +191,9 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   // 显式传入时以显式值为准（host 的 survivalOptions 会显式给 true/false）。
   if (continuous) s.actTimeModel = true;
   else if (actTimeModel ?? (independentWorld && gameRules)) s.actTimeModel = true;
+  // P2c：正式游戏在这一刻起建立唯一位置 pos（spawn 发生在 actTimeModel 判定之前）。
+  // 用固定槽位表，不在建世界/读档时构建每个房间的 roomSurface（那是玩家进入房间时才算的）。
+  if (s.actTimeModel === true) initPositions(world);
   if (continuous) {
     // 决策机会与算力分离：到期节拍按游戏分钟，实际调用由真实毫秒令牌桶 + 硬并发上限约束。
     world.think = {
@@ -240,10 +244,7 @@ function forageRound(w) {
     const wantH = budgetH > 0 && s.plots.some((p) => p.growth >= 1);
     const wantP = budgetP > 0 && s.plots.some((p) => p.growth === 0) && s.water >= 0.1;
     if (!wantH && !wantP) continue;
-    if (w.loc[id] !== 'garden') {
-      w.occupancy[w.loc[id]] = (w.occupancy[w.loc[id]] ?? []).filter((x) => x !== id);
-      w.loc[id] = 'garden'; (w.occupancy.garden ??= []).push(id);
-    }
+    if (w.loc[id] !== 'garden') move(w,id,'garden');
     if (wantH) { const r = actuate(w, id, { kind: 'harvest' }); if (r.ok) { s.forageStats.harvest += 1; budgetH -= 1; } }
     if (wantP) { const r = actuate(w, id, { kind: 'plant' }); if (r.ok) { s.forageStats.plant += 1; budgetP -= 1; } }
   }
@@ -257,7 +258,7 @@ function reapDeaths(w, log) {
   let changed = false;
   for (const a of Object.values(w.agents)) {
     if (a.dead || !a.viab || a.viab.v > 0) continue;
-    if (s.districtTravel) delete s.districtTravel[a.id];
+    if (s.districtTravel) clearTravel(w,a.id);
     changed = true;
     a.dead = true;
     const cause = a.hurtBy ?? '衰竭';
@@ -265,12 +266,11 @@ function reapDeaths(w, log) {
     (s.deaths ??= []).push({ id: a.id, name: a.name, t: w.t, day: dayOf(w.t), cause });
     s.deathTotal = (s.deathTotal ?? 0) + 1;
     trimDeaths(s.deaths);
-    const loc = w.loc[a.id];
-    if (loc) w.occupancy[loc] = (w.occupancy[loc] ?? []).filter((x) => x !== a.id);
+    removeActor(w, a.id);
     log.push({ t: w.t, kind: 'death', ok: true, code: `${a.name}死亡（${cause}）` });
     if (a.isPlayer) {
       s.playerDead = true;
-      w.campPlayerRoom=null;
+      detachPlayerRoom(w);
       if (!w.independentWorld) { s.failed = true; s.endReason = 'player'; }
       s.talk = null;
     }
@@ -289,14 +289,17 @@ export function settleSurvival(sp) {
   if (w.survival.settlementLife) {
     const room=w.campPlayerRoom;
     if (room?.startsWith('facility:') && !(facilityOf(w,room)?.integrity>0)) {
-      w.campPlayerRoom=null;
+      // P2c：房间失效 = 从这扇门回到世界空间（不是把室内坐标当世界坐标）。
+      const door = roomDoorPoint(w, room);
+      w.survival.playerReachState = null;
+      if (door) placeActor(w, 'p1', { x: door[0], z: door[1], space: 'world' }, { mirror: true });
+      else detachPlayerRoom(w);
       changed=true;
     }
     for (const id of Object.keys(w.loc)) {
       if (!isAlive(w.agents[id]) || homeEntry(w,id,w.loc[id]).ok) continue;
       move(w,id,'hall');
       changed=true;
-      if (id==='p1') w.campPlayerRoom=null;
     }
   }
   const staleTalk = w.survival.talk && !talkInRange(w, w.survival.talk);
@@ -500,6 +503,9 @@ function drainThinkQueue(w, sp) {
 
 async function worldTick(sp, { now, onResidentAction, think }) {
   const w = sp.world;
+  // P2c：正式游戏的居民旅行在每刻按 space 路径推进；到达后才结算 loc/occupancy。
+  // 研究态/旧时间模型不调用，保持原"到点瞬移"逐位不变。
+  if (w.survival?.actTimeModel === true) advanceTravels(w);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
   w.percepts = [];
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
@@ -553,7 +559,7 @@ async function worldTick(sp, { now, onResidentAction, think }) {
     const a = w.agents[id];
     if (a.isPlayer) continue;
     if (!isAlive(a)) continue; // P0-1：死者不再参与任何自主决策与行动
-    const travel=w.survival.districtTravel?.[id];
+    const travel=travelOf(w,id);
     if (travel) {
       if (w.t<travel.arrive && Object.hasOwn(w.locs,travel.to)) {
         a.drives.tick(1,false);
@@ -561,13 +567,17 @@ async function worldTick(sp, { now, onResidentAction, think }) {
         a.metabCount = (a.metabCount ?? 0) + 1;
         continue;
       }
-      delete w.survival.districtTravel[id];
-      const site = constructionDestination(w,travel.to);
-      const access = site && residentConstructionAccess(w,id,site);
-      if (access && !access.ok) recordConstructionBlock(w,id,travel.to,'move_to',access.code);
-      else if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) {
-        move(w,id,travel.to);
-        if (access?.destination && w.residentTravel[id]) w.residentTravel[id].at = access.destination;
+      // 正式游戏：有路径的旅行已由 advanceTravels 结算；还在路上就不进入决策。
+      if (w.survival?.actTimeModel === true && Array.isArray(travel.path) && w.t < travel.arrive) continue;
+      if (w.survival?.actTimeModel !== true) {
+        delete w.survival.districtTravel[id];
+        const site = constructionDestination(w,travel.to);
+        const access = site && residentConstructionAccess(w,id,site);
+        if (access && !access.ok) recordConstructionBlock(w,id,travel.to,'move_to',access.code);
+        else if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) {
+          move(w,id,travel.to);
+          if (access?.destination && w.residentTravel[id]) w.residentTravel[id].at = access.destination;
+        }
       }
     }
     // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
@@ -788,7 +798,7 @@ export function survView(sp) {
     housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans, exits: s.coop.exits ?? 0 },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,

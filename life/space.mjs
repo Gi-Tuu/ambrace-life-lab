@@ -14,6 +14,7 @@ import { campTerrain, floorContains, hash2 } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { modelBounds } from '../shared/camp-geometry.mjs';
 import { inCamp } from '../shared/wild-landscape.mjs';
+import { ROOM_DOOR_WORLD, ROOM_UNITS } from '../shared/room-layout.mjs';
 
 export const TILE = 16;
 export const PIXELS_PER_UNIT = 16;
@@ -52,9 +53,10 @@ export const unitsForRealMs = (ms, tickMs = 7500, sprint = false) => {
   return unitsForGameMinutes(minutes) * (sprint ? SPRINT_FACTOR : 1);
 };
 
-// ── 房间：显式世界单位（原服务端 pointIn(from,16.01,12.01) 的等价物）─────────
-// 室内 256×192px = 16×12 世界单位；0.01 是旧判据的边界容差，保留以便逐位兼容。
-export const ROOM_UNITS = Object.freeze({ width: 16, height: 12 });
+// ── 房间：显式 16×12 世界单位（原服务端 pointIn(from,16.01,12.01) 的等价物）─────────
+// P2c：房间几何与门都在 shared/room-layout.mjs；这里只把 roomStage 的实体 AABB 包成
+// 与营地/野外同构的空间查询。像素画布（256×192）只在渲染与旧路径里出现。
+export { ROOM_UNITS };
 export const ROOM_CONTAINS_EPS = 0.01;
 export const ROOM_FLOOR_Y = 0;
 export const roomContains = (x, z) => Number.isFinite(x) && Number.isFinite(z) &&
@@ -62,6 +64,49 @@ export const roomContains = (x, z) => Number.isFinite(x) && Number.isFinite(z) &
   z >= 0 && z < ROOM_UNITS.height + ROOM_CONTAINS_EPS;
 export const roomToWorld = (p) => ({ x: p[0] / PIXELS_PER_UNIT, z: p[1] / PIXELS_PER_UNIT });
 export const worldToRoom = (p) => ({ x: p.x * PIXELS_PER_UNIT, z: p.z * PIXELS_PER_UNIT });
+
+/**
+ * 房间空间：16×12 世界单位，门是唯一出路。
+ * walkable 复刻旧 roomBodyFits：可行走矩形按身体半径收缩；门宽范围允许脚点贴到底边。
+ * @param {{room?:string, stage?:object, bounds?:object, door?:object, extraSolids?:Array}} spec
+ */
+export function roomSurface({ room = null, stage = null, bounds = null, door = null, extraSolids = [] } = {}) {
+  const b = bounds ?? stage?.walkBounds ?? { left: 2, right: 14, top: 1.65, bottom: 12 };
+  const portal = door
+    ? { x: door.x, z: door.z, w: door.w, d: door.d }
+    : { ...ROOM_DOOR_WORLD };
+  const colliders = [];
+  for (const box of stage?.boxes ?? []) { const c = toCollider(box); if (c) colliders.push(c); }
+  for (const box of extraSolids) { const c = toCollider({ ...box, solid: true }, 'room-solid'); if (c) colliders.push(c); }
+  const index = indexColliders(colliders);
+  const portalRect = Object.freeze(portal);
+  function walkable(x, z, r = 0) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    const radius = Number.isFinite(r) ? Math.max(0, r) : 0;
+    // 门只放宽"脚点贴到底边"（旧 roomBodyFits 的口径），绝不放宽到 16×12 之外。
+    if (z > b.bottom + 1e-9) return false;
+    const left = x - radius, right = x + radius;
+    const top = z - radius;
+    const inDoor = x >= portalRect.x + radius && x <= portalRect.x + portalRect.w - radius;
+    const bottom = inDoor ? Math.min(z + radius, b.bottom) : z + radius;
+    if (left < b.left || right > b.right || top < b.top || bottom > b.bottom) return false;
+    return nearColliders(index, colliders, x, z, radius).length === 0;
+  }
+  function portalAt(x, z, r = 0) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    const radius = Number.isFinite(r) ? Math.max(0, r) : 0;
+    return rectGap(x, z, portalRect) <= radius
+      ? Object.freeze({ id: 'door:' + (room ?? 'room'), kind: 'door', room, rect: portalRect, a: 'room:' + room, b: 'outside' })
+      : null;
+  }
+  return Object.freeze({
+    room, bounds: Object.freeze({ ...b }), door: portalRect, colliders,
+    walkable,
+    portalAt,
+    heightAt: () => ROOM_FLOOR_Y,
+    collidersNear: (x, z, r = 0) => nearColliders(index, colliders, x, z, r),
+  });
+}
 
 const smooth = (t) => t * t * (3 - 2 * t);
 
@@ -229,10 +274,10 @@ export function wildSurface(landscape, { crossing = 24, solids = [], height = nu
 }
 
 /**
- * 唯一空间查询。camp 负责营地矩形内；wild 负责矩形外。
- * @param {{camp?:object|null,wild?:object|null,crossing?:number}} spec
+ * 唯一空间查询。camp 负责营地矩形内；wild 负责矩形外；rooms 是显式室内空间工厂。
+ * @param {{camp?:object|null,wild?:object|null,crossing?:number,rooms?:object|Function|null}} spec
  */
-export function createSpace({ camp = null, wild = null, crossing = null } = {}) {
+export function createSpace({ camp = null, wild = null, crossing = null, rooms = null } = {}) {
   const colliders = [...(camp?.colliders ?? []), ...(wild?.colliders ?? [])];
   const index = indexColliders(colliders);
   const cross = crossing ?? camp?.crossing ?? wild?.crossing ?? 24;
@@ -279,10 +324,15 @@ export function createSpace({ camp = null, wild = null, crossing = null } = {}) 
       room: null,
     };
   }
+  function roomSpace(room) {
+    if (typeof rooms === 'function') return rooms(room);
+    return (rooms && rooms[room]) ?? null;
+  }
   return Object.freeze({
     crossing: cross,
     camp, wild,
     colliders,
     walkable, heightAt, roomHeightAt, roomPortal, collidersNear, portalAt, surface, terrainWalkable,
+    roomSpace, roomContains,
   });
 }
