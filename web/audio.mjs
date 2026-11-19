@@ -4,7 +4,8 @@
 // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
 
 import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
-import { musicTarget } from './audio-events.mjs';
+import { musicTarget, musicStartFor, MUSIC_STINT_TICKS } from './audio-events.mjs';
+import { MUSIC_TRACKS } from './music-tracks.mjs';
 
 const STORE_KEY = 'ambrace.audio';
 const SR = 44100;
@@ -19,7 +20,8 @@ const state = {
   volume: 0.7, muted: false,
   buffers: new Map(),            // 音效名 → AudioBuffer
   beds: new Map(),               // 环境声名 → {source, gain}
-  music: { key: null, bar: 0, nextAt: 0, timer: 0, playing: false, want: false }, musicBus: null,
+  music: { key: null, bar: 0, nextAt: 0, timer: 0, playing: false, want: false, src: null, tick: 0, fileTheme: null }, musicBus: null,
+  tracks: new Map(), loading: new Map(),
   voices: 0, lastAt: new Map(), menu: false,
 };
 
@@ -168,22 +170,77 @@ function scheduleMusic() {
   m.timer = setTimeout(scheduleMusic, 220);
 }
 
-function startMusic(key) {
+// ───────────────────────── 成品曲音源（web/music/*.ogg） ─────────────────────────
+// 每首只在第一次要用时拉取并解码（约 2MB / 首）：菜单页不该顺带下载四季。
+function loadTrack(theme) {
+  if (state.tracks.has(theme) || state.loading.has(theme)) return;
+  const p = fetch(`/web/${MUSIC_TRACKS[theme].file}`)
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((b) => state.ctx.decodeAudioData(b))
+    .then((buf) => { state.tracks.set(theme, buf); state.loading.delete(theme); })
+    .catch(() => { state.loading.delete(theme); });   // 拉不到就一直用合成版，不报错、不重试刷屏
+  state.loading.set(theme, p);
+}
+
+function stopFile() {
+  const src = state.music.src;
+  if (!src) return;
+  state.music.src = null;
+  src.onended = null;
+  try { src.stop(); } catch { /* 已经放完 */ }
+  src.disconnect();
+}
+
+// 从起播点放到曲终。淡入淡出全部由 musicBus 负责，所以这里一条包络都不写。
+function playFile(theme, offset) {
+  const buf = state.tracks.get(theme);
+  if (!buf) return false;
+  stopFile();
+  const src = state.ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(state.musicBus ?? state.master);
+  src.onended = () => {
+    state.music.src = null;
+    if (!state.music.playing || state.music.fileTheme !== theme) return;
+    state.music.tick += MUSIC_STINT_TICKS;              // 窗口还没关但曲子放完了：换下一段起播点
+    const next = musicStartFor(theme, state.music.tick);
+    if (next === null || !playFile(theme, next)) startSynth(theme);
+  };
+  src.start(state.ctx.currentTime + 0.12, Math.max(0, offset), Math.max(0, buf.duration - offset));
+  state.music.src = src;
+  state.music.fileTheme = theme;
+  return true;
+}
+
+function startSynth(theme) {
   const m = state.music;
-  if (m.key === key && m.playing) return;
-  const [theme] = key.split(':');
   const meta = musicMeta({ theme });
-  m.key = key; m.bars = meta.bars; m.bar = 0;
+  m.bars = meta.bars; m.bar = 0;
   m.nextAt = state.ctx.currentTime + 0.15;
-  m.playing = true;
   clearTimeout(m.timer);
   scheduleMusic();
 }
 
+// tick 是世界刻：起播点序号由它算，所以同营地的两个观众听到同一段，录屏也能复现。
+function startMusic(key, tick = 0) {
+  const m = state.music;
+  if (m.key === key && m.playing) return;
+  const [theme] = key.split(':');
+  stopMusic();
+  m.key = key; m.tick = Math.max(0, Number(tick) || 0); m.playing = true;
+  const start = musicStartFor(theme, m.tick);
+  if (start === null) { startSynth(theme); return; }     // 灭绝等没素材的槽位：维持合成口径
+  if (!playFile(theme, start)) { loadTrack(theme); startSynth(theme); }
+}
+
 function stopMusic() {
-  state.music.playing = false;
-  clearTimeout(state.music.timer);
-  state.music.key = null;
+  const m = state.music;
+  m.playing = false;
+  clearTimeout(m.timer);
+  m.timer = 0;
+  m.key = null;
+  m.fileTheme = null;
+  stopFile();
 }
 
 // 开始菜单用独立主题：进游戏前不该听到营地四季。
@@ -191,7 +248,7 @@ export function menu(on) {
   if (!state.ready) return;
   if (!on) { state.menu = false; return; }
   state.menu = true;
-  startMusic('menu:day');
+  startMusic('menu:day', 0);
   fadeMusic(musicTarget({ play: true, theme: 'menu' }, 'active'));
 }
 
@@ -237,7 +294,8 @@ export function scene({ season = '春', phase = '昼', weather = 'clear', settle
   setBed('wind', proximity > 0.15 ? 'wind' : null, 0.25 + proximity * 0.55);
   setBed('crisis', (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0)
     && settlement !== 'extinct' && proximity < 0.5, 0.55);
-  if (win.play) startMusic(`${win.theme}:${win.day ? 'day' : 'night'}`);
+  // 世界刻从窗口读数里带出来（musicWindow 已算过），所以轮转序号与 app.js 的传参无关。
+  if (win.play) startMusic(`${win.theme}:${win.day ? 'day' : 'night'}`, win.t ?? 0);
   // 单一出口：窗口说停就淡到 0，不留"算对了但没接线"的余地。
   fadeMusic(musicTarget(win, settlement));
 }

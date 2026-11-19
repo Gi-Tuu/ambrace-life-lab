@@ -3,7 +3,7 @@
 // 这里的"负向对照"写法沿用仓库惯例：每条都注明怎么打红，改错就红。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   renderSfx, sfxNames, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND, themeForSeason,
@@ -313,4 +313,74 @@ test('A-25 三条依赖的载荷字段真的在 survView 里（防止差分对�
   const sample = readWorld(v);
   assert.ok(typeof sample.exits === 'number' && typeof sample.timber === 'object' && typeof sample.widowed === 'string',
     'readWorld 必须把三条事实读成可比对的形状');
+});
+
+// ───────────────────────── 成品曲 BGM（web/music/*.ogg） ─────────────────────────
+// 所有者口径（2026-11-19）：每首都要听得到不同段落，所以**不做强制循环**——
+// 每次窗口开时按世界刻换一个起播点，渐入渐出照旧。这几条钉的就是这套约定不被改回"整首循环"。
+import { MUSIC_TRACKS, MUSIC_BYTE_BUDGET } from '../web/music-tracks.mjs';
+import { musicStartFor, MUSIC_STINT_TICKS } from '../web/audio-events.mjs';
+
+const PLAYING_SLOTS = ['menu', 'spring', 'summer', 'autumn', 'winter', 'crisis', 'recovering'];
+
+test('A-26 清单只覆盖会响的槽位，不播的不许占体积', () => {
+  assert.deepEqual(Object.keys(MUSIC_TRACKS).sort(), [...PLAYING_SLOTS].sort(),
+    '清单槽位必须与 musicWindow 真会播的槽位一一对应');
+  assert.equal(MUSIC_TRACKS.extinct, undefined, '灭绝按窗口规则不播，加了素材就是永远听不到的字节');
+  for (const t of PLAYING_SLOTS) {
+    const tr = MUSIC_TRACKS[t];
+    assert.ok(Array.isArray(tr.starts) && tr.starts.length >= 1, `${t} 没有可用起播点`);
+    assert.ok(typeof tr.seconds === 'number' && typeof tr.bytes === 'number', `${t} 缺时长或字节`);
+  }
+});
+
+test('A-27 起播点必须实测合法：不吃音头、后面够放、彼此隔得开', () => {
+  for (const t of PLAYING_SLOTS) {
+    const tr = MUSIC_TRACKS[t];
+    let prev = -Infinity;
+    for (const s of tr.starts) {
+      assert.ok(s >= 3, `${t}@${s}：淡入 2.5s 会吃掉没成形的音头`);
+      assert.ok(s - prev >= 40 || prev === -Infinity, `${t}@${s}：与上一个起点隔得不够（${(s - prev).toFixed(1)}s），换了等于没换`);
+      assert.ok(tr.seconds - s >= 45, `${t}@${s}：只剩 ${(tr.seconds - s).toFixed(1)}s，撑不满一截播放窗口`);
+      prev = s;
+    }
+    const file = resolve(process.cwd(), 'web', tr.file);
+    assert.ok(existsSync(file), `${t} 的素材文件不存在：${tr.file}`);
+    assert.equal(statSync(file).size, tr.bytes, `${t} 素材字节与清单不符：清单改过还是文件换过？`);
+  }
+  const sum = PLAYING_SLOTS.reduce((a, t) => a + MUSIC_TRACKS[t].bytes, 0);
+  assert.ok(sum <= MUSIC_BYTE_BUDGET, `BGM 素材合计 ${(sum / 1048576).toFixed(1)}MB 超预算 ${(MUSIC_BYTE_BUDGET / 1048576).toFixed(0)}MB`);
+});
+
+test('A-28 轮转只看世界刻：同刻同曲必同一段，跨一截必须换段', () => {
+  const three = { spring: { starts: [33, 73, 113], seconds: 168 } };
+  const base = 0;
+  const seen = new Set();
+  for (let k = 0; k < 6; k += 1) {
+    const a = musicStartFor('spring', base + k * MUSIC_STINT_TICKS, three);
+    const b = musicStartFor('spring', base + k * MUSIC_STINT_TICKS, three);
+    assert.equal(a, b, '同一输入两次调用不同值 ⇒ 里面掺了随机，同营地观众会听到不同段落');
+    seen.add(a);
+  }
+  assert.equal(seen.size, 3, '三起点应被轮换到三次');
+  assert.equal(musicStartFor('menu', 4 * MUSIC_STINT_TICKS, three), musicStartFor('menu', 4 * MUSIC_STINT_TICKS, three));
+  assert.equal(musicStartFor('nope', 0, three), null, '没登记素材的槽位要返回 null，让接线退回合成版');
+});
+
+test('A-29 世界刻随窗口返回，但绝不进窗口签名（否则每轮询都重排音乐）', () => {
+  const inVillage2 = { ...inVillage, phase: '昼', settlement: 'active' };
+  const a = musicWindow({ ...inVillage2, t: 12 }, { now: 12 });
+  assert.equal(a.t, 12, '窗口要把判定用的世界刻带回去，接线才不用向 app.js 多要一个参数');
+  assert.equal(windowSignature(musicWindow({ ...inVillage2, t: 12 }, { now: 12 })),
+    windowSignature(musicWindow({ ...inVillage2, t: 108 }, { now: 108 })),
+    '签名里不许含 t：淡入淡出只能由"该不该播/哪首/昼夜"触发');
+  assert.ok(!String(a.t).includes('undefined'));
+});
+
+test('A-30 成品曲接进 musicBus，且不许再出现强制循环', () => {
+  const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
+  assert.match(wired, /src\.connect\(state\.musicBus/, '成品曲必须走 musicBus，否则 2.5/3.5 秒淡入淡出与电平裁决全部失效');
+  assert.equal(/\.loop\s*=\s*true/.test(wired.split('// 环境声床')[0]), false,
+    'BGM 不许设 loop=true：所有者口径是每截换段落，不是无缝循环');
+  assert.match(wired, /musicStartFor\(/, '接线必须按世界刻取起播点，而不是固定从 0 秒放');
 });

@@ -1,6 +1,7 @@
 // 世界读数差分 → 该播哪条事件音。纯函数，不碰 DOM、不碰世界、不读时间。
 //
 import { themeForSeason } from './audio-data.mjs';
+import { MUSIC_TRACKS } from './music-tracks.mjs';
 
 // 单独成模块的原因：差分规则（谁盖过谁、一次只播一条）是"声音语义"，
 // 必须能被闸门钉住；留在 app.js 里就只能靠手点验证，改坏了没人知道。
@@ -116,8 +117,10 @@ export function playerDistance(sv) {
 
 const busyVillage = (sv) => (sv.coop?.task?.workers?.length ?? 0) > 0 || (sv.sites ?? []).length > 0;
 
-// 返回 { play, theme, day, reason }；reason 是给闸门与报告看的，不是给玩家看的。
-export function musicWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 0 } = {}) {
+// 返回 { play, theme, day, reason, t }；reason 是给闸门与报告看的，不是给玩家看的。
+// t 是这次判定用的世界刻：调用方已经把 sv.t 传进来了，顺手带回去，
+// 免得起播点轮转要额外从 app.js 传参数（那文件此刻由另一路在改）。
+function computeWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 0 } = {}) {
   if (!sv) return { play: false, theme: 'menu', day: true, reason: 'no-world' };
   const day = sv.phase !== '夜';
   if (sv.player?.dead) return { play: false, theme: 'menu', day, reason: 'player-dead' };
@@ -135,6 +138,11 @@ export function musicWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 
   return { play: slot === 0, theme, day, reason: slot === 0 ? 'busy-day' : 'busy-rest' };
 }
 
+export function musicWindow(sv, opts = {}) {
+  const w = computeWindow(sv, opts);
+  return { ...w, t: Math.max(0, Number(opts.now ?? sv?.t ?? 0) || 0) };
+}
+
 // 窗口签名：只有它变了才做淡入/淡出，避免同一秒内反复接管。
 export const windowSignature = (w) => `${w.play ? 1 : 0}|${w.theme}|${w.day ? 1 : 0}`;
 
@@ -147,6 +155,18 @@ export const musicTarget = (win, settlement) => {
   if (!win || !win.play) return 0;
   return win.theme === 'crisis' || settlement === 'crisis' ? MUSIC_LEVEL_CRISIS : MUSIC_LEVEL;
 };
+
+// 一截 = 6 刻播 + 6 刻歇，所以每过一整循环换一段起播点：同一首听久了也不腻。
+// 关键是这个序号取自**世界刻**而不是本地历史，于是同一营地的所有观众、以及录屏回放
+// 听到的都是同一段（外围同权的口径到这里同样成立）。
+export const MUSIC_STINT_TICKS = PLAY_TICKS * 2;
+export function musicStartFor(theme, tick, tracks = MUSIC_TRACKS) {
+  const t = tracks?.[theme];
+  if (!t || !Array.isArray(t.starts) || !t.starts.length) return null;
+  if (t.starts.length === 1) return t.starts[0];
+  const i = Math.floor(Math.max(0, Number(tick) || 0) / MUSIC_STINT_TICKS) % t.starts.length;
+  return t.starts[i];
+}
 
 // 远近程度 0（村内）→ 1（村外远征），用于环境声的连续 ducking。
 export function proximity(sv, { center = CORE_CENTER, far = FAR_RADIUS } = {}) {
