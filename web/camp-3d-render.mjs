@@ -442,6 +442,13 @@ const VERTEX = `
   varying float vGlow, vHeight, vRoad, vBank;
   varying mediump vec3 vPhysical;
   varying mediump float vFinish, vUp;
+
+  float rockHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+  float rockNoise(vec2 p){
+    vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+    return mix(mix(rockHash(i),rockHash(i+vec2(1,0)),f.x),
+               mix(rockHash(i+vec2(0,1)),rockHash(i+vec2(1,1)),f.x),f.y);
+  }
 void main(){
     float phase=uWeather.x*2.1+aMaterial.y;
     vec3 point=aPosition;
