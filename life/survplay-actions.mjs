@@ -199,8 +199,8 @@ function cancelPlayerBusy(sp) {
   return { ok: true, code: 'OK', cancelled: b.kind };
 }
 
-// 玩家跨刻动作：每拍按剩余分钟推进；完成时只结算一次（busy 先清空再执行）。
-function advancePlayerBusy(sp) {
+// 玩家跨刻动作：P1b 由分钟调度每分钟调用；完成点由 endMin 决定，可落在任意分钟。
+function advancePlayerBusy(sp, atMin) {
   const w = sp.world, s = w.survival;
   if (s?.actTimeModel !== true || !w.independentWorld) return;
   const clock = clockOf(w, 'p1');
@@ -208,8 +208,7 @@ function advancePlayerBusy(sp) {
   if (!b) return;
   if (!isAlive(w.agents.p1)) { playerBusyAbort(sp, 'DEAD'); return; }
   if (w.simClock) {
-    // P1 连续路径：完成点由 endMin 决定，可以在任何时刻完成，不再等 tick / 不再按 60 分截断。
-    const nowMin = w.simClock.nowMinutes();
+    const nowMin = Number.isFinite(atMin) ? atMin : w.simClock.nowMinutes();
     const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
     const elapsed = Math.max(0, nowMin - fromMin);
     if (elapsed > 1e-9) {

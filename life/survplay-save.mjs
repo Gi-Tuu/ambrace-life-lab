@@ -12,7 +12,7 @@ import { homeEntry } from './home-access.mjs';
 import { SURV } from './worldstate.mjs';
 import { LEGACY_EVENT_RULES } from './rng.mjs';
 
-export function createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit = 200 }) {
+export function createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit = 200, resetSimCursor = null }) {
   const SURV_LOG_LIMIT = logLimit;
 const DEATHS_CAP = 200;
 function trimDeaths(deaths, cap = DEATHS_CAP) {
@@ -70,6 +70,7 @@ function loadSurv(raw,seed=7,options) {
       const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
       w.simClock.setGameMinutes(minutes);
       w.t = Math.max(w.t, w.simClock.nowTick());
+      resetSimCursor?.(w);
     }
     if (w.survival.households && raw.survival.households) w.survival.households = raw.survival.households;
     for (const id of Object.keys(raw.minds ?? {})) {
@@ -246,6 +247,7 @@ function loadSurv(raw,seed=7,options) {
       const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
       w.simClock.setGameMinutes(minutes);
       w.t = Math.max(w.t, w.simClock.nowTick());
+      resetSimCursor?.(w);
     }
   }
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。

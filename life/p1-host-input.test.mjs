@@ -1,4 +1,5 @@
-// P1 输入解耦闸门：tick 在居民等待（模型/长决策）时，/act 与 /world 不被 tickChain 串行。
+// P1b 修订：P1 的旧断言是"整拍被 3×450ms 模型等待拖慢"；P1b 的目标是模型等待不进入主循环，
+// 所以这里保留同一条闸门的意图（慢模型在途时输入不被堵），改成更强的"step 本身也快速返回 + 最终结算正确"。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
@@ -17,7 +18,7 @@ process.env.MODEL_UNATTENDED = '0';
 const { Organism } = await import('./agent.mjs');
 const { host } = await import('./host.mjs');
 
-test('P1-06 tick 内模型等待时，/act 与 /world 远早于整拍返回', async (t) => {
+test('P1-06 慢模型在途时 step/act/world 快速返回，最终 tick 结算正确', async (t) => {
   await host.start();
   t.after(async () => { await host.stop(); });
   const original = Organism.prototype.tick;
@@ -27,6 +28,8 @@ test('P1-06 tick 内模型等待时，/act 与 /world 远早于整拍返回', as
     return original.call(this, world);
   };
   try {
+    const before = await host.readWorld('survival');
+    const beforeT = before.survival.t;
     const started = Date.now();
     const step = host.ctl({ action: 'step' });
     await new Promise((resolve) => setImmediate(resolve));
@@ -37,14 +40,19 @@ test('P1-06 tick 内模型等待时，/act 与 /world 远早于整拍返回', as
     const acted = await host.act({ mode: 'survival', kind: 'move', room: 'yard' });
     const actMs = Date.now() - actAt;
     await step;
-    const totalMs = Date.now() - started;
+    const stepMs = Date.now() - started;
     assert.ok(view?.survival, '读必须返回生存快照');
     assert.equal(acted.ok, true, JSON.stringify(acted));
-    assert.ok(totalMs >= 800, `这一拍应被拖慢（三居民串行），实测 ${totalMs}ms`);
-    // 阈值留足 CI/并发磁盘抖动；真正的判据是"远小于整拍"而不是绝对值。
-    assert.ok(readMs < totalMs / 2, `读被 tick 阻塞：${readMs}ms（整拍 ${totalMs}ms）`);
-    assert.ok(actMs < totalMs / 2, `普通 act 被 tick 阻塞：${actMs}ms（整拍 ${totalMs}ms）`);
+    // 阈值留足 CI/并发磁盘抖动；判据是"远小于 3×450ms 串行模型等待"。
+    assert.ok(stepMs < 400, `step 被模型等待串行化：step=${stepMs}ms`);
+    assert.ok(readMs < 250, `读被阻塞：${readMs}ms`);
+    assert.ok(actMs < 250, `普通 act 被阻塞：${actMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, 1100)); // 等慢 think 落地
+    const after = await host.readWorld('survival');
+    assert.equal(after.survival.t, beforeT + 1, '一次 step 仍只推进 60 游戏分钟/1 刻');
     assert.equal(host.snapshot().survival.loc.p1, 'yard');
+    const errors = (after.survival.log ?? []).filter((row) => row.kind === 'agentError');
+    assert.equal(errors.length, 0, `在途 think 不应产生 agentError：${JSON.stringify(errors)}`);
   } finally {
     Organism.prototype.tick = original;
   }

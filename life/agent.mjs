@@ -139,8 +139,9 @@ export class Organism {
     }
 
     // S2：日落是"一天结束"这个世界事实，不是某个 tick 数。反思回合挂在它上面，⑦ 关掉就不发生。
+    // P1b：think 改到分钟级后同一 t 会有多次决策机会；日落反思必须每个 t 只发生一次。
     const sunset = isSunset(t);
-    if (sunset && this.ch.reflect) this.reflect(world);
+    if (sunset && this.ch.reflect && this.lastReflectTick !== t) { this.lastReflectTick = t; this.reflect(world); }
     // ⑧ 事件门控：思考层只在这四类时刻被动用。没有事件时由自主层自己决定，不调模型。
     // triggered 与 asked 分开记：反射层可能在这一刻直接接管（关键事件、发现缺口都会触发反射），
     // 那时事件确实发生了、但思考层没被问。混成一个计数就会把这个"吞并"藏起来。

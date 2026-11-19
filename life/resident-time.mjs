@@ -209,8 +209,8 @@ function abortBusy(world, id, clock, code) {
 }
 
 // 推进进行中的动作。返回 {none} | {advanced} | {completed} | {aborted}。
-// 旧路径按"每刻最多 60 分钟"推进；连续路径按 nowMin - lastAdvanceMin 推进，跨刻/跨日不截断。
-export function advanceResidentBusy(world, id) {
+// 旧路径按"每刻最多 60 分钟"推进；连续路径按分钟调度逐分钟推进（atMin 由 tickSurvPlay 传入）。
+export function advanceResidentBusy(world, id, atMin) {
   if (!residentTimeModel(world)) return { none: true };
   const clock = clockOf(world, id);
   const b = clock.busy;
@@ -221,7 +221,7 @@ export function advanceResidentBusy(world, id) {
 
   let chunk;
   if (world.simClock) {
-    const nowMin = world.simClock.nowMinutes();
+    const nowMin = Number.isFinite(atMin) ? atMin : world.simClock.nowMinutes();
     const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
     const elapsed = Math.max(0, nowMin - fromMin);
     if (elapsed <= 1e-9) return { none: true };

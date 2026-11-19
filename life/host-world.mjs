@@ -14,7 +14,8 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex, readOwnerSidecar, writeOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
-import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy, advancePlayerBusy } from './survplay.mjs';
+import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy, advancePlayerBusy, simMinuteCursor } from './survplay.mjs';
+import { createSimScheduler, gameMinutesForRealMinutes } from './sim-scheduler.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
 import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive, publicSaveError } from './host-saves.mjs';
 
@@ -34,7 +35,7 @@ async function onSignal() {
   if (shuttingDown) return;
   shuttingDown = true;
   S.running = false;
-  if (S.timer) { clearInterval(S.timer); S.timer = null; }
+  if (S.timer) { clearTimeout(S.timer); S.timer = null; }
   if (S.sweepTimer) { clearInterval(S.sweepTimer); S.sweepTimer = null; }
   let ok = true;
   let reason = null;
@@ -424,6 +425,29 @@ function queueAct(operation) {
   actChain = run.catch(() => {});
   return run;
 }
+// P1b：连续世界的自动推进由 SimScheduler 叫醒（1 游戏分钟/步），不再等 7.5s 整拍。
+// 非连续世界（研究态 / SIM_TIME=0）保持原 TICK_MS 节拍；两者都不另起时钟。
+let simScheduler = null;
+function primarySimScheduler() {
+  const sp = S.mainSurv ?? S.surv;
+  const clock = sp?.world?.simClock;
+  if (!clock) { simScheduler = null; return null; }
+  if (!simScheduler || simScheduler.clock !== clock) {
+    simScheduler = createSimScheduler({ clock, cursor: () => simMinuteCursor(sp.world) });
+  }
+  return simScheduler;
+}
+function armAutoTick(minDelayMs = 5) {
+  if (S.timer) { clearTimeout(S.timer); S.timer = null; }
+  const scheduler = primarySimScheduler();
+  const delay = Math.max(minDelayMs, scheduler ? scheduler.nextDelayMs() : TICK_MS);
+  S.timer = setTimeout(() => {
+    S.timer = null;
+    autoTick();
+    // 上一拍还在途时不要 1ms 空转：给队列/模型一个喘息窗口；正常节奏仍由 SimScheduler 决定。
+    armAutoTick(autoPending ? 25 : 5);
+  }, delay);
+}
 async function actInSurvival(sp, body, ask, now) {
   let result;
   // 玩家长动作到点后，在下一次输入/读档时补结算；不要求正好落在 tick 边界。
@@ -473,12 +497,19 @@ function enqueueTick(auto = false) {
 function autoTick() {
   if (!S.running && !(S.compareRunning && observerActive(Math.max(S.viewers.compare ?? 0, S.viewers.comparison ?? 0),Date.now()))) return;
   if (autoPending) return; // 上一拍还没跑完/还在排队：跳过这一拍
+  // 连续世界由 SimScheduler 判定"是否真的过了一个整游戏分钟"；没有欠账就不排队。
+  const scheduler = primarySimScheduler();
+  if (scheduler && scheduler.peek().minutes < 1) return;
   autoPending = true;
   enqueueTick(true).finally(() => { autoPending = false; });
 }
 
 async function manualTick() {
-  await enqueueTick(); // 排队，不跳过
+  const run = enqueueTick(); // 排队，不跳过
+  // P1b：居民 think 是异步派发的；显式 step 之间让出一个 macrotask，给模型 I/O 落地机会。
+  // 这里只让出事件循环，不等待任何模型（慢模型仍不会拖住 step/输入）。
+  await new Promise((resolve) => setImmediate(resolve));
+  await run;
 }
 // 时间差推进：只补慢过程（调制衰减与需求积累），不补决策
 function catchUp(minutes) {
@@ -498,29 +529,50 @@ function catchUp(minutes) {
   }
 }
 
-// P1-8 生存世界离线补时：从存档刻继续推进（不重复结算已结算的日），有界（SURV_CATCHUP_CAP 刻）、
-// 本地自主（临时撤 deliberator，不烧模型预算）、终局/失败即停。游戏时间换算＝真实毫秒/TICK_MS。
-// 与床加速（sleepSurvival，玩家主动）和服务暂停恢复（本函数，被动）区分；超长空档如实标 capped。
+// P1-8 生存世界离线补时：与在线共用同一个 rate / 1 游戏分钟步长；cap 仍是 120 刻（=7200 游戏分）。
+// 本地自主（临时撤 deliberator，不烧模型预算）、终局/失败即停。
 async function catchUpSurvival(minutes, sp = S.surv) {
   if (!sp || !(minutes > 0)) return;
-  const want = Math.round(minutes * 60000 / TICK_MS);
-  const steps = Math.min(SURV_CATCHUP_CAP, Math.max(0, want));
-  if (steps <= 0) return;
   const savedDelib = sp.world.survivalDeliberator;
   setSurvivalDeliberator(sp, null); // 离线补时走本地替身
   const start = sp.world.t;
+  let summary;
   try {
-    for (let i = 0; i < steps && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed); i += 1) {
-      // P1：连续时钟下补时仍按"一刻=60 游戏分钟"喂，结算点不变，也不等真实时间。
-      await tickSurvPlay(sp, sp.world.simClock ? { advanceMinutes: 60 } : undefined);
+    if (sp.world.simClock) {
+      // 单一换算源：真实分钟 × 60000 × rate / msPerGameMinute（默认 480 游戏分/真实分）。
+      const wantMinutes = gameMinutesForRealMinutes(minutes, sp.world.simClock);
+      const capMinutes = SURV_CATCHUP_CAP * 60;
+      const targetMinutes = Math.min(wantMinutes, capMinutes);
+      let remaining = Math.floor(targetMinutes + 1e-9);
+      while (remaining > 0 && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed)) {
+        // 60 分一块只是外层批量；tickSurvPlay 内部仍逐 1 分钟推进 busy/think，世界重结算只在块内 60 分边界跑。
+        const chunk = Math.min(60, remaining);
+        await tickSurvPlay(sp, { minutes: chunk });
+        remaining -= chunk;
+      }
+      const applied = sp.world.t - start;
+      summary = {
+        applied,
+        appliedMinutes: Math.round((targetMinutes - remaining) * 10) / 10,
+        requestedMinutes: Math.round(wantMinutes * 10) / 10,
+        capped: wantMinutes > capMinutes,
+        capMinutes,
+      };
+    } else {
+      // 非连续世界保持旧"每刻=60 分"的补时口径。
+      const want = Math.round(minutes * 60000 / TICK_MS);
+      const steps = Math.min(SURV_CATCHUP_CAP, Math.max(0, want));
+      if (steps <= 0) return;
+      for (let i = 0; i < steps && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed); i += 1) {
+        await tickSurvPlay(sp);
+      }
+      summary = { applied: sp.world.t - start, capped: want > SURV_CATCHUP_CAP };
     }
   } finally {
     setSurvivalDeliberator(sp, savedDelib);
   }
-  const applied = sp.world.t - start;
-  const summary={applied,capped:want > SURV_CATCHUP_CAP};
   if (sp === S.surv) S.missed = {...S.missed,survival:summary};
-  sp.log.push({ t: sp.world.t, kind: 'catchup', ok: true, code: `离线补 ${applied} 刻${want > SURV_CATCHUP_CAP ? '（超上限截断）' : ''}` });
+  sp.log.push({ t: sp.world.t, kind: 'catchup', ok: true, code: `离线补 ${summary.applied} 刻${summary.capped ? '（超上限截断）' : ''}` });
   return summary;
 }
 function serialize() {
@@ -764,7 +816,7 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     // 旧版 start() 不先清 interval（第二次 start 留下一个孤儿定时器：stop() 之后世界仍在跑、
     // 事件循环不退出），也不复位 running/missed/masks/tickError（重启后世界可能还是"暂停"，
     // 页面还挂着上一个世界的"休眠 9.3 分钟"）。这里先归零再装载。
-    if (S.timer) { clearInterval(S.timer); S.timer = null; }
+    if (S.timer) { clearTimeout(S.timer); S.timer = null; }
     S.running = true;
     S.missed = { minutes: 0, applied: 0, capped: false };
     S.compareSaveError = null;
@@ -871,8 +923,10 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     note += `；启动基线档写入失败（${S.saveError ?? 'SAVE_FAILED'}），世界仍可运行但当前无最新主档`;
     console.error(`[host] 启动基线档写入失败：${S.saveError ?? 'SAVE_FAILED'}`);
   }
-  // 启动收口完成后再开始推进世界。
-  S.timer = setInterval(autoTick, TICK_MS);
+  // 启动收口完成后再开始推进世界。连续世界用 SimScheduler 自调度（1 游戏分钟/步），
+  // 研究态/旧时间模型仍按 TICK_MS；暂停由 autoTick + clock.paused 双重兜住。
+  simScheduler = null;
+  armAutoTick();
     if (!sigHandlers) {
       process.on('SIGINT', onSignal);
       process.on('SIGTERM', onSignal);
@@ -885,7 +939,7 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     takePendingFlush();
     takeTickSave(); // 已排的后台存档不再等下一拍；start/flush 会 await 它
     if (S.sweepTimer) { clearInterval(S.sweepTimer); S.sweepTimer = null; }
-    if (S.timer) clearInterval(S.timer);
+    if (S.timer) clearTimeout(S.timer);
     S.timer = null;
     // H-10：不再强行复位在途标志。复位等于把锁打开，老 tick 还在跑、新 interval 又起一拍。
     // 这里只停定时器；在途那一拍会自然跑完（quiesce() 可以等它）。
