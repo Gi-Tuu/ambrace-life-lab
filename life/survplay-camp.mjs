@@ -4,6 +4,7 @@ import { move, actuate, isAlive, SURV_COST, PLAYER_UNITS_PER_TICK } from './body
 import { validate, validateCamp } from './rules.mjs';
 import { noteWorkMotion } from './work-motion.mjs';
 import { regionPoint } from '../shared/camp-region-entities.mjs';
+import { inCamp } from '../shared/wild-landscape.mjs';
 import { animalAction } from './camp-animals.mjs';
 import { changeRoad } from './home-roads.mjs';
 import { facilityGate, facilityOf } from '../shared/camp-facility.mjs';
@@ -21,7 +22,20 @@ import { houseAction } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
 
 // P0-1：玩家外围位置 w.survival.playerPos={x,z,t}。带 from 的外围动作先做连续性校验。
-export function playerReach(w, from) {
+// 村内额度另行放宽：客户端在村里保留冲刺（SPEED 0.5×6fps=3.0 格/秒，冲刺 ×1.75=5.25），
+// 而原先全村一律按 PLAYER_UNITS_PER_TICK=10/刻（6 秒刻下只有 1.67 格/秒）⇒ 正常走路就超 1.8 倍、
+// 冲刺超 3.15 倍，每次上报被判 TELEPORT 再被拉回（线上"像高延迟"的真因）。
+// 外围同权（V4-03）只针对外围同程，这里不动它；40 单位/刻 同时盖住 7.5 秒刻的冲刺 39.4。
+const CAMP_UNITS_PER_TICK = 40;
+// 只有"位置上报"这一种动作享受村内宽带：它是技术同步，不是劳动。采集/进出等动作仍按 10/刻 判连续，
+// 这样 A/B 对照那条闸门（from=[0,0] 离采集点 28.1 单位 ⇒ TELEPORT）保持原意不变。
+// inCamp 只在合法坐标上有意义；越界坐标（哨兵值）按"村外"从严处理，绝不因探测地形抛错而改变拒绝码。
+const syncBudget = (from, kind) => {
+  let inside = false;
+  try { inside = kind === "player_sync" && inCamp(from[0], from[1]); } catch { inside = false; }
+  return inside ? CAMP_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK;
+};
+export function playerReach(w, from, kind = '') {
   if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
   const last = s.playerPos;
@@ -33,7 +47,7 @@ export function playerReach(w, from) {
     const d0 = Math.hypot(from[0] - at[0], from[1] - at[1]);
     if (d0 > 2 + 1e-6) return { ok: false, code: 'TELEPORT' };
     s.playerPos = { x: from[0], z: from[1], t: w.t };
-    s.playerReachState = { t: w.t, allowance: PLAYER_UNITS_PER_TICK, sub: 0 };
+    s.playerReachState = { t: w.t, allowance: syncBudget(from, kind), sub: 0 };
     return { ok: true };
   }
   const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
@@ -42,7 +56,8 @@ export function playerReach(w, from) {
   const ticks = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
   const st = s.playerReachState;
   const sameTick = Boolean(st) && st.t === w.t;
-  const allowanceBase = sameTick ? st.allowance : PLAYER_UNITS_PER_TICK * Math.max(1, ticks);
+  const base = Math.max(syncBudget(from, kind), sameTick ? st.allowance : 0);
+  const allowanceBase = sameTick ? base : base * Math.max(1, ticks);
   const used = sameTick ? st.sub : 0;
   if (dist > allowanceBase - used + 1e-6) return { ok: false, code: 'TELEPORT' };
   s.playerPos = { x: from[0], z: from[1], t: w.t };
@@ -71,7 +86,7 @@ export function survActInner(sp, body) {
     // P0-1：客户端行走器持续上报真实位置（表现层），服务端做连续性校验并拥有 playerPos。
     // 不扣行动预算/存续（playerTimeCost 无此项）；伪造瞬移⇒TELEPORT。合法逐格步行由此确立位置。
     // 返回服务端认可位置，供客户端被拒时把可视位置钳回（要求3）。
-    const reach=playerReach(w,body.from);
+    const reach=playerReach(w,body.from,kind);
     return reach.ok ? {ok:true,code:'OK',playerPos:w.survival.playerPos} : {...reach,playerPos:w.survival.playerPos??null};
   }
   if (kind==='animal_feed' || kind==='animal_slaughter') {

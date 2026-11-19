@@ -128,3 +128,42 @@ test('A09 首次同步只容出生槽小偏移；同刻多步按本刻额度，�
     assert.equal(survAct(sp,{kind:'player_sync',from:[x+50,z]}).code,'TELEPORT');
   }
 });
+
+// V4-08（2026-11-19 线上"被拉回"复盘）：客户端在村里保留冲刺（3.0 格/秒、冲刺 5.25），
+// 服务端原先把全村也按 10 单位/刻 限（6 秒刻下 1.67 格/秒）⇒ 正常走路每几秒就被判 TELEPORT
+// 再被拉回。现在村内 40 单位/刻、村外维持 10；防瞬移在两地都不放松。
+import { inCamp } from '../shared/wild-landscape.mjs';
+
+test('V4-08 村内冲刺不再被判瞬移；村外仍 10/刻；村内单步 40 单位仍拒', () => {
+  const sp = start(), w = sp.world;
+  const [hx, hz] = worldSite(w, w.loc.p1);
+  assert.ok(inCamp(hx, hz), '出生点应在村内');
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let dir = null;
+  for (const [dx, dz] of dirs) { let n = 0; while (n < 26 && inCamp(hx + dx * (n + 2), hz + dz * (n + 2))) n += 2; if (!dir || n > dir.n) dir = { dx, dz, n }; }
+  assert.ok(dir && dir.n >= 20, `需要村内至少 20 单位空间（实测 ${dir && dir.n}）`);
+  survAct(sp, { kind: 'player_sync', from: [hx, hz] });
+  // 一刻内 32 单位（≈ 冲刺 5.25 × 6 秒）分 16 次上报：必须全过
+  let x = hx, z = hz;
+  for (let k = 0; k < 16; k += 1) {
+    x += dir.dx * 2; z += dir.dz * 2;
+    const r = survAct(sp, { kind: 'player_sync', from: [x, z] });
+    assert.ok(r.ok, `村内第 ${k + 1} 次上报应通过（累计 ${2 * (k + 1)} 单位）：${r.code}`);
+  }
+  // 村内一步 40 单位：额度只剩 8，必须拒（防瞬移不放松）
+  assert.equal(survAct(sp, { kind: 'player_sync', from: [x + dir.dx * 40, z + dir.dz * 40] }).code, 'TELEPORT',
+    '村内也必须拦住 40 单位的单步跳跃');
+
+  // 村外：把 playerPos 直接放到村外（测试惯例），同一刻 20 单位必须被拒
+  const sp2 = start(), w2 = sp2.world;
+  const [sx, sz] = worldSite(w2, w2.loc.p1);
+  let ox = sx, oz = sz;
+  for (let i = 0; i < 400 && inCamp(ox, oz); i += 1) { ox += 4; }
+  assert.ok(!inCamp(ox, oz), '应能走到村外取样点');
+  w2.survival.playerPos = { x: ox, z: oz, t: w2.t };
+  w2.survival.playerReachState = null;
+  const away = [ox + 4, oz];
+  assert.ok(survAct(sp2, { kind: 'player_sync', from: away }).ok, '村外第一步 4 单位应通过');
+  assert.equal(survAct(sp2, { kind: 'player_sync', from: [ox + 20, oz] }).code, 'TELEPORT',
+    '村外同刻累计超过 10 单位必须被拒（外围同权不变）');
+});

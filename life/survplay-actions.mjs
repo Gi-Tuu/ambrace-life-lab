@@ -71,7 +71,7 @@ function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
   // V7.3.2：player_sync 是技术同步，不是劳动：不扣分钟/体力、不占本刻额度、不取消 busy。
   if (kind === 'player_sync') {
-    const reach = playerReach(w, body.from);
+    const reach = playerReach(w, body.from, 'player_sync');
     noteSync(w, 'player'); // 同步单独计数，不进入劳动账本（成功或被拒都记一次技术同步）
     return reach.ok ? { ok: true, code: 'OK', playerPos: w.survival.playerPos }
       : { ...reach, playerPos: w.survival.playerPos ?? null };
