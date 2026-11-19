@@ -110,11 +110,11 @@ test('SEC5-05 HTTP：令牌姿态下 MAIN survival_reset 走服务端 nonce（�
 });
 
 test('SEC5-05 HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', async () => {
-  const h = await bootAudit5({ CTL_TOKEN: 'top-secret', CTL_NONCE_TTL_MS: '80' });
+  const h = await bootAudit5({ CTL_TOKEN: 'top-secret', CTL_NONCE_TTL_MS: '600' });
   try {
     const jar = {};
     await openSession(h.base, jar);
-    await new Promise((r) => setTimeout(r, 140));
+    await new Promise((r) => setTimeout(r, 900));
     const stale = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, { jar, headers: { 'x-ctl-nonce': jar.ctl_nonce } });
     assert.equal(stale.status, 403, `过期 nonce 必须拒绝，实测 ${stale.status}`);
     await openSession(h.base, jar);
