@@ -20,6 +20,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
+import { GAME_BASE_UNITS_PER_TICK } from './space.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -194,13 +195,12 @@ export function spawn(world, id, loc) {
 }
 
 // Distant trips consume world time. Occupancy changes once, when the resident arrives.
-// 外围移动速度单一来源：居民 startMove 用 距离/RESIDENT_UNITS_PER_TICK 刻；玩家外围连续性校验
-// （survplay.playerReach）用 PLAYER_UNITS_PER_TICK，且不得快于居民（同权）。改这两个常量即可做负向对照。
+// 旧路径（研究态 / actTimeModel=false）仍用 12 与 10，保证旧档与研究面逐位不变。
+// P2 正式游戏统一常数已由 space.mjs 导出：基础 22.5/刻、玩家含冲刺 39.375/刻；
+// 本刀只接玩家，居民 startMove 仍用 12（P2b 接居民移动时再切 GAME_RESIDENT_UNITS_PER_TICK）。
 export const RESIDENT_UNITS_PER_TICK = 12;
-// 玩家外围速度上限：自居民 12 格/刻显式换算取 10（保守慢于居民）。居民 startMove 用 ceil(距离/12)+1 刻
-// （含 +1 抵达开销）；玩家取 10 格/刻保证同程刻数 ceil(距离/10) ≥ 居民 ceil(距离/12)+1（外围距离≥60 时恒成立），
-// 即"玩家不得比居民快"。改此常量即可做负向对照（V4-03 变红法：翻倍⇒玩家快于居民⇒红）。
 export const PLAYER_UNITS_PER_TICK = 10;
+export const GAME_RESIDENT_UNITS_PER_TICK = GAME_BASE_UNITS_PER_TICK;
 export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
@@ -214,7 +214,10 @@ export function startMove(world,id,to) {
   }
   const start=worldSite(world,from), end=worldSite(world,to);
   const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
-  const ticks=Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
+  // P2 第一刀：居民移动/寻路保持旧路径（P2b 再接）；统一常数已从 space.mjs 导出，
+  // 等居民移动接入时把 RESIDENT_UNITS_PER_TICK 换成 GAME_RESIDENT_UNITS_PER_TICK。
+  const units=RESIDENT_UNITS_PER_TICK;
+  const ticks=Math.max(2,Math.ceil(distance/units)+1);
   (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks,
     ...(access?.destination && {at:access.destination})};
 }

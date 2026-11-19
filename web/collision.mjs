@@ -1,5 +1,6 @@
 import { astar, isWalkable } from './walk.mjs';
 import { pixelPath } from './asset-collision.mjs';
+import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 
 export const COLLISION_CELL = 1;
 export const ROOM_BOUNDS = { left: 32, right: 224, top: 50, bottom: 192 };
@@ -41,6 +42,8 @@ const mapCell = (point, scale) => Math.floor((point + 0.5) * scale);
 const mapCenter = (index, scale) => (index + 0.5) / scale - 0.5;
 
 export function mapAllows(world, x, y) {
+  // P2：一个碰撞查询（life/space.mjs）；world.space 缺失时回退旧像素栅格。
+  if (world.space) return world.space.walkable(x + 0.5, y + 0.5, CAMP_BODY_RADIUS);
   const grid = world.collisionGrid ?? world;
   const scale = grid.tw / world.tw;
   return isWalkable(grid, mapCell(x, scale), mapCell(y, scale));
@@ -52,9 +55,12 @@ export function moveMapFeet(world, x, y, dx, dy, fits) {
   const startX = mapCell(x, scale), startY = mapCell(y, scale);
   const clear = (px, py) => {
     const tx = mapCell(px, scale), ty = mapCell(py, scale);
-    // 编辑时若在角色脚下画了阻挡，仍允许角色走出这一格。
-    return (!fits || fits(x,y,px,py)) && (isWalkable(grid, tx, ty) ||
-      (tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < grid.tw && ty < grid.th));
+    const escape = tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < grid.tw && ty < grid.th;
+    // P2：逐轴分步仍保留；可走性改由 space 统一回答（含体半径）；起始格豁免保留编辑期逃生。
+    const walkable = world.space
+      ? world.space.walkable(px + 0.5, py + 0.5, CAMP_BODY_RADIUS)
+      : isWalkable(grid, tx, ty);
+    return (!fits || fits(x, y, px, py)) && (walkable || escape);
   };
   const steps = scale > 2 ? Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * scale)) : 1;
   for (let i = 0; i < steps; i += 1) {

@@ -70,14 +70,16 @@ async function readBody(req) {
 
 // BUG-19：静态面改**白名单 + realpath**。原来的黑名单挡不住 Windows 的大小写不敏感、
 // %2e%2e%2f、junction，也没列举过 /docs、/.git、/contest.txt —— 本地跑 serve 就能读到仓库内部文件。
-// 去掉旧 2D 后浏览器直接 import shared/ 的纯数据/几何，所以白名单只有两棵树：web/ 与 shared/。
-const STATIC_BASES = { web: join(ROOT, 'web'), shared: join(ROOT, 'shared') };
+// 去掉旧 2D 后浏览器直接 import shared/ 的纯数据/几何，白名单是 web/ 与 shared/ 两棵树；
+// P2：浏览器玩家移动复用 life/space.mjs 的纯查询，只额外放行这一个文件（不开放整个 life/）。
+const STATIC_BASES = { web: join(ROOT, 'web'), shared: join(ROOT, 'shared'), life: join(ROOT, 'life') };
 
 async function serveStatic(req, res, urlPath, search = '') {
   let rel;
   try { rel = decodeURIComponent(String(urlPath)); } catch { return json(res, 400, { error: 'BAD_PATH' }); }
   if (rel === '/index.html') rel = '/web/index.html';
-  const tree = rel.startsWith('/web/') ? 'web' : rel.startsWith('/shared/') ? 'shared' : null;
+  const tree = rel.startsWith('/web/') ? 'web' : rel.startsWith('/shared/') ? 'shared' :
+    rel === '/life/space.mjs' ? 'life' : null;
   if (!tree) return json(res, 404, { error: 'NOT_FOUND' });
   const target = resolve(ROOT, '.' + rel);
   let real, base;

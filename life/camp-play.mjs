@@ -14,6 +14,11 @@ import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { campStaticPrecheck } from './camp-precheck.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
+import { roomContains } from './space.mjs';
+// P2：房间区域改成显式世界单位（16×12）判定；SPACE_V1=0 回退旧的隐式 16.01/12.01 判据。
+const roomPoint = (p) => process.env.SPACE_V1 === '0'
+  ? pointIn(p,16.01,12.01)
+  : roomContains(p[0],p[1]);
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],
@@ -51,7 +56,7 @@ export function residentContact(world, {target,room,from,to}) {
   if (!nearResident(from,to)) return 'RESIDENT_OUT_OF_REACH';
   const site=world.loc[target];
   if (room!==null) {
-    return !world.survival.districtTravel?.[target] && room===site && room===world.loc.p1 && pointIn(from,16.01,12.01) && pointIn(to,16.01,12.01)
+    return !world.survival.districtTravel?.[target] && room===site && room===world.loc.p1 && roomPoint(from) && roomPoint(to)
       ? null : 'RESIDENT_OUT_OF_REACH';
   }
   if (!regionPoint(from) || !regionPoint(to) || world.campPlayerRoom) {

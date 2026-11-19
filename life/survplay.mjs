@@ -4,6 +4,7 @@ import { campDistricts, districtHomes } from '../shared/camp-districts.mjs';
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
 // 2026-11-18 拆分：动作预算在 survplay-actions，营地动作入口在 survplay-camp，存档在 survplay-save。
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, PLAYER_UNITS_PER_TICK } from './body.mjs';
+import { GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { facilityOf } from '../shared/camp-facility.mjs';
@@ -769,7 +770,7 @@ export function survView(sp) {
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
   return {
     workMotions: workMotionView(w),
-    t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
+    t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: s.actTimeModel === true ? GAME_PLAYER_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     // P1：连续时钟只读视图。research/旧路径没有 simClock ⇒ 不出现这两个字段。
     ...(w.simClock ? { timeMode: 'continuous', serverNow: Date.now(), gameMinutes: Number(w.simClock.nowMinutes().toFixed(3)), clock: w.simClock.state() } : {}),
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,

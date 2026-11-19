@@ -1,0 +1,37 @@
+✔ game mode advances both comparison worlds while the A/B entry is being viewed (234.6882ms)
+DEBUG gather enter {"target":"district-northwest","from":[13.2,-19.3],"districts":true,"loc":"hall"}
+DEBUG reach {"kind":"","from":[13.2,-19.3],"last":{"x":12.7,"z":-18.799999999999997,"t":7},"dist":0.70710678118655,"act":true}
+DEBUG gather enter {"target":"district-northwest","from":[0,0],"districts":true,"loc":"hall"}
+DEBUG reach {"kind":"","from":[0,0],"last":{"x":13.7,"z":-18.799999999999997,"t":7},"dist":23.26220109963801,"act":true}
+✖ 游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令只写对照档 (391.6439ms)
+✔ A 侧默认通道与相同生存快照的本地运行轨迹完全一致 (520.8292ms)
+✔ 一侧对照档缺失居民状态时提示重开，正式生存档照常恢复 (405.8449ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2293.6197
+
+✖ failing tests:
+
+test at life\camp-compare-entry.test.mjs:35:1
+✖ 游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令只写对照档 (391.6439ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'OUT_OF_REACH'
+  - 'TELEPORT'
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/.agents/worktrees/v7-1-lifecycle/life/camp-compare-entry.test.mjs:98:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'OUT_OF_REACH',
+    expected: 'TELEPORT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

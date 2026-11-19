@@ -36,6 +36,7 @@ import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootpri
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
 import { hallExitAt, hallFrontGeometry } from './hall-front.mjs';
+import { campSurface, createSpace, unitsForRealMs } from '../life/space.mjs';
 
 // P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
 // 隐私模式写不进 localStorage 时，首轮重定向之后的轮询仍然带得上 camp。
@@ -46,6 +47,12 @@ const urlCampKey = (() => {
   } catch { return null; }
 })();
 let campKeyNow = urlCampKey ?? (() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } })();
+// P2 fallback：默认走 space；URL space=legacy 或宿主注入 __SPACE_LEGACY__ 时回到旧像素栅格/旧速度钳。
+const SPACE_LEGACY = (() => {
+  try {
+    return new URLSearchParams(location.search).get('space') === 'legacy' || globalThis.__SPACE_LEGACY__ === true;
+  } catch { return false; }
+})();
 setCampProvider(() => campKeyNow);
 function setCampKey(key) {
   campKeyNow = key || null;
@@ -665,6 +672,19 @@ function buildWorld(w) {
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
   const scene3d = outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass:landscape?[]:grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks);
+  // P2：客户端玩家移动的碰撞查询走 life/space.mjs；几何仍来自本函数的 stage/floors（不重写渲染）。
+  // 旧分支保留：?space=legacy 或 globalThis.__SPACE_LEGACY__=true 时 space=null，所有调用点回退旧栅格。
+  let space=null;
+  if (!SPACE_LEGACY && w.camp) {
+    try {
+      const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,raised:Boolean(w.camp)});
+      const crossing=w.layout?.crossZ??24;
+      space=createSpace({camp,wild:{
+        walkable:(x,z)=>Boolean(landscape?.walkable(x,z,crossing)),
+        height:(x,z)=>landscape?.height(x,z)??0,
+      }});
+    } catch { space=null; }
+  }
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -687,7 +707,7 @@ function buildWorld(w) {
 
   const terrainWalk3d=terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE)))));
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, space, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -778,11 +798,25 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
 
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
-// 允许速度＝PLAYER_UNITS_PER_TICK×1000/tickMs（单位/秒），换算每帧 tile 数；村内不限（保留冲刺）。
+// P2：正式游戏的每帧步长由 space.mjs 的“单位/游戏分钟”换算；这里的 cap 只是防作弊上限，
+// 村外同样允许冲刺（服务端预算 = 冲刺预算 39.375/刻）。旧快照仍按 10/刻 的村外钳制回退。
 function peripheralStepCap(snapshot, dt) {
   const ups = snapshot?.playerUnitsPerTick ?? 10;
   const tickMs = S.tickMs ?? 7500;
   return ups * 1000 / tickMs * dt; // tile/帧（1 tile = 1 世界单位）
+}
+function playerGameStep(snapshot, dt) {
+  // 表现层在“世界钟被冻住/超慢”时不能跟着冻死（金样/quickstart 用 TICK_MS=10000000）：
+  // 超过 60s/刻时按名义 7.5s 刻换算；正常 6s/7.5s 刻仍按真实 tickMs，保持单位/游戏分钟口径。
+  const raw = snapshot?.tickMs ?? S.tickMs ?? 7500;
+  const tickMs = raw > 60000 ? 7500 : raw;
+  return unitsForRealMs(dt * 1000, tickMs, keys.has('sprint'));
+}
+function playerStepCap(snapshot, dt) {
+  const raw = snapshot?.tickMs ?? S.tickMs ?? 7500;
+  const tickMs = raw > 60000 ? 7500 : raw;
+  const ups = snapshot?.playerUnitsPerTick ?? 10;
+  return ups * 1000 / tickMs * dt;
 }
 const SYNC_DIST = 2, SYNC_MS = 1200;
 let playerSyncInFlight = false;
@@ -4722,16 +4756,25 @@ loadAssets();
         if (!world) continue;
         const trip=snapshot.districtTravel?.[who];
         const rate=trip?Math.min(mstep*1.35,Math.max(mstep,(walker.tripSpeed??0)*dt*1000)):mstep; // 限速：tripSpeed 在快 tick 下会放大成瞬移
-        let step=manual?playerStep:rate;
-        // 要求2：玩家出村钳到世界时允许速度（禁冲刺）；村内保留冲刺
-        if (player && manual && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
+        const spaceMove=Boolean(world.space);
+        let step=manual?(player&&spaceMove?playerGameStep(snapshot,dt):playerStep):rate;
+        // P2：正式游戏玩家步长由 space.mjs 换算，村内/村外同一预算（冲刺不再被村外禁用）；
+        // 旧快照/旧分支仍按“村外 10/刻”钳制，保证 fallback 行为不变。
+        if (player && manual) {
+          if (spaceMove) step=Math.min(step, playerStepCap(snapshot,dt));
+          else if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
+        }
         stepCampWalker(world,walker,cvId,snapshot,who,dx,dy,step,manual);
         if (player && cvId==='cvA') syncPlayerPos(walker, snapshot); // 要求3：节流上报＋被拒钳位
       } else if (manual) {
         const n=Math.hypot(dx,dy);
-        let step=playerStep;
-        if (player && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
-        const [x,y]=moveMapFeet(buildWorld(snapshot),walker.x,walker.y,dx/n*step,dy/n*step);
+        const world=buildWorld(snapshot), spaceMove=Boolean(world.space);
+        let step=player&&spaceMove?playerGameStep(snapshot,dt):playerStep;
+        if (player) {
+          if (spaceMove) step=Math.min(step, playerStepCap(snapshot,dt));
+          else if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
+        }
+        const [x,y]=moveMapFeet(world,walker.x,walker.y,dx/n*step,dy/n*step);
         walker.moving=x!==walker.x || y!==walker.y;
         walker.x=x; walker.y=y;
         if (player && cvId==='cvA') syncPlayerPos(walker, snapshot);

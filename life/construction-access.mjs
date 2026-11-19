@@ -7,6 +7,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
+import { campSurface, createSpace, wildSurface } from './space.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
@@ -34,7 +35,12 @@ function mapFor(w) {
     const pads = districtPads(w.districts);
     const terrain = wildLandscape(w.mapSeed,w.layoutVersion,{joined:true,flats:pads,clearing:pads});
     const anchor = [landmarks.hall[0]+.5,landmarks.hall[1]+2.7];
-    map = { layout,districts:w.districts,anchor,ground,terrain,
+    // P2：服务端与客户端共用同一套空间查询；旧 ground 保留给 SPACE_V1=0 fallback。
+    const space = createSpace({
+      camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion, layout, stage }),
+      wild: wildSurface(terrain, { crossing:layout.crossZ }),
+    });
+    map = { layout,districts:w.districts,anchor,ground,terrain,space,
       fixed:stage.boxes.filter(b=>b.solid), entries:Object.values(stage.entrances), results:new Map() };
     cache.set(w,map);
   }
@@ -53,6 +59,17 @@ function mapFor(w) {
   return map;
 }
 
+// P2 开关：默认走 space；SPACE_V1=0 恢复旧的“营地解析河 + 村外 wildLandscape”两套谓词。
+export const spaceQueriesEnabled = () => process.env.SPACE_V1 !== '0';
+export function constructionSpace(w) {
+  return constructionAccessEnabled(w) ? mapFor(w).space : null;
+}
+function groundQuery(w, map) {
+  return spaceQueriesEnabled()
+    ? (x, z) => map.space.walkable(x, z, 0)
+    : (x, z) => inCamp(x, z) ? map.ground(x, z) : map.terrain.walkable(x, z, w.campLayout.crossZ);
+}
+
 export function constructionAccess(w, record, { proposed = false, from, entrance = false } = {}) {
   if (!constructionAccessEnabled(w)) return ok;
   if (!record.lot) return fail('NO_LOT');
@@ -60,7 +77,7 @@ export function constructionAccess(w, record, { proposed = false, from, entrance
   const others = map.records.filter(b=>b.loc!==record.loc || b.type!==record.type);
   const fixed = map.solids;
   const occupied = others.map(b=>b.lot);
-  const ground = (x,z) => inCamp(x,z) ? map.ground(x,z) : map.terrain.walkable(x,z,w.campLayout.crossZ);
+  const ground = groundQuery(w, map);
   const clearOutside = (x,z) => ground(x,z) && clearOfLots(fixed,x,z) && clearOfLots(occupied,x,z);
   const allows = (x,z) => clearOutside(x,z) && clearOfLots([record.lot],x,z);
   const key = JSON.stringify([record,proposed]);
@@ -150,7 +167,7 @@ export function residentConstructionAccess(w, id, record) {
   const finishedHome = record.type==='house' && w.survival.households?.deeds[record.loc];
   const destination = finishedHome ? site.entryPoint : site.workPoint;
   const lots = map.records.map(b=>b.lot).concat(record.lot);
-  const allows = (x,z) => (inCamp(x,z)?map.ground(x,z):map.terrain.walkable(x,z,w.campLayout.crossZ)) &&
+  const allows = (x,z) => groundQuery(w,map)(x,z) &&
     clearOfLots(lots,x,z) && clearOfLots(map.solids,x,z);
   const starts = [from,...(gate ? entrancePoints(gate) : [])].filter(p=>p && allows(...p));
   // A logical indoor location has no outdoor foot position; its exit is the start of the route.

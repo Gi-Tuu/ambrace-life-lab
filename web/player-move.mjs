@@ -14,7 +14,8 @@ export function rectGap(x,z,left,top,w,d) {
 }
 
 export function campBodyWorld(world,openEdge=false) {
-  return { ...world, collisionGrid:bodyGrid(world.collisionGrid,TILE,openEdge) };
+  // P2：bodyGrid 仍是体半径膨胀的实现，但碰撞判定由 world.space 统一回答（mapAllows/moveMapFeet）。
+  return { ...world, collisionGrid:bodyGrid(world.collisionGrid,TILE,openEdge), space:world.space ?? null };
 }
 
 // 契约收紧：缺 world.landscape 时以前返回 undefined，现在一律返回真正的布尔。

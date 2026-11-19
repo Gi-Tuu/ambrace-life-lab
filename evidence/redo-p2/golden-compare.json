@@ -1,0 +1,16 @@
+[
+  {
+    "against": "evidence/redo-p0/main-after.json",
+    "label": "p2",
+    "same": 45,
+    "total": 45,
+    "diffs": []
+  },
+  {
+    "against": "evidence/redo-p0/main-after.json",
+    "label": "p2b",
+    "same": 45,
+    "total": 45,
+    "diffs": []
+  }
+]

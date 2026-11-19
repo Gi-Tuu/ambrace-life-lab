@@ -1,0 +1,13 @@
+✔ seed 13: a disjoint blocker seals the entrance in both core and outskirts (113.1669ms)
+✔ outskirts: valid travel, blocked progress and recovered work through normal actions (97.2597ms)
+✔ private house: resident chooses a reachable peripheral plot, works there and gains a deed (236.0692ms)
+✔ seed 13: distinguish a missing work position from a severed approach route (268.671ms)
+✔ an en-route resident cannot be declared on site after the entrance closes (43.791ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1411.8444
