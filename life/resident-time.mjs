@@ -15,8 +15,13 @@ import { costFor } from './action-cost.mjs';
 
 export const TICK_MINUTES = 60;
 export const DAY_MINUTES = 1440;
-export const TICK_ACTION_CAP = 4; // 同一角色同一世界刻最多几个动作
-export const CHAIN_MAX = 2; // 决策环在同一刻最多再追加几次决策（不含第一次）
+export const TICK_ACTION_CAP = 4; // 旧路径：同一角色同一世界刻最多几个动作（仅统计；连续路径不再使用）
+export const CHAIN_MAX = 2; // 旧路径：决策环在同一刻最多再追加几次决策（连续路径不再使用）
+
+// P1 连续路径：这些动作占用一段连续世界时间（可跨刻），其余动作仍是原子短动作。
+// 短动作立即产生效果；长动作在 endMin 到点后结算，开始/完成都不再对齐 tick 边界。
+export const CONTINUOUS_LONG_ACTIONS = Object.freeze(['build', 'till', 'repair', 'expand']);
+const CONTINUOUS_LONG = new Set(CONTINUOUS_LONG_ACTIONS);
 
 // 动作分钟表：设计 §4 的初始参考值，缺省 10 分钟。
 export const RESIDENT_MIN = Object.freeze({
@@ -64,7 +69,8 @@ export function clockOf(world, id) {
   if (clock.day !== day) {
     // 跨日：进行中的动作不无限续命，记一条 DAY_END 中止（已落的施工进度留在工地）。
     // V7.3 第三批：与跨刻/死亡中止同口径，补写累计账本与聚落事件；clock.day 更新后天然幂等。
-    if (clock.busy) {
+    // P1 连续路径：动作占的是连续区间，跨午夜不应被整数日界砍断 ⇒ 只重置日统计，不清 busy。
+    if (clock.busy && !world.simClock) {
       const b = clock.busy;
       clock.lastAbort = { kind: b.kind, code: 'DAY_END', at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
       if (world.gameRules === true) {
@@ -86,9 +92,19 @@ export function clockOf(world, id) {
         }
       }
     }
-    clock.day = day; clock.usedMin = 0; clock.busy = null;
+    clock.day = day; clock.usedMin = 0;
+    if (!world.simClock) clock.busy = null;
   }
   if (!clock.tick || clock.tick.t !== world.t) clock.tick = { t: world.t, usedMin: 0, n: 0 };
+  // P1：旧档 busy 只有 {startTick, remainMin, progressMin}，连续路径首次取用时补成绝对区间。
+  if (world.simClock && clock.busy && !Number.isFinite(clock.busy.endMin)) {
+    const nowMin = world.simClock.nowMinutes();
+    const progressMin = Math.max(0, Number(clock.busy.progressMin) || 0);
+    const remainMin = Math.max(0, Number(clock.busy.remainMin) || 0);
+    clock.busy.startMin = nowMin - progressMin;
+    clock.busy.endMin = nowMin + remainMin;
+    clock.busy.lastAdvanceMin = nowMin;
+  }
   return clock;
 }
 
@@ -98,6 +114,14 @@ export function residentBusy(world, id) {
 
 export function residentBudget(world, id) {
   const clock = clockOf(world, id);
+  if (world.simClock) {
+    // 连续路径：不再有"本刻剩余分钟"这个拒绝条件；日统计保留，tickLeft 仅为视图兼容。
+    return {
+      tickLeft: Math.max(0, DAY_MINUTES - clock.usedMin),
+      dayLeft: Math.max(0, DAY_MINUTES - clock.usedMin),
+      actionsLeft: Number.POSITIVE_INFINITY,
+    };
+  }
   return {
     tickLeft: Math.max(0, TICK_MINUTES - clock.tick.usedMin),
     dayLeft: Math.max(0, DAY_MINUTES - clock.usedMin),
@@ -106,8 +130,9 @@ export function residentBudget(world, id) {
 }
 
 // 能不能在同一刻再追加一个动作：活着、没有进行中动作、时刻/当日都有时间、体力没有见底。
+// 连续路径不再"同一刻追加"：决策机会由 ThinkScheduler 按游戏分钟节拍发放，返回 false。
 export function residentCanChain(world, id) {
-  if (!residentTimeModel(world)) return false;
+  if (!residentTimeModel(world) || world.simClock) return false;
   const a = world.agents?.[id];
   if (!a || a.dead) return false;
   const clock = clockOf(world, id);
@@ -116,13 +141,29 @@ export function residentCanChain(world, id) {
   return budget.tickLeft > 0 && budget.dayLeft > 0 && (a.drives?.v?.energy ?? 0) > 0.01;
 }
 
-// 开始一个动作：先扣时间；装不下当前刻就转成 busy（不立刻产生效果）。
+// 开始一个动作：先扣时间；旧路径装不下当前刻就转成 busy（不立刻产生效果）。
+// 连续路径：短动作立即完成，长动作占用 [startMin,endMin) 的连续区间，到点由 advance 结算。
 export function residentBeginTime(world, id, kind) {
   const clock = clockOf(world, id);
   if (clock.busy) return { ok: false, code: 'BUSY' };
   // V7.3.1：TICK_ACTION_CAP 只作调度统计，不再作为“不能行动”的资格上限。
   const cost = residentMinutes(kind, world);
   if (cost <= 0) { clock.tick.n += 1; return { ok: true, minutes: 0, staged: false }; }
+  if (world.simClock) {
+    clock.tick.n += 1;
+    const nowMin = world.simClock.nowMinutes();
+    if (!CONTINUOUS_LONG.has(kind)) {
+      clock.usedMin += cost;
+      clock.tick.usedMin += cost;
+      return { ok: true, minutes: cost, staged: false };
+    }
+    clock.busy = {
+      kind, action: null, startTick: world.t, startMin: nowMin, endMin: nowMin + cost,
+      lastAdvanceMin: nowMin, totalMin: cost, remainMin: cost,
+      progressMin: 0, bankedMin: 0, applied: 0, energyPaid: 0,
+    };
+    return { ok: true, minutes: 0, staged: true, remainMin: cost };
+  }
   const tickLeft = Math.max(0, TICK_MINUTES - clock.tick.usedMin);
   const dayLeft = Math.max(0, DAY_MINUTES - clock.usedMin);
   if (dayLeft + 1e-9 < cost) return { ok: false, code: 'TIME_WAIT' };
@@ -167,7 +208,8 @@ function abortBusy(world, id, clock, code) {
   clock.lastAbort = { kind: b.kind, code, at: world.t, progressMin: b.progressMin, totalMin: b.totalMin, applied: b.applied };
 }
 
-// 每刻推进进行中的动作。返回 {none} | {advanced} | {completed} | {aborted}。
+// 推进进行中的动作。返回 {none} | {advanced} | {completed} | {aborted}。
+// 旧路径按"每刻最多 60 分钟"推进；连续路径按 nowMin - lastAdvanceMin 推进，跨刻/跨日不截断。
 export function advanceResidentBusy(world, id) {
   if (!residentTimeModel(world)) return { none: true };
   const clock = clockOf(world, id);
@@ -176,9 +218,21 @@ export function advanceResidentBusy(world, id) {
   const a = world.agents?.[id];
   const cost = laborEnergy(b.kind, world);
   if (!a || a.dead) { abortBusy(world, id, clock, 'DEAD'); return { aborted: true, code: 'DEAD' }; }
-  // 体力门：按“本刻应付 - 已付”判断（不是整段全额），5+25/10+20 只在钱不够本段时中止。
-  const nextChunk = Math.min(TICK_MINUTES - clock.tick.usedMin, b.remainMin);
-  const dueAfter = cost * ((b.progressMin + nextChunk) / Math.max(1, b.totalMin));
+
+  let chunk;
+  if (world.simClock) {
+    const nowMin = world.simClock.nowMinutes();
+    const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
+    const elapsed = Math.max(0, nowMin - fromMin);
+    if (elapsed <= 1e-9) return { none: true };
+    chunk = Math.min(elapsed, b.remainMin);
+    b.lastAdvanceMin = nowMin;
+  } else {
+    chunk = Math.min(TICK_MINUTES - clock.tick.usedMin, b.remainMin);
+  }
+
+  // 体力门：按“本段应付 - 已付”判断（不是整段全额），5+25/10+20 只在钱不够本段时中止。
+  const dueAfter = cost * ((b.progressMin + chunk) / Math.max(1, b.totalMin));
   const payDue = Math.max(0, dueAfter - (b.energyPaid ?? 0));
   if (cost > 0 && (a.drives?.v?.energy ?? 0) + 1e-9 < payDue) {
     abortBusy(world, id, clock, 'STAMINA');
@@ -192,7 +246,6 @@ export function advanceResidentBusy(world, id) {
       return { aborted: true, code: gate.code ?? 'INVALID' };
     }
   }
-  const chunk = Math.min(TICK_MINUTES, b.remainMin);
   clock.tick.usedMin += chunk;
   clock.usedMin += chunk;
   b.progressMin += chunk;

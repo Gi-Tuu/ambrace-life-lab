@@ -1,0 +1,19 @@
+✔ P1-01 正式游戏同刻连续 8 个短动作全成，没有 TIME_WAIT 或 60 分池 (60.0557ms)
+✔ P1-02 30 分钟施工按 endMin 跨刻完成，开始/完成不对齐 tick 边界 (72.6771ms)
+✔ P1-03 busy 居民仍会思考，行动被拒留下 BUSY trace（不再关掉大脑） (51.4353ms)
+✔ P1-04 读档连续：t/时钟/busy 重锚；旧 busy 字段自动补成绝对 start/end (157.733ms)
+✔ P1-05 研究态逐位不变：simTime 选项不创建时钟、dumpSurv 哈希一致 (14.5935ms)
+✔ P1-06 tick 内模型等待时，/act 与 /world 远早于整拍返回 (3002.4372ms)
+✔ CLOCK-01 默认 7.5s/60min：125ms 一游戏分钟，t 是派生的整 60 分 (0.6994ms)
+✔ CLOCK-02 advance 显式推进：测试/离线补时不依赖真实时间 (0.1787ms)
+✔ CLOCK-03 暂停期间世界冻结，恢复后不欠不补 (0.1268ms)
+✔ CLOCK-04 rate 是倍速：同一段真实时间走双倍游戏分钟，换挡不跳变 (0.642ms)
+✔ CLOCK-05 真实毫秒令牌桶：容量、补充与耗尽 (0.2006ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3183.1301

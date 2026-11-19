@@ -23,7 +23,8 @@ process.env.V72_TIME = '1';
 process.env.SETTLEMENT_DISCUSSIONS = '1';
 process.env.TICK_MS = '1000000';
 const { host, survivalOptions } = await import('./host.mjs');
-const options = { ...survivalOptions(), adoptArchivedRules: true, upgradeLegacyEventRules: true };
+// P1：这条闸门钉的是旧"每刻结算"的风暴/账本时序；连续时钟的行为由 p1-continuous-clock.test.mjs 覆盖。
+const options = { ...survivalOptions(), simTime: false, adoptArchivedRules: true, upgradeLegacyEventRules: true };
 
 test('same-seed storm records the forecast, verified damage and every actual repair', async () => {
   const natural = loadSurv(structuredClone(archive.survival), archive.seed, options);

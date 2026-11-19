@@ -1,7 +1,7 @@
 // 生存玩家动作门面：时间/体力成本、busy 跨刻、失败回滚与账本。
 // 具体“能不能做、做了什么”在 survplay-camp；这里只负责预算与生命周期，避免两处各记一套成本。
 import { isAlive } from './body.mjs';
-import { clockOf } from './resident-time.mjs';
+import { clockOf, CONTINUOUS_LONG_ACTIONS } from './resident-time.mjs';
 import { costFor } from './action-cost.mjs';
 import { PLAYER_TIME } from './camp-catalog.mjs';
 import { noteAction, noteRefusal, noteAbort, noteCancel, noteSync } from './action-ledger.mjs';
@@ -16,7 +16,9 @@ import { playerReach, survActInner } from './survplay-camp.mjs';
 // settleSurvival 由 survplay 注入：本模块只调用，不反向持有世界单例。
 export function createActionDomain({ settleSurvival }) {
 const PLAYER_BUDGET = 100;
-const P1_TICK_MINUTES = 60; // 与 resident-time 的 TICK_MINUTES 同源：玩家与居民共用 60 分/刻
+const P1_TICK_MINUTES = 60; // 旧路径：与 resident-time 的 TICK_MINUTES 同源
+const P1_DAY_MINUTES = 1440; // 连续路径：只保留日统计，不再拒绝操作
+const CONTINUOUS_LONG = new Set(CONTINUOUS_LONG_ACTIONS);
 function legacyPlayerTime(w, kind) {
   if (!w.independentWorld) return 0;
   if (kind.startsWith('family_')) return 10;
@@ -28,17 +30,19 @@ function budgetLeft(w) {
   if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
   return s.p1BudgetLeft;
 }
-// 剩余可行动时间：旧路径仍是本刻 100 点额度；V7.3 正式游戏是本刻 60 分钟池的剩余。
+// 剩余可行动时间：旧路径仍是本刻 100 点/60 分池；连续路径只显示"今日剩余"，不参与拒绝。
 function playerTimeLeft(w) {
   const s = w.survival;
   if (s?.actTimeModel === true) {
     const clock = clockOf(w, 'p1');
+    if (w.simClock) return Math.max(0, P1_DAY_MINUTES - clock.usedMin);
     return Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
   }
   return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
 }
 function playerTimeMax(w) {
-  return w.survival?.actTimeModel === true ? P1_TICK_MINUTES : PLAYER_BUDGET;
+  if (w.survival?.actTimeModel === true) return w.simClock ? P1_DAY_MINUTES : P1_TICK_MINUTES;
+  return PLAYER_BUDGET;
 }
 
 // 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用。
@@ -93,19 +97,39 @@ function survAct(sp, body) {
       if (cost.energy > 0 && (w.agents.p1?.drives?.v?.energy ?? 0) + 1e-9 < cost.energy) {
         return failTime('STAMINA', '体力不够做这件活');
       }
-      const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
-      if (left <= 1e-9) return failTime('TIME_WAIT', '这一拍的时间用完了，等下一拍');
-      if (cost.minutes <= left + 1e-9) {
-        clock.tick.usedMin += cost.minutes;
-        spentMinutes = cost.minutes;
+      if (w.simClock) {
+        // P1 连续路径：没有"本刻池"这个拒绝条件。短动作立即结算；长动作占用 [startMin,endMin)。
+        const nowMin = w.simClock.nowMinutes();
+        clock.tick.n = (clock.tick.n ?? 0) + 1;
+        if (!CONTINUOUS_LONG.has(kind)) {
+          clock.tick.usedMin += cost.minutes;
+          clock.usedMin += cost.minutes;
+          spentMinutes = cost.minutes;
+        } else {
+          const endMin = nowMin + cost.minutes;
+          clock.busy = {
+            id: `p1:${kind}:${w.t}:${clock.tick.n ?? 0}`, kind, body: { ...body }, startTick: w.t,
+            startMin: nowMin, endMin, lastAdvanceMin: nowMin,
+            totalMin: cost.minutes, remainMin: cost.minutes, progressMin: 0,
+            energyTotal: cost.energy, energyPaid: 0, status: 'running',
+          };
+          return { ok: true, code: 'BUSY_START', remainMin: cost.minutes, endMin, why: `已排入时间轴，约 ${cost.minutes} 游戏分钟后完成` };
+        }
       } else {
-        // 装不下本刻剩余分钟：记 busy，下一（几）拍继续；未完成前不产生效果。
-        clock.tick.usedMin = P1_TICK_MINUTES;
-        clock.busy = {
-          id: `p1:${kind}:${w.t}:${clock.tick.n ?? 0}`, kind, body: { ...body }, startTick: w.t,
-          totalMin: cost.minutes, remainMin: cost.minutes - left, energyTotal: cost.energy, energyPaid: 0, status: 'running',
-        };
-        return { ok: true, code: 'BUSY_START', remainMin: cost.minutes - left, why: '本刻只剩这些分钟，剩下的下一拍继续' };
+        const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
+        if (left <= 1e-9) return failTime('TIME_WAIT', '这一拍的时间用完了，等下一拍');
+        if (cost.minutes <= left + 1e-9) {
+          clock.tick.usedMin += cost.minutes;
+          spentMinutes = cost.minutes;
+        } else {
+          // 装不下本刻剩余分钟：记 busy，下一（几）拍继续；未完成前不产生效果。
+          clock.tick.usedMin = P1_TICK_MINUTES;
+          clock.busy = {
+            id: `p1:${kind}:${w.t}:${clock.tick.n ?? 0}`, kind, body: { ...body }, startTick: w.t,
+            totalMin: cost.minutes, remainMin: cost.minutes - left, energyTotal: cost.energy, energyPaid: 0, status: 'running',
+          };
+          return { ok: true, code: 'BUSY_START', remainMin: cost.minutes - left, why: '本刻只剩这些分钟，剩下的下一拍继续' };
+        }
       }
     } else if (!spendTime(w, cost.minutes)) {
       return failTime('ACTION_BUDGET', '本世界刻的可用时间已用完，等下一拍');
@@ -183,11 +207,27 @@ function advancePlayerBusy(sp) {
   const b = clock.busy;
   if (!b) return;
   if (!isAlive(w.agents.p1)) { playerBusyAbort(sp, 'DEAD'); return; }
-  const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
-  const chunk = Math.min(left, b.remainMin);
-  clock.tick.usedMin += chunk;
-  b.remainMin -= chunk;
-  if (b.remainMin > 1e-9) return;
+  if (w.simClock) {
+    // P1 连续路径：完成点由 endMin 决定，可以在任何时刻完成，不再等 tick / 不再按 60 分截断。
+    const nowMin = w.simClock.nowMinutes();
+    const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
+    const elapsed = Math.max(0, nowMin - fromMin);
+    if (elapsed > 1e-9) {
+      const chunk = Math.min(elapsed, b.remainMin);
+      b.lastAdvanceMin = nowMin;
+      b.remainMin -= chunk;
+      b.progressMin = (b.progressMin ?? 0) + chunk;
+      clock.tick.usedMin += chunk;
+      clock.usedMin += chunk;
+    }
+    if (b.remainMin > 1e-9) return;
+  } else {
+    const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
+    const chunk = Math.min(left, b.remainMin);
+    clock.tick.usedMin += chunk;
+    b.remainMin -= chunk;
+    if (b.remainMin > 1e-9) return;
+  }
   clock.busy = null;
   const r = survActInner(sp, b.body);
   if (r?.ok) {

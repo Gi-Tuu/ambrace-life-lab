@@ -209,8 +209,9 @@ export class Organism {
       }
     }
 
-    // V7.2：进行中的动作占住这一刻的决策机会（推进由 tickSurvPlay 提前结算）；代谢照常只跑一次。
-    if (residentTimeModel(world) && clockOf(world, this.id).busy) return null;
+    // V7.2：旧路径里进行中的动作占住这一刻的决策机会（推进由 tickSurvPlay 提前结算）。
+    // P1 连续路径：身体忙不等于头脑停——照常感知/评价/决策，行动由 execute 以 BUSY trace 拒绝。
+    if (residentTimeModel(world) && !world.simClock && clockOf(world, this.id).busy) return null;
 
     const metab = preMetab ?? metabolize();
     this.lastMetab = metab;

@@ -95,7 +95,7 @@ const {
   campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
   claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, manualTick,
   catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, serialize,
-  makePack, freshPacks, packsFrom, buildPacks,
+  makePack, freshPacks, packsFrom, buildPacks, queueAct,
 } = world;
 
 // 旧导出名全部保留：调用方（serve/scripts/测试）不需要知道模块内部怎么分层。
@@ -105,6 +105,21 @@ export {
   sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
   claimCamp, openCamp, backToMainCamp,
 };
+
+// P1：正式生存动作走短串行（只保护状态提交），不再等当前 tick / 模型。
+// 会 await 模型或内嵌多拍的动作（talk_say、camp_sleep）仍走完整 world 写链。
+async function actSurvivalFast(body, campKey) {
+  if (!S.packs) return { ok: false, error: 'NO_WORLD' };
+  const reqCamp = campKey && campKey !== 'MAIN' ? String(campKey) : null;
+  if (reqCamp && !validCampKey(reqCamp)) return { ok: false, code: 'CAMP_INVALID' };
+  const survSel = campSurv(reqCamp);
+  if (!survSel) return { ok: false, error: 'NO_SURV' };
+  return queueAct(async () => {
+    const result = await actInSurvival(survSel, body, modelTalk);
+    if (result.ok || result.settled) return { ...result, ...await persistAfterAction(survSel) };
+    return result;
+  });
+}
 
 export const host = {
   replay(query = {}) { return replayQuery(query); },
@@ -125,11 +140,11 @@ export const host = {
   sweepCamps,
   openCamp,
   backToMainCamp,
-  readWorld(mode, campKey) {
-    return queueWorldWrite(() => {
-      if (mode !== 'menu') this.touch(mode, campKey); // 审计 ARCH-03
-      return structuredClone(this.snapshot(mode,campKey));
-    });
+  async readWorld(mode, campKey) {
+    // P1：读路径不再排队。snapshot 是同步只读，tick 在 await 模型时也能立即返回上一致状态；
+    // 读不等待写，也不会被一拍模型拖到 TICK_MS 之后。保留 async 是路由/测试的 Promise 契约。
+    if (mode !== 'menu') this.touch(mode, campKey); // 审计 ARCH-03
+    return structuredClone(this.snapshot(mode,campKey));
   },
   snapshot(mode, campKey) {
     // 第三轮 N1：请求里的 camp 不可用（格式错/未登记/过期）⇒ 按主营地服务。
@@ -179,6 +194,10 @@ export const host = {
     return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : (invalidCamp ? { key: invalidCamp, invalid: true } : null), saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
+    // P1 输入解耦：普通生存动作不排在 tickChain 后面；模型等待/睡眠/对照仍走原链。
+    if (body?.mode === 'survival' && body.kind !== 'camp_sleep' && body.kind !== 'talk_say') {
+      return actSurvivalFast(body, campKey);
+    }
     return queueWorldWrite(async () => {
       if (!S.packs) return { ok: false, error: 'NO_WORLD' };
       // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
@@ -318,6 +337,17 @@ export const host = {
       if (body.action === 'pause' || body.action === 'resume') {
         const key = body.mode === 'compare' ? 'compareRunning' : 'running';
         S[key] = body.action === 'resume';
+        // P1：连续时钟要跟着宿主暂停/恢复，否则暂停期间真实时间仍在走，恢复时会凭空跳一段。
+        if (body.mode !== 'compare') {
+          const worlds = [S.mainSurv, S.surv, ...(S.camps?.live.values() ?? [])].filter(Boolean);
+          const seen = new Set();
+          for (const entry of worlds) {
+            const clock = (entry.world ?? entry.sp?.world)?.simClock;
+            if (!clock || seen.has(clock)) continue;
+            seen.add(clock);
+            clock[body.action]();
+          }
+        }
       }
       if (body.action === 'brain') {
         // H-02b：旧版这里调 buildPacks()，等于**静默把世界打回起点**（实测 t 5→0、stat.决策 15→0、

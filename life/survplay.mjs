@@ -30,6 +30,7 @@ import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from 
 import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
 import { createActionDomain } from './survplay-actions.mjs';
 import { createSaveDomain } from './survplay-save.mjs';
+import { createSimClock, createTokenBucket } from './sim-clock.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 import { workMotionView } from './work-motion.mjs';
@@ -51,8 +52,14 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
+  // P1 连续时钟只属于正式游戏（gameRules）且必须显式开启；研究态/旧参数路径不创建、不写字段。
+  const continuous = simTime === true && gameRules === true;
+  if (continuous) {
+    world.simTime = true;
+    world.simClock = simClock ?? createSimClock({ startMinutes: 0 });
+  }
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
     error.code = 'SURV_EVENT_VERSION';
@@ -143,7 +150,19 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   s.plantWater = 0.06; // §16 选点：E3 水循环再平衡
   // V7.2 阶段 B：个人时间模型只属于正式游戏（独立世界 + gameRules），研究态（gameRules:false）保持旧预算逐位不变。
   // 显式传入时以显式值为准（host 的 survivalOptions 会显式给 true/false）。
-  if (actTimeModel ?? (independentWorld && gameRules)) s.actTimeModel = true;
+  if (continuous) s.actTimeModel = true;
+  else if (actTimeModel ?? (independentWorld && gameRules)) s.actTimeModel = true;
+  if (continuous) {
+    // 决策机会与算力分离：到期节拍按游戏分钟，实际调用由真实毫秒令牌桶限流。
+    world.think = {
+      everyMin: Math.max(1, Number(process.env.THINK_EVERY_MIN ?? 10)),
+      maxPerTick: Math.max(1, Number(process.env.THINK_MAX_PER_TICK ?? 2)),
+      bucket: createTokenBucket({
+        capacity: Math.max(1, Number(process.env.THINK_BUCKET ?? 6)),
+        refillMs: Math.max(1, Number(process.env.THINK_REFILL_MS ?? 1000)),
+      }),
+    };
+  }
   if (world.gameRules) {
     // C4：生命参数随档（旧档缺字段时走 households 里的当前默认，不写回、不突变）。
     s.lifecycle = {
@@ -249,7 +268,7 @@ const actionDomain = createActionDomain({ settleSurvival });
 const { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTimeMax } = actionDomain;
 const saveDomain = createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit: SURV_LOG_LIMIT });
 const { DEATHS_CAP, trimDeaths, dumpSurv, loadSurv } = saveDomain;
-export { survAct, cancelPlayerBusy, playerTimeLeft, playerTimeMax, DEATHS_CAP, trimDeaths, dumpSurv, loadSurv };
+export { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTimeMax, DEATHS_CAP, trimDeaths, dumpSurv, loadSurv };
 export { playerReach } from './survplay-camp.mjs';
 
 
@@ -294,9 +313,20 @@ function restoreDistricts(world) {
 }
 
 
-export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
+export async function tickSurvPlay(sp, { now, onResidentAction, advanceMinutes } = {}) {
   const w = sp.world;
-  w.t += 1;
+  const prevT = w.t;
+  if (w.simClock) {
+    // 连续路径：t 是派生量；正常 tick 由真实 elapsed 推进。床/离线补时显式喂分钟。
+    // 迁移期保底：一次 tick 至少推进一刻（60 游戏分钟），这样直接调 tickSurvPlay 的测试/手动 step
+    // 不会因为真实时间没过而卡住；自动 tick 在 7.5s 节拍下本来就已经过了一刻，不额外加速。
+    if (Number.isFinite(advanceMinutes)) w.simClock.advanceMinutes(advanceMinutes);
+    else if (w.fastForward) w.simClock.advanceMinutes(60);
+    else if (!w.simClock.manual && w.simClock.nowTick() <= prevT) w.simClock.advanceMinutes(60);
+    w.t = Math.max(prevT, w.simClock.nowTick());
+  } else {
+    w.t += 1;
+  }
   advancePlayerBusy(sp);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
   w.percepts = [];
@@ -374,22 +404,38 @@ export async function tickSurvPlay(sp, { now, onResidentAction } = {}) {
       continue;
     }
     const traceStart = onResidentAction ? a.trace.length : 0;
-    // V7.2：进行中的动作每刻推进一次（施工按 30 分钟落一单位劳动，打断时进度保留）。
+    // V7.2：进行中的动作推进（旧路径按刻；连续路径按 elapsed 游戏分钟，施工 30 分落一单位）。
     if (residentTimeModel(w)) {
       const adv = advanceResidentBusy(w, id);
       if (adv.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: adv.code });
     }
-    try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
-    // V7.2：个人时间模型下，同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX ⇒ 不会 CPU 爆炸）。
-    // 追加决策 reason=null ⇒ 不问模型；模型预算/熔断仍只归 host 资源层。
-    if (residentTimeModel(w) && a.lastMetabTick === w.t) {
-      const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
-      const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
-      for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {
-        if (!residentCanChain(w, id) || residentBusy(w, id)) break;
-        const before = a.counters.actions ?? 0;
-        try { await a.decideOn(w, { metab: a.lastMetab, reason: null, told: false, silent: true, sameKind }); } catch { break; }
-        if ((a.counters.actions ?? 0) === before) break;
+    if (w.simClock) {
+      // P1：决策机会按游戏分钟到期（默认 10 分），实际调用由真实毫秒令牌桶限流；
+      // busy 不再提前 return——身体在干活，头脑仍可感知/思考，行动被拒会留下 BUSY trace。
+      const think = w.think;
+      const bypassBucket = Number.isFinite(advanceMinutes) || w.simClock.manual;
+      let thoughts = 0;
+      while (think && thoughts < think.maxPerTick) {
+        const nowMin = w.simClock.nowMinutes();
+        if (a.nextThinkMin !== undefined && nowMin + 1e-9 < a.nextThinkMin) break;
+        if (!bypassBucket && !think.bucket.take()) break;
+        a.nextThinkMin = (a.nextThinkMin === undefined ? nowMin : Math.max(a.nextThinkMin, nowMin)) + think.everyMin;
+        thoughts += 1;
+        try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+      }
+    } else {
+      try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+      // V7.2：个人时间模型下，同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX ⇒ 不会 CPU 爆炸）。
+      // 追加决策 reason=null ⇒ 不问模型；模型预算/熔断仍只归 host 资源层。
+      if (residentTimeModel(w) && a.lastMetabTick === w.t) {
+        const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
+        const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
+        for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {
+          if (!residentCanChain(w, id) || residentBusy(w, id)) break;
+          const before = a.counters.actions ?? 0;
+          try { await a.decideOn(w, { metab: a.lastMetab, reason: null, told: false, silent: true, sameKind }); } catch { break; }
+          if ((a.counters.actions ?? 0) === before) break;
+        }
       }
     }
     // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
@@ -557,6 +603,8 @@ export function survView(sp) {
   return {
     workMotions: workMotionView(w),
     t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
+    // P1：连续时钟只读视图。research/旧路径没有 simClock ⇒ 不出现这两个字段。
+    ...(w.simClock ? { timeMode: 'continuous', serverNow: Date.now(), gameMinutes: Number(w.simClock.nowMinutes().toFixed(3)), clock: w.simClock.state() } : {}),
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
@@ -579,7 +627,7 @@ export function survView(sp) {
       ...(w.independentWorld ? {
         result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive',
         // V7.3 第三批：把进行中的 busy 暴露给 UI，供「取消」按钮显示；研究态不输出。
-        busy: (() => { const b = w.survival?.actClock?.p1?.busy; return b ? { id: b.id, kind: b.kind, remainMin: Number((b.remainMin ?? 0).toFixed(1)), totalMin: b.totalMin } : null; })(),
+        busy: (() => { const b = w.survival?.actClock?.p1?.busy; return b ? { id: b.id, kind: b.kind, remainMin: Number((b.remainMin ?? 0).toFixed(1)), totalMin: b.totalMin, ...(Number.isFinite(b.endMin) ? { startMin: b.startMin, endMin: b.endMin } : {}) } : null; })(),
       } : {}) },
     ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     ...(w.gameRules ? { resources: resLedgerView(w) } : {}),

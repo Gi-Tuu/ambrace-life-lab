@@ -28,6 +28,8 @@ function makeComparison(origin, revision = 0, saved) {
     const record = saved?.branches?.[key];
     const play = loadSurv(structuredClone(record?.world ?? origin), CFG.seed, {
       ...survivalOptions(),
+      // 对照/研究面必须逐位可复现：强制旧每刻结算，不接连续时钟。
+      simTime: false,
       residentCondition: key === 'A' ? 'C2' : 'C2-neg',
       residentChannelMask: masks[key],
       deliberator: null,

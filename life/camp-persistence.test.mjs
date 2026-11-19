@@ -134,7 +134,7 @@ test('复审：重开写入失败保留旧索引和世界进度', async t=>{
   assert.equal(campSurv(key).world,world);
 });
 
-test('复审：已常驻营地的读取等待整拍完成，并返回独立快照', async t=>{
+test('复审：已常驻营地的读取不被整拍阻塞，并返回独立快照', async t=>{
   await host.start();
   t.after(()=>host.stop());
   const {key}=await openCamp('整拍快照');
@@ -150,7 +150,8 @@ test('复审：已常驻营地的读取等待整拍完成，并返回独立快�
     await entered;
     request=host.readWorld('survival',key).then(view=>{resolved=true;return view;});
     await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(resolved,false);
+    // P1：读路径不排 tickChain；模型等待期间也必须立刻拿到一致快照。
+    assert.equal(resolved,true, '读取不得被一整拍模型等待阻塞');
   } finally { release();await step;agent.tick=original; }
   const view=await request;
   assert.equal(view.survival.t,before+1);

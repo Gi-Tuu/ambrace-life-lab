@@ -40,6 +40,8 @@ function dumpSurv(sp) {
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
   const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+    // P1：连续时钟只随正式游戏入档；研究态没有 simClock ⇒ 哈希逐位不变。
+    ...(w.simClock ? { clock: { rate: w.simClock.rate, msPerGameMinute: w.simClock.msPerGameMinute, gameMinutes: w.simClock.nowMinutes(), t: w.t } } : {}),
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}),
     // V7.3.2：fair 调度的欠账/上次机会随档走，重启后不重置轮转（仅正式游戏）。
  };
@@ -63,6 +65,12 @@ function loadSurv(raw,seed=7,options) {
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
     w.t = raw.t;
+    // P1 读档连续：把连续时钟重锚到存档刻；旧档没有 clock 时按 t*60 接上，不补离线空档。
+    if (w.simClock) {
+      const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
+      w.simClock.setGameMinutes(minutes);
+      w.t = Math.max(w.t, w.simClock.nowTick());
+    }
     if (w.survival.households && raw.survival.households) w.survival.households = raw.survival.households;
     for (const id of Object.keys(raw.minds ?? {})) {
       if (!/^c[1-9]\d*$/.test(id)) continue;
@@ -232,6 +240,13 @@ function loadSurv(raw,seed=7,options) {
     sp.world.occupancy = occOk
       ? Object.fromEntries(Object.entries(rawOcc).map(([k, arr]) => [k, Array.isArray(arr) ? arr.slice() : []]))
       : expected;
+    // P1：装载本身会消耗真实毫秒；在最后再重锚一次，保证"读档后的世界分钟 = 存档分钟"，
+    // 不让读档磁盘/反序列化的耗时偷偷写进世界时间。
+    if (w.simClock) {
+      const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
+      w.simClock.setGameMinutes(minutes);
+      w.t = Math.max(w.t, w.simClock.nowTick());
+    }
   }
   // V7.3.2：恢复 fair 调度欠账/上次机会；旧档没有该字段则保持空状态（不伪造历史）。
   return sp;

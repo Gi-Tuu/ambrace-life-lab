@@ -14,7 +14,7 @@ import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex, readOwnerSidecar, writeOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
-import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy } from './survplay.mjs';
+import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy, advancePlayerBusy } from './survplay.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
 import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive, publicSaveError } from './host-saves.mjs';
 
@@ -277,11 +277,12 @@ async function backToMainCampInQueue() {
 
 // V7.2 阶段 B：正式游戏默认走角色个人时间（一天 1440 分）；V72_TIME=0 是退回旧"每刻 100 点预算"的兼容开关。
 function survivalOptions() {
-  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, actTimeModel: process.env.V72_TIME !== '0', gameRules: process.env.GAME_RULES === '1', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, actTimeModel: process.env.V72_TIME !== '0', gameRules: process.env.GAME_RULES === '1', simTime: process.env.SIM_TIME !== '0', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 async function advanceWorlds(onError = null, auto = false) {
-  if (!auto || S.running) await tickBody(onError);
+  // 手动 step/测试仍按"一刻=60 游戏分钟"推进；自动 tick 交给连续时钟按真实 elapsed 推进。
+  if (!auto || S.running) await tickBody(onError, auto ? undefined : 60);
   if (!auto) return;
   if (S.compareRunning && observerActive(Math.max(S.viewers.compare ?? 0, S.viewers.comparison ?? 0), Date.now())) {
     await tickComparison();
@@ -289,7 +290,7 @@ async function advanceWorlds(onError = null, auto = false) {
     if (S.compareView.A.t % SAVE_EVERY === 0) await saveComparison();
   }
 }
-async function tickBody(onError = null) {
+async function tickBody(onError = null, advanceMinutes) {
   // 单拍调用计数：PER_TICK_CAP 默认 0（不设上限），此时这一行与本变量都不影响任何行为。
   S.asksThisTick = 0;
   const compareActive=GAME_MODE!=='game' || observerActive(S.viewers.compare,Date.now());
@@ -370,7 +371,7 @@ async function tickBody(onError = null) {
   let skipped = 0;
   for (const sp of camps) {
     if (budget > 0 && Date.now() - started > budget) { skipped += 1; continue; }
-    try { await tickSurvPlay(sp); } catch (e) { onError?.(String(e?.message ?? e).slice(0,120)); }
+    try { await tickSurvPlay(sp, sp.world?.simClock && Number.isFinite(advanceMinutes) ? { advanceMinutes } : undefined); } catch (e) { onError?.(String(e?.message ?? e).slice(0,120)); }
   }
   S.campTickSkipped = skipped;   // Phase D／§15：生存单世界随拍推进（居民决策环 async）
   const saveTick = GAME_MODE === 'game' ? (S.surv?.world.t ?? 0) : S.packs.A.world.t; // P1-7：game 模式 A/B 不推进，改用生存刻触发存档
@@ -415,8 +416,18 @@ function queueWorldWrite(operation) {
   tickChain = run.catch(() => {});
   return run;
 }
+// P1 输入解耦：普通生存动作只和彼此串行（保护状态提交），不再排在长 tick/模型等待后面。
+// talk_say 会 await 模型、camp_sleep 会内嵌多拍结算，仍走 queueWorldWrite 以保安全。
+let actChain = Promise.resolve();
+function queueAct(operation) {
+  const run = actChain.then(operation);
+  actChain = run.catch(() => {});
+  return run;
+}
 async function actInSurvival(sp, body, ask, now) {
   let result;
+  // 玩家长动作到点后，在下一次输入/读档时补结算；不要求正好落在 tick 边界。
+  advancePlayerBusy(sp);
   if (body.kind === 'talk_open') result = openTalk(sp, body, now);
   else if (body.kind === 'talk_say') result = await sayTo(sp, body, ask, now);
   else if (body.kind === 'talk_close') result = closeTalk(sp);
@@ -499,7 +510,10 @@ async function catchUpSurvival(minutes, sp = S.surv) {
   setSurvivalDeliberator(sp, null); // 离线补时走本地替身
   const start = sp.world.t;
   try {
-    for (let i = 0; i < steps && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed); i += 1) await tickSurvPlay(sp);
+    for (let i = 0; i < steps && (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed); i += 1) {
+      // P1：连续时钟下补时仍按"一刻=60 游戏分钟"喂，结算点不变，也不等真实时间。
+      await tickSurvPlay(sp, sp.world.simClock ? { advanceMinutes: 60 } : undefined);
+    }
   } finally {
     setSurvivalDeliberator(sp, savedDelib);
   }
@@ -887,7 +901,7 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     serialize, applyInto, loadArchive, readArchive, quarantine, buildPacks, makePack, freshPacks, packsFrom,
     catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, takePendingFlush,
     campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
-    claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, manualTick, autoTick,
+    claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, queueAct, manualTick, autoTick,
     scheduleTickSave, takeTickSave, onSignal,
   };
 }

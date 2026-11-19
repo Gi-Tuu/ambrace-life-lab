@@ -16,7 +16,8 @@ const withV72 = (value, fn) => {
 
 test('V72 生产配置默认开启个人时间：同刻多动作、当天用尽 TIME_WAIT', () => withV72(undefined, () => {
   assert.equal(survivalOptions().actTimeModel, true, '不设环境变量时生产配置应默认打开');
-  const opts = { ...survivalOptions(), gameRules: true, independentWorld: true };
+  // P1：生产默认已切连续时钟；这条闸门只钉 V7.2 每刻池的兼容路径，必须显式 simTime:false。
+  const opts = { ...survivalOptions(), gameRules: true, independentWorld: true, simTime: false };
   const sp = createSurvPlay(7, opts);
   const w = sp.world;
   assert.equal(w.survival.actTimeModel, true, '生产开关应落到世界');
@@ -29,7 +30,7 @@ test('V72 生产配置默认开启个人时间：同刻多动作、当天用尽 
 
 test('V72 兼容开关 V72_TIME=0：正式游戏退回每刻 100 点预算', () => withV72('0', () => {
   assert.equal(survivalOptions().actTimeModel, false, 'V72_TIME=0 必须真的关掉个人时间');
-  const opts = { ...survivalOptions(), gameRules: true, independentWorld: true };
+  const opts = { ...survivalOptions(), gameRules: true, independentWorld: true, simTime: false };
   const sp = createSurvPlay(7, opts);
   const w = sp.world;
   assert.equal(w.survival.actTimeModel, undefined, '世界层不该带着个人时间开关');
