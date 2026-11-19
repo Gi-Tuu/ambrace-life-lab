@@ -871,7 +871,7 @@ export function createCampRenderer() {
     if (terrainCount) paint(b,terrainCount,terrain);
     let from=terrainCount;
     for (const r of ranges) {
-      if (!covered.has(r.id)) continue;
+      if (!covered.has(r.id) || !/^(roof|room-roof):/.test(r.id)) continue;
       if (from<r.from) paint(b,r.from-from,false,from);
       faded.push({b,...r});
       from=r.from+r.count;

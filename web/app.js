@@ -1313,7 +1313,8 @@ function campViewport(cv, aspect) {
   const available=full ? innerWidth-12 : canvasHostWidth(cv)-20;
   const display=Math.max(180,Math.min(full?innerWidth-12:1120,available));
   const height=Math.min(full?innerHeight-80:520,Math.round(display/aspect));
-  const ratio=Math.min(devicePixelRatio||1,1.5);
+  const motionScale=S?.moving?0.78:1;
+  const ratio=Math.min(devicePixelRatio||1,1.5)*motionScale;
   const width=Math.round(display*ratio), pixels=Math.round(Math.max(150,height)*ratio);
   if(cv.width!==width||cv.height!==pixels){cv.width=width;cv.height=pixels;}
   cv.style.width=display+'px';
@@ -2256,7 +2257,7 @@ function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.textContent = ''; }, ms);
 }
-const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻行动时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', TELEPORT: '太远了，得走过去才行（村外按世界时限速）', OUT_OF_REACH: '够不到，走近一点', REFUSED: '对方拒绝协助', CANCELLED: '已取消当前动作', NO_BUSY: '没有正在进行的动作', BUSY: '手上还有没做完的动作', STAMINA: '体力不够', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
+const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPTY_PLOT: '没有空畦', NO_WATER: '水不够', NOT_GARDEN: '得在菜园', NOT_OUTDOOR: '得在户外', OCCUPIED: '当前地点已占用', NO_MATERIAL: '材料不够', NO_SITE: '当前地点没有工地', NO_LOT:'这里没有可施工的地块', NO_REPAIR: '当前地点没有损坏建筑', NO_LOC: '未知地点', UNKNOWN_KIND: '未知动作', EMPTY: '公仓空了', NOTHING_HERE: '这里没有可交互的对象', NEED_TOOL: '工具不对', NEED_TRAY: '需要木托盘（工坊/院子用 2 木制作）', ACTION_BUDGET: '本刻可用时间已用完，等下一拍', PLAYER_DEAD: '你已倒下', CAMP_ENDED: '这一局已经结束', NOT_TOGETHER: '对方不在这里', NO_RESIDENT: '这里没有可交谈的人', NO_TALK: '对话已经结束', EMPTY_TEXT: '说点什么', NO_RESOURCE: '这里的资源采空了，等它恢复', NOT_GATHER_LOC: '这里没有可采集的资源', TELEPORT: '太远了，得走过去才行（村外按世界时限速）', OUT_OF_REACH: '够不到，走近一点', REFUSED: '对方拒绝协助', CANCELLED: '已取消当前动作', NO_BUSY: '没有正在进行的动作', BUSY: '手上还有没做完的动作', STAMINA: '体力不够', COOP_OFF: '合作未开启', assist: '愿意协助', alternative: '有条件参与', refuse: '拒绝协助' };
 // E 打开背包，F/Enter 使用场景中的对象。
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
@@ -3329,7 +3330,7 @@ function renderSeasonHud(view, location, outdoor) {
     ph.innerHTML = [
       [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
       [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
-      [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日时间' : '本刻行动', `${view.player?.timeLeft ?? 0}/${view.player?.timeMax ?? 100}`],
+      [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日时间' : '本刻时间', `${view.player?.timeLeft ?? 0}/${view.player?.timeMax ?? 100}`],
       ...(view.player?.busy ? [[`${STAT_ICON.action}`, '⏳ 动作', `${esc(view.player.busy.kind)} 剩 ${view.player.busy.remainMin} 分`]] : []),
     ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
     if (view.player?.busy && !ph.querySelector('#btnBusyCancel')) {
@@ -3413,7 +3414,7 @@ function renderSurv(s) {
       <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
       <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
       ${outside ? '<span class="bad" title="村外步行按世界时限速，冲刺禁用；与居民同速">村外·限速</span>' : ''}
-      ${s.player?.timeLeft != null ? `<span class="stat" title="${s.player?.timeMax === 1440 ? '今日剩余可用分钟' : '本刻行动'}">${STAT_ICON.action}<b>${s.player.timeLeft}/${s.player?.timeMax ?? 100}</b></span>` : ''}
+      ${s.player?.timeLeft != null ? `<span class="stat" title="${s.player?.timeMax === 1440 ? '今日剩余可用分钟' : '本刻剩余可用分钟'}">${STAT_ICON.action}<b>${s.player.timeLeft}/${s.player?.timeMax ?? 100}</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}
@@ -4944,6 +4945,8 @@ loadAssets().finally(() => {
     const mstep=SPEED*ACT.fps*dt, playerStep=mstep*(keys.has('sprint')?1.75:1);
     if (guidance && now>guidance.until) { guidance=null; forceRepaint=true; }
     const walking=mdx||mdy||Boolean(roomRoute)||Object.values(WALK).some(walker=>walker.pi<walker.path?.length||walker.moving);
+    S.moving=walking;
+    S.moving=walking;
     const repaint3d=forceRepaint || changed || walking || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24));
     // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
