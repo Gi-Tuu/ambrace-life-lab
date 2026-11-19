@@ -1941,7 +1941,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     ? sceneGuidance(cv._cam,w,player,hoverHit,right) : [];
   const guideHeight=surfaceHeight;
   if (hints.length) impacts.push(...guideGeometry(hints,guideHeight));
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,impacts,hearth,covered,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
+  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,terrain,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight,

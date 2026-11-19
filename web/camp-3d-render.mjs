@@ -29,7 +29,7 @@ export function campCamera({ x,z,width,height,span,yaw=.29,pitch=.65,targetY=.55
     back, focus:[x,z],
     view: [right[0],up[0],back[0],0,right[1],up[1],back[1],0,right[2],up[2],back[2],0,
       -dot(right,eye),-dot(up,eye),-dot(back,eye),1],
-    projection: [1/halfX,0,0,0,0,1/halfY,0,0,0,0,-2/199.9,0,0,0,-200.1/199.9,1],
+    projection: [1/halfX,0,0,0,0,1/halfY,0,0,0,0,-2/199,0,0,0,-201/199,1],
     project(px,py,pz) {
       const p = [px-aim[0],py-aim[1],pz-aim[2]];
       return [(1+dot(right,p)/halfX)*width/2,(1-dot(up,p)/halfY)*height/2];
@@ -429,6 +429,7 @@ const VERTEX = `
   attribute vec4 aNormal;
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
+uniform mediump vec4 uCutout;
   uniform bool uRegionTexture;
   uniform mediump vec4 uSunRay;
   uniform mediump vec3 uLight;
@@ -736,7 +737,7 @@ export function createCampRenderer() {
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Water','HasWater','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','Ground','Fog','FogBounds','Texture','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   
     const postProgram=gl.createProgram();
     {
@@ -867,11 +868,20 @@ export function createCampRenderer() {
     }
     return item;
   }
-  function paintStage({b,count,ranges,terrainCount}, covered, faded, terrain=false) {
+  function paintStage({b,count,ranges,terrainCount}, covered, faded, terrain=false, cutout=null) {
     if (terrainCount) paint(b,terrainCount,terrain);
     let from=terrainCount;
     for (const r of ranges) {
-      if (!covered.has(r.id) || !/^(roof|room-roof):/.test(r.id)) continue;
+      const isRoof=/^(roof|room-roof):/.test(r.id);
+      if (isRoof && cutout) {
+        if (from<r.from) paint(b,r.from-from,false,from);
+        gl.uniform4f(uniform.Cutout,cutout[0],cutout[1],cutout[2],1);
+        paint(b,r.count,false,r.from);
+        gl.uniform4f(uniform.Cutout,0,0,0,0);
+        from=r.from+r.count;
+        continue;
+      }
+      if (!covered.has(r.id) || !isRoof) continue;
       if (from<r.from) paint(b,r.from-from,false,from);
       faded.push({b,...r});
       from=r.from+r.count;
@@ -895,7 +905,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false }) {
+    render({ target,stage,regions,regionAtlas,life,homes,terrain,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],waterMask,season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null }) {
       if (lost || gl.isContextLost()) return false;
       const width=target.width,height=target.height;
       if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
@@ -978,9 +988,9 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
           gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
         }
       }
-      paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain));
-      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded);
-      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
+      paintStage(stageBuffer(stage,cacheLimit),covered,faded,Boolean(terrain),cutout);
+      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded,false,cutout);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded,false,cutout);
       if (physical && shadows) {
         const base=groundContactMesh(shadows);
         const cast=sun?.direct ? contactShadowMesh(shadows,sun,{soft:true}) : null;
