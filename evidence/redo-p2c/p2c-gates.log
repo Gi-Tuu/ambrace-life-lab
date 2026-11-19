@@ -1,0 +1,34 @@
+✔ P2-01 正式游戏视图预算 = 冲刺预算 39.375/刻；研究态仍是旧 10/刻 (50.3809ms)
+✔ P2b-02 正式游戏居民 startMove 接同一 speedBudget + space 路径；研究态仍 12/刻 (157.9399ms)
+✔ P2-03 正式游戏村外同预算：39.375/刻可走、再远判 TELEPORT（不再村外禁冲刺） (85.2767ms)
+✔ P2-03b 非移动动作按基础步行预算 22.5/刻；冲刺预算只给 movement sync (88.0589ms)
+✔ P2-04 旧时间模型/研究态仍是村外 10/刻（不被新预算改写） (45.3142ms)
+✔ P2-05 旧档读档位置连续：playerPos/loc/campPlayerRoom 原样恢复 (79.1378ms)
+✔ P2-06 研究态 dumpSurv 逐位相同（space 不进入存档） (1.0594ms)
+✔ P2-07 服务端 construction space：岸带收紧、桥可走、桥面高度、门 portal (82.3877ms)
+✔ P2-08 fallback 开关：SPACE_V1=0 时 groundQuery 回退旧实现 (0.2668ms)
+✔ P2-09 客户端速度换算与服务端预算同一函数：冲刺恰好卡在 cap 上 (0.258ms)
+✔ P2b-01 服务端 stage 真的带树/岩/山丘/桥（trees:[] 会红） (226.3025ms)
+✔ P2b-02 客户端/服务端同坐标 0 差异（每例 4000 点：walk/height） (294.6883ms)
+✔ P2b-03 居民/玩家同一 speedBudget：按 space 路径长度推导；研究态仍 12/刻 (114.97ms)
+✔ P2b-04 A* 唯一核心：astar 结果 = pixelPath 转向点展开（含绕墙） (1.2633ms)
+✔ P2b-05 playerReach 几何：实体/水面拒 OUT_OF_REACH，合法点放行，室内按房间空间 (79.153ms)
+✔ P2b-06 旧档位置连续：playerPos/campPlayerRoom 原样恢复且几何口径一致 (88.1338ms)
+✔ P2b-07 研究态 dumpSurv 逐位不变（居民仍 12/刻、space 不入档） (1.1598ms)
+✔ P2c-01 唯一位置事实：正式游戏每人有 pos；研究态没有 pos 且 dump 不含位置 (50.9661ms)
+✔ P2c-02 旧档迁移：没有 pos 时按 loc/槽位/playerPos/residentTravel.at 确定性补齐 (165.5767ms)
+✔ P2c-03 静态闸门：旧位置字段只在 actor-pos/迁移/研究快照适配里被写 (31.0754ms)
+✔ P2c-04 房间是显式 16×12 世界空间：门 portal、墙/家具/越界拒绝 (38.7664ms)
+✔ P2c-05 居民连续移动：按 space 路径逐段推进，到达才同步 loc/occupancy (144.3549ms)
+✔ P2c-06 玩家与居民同一 speedBudget：22.5/刻步行；冲刺 39.375/刻只在同一张表 (76.6021ms)
+✔ P2c-07 穿墙/越界拒绝：室外实体、房间墙/家具、WILDS 外 (84.3655ms)
+✔ P2c-08 A* 单入口：web/walk.astar 是唯一薄包装，核心只有 pixelPath；worldRoute 是同一核心的世界适配 (0.8604ms)
+✔ P2c-09 房间进出是 portal 迁移：进门切 room 空间，出门切回门外世界点 (83.1587ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2591.1856

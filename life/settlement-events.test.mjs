@@ -46,9 +46,9 @@ test('same-seed storm records the forecast, verified damage and every actual rep
   // 建筑组合改变 ⇒ 受损建筑从 5 降到 4。世界事实（预警/损伤/修复顺序、逐项耗材）不变；
   // 下界随轨迹调整，证据见 evidence/redo-p2b/。
   assert.ok(impact.buildings.length >= 4, `至少 4 处建筑受损，实测 ${impact.buildings.length}`);
-  // P2b：居民行程变快后，风暴当日地块水分轨迹与旧基线差 0.01（0.29→0.30）；
-  // 这里钉的是"风暴后地块被损坏"这一世界事实，具体数值随轨迹更新（见回报 §长程变化）。
-  if (impact.plot) assert.equal(impact.plot.after, .3);
+  // P2c：居民改为沿 space 路径连续移动后，风暴当日地块水分轨迹再变（P2b 0.30 → 0.42，到点 +1 缓冲后 0.42）；
+  // 这里钉的是"风暴后地块被损坏"这一世界事实，具体数值随轨迹更新（见 P2c 回报 §长程变化）。
+  if (impact.plot) assert.equal(impact.plot.after, .42);
   const repairs = storm.filter(row => row.kind === 'repair');
   assert.ok(repairs.length >= 3, '损伤后应有修复');
   for (const repair of repairs) {

@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "lines": [
+    {
+      "at": "2026-11-19T18:11:54.961Z",
+      "kind": "roomSpace",
+      "door": {
+        "x": 7,
+        "z": 11,
+        "w": 2,
+        "d": 1
+      },
+      "doorWalk": true,
+      "wallBlocked": false,
+      "furnitureBlocked": false,
+      "outsideBlocked": false,
+      "portalKind": "door",
+      "portalRoom": "hall",
+      "wallMove": {
+        "x": 38,
+        "z": 96
+      },
+      "doorMove": {
+        "x": 128,
+        "z": 192
+      }
+    },
+    {
+      "at": "2026-11-19T18:11:56.398Z",
+      "kind": "keyboardWalk",
+      "before": {
+        "x": 120,
+        "y": 112
+      },
+      "after": {
+        "x": 83.19839999999999,
+        "y": 150,
+        "walkable": true
+      }
+    }
+  ]
+}
