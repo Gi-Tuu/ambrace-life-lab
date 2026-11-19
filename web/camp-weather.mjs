@@ -3,20 +3,28 @@ import { hash2 } from '../shared/camp-terrain.mjs';
 export function paintWeather(g,climate,time,ratio) {
   if (!climate.rain && !climate.snow) return;
   const {width,height}=g.canvas, snow=climate.snow && !climate.storm;
-  const count=climate.storm?104:snow?50:55, speed=snow?24:climate.storm?420:265;
+  const count=climate.storm?86:snow?44:48;
+  const speed=snow?24:climate.storm?420:265;
   g.save();
   g.strokeStyle=snow?'#DDE4DE':'#A3BEC1';
   g.fillStyle=g.strokeStyle;
   g.lineWidth=Math.max(1,ratio);
-  g.globalAlpha=snow?.57:climate.storm?.46:.26;
-  g.beginPath();
+  g.lineCap='round';
   for (let i=0;i<count;i+=1) {
-    const x=((i*271.3+time*(snow?9:climate.storm?160:65))*ratio)%(width+20)-10;
-    const y=((i*163.7+time*speed)*ratio)%(height+24)-12;
-    if (snow) g.fillRect(Math.round(x),Math.round(y),ratio*(i%3===0?2:1),ratio);
-    else { g.moveTo(x,y); g.lineTo(x+(climate.storm?7:3)*ratio,y+10*ratio); }
+    const seed=i+Math.floor(time*.35)*131;
+    const r1=hash2(seed,1,7), r2=hash2(seed,2,7), r3=hash2(seed,3,7);
+    const x=((i*271.3+r1*431+time*(snow?9:climate.storm?160:65))*ratio)%(width+40)-20;
+    const y=((i*163.7+r2*379+time*speed)*ratio)%(height+40)-20;
+    if (snow) {
+      g.globalAlpha=.30+r3*.25;
+      g.fillRect(Math.round(x),Math.round(y),ratio*(i%3===0?2:1),ratio);
+      continue;
+    }
+    const len=(5+r2*10)*ratio;
+    const dx=(2+r3*5)*ratio*(climate.storm?1.4:1);
+    g.globalAlpha=(climate.storm?.22:.09)+r3*(climate.storm?.16:.11);
+    g.beginPath();g.moveTo(x,y);g.lineTo(x+dx,y+len);g.stroke();
   }
-  g.stroke();
   g.restore();
 }
 
