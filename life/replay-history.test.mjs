@@ -58,3 +58,20 @@ test('RP-05 空历史/无对照：可解释，不抛异常', () => {
   assert.equal(replayRange(null).code, 'NO_REPLAY');
   assert.equal(replayPoint(null, 1).code, 'NO_REPLAY');
 });
+
+test('同一刻保留最新场景及已有事件；旧帧不借用新场景',()=>{
+  const replay=createReplay(2);
+  replay.terrain={mapSeed:13};
+  recordReplayFrame(replay,{t:0,A:card('A',0),B:card('B',0)});
+  const scenes=(weather)=>({A:{t:1,weather},B:{t:1,weather:'clear'}});
+  recordReplayFrame(replay,{t:1,A:card('A',1),B:card('B',1),scene:scenes('clear'),events:[{id:1,t:1}]});
+  recordReplayFrame(replay,{t:1,A:card('A',1),B:card('B',1),scene:scenes('rain')});
+  const selected=replayPoint(replay,1,2);
+  assert.equal(replay.frames.length,2);
+  assert.ok(selected.scenes);
+  assert.deepEqual(selected.scenes.A,{mapSeed:13,t:1,weather:'rain'});
+  assert.equal(selected.scenes.B.weather,'clear');
+  assert.deepEqual(selected.frame.events,[{id:1,t:1}]);
+  assert.equal(replayPoint(replay,0,2).scenes,null);
+  assert.ok(replayRange(replay).frames.every(frame=>!frame.scene));
+});

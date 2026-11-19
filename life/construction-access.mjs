@@ -10,7 +10,7 @@ import { constructionFootprint, constructionGate, entrancePoints, workPoints, cl
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
-const fail = code => ({ ok:false, code });
+const fail = (code, guide) => ({ ok:false, code, ...guide });
 
 export const constructionAccessEnabled = w => w.gameRules === true && w.layoutVersion >= 2 && Boolean(w.campLayout);
 
@@ -69,38 +69,54 @@ export function constructionAccess(w, record, { proposed = false, from, entrance
     const {x,z,w:width,d} = record.lot;
     const footprint = [[x,z],[x+width,z],[x,z+d],[x+width,z+d],[x+width/2,z+d/2]];
     const gate = constructionGate(record,w.campLayout,w.peripheralHomes);
-    const entries = gate ? entrancePoints(gate).filter(p=>allows(...p)) : [];
-    const work = workPoints(record.lot).filter(p=>allows(...p));
+    const entryCandidates = gate ? entrancePoints(gate) : [];
+    const workCandidates = workPoints(record.lot);
+    const entries = entryCandidates.filter(p=>allows(...p));
+    const work = workCandidates.filter(p=>allows(...p));
     const connected = points => points.find(p=>joinedRoute(p,map.anchor,allows));
-    if (proposed && others.some(b=>overlapsLot(record.lot,b.lot,.35))) result = fail('OCCUPIED');
-    else if (proposed && footprint.some(p=>!ground(...p))) result = fail('BUILD_PATH_BLOCKED');
-    else if (proposed && [...map.entries,...others.map(other=>constructionGate(other,w.campLayout,w.peripheralHomes))].some(gate => {
-      if (!gate || !overlapsLot(gate,record.lot,.33)) return false;
-      const before = entrancePoints(gate).filter(p=>clearOutside(...p));
-      return before.length && !before.some(p=>allows(...p));
-    })) result = fail('BUILD_ENTRANCE_BLOCKED');
-    else if (gate && !entries.length) result = fail('BUILD_ENTRANCE_BLOCKED');
-    else if (!work.length) result = fail('BUILD_WORK_BLOCKED');
+    const overlap = proposed && others.find(b=>overlapsLot(record.lot,b.lot,.35));
+    const badGround = proposed && footprint.find(p=>!ground(...p));
+    const coveredGate = proposed && !overlap && !badGround && [...map.entries,...others.map(other=>constructionGate(other,w.campLayout,w.peripheralHomes))]
+      .filter(otherGate=>otherGate && overlapsLot(otherGate,record.lot,.33))
+      .map(otherGate=>entrancePoints(otherGate).filter(p=>clearOutside(...p)))
+      .find(before=>before.length && !before.some(p=>allows(...p)));
+    if (overlap) {
+      const other=overlap.lot;
+      const blockedAt=[x+Math.max(0,Math.min(width,other.x+other.w*.5-x)),
+        z+Math.max(0,Math.min(d,other.z+other.d*.5-z))];
+      result = fail('OCCUPIED',{blockedAt});
+    } else if (badGround) result = fail('BUILD_PATH_BLOCKED',{blockedAt:badGround});
+    else if (coveredGate) result = fail('BUILD_ENTRANCE_BLOCKED',{blockedAt:coveredGate[0]});
+    else if (gate && !entries.length) result = fail('BUILD_ENTRANCE_BLOCKED',{blockedAt:entryCandidates[0]});
+    else if (!work.length) result = fail('BUILD_WORK_BLOCKED',{blockedAt:workCandidates[0]});
     else {
       const routeEntry = gate && connected(entries);
       const workPoint = connected(work);
-      result = gate && !routeEntry || !workPoint ? fail('BUILD_PATH_BLOCKED') : { ...ok, entries, entryPoint:routeEntry || null, work, workPoint };
+      if (gate && !routeEntry) result = fail('BUILD_PATH_BLOCKED',{unreachableAt:entries[0]});
+      else if (!workPoint) result = fail('BUILD_PATH_BLOCKED',{unreachableAt:work[0]});
+      else result = { ...ok, entries, entryPoint:routeEntry || null, work, workPoint };
     }
     map.results.set(key,result);
   }
   if (!result.ok || !from) return result;
   const targets = entrance ? result.entries : result.work;
-  if (!allows(...from)) return fail(entrance ? 'BUILD_ENTRANCE_BLOCKED' : 'BUILD_WORK_BLOCKED');
-  const canReach = targets.some(([x,z])=>{
+  const standAt = entrance ? result.entryPoint : result.workPoint;
+  const code = entrance ? 'BUILD_ENTRANCE_BLOCKED' : 'BUILD_WORK_BLOCKED';
+  if (!allows(...from)) return fail(code,{standAt,blockedAt:from});
+  let blockedAt, nearest=Infinity;
+  for (const [x,z] of targets) {
     const dx=x-from[0], dz=z-from[1], distance=Math.hypot(dx,dz);
-    if (distance>1.85) return false;
+    if (distance>1.85) continue;
     const steps=Math.max(1,Math.ceil(distance*12));
+    let obstacle;
     for (let i=1;i<=steps;i++) {
-      if (!allows(from[0]+dx*i/steps,from[1]+dz*i/steps)) return false;
+      const point=[from[0]+dx*i/steps,from[1]+dz*i/steps];
+      if (!allows(...point)) { obstacle=point; break; }
     }
-    return true;
-  });
-  return canReach ? result : fail(entrance ? 'BUILD_ENTRANCE_BLOCKED' : 'BUILD_WORK_BLOCKED');
+    if (!obstacle) return result;
+    if (distance<nearest) { blockedAt=obstacle; nearest=distance; }
+  }
+  return fail(code,blockedAt?{standAt,blockedAt}:{standAt});
 }
 
 export function recordConstructionBlock(w, actor, loc, action, reason) {

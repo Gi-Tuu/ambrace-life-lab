@@ -1,14 +1,12 @@
 import { districtPads } from './camp-districts.mjs';
 import { hash2 } from './camp-terrain.mjs';
-import { inCamp, wildLandscape, REGION_SIZE, WILDS } from './wild-landscape.mjs';
+import { inCamp, wildLandscape, regionSlotPosition, WILDS } from './wild-landscape.mjs';
 
 export function regionEntities(terrain,cx,cz) {
   const plants=[], animals=[], seed=terrain.seed;
-  const ox=cx*REGION_SIZE, oz=cz*REGION_SIZE;
   for (let slot=0;slot<4;slot++) {
     const salt=seed+slot*13;
-    const x=ox+3+hash2(cx,cz,salt+109)*18;
-    const z=oz+3+hash2(cx,cz,salt+110)*18;
+    const [x,z]=regionSlotPosition(seed,cx,cz,slot);
     if (inCamp(x,z) || !regionPoint([x,z]) || terrain.cleared(x,z) || !terrain.walkable(x,z) || terrain.bankGap(x,z)<1.25) continue;
     const id=`region:${cx}:${cz}:${slot}`;
     if (slot<3) plants.push({id,x,z,item:slot===0?'fruit':'berry',mature:true});

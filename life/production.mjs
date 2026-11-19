@@ -1,3 +1,4 @@
+import { noteWorkMotion } from './work-motion.mjs';
 import { recordSettlementEvent, stormDamageForRepair } from './settlement-events.mjs';
 import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-produce.mjs';
 // 生产建设层（Phase B）。服务端权威：资源库存、建筑选址/材料/工时/功能/损坏/维修。
@@ -108,7 +109,7 @@ export function effectiveMods(world) {
   };
 }
 
-export function doGather(world, agentId, loc = world.loc[agentId]) {
+export function doGather(world, agentId, loc = world.loc[agentId], at) {
   const s = world.survival;
   const res = gatherResource(world,loc);
   if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
@@ -121,6 +122,7 @@ export function doGather(world, agentId, loc = world.loc[agentId]) {
   bag[res] += take;
   noteRes(world, 'gross', res, take); // D1：自然产出与个人获得分开记
   noteRes(world, 'personal', res, take);
+  noteWorkMotion(world,agentId,res==='wood'?'chop':'mine',{at:at ?? world.districts?.[loc]?.source,loc});
   world.observeProduction?.('gather', res, take);
   return { ok: true, code: 'OK', res, amount: take };
 }
@@ -173,6 +175,7 @@ export function doPlan(world, agentId, type, loc = world.loc[agentId]) {
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
   world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
   world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
+  noteWorkMotion(world,agentId,'hammer',{rect:lot,loc,target:`work:${loc}:${type}`});
   s.sites.push({ type, loc, at: world.districts?.[loc]?.at ?? siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
@@ -192,6 +195,7 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
     const people=site.contributors??={};
     people[agentId]=(people[agentId]??0)+1;
   }
+  noteWorkMotion(world,agentId,'hammer',{rect:site.lot ?? buildLot(world,loc),loc,target:`work:${loc}:${site.type}`});
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= buildDef(world, site.type).labor) {
     s.sites = s.sites.filter((x) => x !== site);
@@ -223,6 +227,7 @@ export function doRepair(world, agentId, loc = world.loc[agentId]) {
   world.observeProduction?.('materialSpent', 'repairWood', 1);
   world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
+  noteWorkMotion(world,agentId,'hammer',{rect:b.lot ?? buildLot(world,loc),loc,target:`work:${loc}:${b.type}`});
   const task=s.coop?.task;
   if (s.settlementLife && task?.loc===loc && task.repair) (task.repairedBy??=[]).push(agentId);
   if (world.gameRules) recordSettlementEvent(world, 'repair', {
@@ -311,7 +316,8 @@ export function doForage(world, id, site = world.loc[id], target) {
   const s = world.survival;
   const gate = forageRule(world,id,site,target);
   if (!gate.ok) return gate;
-  if (s.wildBerries) takeBerry(s, site, target);
+  const patch = s.wildBerries ? takeBerry(s, site, target) : target;
+  noteWorkMotion(world,id,'pick',{item:'berry',target:patch,loc:site});
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
   noteRes(world, 'gross', 'berry', 1); // D1：树上/地面的产出（未收集），收集时再记 personal

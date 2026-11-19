@@ -14,6 +14,38 @@ export function materialGrain() {
 const cached=new WeakMap();
 const ring=Array.from({length:9},(_,i)=>[Math.cos(i*Math.PI/4),Math.sin(i*Math.PI/4)]);
 
+const contactCache=new WeakMap();
+export function groundContactMesh({source,x,z,height}) {
+  const key=[Math.floor(x/2),Math.floor(z/2)].join(',');
+  const old=contactCache.get(source);
+  if (old?.key===key) return old.mesh;
+  const out=[];
+  const emit=(px,pz,alpha)=>out.push(px,height(px,pz)+.024,pz,alpha,0,0,0,0,0,0,0,0,1,0,.5);
+  for (const box of source) {
+    const cx=box.x+box.w*.5,cz=box.z+box.d*.5;
+    if (Math.abs(cx-x)>20+box.w*.5 || Math.abs(cz-z)>20+box.d*.5) continue;
+    if (box.y-height(cx,cz)>.18 || box.y+box.h<height(cx,cz)-.08) continue;
+    const rx=box.w*.5, rz=box.d*.5;
+    const corners=[[-1,-1],[1,-1],[1,1],[-1,1]];
+    for (let i=0;i<corners.length;i++) {
+      const [u,v]=corners[i],[a,b]=corners[(i+1)%corners.length];
+      const [ix,iz]=[cx+u*(rx+.015),cz+v*(rz+.015)];
+      const [jx,jz]=[cx+a*(rx+.015),cz+b*(rz+.015)];
+      const [ox,oz]=[cx+u*(rx+.23),cz+v*(rz+.21)];
+      const [px,pz]=[cx+a*(rx+.23),cz+b*(rz+.21)];
+      emit(ix,iz,.34);emit(jx,jz,.34);emit(px,pz,0);
+      emit(ix,iz,.34);emit(px,pz,0);emit(ox,oz,0);
+    }
+  }
+  const mesh=new Float32Array(out);
+  contactCache.set(source,{key,mesh});
+  return mesh;
+}
+
+export function roomExposure(open,daylight,fire=0) {
+  return open ? .92 : .49+.18*daylight+.21*fire;
+}
+
 export function contactShadowMesh({source,x,z,height},sun) {
   if (sun.phase==='夜晚' || !sun.direct) return new Float32Array();
   const quantize=n=>Math.round(n*12);

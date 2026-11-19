@@ -1,4 +1,5 @@
 import { findRegionEntity, regionPoint, regionReady } from '../shared/camp-region-entities.mjs';
+import { recordResidentHit } from './resident-injury.mjs';
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../shared/camp-interaction.mjs';
@@ -12,6 +13,7 @@ import { doHarvest, doPlant } from './worldstate.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { campStaticPrecheck } from './camp-precheck.mjs';
 
+import { noteWorkMotion } from './work-motion.mjs';
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],
@@ -78,7 +80,7 @@ function interactWithResident(world,body) {
     npc.hurtBy='受伤'; // P0-1：致死原因可追溯
     npc.viab.v=Math.max(0,before-.14);
     const damage=before-npc.viab.v;
-    wounds[target]={t:world.t,total:(wounds[target]?.total??0)+damage};
+    recordResidentHit(world,npc,before);
     npc.relations.meet('p1',world.t,{delta:{trust:-15}});
     world.pending.push({for:target,evt:{kind:'injury',valence:-.8,about:'p1',selfCaused:false,serves:'safety'}});
     return {...ok(),code:'RESIDENT_HURT',damage,name:npc.name};
@@ -205,7 +207,7 @@ export function campAction(world,body) {
     if (!tree || tree.site!==site) return fail('NO_TREE');
     const trees=(s.campTrees??={});
     if ((trees[target]??0)>world.t) return fail('TREE_GROWING');
-    const cut=doGather(world,'p1',site);
+    const cut=doGather(world,'p1',site,[tree.x,tree.z]);
     if (!cut.ok) return cut; // P0-3：储量采空不能砍，树不标记（与资源账同步，等再生）
     trees[target]=world.t+3*DAY_TICKS;
     pay(world,SURV_COST.gather); // P0-2：与 AI gather 同价
@@ -217,6 +219,7 @@ export function campAction(world,body) {
     bag.wood-=2;
     world.observeProduction?.('materialSpent', 'craftWood', 2);
     bag.tray=amount(bag,'tray')+1;
+    noteWorkMotion(world,'p1','hammer',{prop:'workbench'});
     pay(world,0.01);
     return ok();
   }
@@ -240,6 +243,7 @@ export function campAction(world,body) {
       s.water=Math.min(1,s.water+.12);
     }
     bag.water-=1;
+    noteWorkMotion(world,'p1','water',{plot,rect:field?.bed});
     pay(world,0.01);
     return ok();
   }
@@ -273,6 +277,11 @@ export function campAction(world,body) {
     if (s.farmLife && !target) return fail('NO_PRODUCE');
     if (!takeProduce(s,item,1,target)) return fail('NO_PRODUCE');
     world.observeProduction?.('collected', item, 1);
+  }
+  // Local berries and crops already emit at the shared harvest settlement.
+  if (node || ['fruit','egg','wool','milk'].includes(item)) {
+    const motion=item==='wool'?'shear':item==='milk'?'milk':'pick';
+    noteWorkMotion(world,'p1',motion,{item,target,at:node?[node.x,node.z]:undefined});
   }
   bag[item]=amount(bag,item)+1;
   noteRes(world, 'personal', item, 1); // D1：从来源/树上收进个人包

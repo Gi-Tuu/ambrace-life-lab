@@ -1,3 +1,4 @@
+import { noteWorkMotion } from './work-motion.mjs';
 import { gatherPlace } from './production.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
@@ -467,6 +468,7 @@ export function houseLabor(w, id, apply = false) {
   if (!work || w.survival.districtTravel?.[id] || (housingMode(w) !== 'legacy' && !canWork(w, id)) || w.loc[id] !== site || work.lastWorkDay === day || work.progress >= WORK_DAYS) return false;
   if (!houseConstructionAccess(w,id).ok) return false;
   if (apply) {
+    noteWorkMotion(w,id,'hammer',{home:room,loc:site});
     work.lastWorkDay = day;
     work.progress += housingMode(w) !== 'legacy' && residentStage(w, id) === 'elder' ? .5 : 1;
   }

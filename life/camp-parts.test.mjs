@@ -57,7 +57,7 @@ test('C′ caches reuse geometry within state and rebuild named parts after real
   assert.ok(part(build(occupied),'workshop','forge-embers'));
 });
 
-test('C′ occupied homes move their shutters and wall damage preserves the three counts',()=>{
+test('C′ occupied homes move their shutters and wall damage opens local gaps in three stages',()=>{
   const view=structuredClone(survView(fixture()));
   const room=view.housing.a1, id='work:'+room+':house:shutter-left';
   const occupied=build(view).homes;
@@ -65,15 +65,16 @@ test('C′ occupied homes move their shutters and wall damage preserves the thre
   const empty=build(view).homes;
   assert.notEqual(occupied.parts.get(id).x,empty.parts.get(id).x);
   const wall=view.buildings.find(b=>b.type==='wall');
-  const counts=[], braces=[];
+  const rails=[], braces=[];
   for (const integrity of [1,.8,.45]) {
     wall.integrity=integrity;
     const {boxes,projects}=build(view), p=projects.find(p=>p.record.type==='wall');
-    counts.push(boxes.filter(b=>b.occluder===p.id).length);
+    rails.push(boxes.filter(b=>b.occluder===p.id && b.h===.3 && b.d===.09)
+      .reduce((sum,b)=>sum+b.w,0));
     braces.push(p.parts.get('wall-brace-1').to[1]);
   }
-  // 2026-11-18 批量细化：完好柱加柱帽 6/5/4（随破损递减），基数 24/23/22 → 30/28/26。
-  assert.deepEqual(counts,[30,28,26]);
+  assert.ok(rails[0]>rails[1] && rails[1]>rails[2]);
+  assert.ok(rails[2]>rails[0]*.75,'even heavy damage keeps both ends of the broken rails');
   assert.ok(braces[2]<braces[0]);
 });
 

@@ -2,6 +2,7 @@
 // 这里只裁决“能不能、做了什么”并结算世界侧后果；时间/体力预算与账本在 survplay-actions。
 import { move, actuate, isAlive, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { validate, validateCamp } from './rules.mjs';
+import { noteWorkMotion } from './work-motion.mjs';
 import { regionPoint } from '../shared/camp-region-entities.mjs';
 import { animalAction } from './camp-animals.mjs';
 import { changeRoad } from './home-roads.mjs';
@@ -143,6 +144,7 @@ export function survActInner(sp, body) {
       if (!(bag.wood>=2)) return {ok:false,code:'NO_MATERIAL'};
       bag.wood-=2;
       bag.tray=(bag.tray??0)+1;
+      noteWorkMotion(w,'p1','hammer',{prop:'workbench'});
       w.observeProduction?.('materialSpent','craftWood',2);
     } else if (building.type==='shelter') {
       if (s.lastShelterRest===w.t) return {ok:false,code:'ACTION_BUDGET'};

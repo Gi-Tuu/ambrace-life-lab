@@ -6,8 +6,10 @@ import { householdAccess } from './home-access.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { noteConsumed } from './resource-ledger.mjs';
 
+import { noteWorkMotion } from './work-motion.mjs';
 function recordRequest(world, req, result, delivered, reason) {
   const to = req.to ?? 'p1';
+  if (delivered) noteWorkMotion(world,to,'give',{target:req.from,item:delivered.item,loc:world.loc[req.from]});
   recordSettlementEvent(world, 'resource_request', {
     requestId: req.id, actor: req.from, target: to, loc: world.loc[req.from], result, startedAt: req.t,
     resource: req.kind === 'food' ? 'food' : 'wood', ...(delivered && { delivered }), ...(reason && { reason }),

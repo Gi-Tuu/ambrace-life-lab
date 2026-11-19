@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { dumpSurv, loadSurv, survView, tickSurvPlay } from './survplay.mjs';
 import { campSleepTicks } from './camp-play.mjs';
 import { createReplay, recordReplayFrame, replayRange, replayPoint } from './replay-history.mjs';
+import { replayTerrain, replayScene } from './replay-scene.mjs';
 import { speechLine } from './speech.mjs';
 import { PARAMS } from './params.mjs';
 import { validCampArchive } from './camp-instances.mjs';
@@ -40,6 +41,7 @@ function makeComparison(origin, revision = 0, saved) {
     survView(branch.play);
     if (!branch.series.length) recordComparisonSeries(branch);
   }
+  if (!saved) captureComparisonFrame(pair);
   return pair;
 }
 
@@ -102,17 +104,24 @@ function replayCard(branch) {
   };
 }
 
+function captureComparisonFrame(pair) {
+  const {A,B}=pair.branches;
+  const t=A.play.world.t;
+  const views={A:survView(A.play),B:survView(B.play)};
+  pair.replay.terrain??=replayTerrain(views.A);
+  const events=[['A',A],['B',B]].flatMap(([side,branch])=>
+    (branch.play.world.survival?.eventJournal?.rows??[]).filter(e=>e.t===t).map(e=>({...e,side})));
+  recordReplayFrame(pair.replay,{t,A:replayCard(A),B:replayCard(B),events,
+    scene:{A:replayScene(views.A,'A'),B:replayScene(views.B,'B')}});
+}
+
 async function tickComparison(now = Date.now()) {
   for (const key of COMPARE_SIDES) {
     const branch = S.comparison.branches[key];
     await tickSurvPlay(branch.play, {now, onResidentAction: (agent, rows) => recordComparisonAction(branch, agent, rows)});
     recordComparisonSeries(branch);
   }
-  const A = S.comparison.branches.A, B = S.comparison.branches.B;
-  const t = A.play.world.t;
-  const events = [['A', A], ['B', B]].flatMap(([side, br]) =>
-    (br.play.world.survival?.eventJournal?.rows ?? []).filter((e) => e.t === t).map((e) => ({ ...e, side })));
-  recordReplayFrame(S.comparison.replay, { t, A: replayCard(A), B: replayCard(B), events });
+  captureComparisonFrame(S.comparison);
 }
 
 function makeComparisonView() {
@@ -191,6 +200,7 @@ async function actInComparison(body) {
   }
   publishComparison();
   if (body.kind === 'player_sync' && !Object.values(results).some(r => r.ok)) return {...results.A,sides:results};
+  if (body.kind!=='camp_sleep') captureComparisonFrame(pair);
   return {...results.A, sides: results, persisted: await saveComparison()};
 }
 

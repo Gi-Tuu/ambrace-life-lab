@@ -80,7 +80,9 @@ test(`${type} roof has joined slopes, a visible damage opening and no roof befor
   const panels=boxes=>boxes.filter(b=>b.rot && b.h===.13);
   const complete=panels(bake({integrity:1})), damaged=panels(bake({integrity:.5}));
   assert.equal(complete.length,8);
-  assert.equal(damaged.length,7);
+  assert.equal(damaged.length,complete.length);
+  assert.equal(damaged.filter((b,i)=>b.d<complete[i].d).length,1);
+  assert.ok(damaged.every((b,i)=>b.d>complete[i].d*.4),'one section opens while the ridge stays covered');
   assert.equal(complete.filter(b=>b.rot[0]>0).length,4);
   assert.equal(complete.filter(b=>b.rot[0]<0).length,4);
   for (const b of complete) {
@@ -268,7 +270,7 @@ test('workshop tabletop rests on four legs and supports its tool in both damage 
   }
 });
 
-test('workshop roof slopes toward the open front and damage removes one panel',()=>{
+test('workshop roof slopes toward the open front and damage opens a section of one panel',()=>{
   const bake=record=>{
     const boxes=[];
     addCampWork(boxes,{settlementLife:true,buildings:[{type:'workshop',loc:'yard',lot:{x:0,z:0,w:4,d:3.2},...record}],sites:[]},[]);
@@ -276,7 +278,10 @@ test('workshop roof slopes toward the open front and damage removes one panel',(
   };
   const complete=bake({integrity:1});
   assert.equal(complete.length,4);
-  assert.equal(bake({integrity:.5}).length,3);
+  const damaged=bake({integrity:.5});
+  assert.equal(damaged.length,complete.length);
+  assert.equal(damaged.filter((b,i)=>b.d<complete[i].d).length,1);
+  assert.ok(damaged.every((b,i)=>b.d>complete[i].d*.5));
   for (const panel of complete) {
     const rise=panel.d*Math.sin(panel.rot[0])/2;
     assert.ok(Math.abs(panel.pivot[1]+rise-2.95)<1e-9);

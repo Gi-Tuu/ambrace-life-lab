@@ -1,5 +1,6 @@
 import { pixelPath } from './asset-collision.mjs';
 import { regionEntities, regionReady } from './camp-region-entities.mjs';
+import { orchardWeather } from './camp-orchard-look.mjs';
 import { regionLife } from './camp-scene.mjs';
 import { inCamp, regionWindow, wildDetails, wildLandscape, wildRegion, worldOverview, REGION_SIZE, WILDS } from './wild-landscape.mjs';
 
@@ -27,10 +28,11 @@ export function createCampOutskirts(seed,version,crossing,world) {
         }
         animals.push(...chunk.entities.animals);
       }
-      const key=plants.map(p=>p.id+':'+p.ready).concat(animals.map(a=>a.id)).join(',');
+      const weather=orchardWeather(snapshot);
+      const key=JSON.stringify([plants.map(p=>[p.id,p.ready]),animals.map(a=>a.id),weather]);
       if (key!==lifeKey || !living) {
         lifeKey=key;
-        living=regionLife(plants,animals);
+        living=regionLife(plants,animals,weather);
       }
       return living;
     },

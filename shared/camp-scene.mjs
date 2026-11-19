@@ -1,11 +1,25 @@
 import { beam, cyl, modelBounds } from './camp-geometry.mjs';
-import { reliefFaces, floorContains, campHash } from './camp-terrain.mjs';
+import { reliefFaces, floorContains, campHash, hash2 } from './camp-terrain.mjs';
 import { homeLot as layoutHomeLot, constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
 import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
+import { orchardAppearance, orchardWeather } from './camp-orchard-look.mjs';
 import { itemBoxes } from './camp-items.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
+
+const HOME_STYLES = [
+  {id:'timber', rise:1.06, ridge:.5, roof:'#944735', trim:'#976A45', door:'#AB5236',
+    windows:[-1.35,.78], floor:WOOD, cloth:'#A85A55', border:'#EDC787', pottery:'#D27A4A'},
+  {id:'saltbox', rise:1.32, ridge:.34, roof:'#497245', trim:'#70905A', door:'#3F7036',
+    windows:[-1.53,.89], floor:'#B58A4C', cloth:'#497245', border:'#C2CFA0', pottery:'#A0D2C6'},
+  {id:'stone', rise:.97, ridge:.5, roof:'#6D7165', trim:'#939584', door:'#664D32',
+    windows:[-1.25,.70], floor:'#B9B8A1', cloth:'#2D5D6E', border:'#D9D6B8', pottery:'#83769C'},
+].map(Object.freeze);
+
+export function homeStyle(room, seed=0) {
+  return HOME_STYLES[Math.floor(campHash(seed,'home-style:'+room)*HOME_STYLES.length)];
+}
 
 function addModel(boxes,model,occluder) {
   if (!model) return null;
@@ -19,7 +33,7 @@ function stage(width, depth) {
   const boxes = [], floors = [], fxs = [], chimneys = [], interactables = [], animals = [], gatherables = [], parts=new Map();
   let occluder = null;
   return {
-    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, parts, entrances: {},
+    width, depth, boxes, floors, fxs, chimneys, interactables, animals, gatherables, parts, entrances: {}, shelters:[],
     group(id, build) {
       const previous=occluder;
       occluder=id;
@@ -136,9 +150,12 @@ function house(s, id, x, z, seed) {
   cladding(s,left,0,back,width,.27,depth,true);
   const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
   timberGable(roofStage,left,3.08,back,width,depth,color,false);
+  if (id==='workshop') s.shelters.push([left,back,width,depth]);
   const front = back + depth;
   s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
   s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
+  s.box(x-.69,0,front+.08,1.38,.13,.58,'#786C58');
+  s.box(x-.63,.13,front+.015,1.26,.13,.39,'#AE865A');
   s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
   for (const dx of [-2.45,1.57]) {
     s.box(x+dx,1.36,front-.025,.89,.83,.1,'#514134');
@@ -151,8 +168,9 @@ function house(s, id, x, z, seed) {
       s.chimneys.push([x+2.48,4.92,back+2.07]);
   }
   lantern(s, x-1.15, .27, front+.42);
-  worldItem(s, 'crate', left-1.05, front-1.35, .8, .27);
-  worldItem(s, 'sack', left-.85, front-.5, .7, .27);
+  s.box(left-1.11,0,front-1.42,.81,.053,1.58,'#5B4938');
+  worldItem(s,'crate',left-1.05,front-1.35,.8,.045);
+  worldItem(s,'sack',left-.85,front-.5,.7,.045);
 }
 
 function watchTower(s,x,z) {
@@ -184,9 +202,12 @@ function watchTower(s,x,z) {
 
 function outdoorFixture(s, id, x, z) {
   if (id === 'well') {
-    s.box(x+.2,0,z-4,2.6,.72,2.65,'#67675E',true);
-    cladding(s,x+.2,0,z-4,2.6,.72,2.65,true);
-    s.box(x+.47,.73,z-3.73,2.05,.045,2.09,'#458996');
+    s.shelters.push([x+.12,z-3.98,2.8,2.6]);
+    s.box(x+.2,0,z-4,2.6,.57,2.65,'#67675E',true);
+    cladding(s,x+.2,0,z-4,2.6,.57,2.65,true);
+    for (const edge of [z-4,z-1.62]) s.box(x+.17,.57,edge,2.66,.20,.29,'#939584');
+    for (const edge of [x+.17,x+2.54]) s.box(edge,.57,z-3.71,.29,.20,2.09,'#939584');
+    s.box(x+.46,.585,z-3.71,2.08,.013,2.09,'#2F6066',false,false,null,{water:true});
     for (const dx of [.28,2.56]) s.box(x+dx,.72,z-3.12,.18,1.84,.18,DARK);
     s.group('roof:well',()=>timberGable(roofAdapter(s),x+.12,2.5,z-3.98,2.8,2.6,'#5F574F',false,true));
     s.beam([x+.37,2.2,z-3.03],[x+2.65,2.2,z-3.03],.06,DARK);
@@ -278,12 +299,68 @@ function meadowPlant(s,x,y,z,variant,kind) {
     }
   }
 }
+function bankPlant(s,x,y,z,variant,kind) {
+  const colors={
+    reed:['#497245','#93AE73','#8D6A3D'],
+    rush:['#315431','#70905A','#BED773'],
+    iris:['#497245','#70905A','#83769C'],
+  }[kind];
+  const scale=.76+variant*.13;
+  const phase=x*.37+z*.81;
+  for (const [dx,dz,stem] of [[-.18,-.035,.64],[.05,.09,.89],[.21,-.10,.72]]) {
+    const px=x+dx,pz=z+dz,h=stem*scale*(kind==='rush'?.62:1);
+    plantBox(s,phase,.14,true,px-.024,y,pz-.024,.048,h,.048,colors[0]);
+    for (const [side,above] of [[-1,.28],[1,.47]]) {
+      const pivot=[px,y+h*above,pz];
+      plantBox(s,phase,.14,false,px-.026,pivot[1],pz-.035,.052,h*.48,.07,colors[1],false,false,null,
+        {rot:[dz,0,side*.64],pivot});
+    }
+    plantBox(s,phase,.16,false,px-.043,y+h-.04,pz-.043,.086,kind==='reed'?.18:.073,.086,colors[2]);
+    if (kind==='iris') {
+      plantBox(s,phase,.16,false,px-.102,y+h+.012,pz-.045,.204,.068,.09,colors[2]);
+      plantBox(s,phase,.16,false,px-.034,y+h+.071,pz-.031,.068,.028,.062,'#EDC787');
+    }
+  }
+}
+
+export function addWildLandmarks(s,landmarks,height) {
+  for (const {id,name,x,z,cores} of landmarks) {
+    const start=s.boxes.length;
+    s.group('landmark:'+id,()=>{
+      for (const [i,b] of cores.entries()) {
+        const ground=height(b.x+b.w/2,b.z+b.d/2), top=ground+b.h;
+        const bottom=Math.min(ground,height(b.x,b.z),height(b.x+b.w,b.z),
+          height(b.x,b.z+b.d),height(b.x+b.w,b.z+b.d))-.08;
+        const color=id==='falls-rocks'?'#6D7165':'#5F574F';
+        s.box(b.x,bottom,b.z,b.w,top-bottom,b.d,color,true);
+        if (id==='boundary-wall') {
+          for (let row=0;row<b.h*.88;row+=.26) {
+            for (let dx=(row===0?.08:.13);dx<b.w-.12;dx+=.59)
+              s.box(b.x+dx,ground-.045+row,b.z+b.d+.005,Math.min(.54,b.w-dx-.07),.22,.025,'#939584');
+          }
+        } else if (id==='fork-cairn') {
+          for (const [inset,level,lift] of [[.15,0,.24],[.29,.24,.22],[.43,.46,.20]])
+            s.box(b.x+inset+.025,top-.061+level,b.z+inset*.85,b.w-inset*2,lift,b.d-inset*1.7,'#939584');
+        } else {
+          s.box(b.x+.1,top-.035,b.z+.12,b.w-.22,.19,b.d-.22,'#B9B8A1',false,false,null,
+            {yaw:i%2?.14:-.09,pivotX:b.x+b.w/2,pivotZ:b.z+b.d/2});
+        }
+        s.box(b.x+.08,top-.044,b.z+.08,b.w*.35,.052,b.d*.47,'#70905A');
+      }
+    });
+    for (let i=start;i<s.boxes.length;i++) s.boxes[i].landmark={name,at:[x,z]};
+  }
+}
+
 export function wildVegetation(trees, undergrowth) {
   const s=stage(0,0);
   for (const {x,y,z,variant,scale} of trees) {
     s.group(`wildtree:${x}:${z}`,()=>tree(s,x,z,variant,y,scale));
   }
-  for (const {x,y,z,variant,kind} of undergrowth) meadowPlant(s,x,y,z,variant,kind);
+  for (const {x,y,z,variant,kind} of undergrowth) {
+    if (['reed','rush','iris'].includes(kind)) bankPlant(s,x,y,z,variant,kind);
+    else meadowPlant(s,x,y,z,variant,kind);
+  }
   return s;
 }
 function flora3d(s, world) {
@@ -295,22 +372,62 @@ function flora3d(s, world) {
     meadowPlant(s,x,world.landscape?.height(x,z)??0,z,v,seed<.052?'shrub':'flower');
   }
 }
+const orchardSpurs=[
+  [-.51,1.75,.75], [.17,1.53,.78], [.76,1.71,-.25], [-.89,1.95,.08],
+  [.41,2.28,.49], [-.59,2.39,.19], [.29,2.80,-.12], [-.26,2.74,-.29], [.75,2.04,.25],
+];
+function orchardTree(s,{x,z,mature},ground,shades,look,ready) {
+  const scale=mature===false?.46:1;
+  const lean=look.bent?.18:0, drop=look.parched?.19:look.damage>=2?.14:0;
+  const leaf=look.parched?['#777647','#8A8750']:shades.slice(1);
+  const lowerWidth=look.damage===2?1.25:1.64, upperWidth=look.damage>0?.72:1.04;
+  const b=(dx,y,dz,w,h,d,c,wind=.12)=>plantBox(s,x+z,wind,false,
+    x+dx*scale,ground+y*scale,z+dz*scale,w*scale,h*scale,d*scale,c);
+  s.box(x-.16*scale,ground,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
+  b(-.82+lean,1.28-drop,-.76,lowerWidth,look.parched?.71:.96,1.52,leaf[0]);
+  b(-.52+lean,2.16-drop,-.48,upperWidth,look.parched?.42:.66,1.0,leaf[1]);
+  if (look.damage) {
+    const branch=(dx,y,dz)=>[x+dx*scale,ground+y*scale,z+dz*scale];
+    s.beam(branch(.08,1.32,0),branch(.86,1.66,.24),.086*scale,DARK);
+    s.beam(branch(.76,1.62,.22),branch(.92,1.69,.26),.055*scale,'#DAB284');
+    if (look.damage===2) {
+      s.beam(branch(.43,.07,.1),branch(1.11,.09,.71),.067*scale,WOOD);
+      b(.59,.07,.49,.31,.08,.17,'#817A48',.03);
+    }
+  }
+  if (look.frost) {
+    b(-.47+lean,(look.parched?2.58:2.82)-drop,-.41,upperWidth*.58,.027,.31,'#D5DECF');
+    b(-.76+lean,(look.parched?1.99:2.24)-drop,.43,.28,.032,.23,'#C5D1CA');
+  }
+  for (const [i,[dx,y,dz]] of orchardSpurs.slice(0,look.flowers).entries()) {
+    if (look.damage && dx>.6) continue;
+    const bud=look.bloom==='bud';
+    const width=bud?.093:.148;
+    const color=bud?'#CB8B9D':i%3===0?'#FFF0D4':'#F3C3C5';
+    b(dx+lean,y-drop,dz,width,.064,width,color);
+    if (!bud) {
+      b(dx+lean+.037,y-drop+.004,dz-.032,.074,.066,.211,color);
+      b(dx+lean+.054,y-drop+.064,dz+.04,.041,.018,.041,'#D7A56B');
+    }
+  }
+  const fruitSites=look.damage>=2?[[-.65,1.62,.74],[-.15,1.88,-.79],[-.32,2.34,.5]]:
+    [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]];
+  for (const [dx,y,dz] of fruitSites.slice(0,Math.min(3,ready)))
+    b(dx+lean,y-drop,dz,.17,.17,.17,'#CF4E53');
+}
+
 function producePlants(s,nodes,world) {
+  const weather=world.orchard??orchardWeather(world);
   for (const plant of nodes) {
     const {x,z,item,id,site}=plant, v=((Math.floor(x*7+z*13)%4)+4)%4, shades=LEAF_RAMPS[v];
     const ready=plant.ready ?? (item==='fruit' ? world.season==='冬'?0:world.produce?.fruit??0
       : Math.floor(world.berryPatches?.[site]?.[Number(id.split(':').at(-1))] ?? world.wildBerries?.[site] ?? 3));
     const ground=plant.y??0;
-    s.gatherables.push({...plant,ready});
+    const appearance=item==='fruit'?orchardAppearance(plant,weather):null;
+    s.gatherables.push({...plant,ready,...(appearance && {appearance})});
     s.group(id,()=>{
       if (item==='fruit') {
-        const scale=plant.mature===false?.46:1;
-        s.box(x-.16*scale,ground,z-.16*scale,.32*scale,1.45*scale,.32*scale,DARK);
-        plantBox(s,x+z,.12,false,x-.82*scale,ground+1.28*scale,z-.76*scale,1.64*scale,.96*scale,1.52*scale,shades[1]);
-        plantBox(s,x+z,.12,false,x-.52*scale,ground+2.16*scale,z-.48*scale,1.04*scale,.66*scale,1.0*scale,shades[2]);
-        const count=Math.min(3,ready);
-        for (const [dx,y,dz] of [[-.48,1.62,.74],[.77,1.88,-.34],[.08,2.34,.5]].slice(0,count))
-          plantBox(s,x+z,.12,false,x+dx,ground+y,z+dz,.17,.17,.17,'#CF4E53');
+        orchardTree(s,plant,ground,shades,appearance,ready);
       } else {
         for (const [i,[dx,y,dz,w,h,d]] of SHRUBS[v].entries())
           plantBox(s,x+z,.09,true,x+dx,ground+y+.02,z+dz,w,h,d,shades[Math.min(i+1,3)]);
@@ -321,9 +438,9 @@ function producePlants(s,nodes,world) {
     });
   }
 }
-export function regionLife(plants,animals) {
+export function regionLife(plants,animals,orchard) {
   const s=stage(0,0);
-  producePlants(s,plants,{});
+  producePlants(s,plants,{orchard});
   wildlife3d(s,animals);
   return s;
 }
@@ -340,19 +457,50 @@ function grass3d(s, sites) {
     }
   }
 }
+function crackedBed(s,bed,x,z,w,d) {
+  for (let i=0;i<bed.dryness*3;i++) {
+    let px=x+w*(.14+.68*hash2(bed.id,i,61)), pz=z+d*(.16+.64*hash2(bed.id,i,62));
+    const heading=hash2(bed.id,i,63)*Math.PI*2;
+    for (let j=0;j<3;j++) {
+      const angle=heading+(hash2(bed.id,i,64+j)-.5)*1.35;
+      const span=(.095+hash2(bed.id,i,67+j)*.11)*(1+bed.dryness*.27);
+      const nx=Math.min(x+w-.06,Math.max(x+.06,px+span*Math.cos(angle)));
+      const nz=Math.min(z+d-.06,Math.max(z+.06,pz+span*Math.sin(angle)));
+      const length=Math.hypot(nx-px,nz-pz);
+      if (length>.02) {
+        s.box(px,.053,pz-.011,length,.002,.022+bed.dryness*.008,'#432B26',false,false,null,
+          {yaw:Math.atan2(nz-pz,nx-px),pivotX:px,pivotZ:pz});
+      }
+      px=nx;pz=nz;
+    }
+  }
+}
+
 function crops3d(s, world) {
   for (const b of world.beds ?? []) {
     const bx=b.x/16, bz=b.y/16, bw=b.w/16, bh=b.h/16;
-    const { growth } = b;
+    const {growth,dryness=0,windDamage}=b;
     s.group('plot:'+b.id, () => {
-      s.box(bx,.012,bz,bw,.04,bh,b.moisture?'#594032':'#8C6648');
+      s.box(bx,.012,bz,bw,.04,bh,dryness>=2?'#A78158':b.moisture?'#594032':'#8C6648');
       for (const row of [.15, .65]) s.box(bx+.13,.052,bz+bh*row,bw-.26,.022,.27,b.moisture?'#463024':'#694932');
-      if (growth <= 0) return;
+      if (dryness) crackedBed(s,b,bx,bz,bw,bh);
+      if (growth <= 0 && !windDamage) return;
       for(let r=0;r<2;r+=1) for(let c=0;c<4;c+=1){
-        const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1), hh=.18+growth*.6;
-        s.box(x-.05,.06,z-.05,.1,hh,.1,'#315431');
-        s.box(x-.22,.06+hh*.42,z-.12,.44,.16,.24,growth>=1?'#FFEC27':'#73A747');
-        if(growth>=.65)s.box(x-.12,.06+hh,z-.12,.24,.22,.24,growth>=1?'#FFA300':'#98BD51');
+        const x=bx+.42+c*(bw-.84)/3.5, z=bz+.5+r*(bh-1);
+        if (windDamage && (r+c)%3!==2) {
+          // The storm took growth from this bed. Leave a flattened strip through the affected rows.
+          const rot={rot:[.95,0,-.67],pivot:[x,.072,z]};
+          s.box(x-.036,.072,z-.036,.072,.24+growth*.24,.072,'#585B36',false,false,null,rot);
+          s.box(x-.112,.19,z-.077,.23,.09,.15,'#88864D',false,false,null,rot);
+          continue;
+        }
+        if (growth <= 0) continue;
+        const height=(.18+growth*.6)*(1-.12*dryness);
+        const lean=dryness?{rot:[dryness*.1,0,(c%2===0?1:-1)*dryness*.21],pivot:[x,.06,z]}:undefined;
+        const leaf=['#73A747','#87A34F','#99994E','#A48D54'][dryness];
+        s.box(x-.05,.06,z-.05,.1,height,.1,dryness?'#606136':'#315431',false,false,null,lean);
+        s.box(x-.22,.06+height*.42,z-.12,.44,.16,.24,dryness?leaf:growth>=1?'#FFEC27':leaf,false,false,null,lean);
+        if(growth>=.65)s.box(x-.12,.06+height,z-.12,.24,.22,.24,dryness?leaf:growth>=1?'#FFA300':'#98BD51',false,false,null,lean);
       }
     });
   }
@@ -469,19 +617,19 @@ function livestock3d(s, world) {
       if (cow) {
         b(-w/2-.015,y+.13,-.18,.042,.23,.39,'#57514A');
         b(.02,y+.49,-.28,.28,.012,.36,'#57514A');
-        b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
-        b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A');
+        b(.068,y+.52,d*.36,.08,.13,.085,'#D6BD8A','head');
+        b(-.147,y+.52,d*.36,.08,.13,.085,'#D6BD8A','head');
         b(-.06,y+.3,-d*.63-.06,.12,.14,.08,'#57514A');
       } else {
         b(-.29,y+.45,-.26,.57,.12,.53,'#F0E4C7');
         b(-.32,y+.44,.105,.29,.11,.26,'#E8DCBE');
         b(-.2,y+.56,.02,.4,.1,.34,'#F0E4C7');
       }
-      b(-.18,y+.22,d*.29,.36,.32,.29,face);
-      b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748');
-      for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722');
-      if (cow) b(-.06,y+.16,d*.29+.24,.12,.11,.06,'#D8A667');
-      for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face);
+      b(-.18,y+.22,d*.29,.36,.32,.29,face,'head');
+      b(-.145,y+.2,d*.29+.245,.29,.155,.072,cow?'#B48278':'#6C5748','head');
+      for (const dx of [-.135,.08]) b(dx,y+.404,d*.29+.291,.055,.05,.013,'#262722','head');
+      if (cow) b(-.06,y+.16,d*.29+.24,.12,.11,.06,'#D8A667','head');
+      for (const dx of [-.256,.176]) b(dx,y+.43,d*.31,.08,.073,.14,face,'head');
       b(-.044,y+.36,-d*.63,.08,.1,.16,face);
     }
   }
@@ -492,6 +640,14 @@ export function outdoorStage(world, bridges, rocks) {
   s.floors.push(...reliefFaces(world.hills ?? []));
   for (const [x0,z0,x1,z1] of bridges) {
     const y = .32, ramp = Math.min(.85,(x1-x0)/4);
+    for (const px of [x0+ramp+.12,x1-ramp-.36]) {
+      for (const pz of [z0+.09,z1-.29]) {
+        const ground=Math.min(.12,world.height?.(px+.11,pz+.11)??-.14);
+        s.box(px,ground-.08,pz,.24,y-ground+.06,.22,'#5B4434');
+        s.box(px-.06,ground-.08,pz-.06,.36,.19,.34,'#767667');
+      }
+      s.box(px-.035,y-.12,z0+.045,.31,.12,z1-z0-.09,'#72513B');
+    }
     s.floor(x0,z0,ramp,z1-z0,0,WOOD,'x',y);
     s.floor(x0+ramp,z0,x1-x0-ramp*2,z1-z0,y,WOOD);
     s.floor(x1-ramp,z0,ramp,z1-z0,y,WOOD,'x',0);
@@ -550,16 +706,16 @@ function wildlife3d(s, places) {
     for (const dx of [-width*.46,width*.22]) for (const dz of [-length*.42,length*.25])
       b(dx,0,dz,deer?.105:.09,leg+.05,deer?.105:.13,rabbit?'#766C61':'#594439','leg');
     const neck=leg+(deer?.48:.16);
-    if (deer) b(-.13,leg+.14,length*.24,.26,.52,.26,coat);
-    b(-width*.42,neck,length*.3,width*.85,rabbit?.21:.25,rabbit?.23:.30,coat);
-    b(-width*.32,neck+.04,length*.3+(rabbit?.18:.22),width*.64,.12,.15,deer?'#80614E':'#DDD0B0');
+    if (deer) b(-.13,leg+.14,length*.24,.26,.52,.26,coat,'head');
+    b(-width*.42,neck,length*.3,width*.85,rabbit?.21:.25,rabbit?.23:.30,coat,'head');
+    b(-width*.32,neck+.04,length*.3+(rabbit?.18:.22),width*.64,.12,.15,deer?'#80614E':'#DDD0B0','head');
     for (const dx of [-width*.46,width*.26]) {
-      b(dx,neck+.18,length*.32,width*.21,rabbit?.29:deer?.14:.16,.08,coat);
-      b(dx,neck+.13,length*.3+(rabbit?.20:.25),.054,.052,.026,'#252825');
-      if (rabbit) b(dx+.02,neck+.2,length*.32+.02,width*.17-.04,.25,.04,'#D58274');
+      b(dx,neck+.18,length*.32,width*.21,rabbit?.29:deer?.14:.16,.08,coat,'head');
+      b(dx,neck+.13,length*.3+(rabbit?.20:.25),.054,.052,.026,'#252825','head');
+      if (rabbit) b(dx+.02,neck+.2,length*.32+.02,width*.17-.04,.25,.04,'#D58274','head');
       if (deer) {
-        b(dx+.02,neck+.3,length*.32,.05,.3,.05,'#80614E');
-        b(dx-.04,neck+.44,length*.32,.13,.05,.05,'#80614E');
+        b(dx+.02,neck+.3,length*.32,.05,.3,.05,'#80614E','head');
+        b(dx-.04,neck+.44,length*.32,.13,.05,.05,'#80614E','head');
       }
     }
     const tail=deer?.19:rabbit?.16:.36;
@@ -582,7 +738,7 @@ export function outdoorLife(world) {
 
 // 室内/院内道具：19 种各自有形体，而不是"一个盒子换颜色"。
 // 约定 (x,z) 是道具左下角，占约 1.9×1.5 世界单位；只有主体 solid，小装饰不参与碰撞。
-function prop3d(s, kind, x, z, y) {
+function prop3d(s, kind, x, z, y, style) {
   const b = (dx,dy,dz,w,h,d,c,solid=false,fx=null) => s.box(x+dx,y+dy,z+dz,w,h,d,c,solid,false,fx);
   const legs = (top=.55) => {
     for(const dx of [.22,1.42]) for(const dz of [.18,1.06]) b(dx,0,dz,.16,top,.16,DARK);
@@ -598,13 +754,14 @@ function prop3d(s, kind, x, z, y) {
       b(.1,0,.15,1.72,.36,1.28,DARK,true);
       b(.18,.36,.23,1.56,.12,1.12,'#FFF0CC');
       b(.22,.48,.28,.62,.1,.94,'#FFF0CC');
-      b(.9,.48,.25,.78,.13,1.0,'#D58274');
+      b(.9,.48,.25,.78,.13,1.0,style?.cloth??'#D58274');
       b(.04,0,.1,.16,.78,1.36,LIGHT);
       b(1.72,0,.1,.14,.52,1.36,LIGHT);
-      b(.86,.61,.25,.1,.04,1.0,'#B65B3C');
+      b(.86,.61,.25,.1,.04,1.0,style?.border??'#B65B3C');
+      if (style) for (const dz of [.41,.8,1.11]) b(1.13,.612,dz,.31,.02,.055,style.border);
       break;
     case 'hearth': case 'furnace':
-      const stone=kind==='furnace'?'#77766E':'#98654F';
+      const stone=kind==='furnace'||style?.id==='stone'?'#77766E':'#98654F';
       b(.12,0,.16,1.62,.2,1.24,stone,true);
       b(.12,.2,.16,.31,.78,1.24,stone);
       b(1.43,.2,.16,.31,.78,1.24,stone);
@@ -624,7 +781,7 @@ function prop3d(s, kind, x, z, y) {
       break;
     case 'table':
       legs(); b(.08,.55,.08,1.74,.12,1.26,LIGHT,true);
-      b(.36,.67,.37,.33,.045,.29,'#C2C3C7'); b(1.04,.67,.71,.34,.045,.3,'#C2C3C7');
+      b(.36,.67,.37,.33,.045,.29,style?.pottery??'#C2C3C7'); b(1.04,.67,.71,.34,.045,.3,style?.pottery??'#C2C3C7');
       b(.22,.18,.24,1.36,.07,.1,DARK); b(.22,.18,.98,1.36,.07,.1,DARK);
       break;
     case 'workbench':
@@ -635,17 +792,30 @@ function prop3d(s, kind, x, z, y) {
       b(.22,.34,.24,1.36,.06,1.0,WOOD);
       break;
     case 'rug':
-      b(.06,.01,.1,1.84,.025,1.28,'#7E2553');
-      b(.18,.04,.2,1.6,.02,1.08,'#83769C');
-      b(.3,.06,.3,1.36,.02,.88,'#7E2553');
+      b(.06,.01,.1,1.84,.025,1.28,style?.cloth??'#7E2553');
+      b(.18,.04,.2,1.6,.02,1.08,style?.border??'#83769C');
+      b(.3,.06,.3,1.36,.02,.88,style?.cloth??'#7E2553');
+      if (style) for (const dx of [.47,.9,1.33]) b(dx,.08,.49,.13,.01,.5,style.border);
       for (const dz of [.06,1.38]) for (let i=0;i<6;i++) b(.16+i*.3,.012,dz,.12,.02,.06,'#EDC787');
       break;
     case 'shelf':
       b(.12,0,.18,.14,1.7,1.2,DARK,true); b(1.6,0,.18,.14,1.7,1.2,DARK,true);
       b(.26,0,.18,1.34,1.67,.09,DARK,true);
       for(const sy of [.12,.66,1.2,1.62]) b(.12,sy,.18,1.62,.1,1.2,LIGHT);
-      for(const [sx,c] of [[.28,'#FFEC27'],[.5,'#29ADFF'],[.72,'#00E436'],[.94,'#FFA300'],[1.24,'#D58274']])
-        b(sx,.76,.42,.18,.36,.22,c);
+      if (style?.id==='saltbox') {
+        for (const dx of [.38,.95]) {
+          b(dx,.76,.42,.37,.20,.40,'#98744C');
+          b(dx+.045,.96,.46,.28,.055,.31,'#627C51');
+        }
+      } else if (style) {
+        for (const [dx,r,h] of [[.45,.16,.28],[.87,.13,.21],[1.23,.14,.31]]) {
+          s.cyl(x+dx,y+.76,z+.61,r,h,style.pottery);
+          s.cyl(x+dx,y+.76+h,z+.61,r*.72,.05,style.border);
+        }
+      } else {
+        for (const [sx,c] of [[.28,'#FFEC27'],[.5,'#29ADFF'],[.72,'#00E436'],[.94,'#FFA300'],[1.24,'#D58274']])
+          b(sx,.76,.42,.18,.36,.22,c);
+      }
       b(.44,.22,.56,.61,.28,.54,WOOD); b(.49,.5,.6,.51,.04,.46,LIGHT);
       b(.96,1.3,.6,.27,.31,.3,'#939584'); b(.99,1.61,.63,.21,.05,.24,'#C2C3C7');
       b(.08,1.7,.14,1.7,.08,1.28,DARK);
@@ -719,9 +889,10 @@ function prop3d(s, kind, x, z, y) {
       b(1.58,.46,.48,.42,.16,.42,'#6D7165');
       break;
     case 'well':
-      b(.18,0,.2,1.5,.62,1.32,'#939584',true);
-      b(.3,.62,.32,1.26,.04,1.08,'#1D2B53',false,'water');
-      b(.24,.66,.38,1.38,.03,.96,'#29ADFF',false,'water');
+      b(.18,0,.2,1.5,.55,1.32,'#939584',true);
+      for (const dz of [.20,1.37]) b(.18,.55,dz,1.5,.16,.15,'#7B827B');
+      for (const dx of [.18,1.53]) b(dx,.55,.35,.15,.16,1.02,'#7B827B');
+      s.box(x+.33,y+.565,z+.35,1.2,.015,1.02,'#2F6066',false,false,null,{water:true});
       b(.16,.62,.16,.14,1.5,.14,DARK); b(1.56,.62,.16,.14,1.5,.14,DARK);
       b(.12,2.06,.12,1.62,.12,1.5,'#72513B');
       b(.1,2.18,.1,1.66,.06,1.54,'#5B4434');
@@ -775,17 +946,18 @@ function outdoorRoom(s,site,width,depth,back) {
   for (const x of [2.02,width-2.16]) rail(s,x,back,.14,7.2,0);
   rail(s,2.02,back-.14,width-4.04,.14,0);
   // 顶棚独立淡出，地面和柱脚仍留在同一个位置。
+  s.shelters.push([2.04,2.72,4.05,4.05]);
   s.group(`room-roof:${site}`,()=>timberGable(roofAdapter(s),2.04,2.75,2.72,4.05,4.05,site==='garden'?'#526B46':'#7A624D',false,true));
   for (const x of [2.14,5.78]) for (const z of [2.83,6.47]) s.box(x,0,z,.18,2.78,.18,DARK,true);
 }
 
-export function roomStage(site, props, front, width, depth) {
+export function roomStage(site, props, front, width, depth, style) {
   const s = stage(width, depth);
   const facility=site.startsWith('facility:') ? site.split(':')[2] : null;
   const outside = ['garden','well','yard'].includes(site);
   const back=outside?2.75:site==='watch'?1.76:1.65, wallWidth=2;
   s.walkBounds={left:wallWidth,right:width-wallWidth,top:back,bottom:depth};
-  const color = facility==='workshop'?'#77766E':facility==='granary'?'#9C7750':outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD;
+  const color = style?.floor ?? (facility==='workshop'?'#77766E':facility==='granary'?'#9C7750':outside ? '#568D3E' : ['watch','workshop'].includes(site) ? '#939584' : WOOD);
   s.floor(0,0,width,depth,0,color);
   if (outside) outdoorRoom(s,site,width,depth,back);
   if (facility) {
@@ -809,11 +981,11 @@ export function roomStage(site, props, front, width, depth) {
   } else if (!outside) {
     const rear=back;
     s.box(0,0,rear-.2,width,2.18,.2,'#72513B',true);
-    cladding(s,0,0,rear-.2,width,2.18,.2,['watch','workshop'].includes(site));
+    cladding(s,0,0,rear-.2,width,2.18,.2,site==='workshop'||style?.id==='stone');
     s.box(0,.26,rear-.02,width,.09,.075,'#D8A667',true);
     for (const side of [0,width-wallWidth]) s.group(`wall:${side}`,() => {
       s.box(side,0,rear,wallWidth,1.27,depth-rear,DARK,true);
-      cladding(s,side,0,rear,wallWidth,1.27,depth-rear,['watch','workshop'].includes(site));
+      cladding(s,side,0,rear,wallWidth,1.27,depth-rear,site==='workshop'||style?.id==='stone');
     });
     // 后墙不再是一整面纯色：两扇窗（框+玻璃+十字棂）+ 一面挂布 + 壁灯。
     for (const wx of [width*.22,width*.68]) {
@@ -830,9 +1002,24 @@ export function roomStage(site, props, front, width, depth) {
     }
     // 窗位交给渲染器（中心 x / 所在 z / 半宽 / 占位）
     s.windows = [width*.22, width*.68].map((wx) => [wx + .75, rear + .12, .78, 1]);
-    s.box(width*.46,.72,rear+.03,1.24,1.28,.06,'#7E2553');
-    s.box(width*.46+.16,1.24,rear+.1,.92,.24,.03,'#EDC787');
-    s.box(width*.46+.5,1.5,rear+.1,.24,.28,.03,'#FFEC27');
+    const middle=width*.46;
+    if (style?.id==='saltbox') {
+      s.box(middle+.08,1.8,rear+.02,1.25,.06,.18,DARK);
+      for (const dx of [.27,.68,1.06]) {
+        s.beam([middle+dx,1.8,rear+.16],[middle+dx-.08,1.22,rear+.27],.029,'#B49462');
+        s.box(middle+dx-.16,1.2,rear+.19,.18,.24,.15,'#839564');
+      }
+    } else if (style?.id==='stone') {
+      s.box(middle,1.12,rear+.03,1.38,.09,.36,DARK);
+      for (const [dx,r,h] of [[.21,.13,.23],[.59,.15,.3],[1.08,.17,.22]]) {
+        s.cyl(middle+dx,1.21,rear+.19,r,h,style.pottery);
+        s.cyl(middle+dx,1.21+h,rear+.19,r*.71,.04,style.border);
+      }
+    } else {
+      s.box(middle,.72,rear+.03,1.24,1.28,.06,style?.cloth??'#7E2553');
+      s.box(middle+.16,1.24,rear+.1,.92,.24,.03,style?.border??'#EDC787');
+      s.box(middle+.5,1.5,rear+.1,.24,.28,.03,'#FFEC27');
+    }
     s.box(width*.5,.62,rear+.04,.16,.12,.12,'#FFA300',false,true);
   }
   const door = site === 'hall' ? front.door : [112,176,32,16];
@@ -846,10 +1033,11 @@ export function roomStage(site, props, front, width, depth) {
   }
   for (const [i,[kind,px,pz]] of props.entries()) {
     const id=`prop:${i}`, start=s.boxes.length;
-    s.group(id,() => prop3d(s,kind,px/16,pz/16,s.heightAt(px/16+.75,pz/16+.6)));
+    s.group(id,() => prop3d(s,kind,px/16,pz/16,s.heightAt(px/16+.75,pz/16+.6),style));
     const boxes=s.boxes.slice(start).filter(b => !['fire','smoke'].includes(b.fx));
-    const x=Math.min(...boxes.map(b=>b.x)), z=Math.min(...boxes.map(b=>b.z));
-    const w=Math.max(...boxes.map(b=>b.x+b.w))-x, d=Math.max(...boxes.map(b=>b.z+b.d))-z;
+    const bounds=boxes.map(b=>b.bounds??b);
+    const x=Math.min(...bounds.map(b=>b.x)), z=Math.min(...bounds.map(b=>b.z));
+    const w=Math.max(...bounds.map(b=>b.x+b.w))-x, d=Math.max(...bounds.map(b=>b.z+b.d))-z;
     s.interactables.push({id,kind,x,z,w,d,boxes});
   }
   return s;
@@ -927,10 +1115,13 @@ function timberGable(s, x, y, z, w, d, color, damaged, openEnds = false) {
     const transform = { rot: [side * slope, 0, 0], pivot };
     const start = pivot[2] - length / 2;
     for (let panel = 0; panel < 4; panel++) {
-      if (damaged && side === 1 && panel === 1) continue;
-      const px = left + panel * width / 4;
-      s.box(px, pivot[1] - .065, start, width / 4, .13, length, color, false, false, transform);
-      if (panel > 0) s.box(px, pivot[1] + .065, start + .03, .045, .035, length - .06, WOOD, false, false, transform);
+      const broken=damaged && side===1 && panel===1;
+      const px = left + panel * width / 4, panelWidth=width/4, remaining=length*(broken?.54:1);
+      s.box(px, pivot[1] - .065, start, panelWidth, .13, remaining, color, false, false, transform);
+      if (panel > 0) s.box(px, pivot[1] + .065, start + .03, .045, .035, remaining - .06, WOOD, false, false, transform);
+      if (broken) for (const [offset,tail] of [[.04,.18],[.44,.33],[.8,.12]]) {
+        s.box(px+panelWidth*offset,pivot[1]-.064,start+remaining,panelWidth*.13,.089,tail,LIGHT,false,false,transform);
+      }
     }
     const eave = ridge + side * half;
     s.box(left, y - .14, eave - .065, width, .16, .13, DARK);
@@ -1051,7 +1242,7 @@ function granary3d(s, lot, record, world) {
     s.box(X + W / 2 - .02, wallTop - .34, front + .05, .04, .34, .04, WOOD);
     s.box(X + W / 2 - .34, wallTop - .17, front + .05, .68, .04, .04, WOOD);
   }
-  timberGable(s, X - .06, wallTop, Z - .06, W + .12, D + .12, damaged ? '#5F574F' : '#B65B3C', damaged);
+  timberGable(s, X - .06, wallTop, Z - .06, W + .12, D + .12, '#B65B3C', damaged);
   // 檐下横梁 + 两束谷穗（可辨认"粮"）
   s.box(X - .1, wallTop - .1, front + .06, W + .2, .12, .12, DARK);
   if (!damaged) for (const dx of [-1.1, 1.0]) {
@@ -1150,7 +1341,7 @@ function shelter3d(s, lot, record, world, state) {
   s.box(X + W / 2 - .58, 1.64, front + .015, 1.16, .13, .22, WOOD);
   s.box(X + W / 2 - .54, .16, front + .015, 1.08, .07, .24, WOOD);
   s.box(X - .2, 2.06, front + .2, W + .4, .12, .9, DARK);           // 门廊挑檐
-  timberGable(s, X - .1, 2.06, Z - .1, W + .2, D + .2, damaged ? '#5F574F' : '#976A45', damaged);
+  timberGable(s, X - .1, 2.06, Z - .1, W + .2, D + .2, '#976A45', damaged);
   const drainX=X+.42, drainZ=front+1.11;
   s.beam([drainX,2.08,drainZ],[X+W+.17,2.14,drainZ],.076,'#458996',8);
   s.beam([drainX,2.08,drainZ],[drainX,1.91,front+.53],.052,'#458996');
@@ -1189,6 +1380,9 @@ function workshop3d(s, lot, record, world, state) {
     return;
   }
   // 三面矮墙（正面敞开）
+  for (const px of [X-.028,X+W-.24]) for (const pz of [Z-.03,front-.24])
+    s.box(px,.16,pz,.27,.105,.27,'#7D7A6B');
+  s.box(X+.06,.16,front-.045,W-.12,.053,.125,'#8F6B4B');
   s.box(X, .16, Z, W, 1.15, .12, '#72513B');
   if (!world.settlementLife) s.box(X,.16,Z+D-.12,W,1.15,.12,'#72513B');
   for (const px of [X, X + W - .12]) s.box(px, .16, Z, .12, 1.15, D, '#72513B');
@@ -1199,10 +1393,11 @@ function workshop3d(s, lot, record, world, state) {
   const surface = { rot: [slope, 0, 0], pivot };
   const start = pivot[2] - length / 2;
   for (let panel = 0; panel < 4; panel++) {
-    if (damaged && panel === 1) continue;
-    const px = X - .42 + panel * roofWidth / 4;
-    s.box(px, pivot[1] - .065, start, roofWidth / 4, .13, length, damaged ? '#5F574F' : '#6D7165', false, false, surface);
-    if (panel > 0) s.box(px, pivot[1] + .065, start + .03, .05, .035, length - .06, '#939584', false, false, surface);
+    const broken=damaged && panel===1;
+    const px=X-.42+panel*roofWidth/4, panelWidth=roofWidth/4, remaining=length*(broken?.63:1);
+    s.box(px,pivot[1]-.065,start,panelWidth,.13,remaining,'#6D7165',false,false,surface);
+    if (panel > 0) s.box(px,pivot[1]+.065,start+.03,.05,.035,remaining-.06,'#939584',false,false,surface);
+    if (broken) s.box(px+panelWidth*.67,pivot[1]-.06,start+remaining,panelWidth*.27,.07,.42,'#8A8F83',false,false,surface);
   }
   const rearBeamY = 2.95 - .45 * .3 / roofDepth - .14;
   s.box(X, rearBeamY, Z, W, .14, .2, DARK);
@@ -1253,6 +1448,7 @@ function wall3d(s, lot, record, world) {
   const ratio = worksRatio(record, world, 8);
   const Z = z + d / 2 - .25, H = 1.72, seg = 5;
   s.box(x + .04, 0, Z - .1, w - .08, .18, .62, '#8A8F83', true, phase === 'foundation' ? 'ground' : false);
+  s.box(x+.08,0,Z+.48,w-.16,.082,.105,'#686A5C',false,phase==='foundation'?'ground':false);
   if (phase === 'foundation') {
     s.box(x + .3, .18, Z - .05, 1.3, .05, .5, '#A79C86', false, 'ground');
     worldItem(s, 'wood', x + .34, Z - .02, .9, .23);
@@ -1272,12 +1468,24 @@ function wall3d(s, lot, record, world) {
   }
   const rows = phase === 'frame' ? Math.ceil(ratio * 4) : 4;
   for (let r = 0; r < rows; r++) {
-    if (damage >= 1 && r === 3) continue;          // 轻损：缺最上一道横板
-    if (damage >= 2 && r === 1) continue;          // 重损：再缺第二道
-    s.box(x + .18, .34 + r * .36, Z + .42, w - .36, .3, .09, GR_PLANK[(r + 1) % 4]);
+    const broken=(damage>=1 && r===3) || (damage>=2 && r===1);
+    const start=x+.18,width=w-.36,y=.34+r*.36,color=GR_PLANK[(r+1)%4];
+    if (!broken) {
+      s.box(start,y,Z+.42,width,.3,.09,color);
+      continue;
+    }
+    // Keep both ends of the rail. The gap follows the shortened post instead of spanning the wall.
+    const gapStart=r===3?.46:.29, gapEnd=r===3?.73:.61;
+    s.box(start,y,Z+.42,width*gapStart,.3,.09,color);
+    s.box(start+width*gapEnd,y,Z+.42,width*(1-gapEnd),.3,.09,color);
+    s.box(start+width*gapStart,y+.11,Z+.42,width*.032,.105,.085,LIGHT);
   }
   if (phase !== 'frame') {
-    s.box(x + .14, .18 + H, Z - .05, w - .28, .13, .52, WOOD);
+    const capWidth=w-.28;
+    if (damage) {
+      s.box(x+.14,.18+H,Z-.05,capWidth*.48,.13,.52,WOOD);
+      s.box(x+.14+capWidth*.72,.18+H,Z-.05,capWidth*.28,.13,.52,WOOD);
+    } else s.box(x+.14,.18+H,Z-.05,capWidth,.13,.52,WOOD);
     for (let i = 0; i < 3; i++) {
       const px = x + .7 + i * (w - 1.5) / 2;
       const fallen = damage >= 2 && i === 1;        // 重损：中间斜撑倒地
@@ -1290,22 +1498,23 @@ function wall3d(s, lot, record, world) {
 }
 
 // 从奠基到登记入住使用同一个地块和木屋外壳。
-function homeRoof(s,x,y,z,w,d,color) {
-  const half=d/2, rise=1.06, slope=Math.atan2(rise,half), length=Math.hypot(half,rise);
-  const ridge=z+half;
+function homeRoof(s,x,y,z,w,d,style) {
+  const {rise}=style, ridge=z+d*style.ridge;
   for (const side of [-1,1]) {
-    const pivot=[x+w/2,y+rise/2,ridge+side*half/2];
+    const run=d*(side<0?style.ridge:1-style.ridge);
+    const slope=Math.atan2(rise,run), length=Math.hypot(run,rise);
+    const pivot=[x+w/2,y+rise/2,ridge+side*run/2];
     const surface={rot:[side*slope,0,0],pivot};
     const start=pivot[2]-length/2;
-    s.box(x-.06,pivot[1]-.065,start,w+.12,.13,length,color,false,false,surface);
+    s.box(x-.06,pivot[1]-.065,start,w+.12,.13,length,style.roof,false,false,surface);
     for (let k=.32; k<w; k+=.62) {
       s.box(x+k,pivot[1]+.065,start+.04,.044,.031,length-.08,'#514134',false,false,surface);
     }
-    const eave=ridge+side*half;
+    const eave=ridge+side*run;
     s.box(x-.12,y-.09,eave-.055,w+.24,.14,.11,'#72513B');
     // The gable closes the space under the roof at both ends.
     for (let step=0;step<7;step++) {
-      const span=half/7, zz=side<0 ? z+step*span : z+d-(step+1)*span;
+      const span=run/7, zz=side<0 ? z+step*span : z+d-(step+1)*span;
       for (const xx of [x+.025,x+w-.12]) {
         const high=rise*step/7;
         if (high>0) s.box(xx,y-.02,zz,.095,high+.02,span,'#976A45');
@@ -1320,29 +1529,37 @@ function home3d(s, lot, record, seed) {
   const X = x + .25, Z = z + .25, W = w - .5, D = d - .5;
   const phase = constructionStage(record);
   const ratio = Math.min(1, (record.progress ?? HOME_LABOR) / HOME_LABOR), front = Z + D;
-  const v = Math.floor(campHash(seed ?? 0, `home-${record.loc}`) * 4);
-  const roofColor = ['#944735', '#497245', '#77607A', '#8D6A3D'][v];
+  const style = homeStyle(record.loc,seed);
   if (worksBase(s, lot, phase)) return;
   const postH = phase === 'frame' ? .5 + ratio * 1.5 : 1.95;
   for (const px of [X, X + W - .18]) for (const pz of [Z, front - .18])
     s.box(px, .16, pz, .18, postH, .18, DARK, false, phase === 'frame');
   if (phase === 'frame') {
-    for (let i = 0; i < Math.ceil(ratio * 5); i++) s.box(X, .16 + i * .36, front, W, .3, .12, GR_PLANK[(i + v) % 4], false, true);
+    for (let i = 0; i < Math.ceil(ratio * 5); i++) s.box(X, .16 + i * .36, front, W, .3, .12, GR_PLANK[i % GR_PLANK.length], false, true);
     s.box(X, .16 + postH, Z, W, .14, .18, WOOD, false, true);
     return;
   }
   s.box(X, .16, Z, W, 1.85, D, '#72513B', false, false, {castShadow:true});
   grPlanks(s, X, .16, Z, W, 1.82, D, true);
-  homeRoof(s,X-.19,2.0,Z-.30,W+.38,D+.60,roofColor);
+  homeRoof(s,X-.19,2.0,Z-.30,W+.38,D+.60,style);
+  if (style.id==='stone') {
+    cladding(s,X-.025,.16,Z-.023,W+.05,.56,D+.05,true);
+  } else if (style.id==='saltbox') {
+    for (const side of [-1,1]) {
+      const px=X+W/2+side*(W/2-.13);
+      s.beam([px,.27,front+.031],[px-side*.65,1.04,front+.031],.05,style.trim);
+      s.box(px-.055,.16,front+.025,.11,1.78,.09,style.trim);
+    }
+  }
   s.box(X + W / 2 - .46, .16, front, .92, 1.42, .08, '#514134');
-  s.box(X + W / 2 - .36, .24, front + .05, .72, 1.26, .04, '#AB5236');
+  s.box(X + W / 2 - .36, .24, front + .05, .72, 1.26, .04, style.door);
   for (const dx of [-.5, .36]) s.box(X + W / 2 + dx, .16, front + .015, .14, 1.42, .20, DARK);
   s.box(X + W / 2 - .54, 1.58, front + .015, 1.08, .13, .22, WOOD);
   s.box(X + W / 2 - .5, .16, front + .015, 1.0, .07, .24, WOOD);
   const doorX = X + W / 2;
   s.box(doorX - .6, 0, front + .14, 1.2, .12, .43, '#7A7667');
   s.box(doorX - .49, .004, front + .57, .98, .04, .39, '#939584');
-  for (const dx of [-1.35, .78]) {
+  for (const dx of style.windows) {
     const windowX=X+W/2+dx;
     s.box(windowX,1.05,front+.01,.54,.58,.06,'#514134');
     s.box(windowX-.035,1.043,front+.015,.61,.045,.105,'#976A45');
@@ -1358,7 +1575,7 @@ function home3d(s, lot, record, seed) {
   s.box(X + W - .66, 3.27, Z + .41, .42, .11, .42, '#939584');
   // A rain hood protects the threshold and is fixed back into the façade.
   const pivot=[doorX,1.82,front+.16];
-  s.box(doorX-.72,1.78,front+.06,1.44,.09,.67,'#976A45',false,false,
+  s.box(doorX-.72,1.78,front+.06,1.44,.09,.67,style.trim,false,false,
     {rot:[.25,0,0],pivot});
   for (const side of [-1,1]) {
     const px=doorX+side*.55;
@@ -1392,12 +1609,13 @@ export function outdoorHomes(world, appearance) {
     const x = lot.x + lot.w / 2, front = lot.z + lot.d - .25;
     s.entrances[room]=campEntrance(room,world.layout?.sites[room]??residentialSite(room,world.peripheralHomes),world.peripheralHomes);
     s.group(`work:${room}:house`, () => {
-      for (const dx of [-1.29, .84]) {
-        const side=dx<0?'left':'right';
+      const style=homeStyle(room,world.layout?world.mapSeed:0);
+      for (const offset of style.windows) {
+        const dx=offset+.06, side=offset<0?'left':'right';
         const pane=s.box(x+dx,1.12,front+.075,.42,.44,.03,occupied?'#EDC787':'#2E3B3A',false,occupied,null,{part:'window-'+side});
         if (occupied) s.windows.push([pane.x+pane.w/2,pane.z+pane.d,pane.w/2,pane.y]);
         const shutter=occupied?(dx<0?x+dx-.2:x+dx+.44):x+dx;
-        s.box(shutter,1.1,front+.115,occupied?.17:.42,.48,.045,'#976A45',false,false,null,{part:'shutter-'+side});
+        s.box(shutter,1.1,front+.115,occupied?.17:.42,.48,.045,style.trim,false,false,null,{part:'shutter-'+side});
       }
       if (damage>0) {
         s.box(x-.34,.27,front+.105,.68,1.17,.055,'#342923');

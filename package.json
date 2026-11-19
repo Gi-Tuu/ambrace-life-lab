@@ -20,6 +20,7 @@
     "coverage": "node scripts/test.mjs --coverage",
     "lint": "node scripts/check.mjs",
     "art": "node scripts/art-hashes.mjs",
+    "art:catalog": "node scripts/art-catalog.mjs",
     "art:check": "node scripts/art-hashes.mjs --check",
     "check": "npm run lint && npm run art:check && npm test",
     "assets": "node scripts/gen-pixel-assets.mjs && node scripts/pack-assets.mjs && node scripts/gen-actions.mjs",

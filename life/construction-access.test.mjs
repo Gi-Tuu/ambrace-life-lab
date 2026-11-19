@@ -68,6 +68,10 @@ test('seed 13: a disjoint blocker seals the entrance in both core and outskirts'
     w.pinv.p1={wood:8,stone:4};
     const r=survAct(sp,{kind:'plan',type,target:loc,from,tool:'hammer'});
     assert.equal(r.code,'BUILD_ENTRANCE_BLOCKED');
+    const [bx,bz]=r.blockedAt;
+    assert.ok(bx>=blocker.lot.x && bx<=blocker.lot.x+blocker.lot.w);
+    assert.ok(bz>=blocker.lot.z && bz<=blocker.lot.z+blocker.lot.d);
+    assert.equal(r.unreachableAt,undefined);
     assert.equal(found(sp,loc),undefined);
     assert.deepEqual(w.pinv.p1,{wood:8,stone:4});
     assert.equal(survView(sp).settlementEvents.at(-1).reason,'BUILD_ENTRANCE_BLOCKED');
@@ -175,7 +179,10 @@ test('seed 13: distinguish a missing work position from a severed approach route
       w.survival.buildings.push({loc:`fixture-${i}`,type:'wall',lot,integrity:1});
     }
     w.pinv.p1={wood:12,stone:12};
-    assert.equal(survAct(sp,{kind:'plan',type,target:place,from,tool:'hammer'}).code,code);
+    const result=survAct(sp,{kind:'plan',type,target:place,from,tool:'hammer'});
+    assert.equal(result.code,code);
+    assert.ok(Array.isArray(code==='BUILD_PATH_BLOCKED'?result.unreachableAt:result.blockedAt));
+    assert.equal((code==='BUILD_PATH_BLOCKED'?result.blockedAt:result.unreachableAt),undefined);
     assert.equal(found(sp,place),undefined);
     assert.deepEqual(w.pinv.p1,{wood:12,stone:12});
   }

@@ -14,8 +14,11 @@ function sources(w, item) {
   if (population) return population.map(row => {
     const age = (w.t - row.born) / DAY_TICKS;
     const mature = age >= MATURE_DAYS[group];
+    const stormLoss = (row.stormRecovery ?? row.health) - row.health;
     return {
       id: item === 'fruit' ? `fruit:${row.id}` : `${group}:${row.id}`, slot: row.slot, mature,
+      ...(item === 'fruit' ? { healthGrade:row.health<=.3?0:row.health<.78?1:2,
+        stormDamage:stormLoss>.105?2:stormLoss>1e-6?1:0 } : {}),
       ...(item === 'egg' ? { stage: !mature ? 'juvenile' : age >= CHICKEN_ELDER_DAYS ? 'elder' : 'adult' } : {}),
     };
   });
@@ -134,10 +137,13 @@ export function berryAmount(s, site, target) {
 
 export function takeBerry(s, site, target) {
   const patches = s.berryPatches?.[site];
+  let picked = target;
   if (patches) {
     const index = patches.findIndex((n, i) => n >= 1 && (target === undefined || target === `berry:${site}:${i}`));
     patches[index] -= 1;
+    picked = `berry:${site}:${index}`;
   }
   s.wildBerries[site] -= 1;
+  return picked;
 }
 

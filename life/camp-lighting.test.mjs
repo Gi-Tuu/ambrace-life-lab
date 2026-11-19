@@ -1,9 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { modelMesh, MODEL_STRIDE, campCamera, regionOnScreen, collisionFootprint } from '../web/camp-3d-render.mjs';
-import { contactShadowMesh, materialGrain } from '../web/camp-lighting.mjs';
+import { contactShadowMesh, groundContactMesh, materialGrain, roomExposure } from '../web/camp-lighting.mjs';
 import { solarLight } from '../web/camp-sun.mjs';
-import { outdoorHomes } from '../web/camp-3d-scene.mjs';
+import { outdoorHomes, outdoorStage } from '../web/camp-3d-scene.mjs';
+
+test('接触阴影只贴接地物，桥桩伸入地面且井沿高于井水',()=>{
+  const cast=[{x:1,y:0,z:2,w:2,d:1,h:.35},{x:1,y:2,z:2,w:1,d:1,h:.2}];
+  const mesh=groundContactMesh({source:cast,x:2,z:2,height:()=>0});
+  assert.equal(mesh.length,24*MODEL_STRIDE);
+  assert.ok(Array.from(mesh).filter((_,i)=>i%MODEL_STRIDE===1).every(y=>Math.abs(y-.024)<1e-6));
+  const stage=outdoorStage({tw:24,th:24,sites:{well:[14,16]},trees:[],grass:[],height:()=>-.27},
+    [[2,3,8,5]],[]);
+  const posts=stage.boxes.filter(b=>b.color==='#5B4434' && b.z<5 && b.h>.4);
+  assert.equal(posts.length,4);
+  assert.ok(posts.every(b=>b.y<-.27 && Math.abs(b.y+b.h-.30)<1e-8));
+  const water=stage.boxes.find(b=>b.water), rim=stage.boxes.filter(b=>b.occluder==='site:well' && b.color==='#939584');
+  assert.ok(water && rim.some(b=>b.y<=water.y && b.y+b.h>water.y+water.h));
+  assert.ok(roomExposure(false,1)<roomExposure(true,1));
+  assert.ok(roomExposure(false,0,1)>roomExposure(false,0,0));
+});
 
 const source=[{x:3,y:0,z:4,w:3,h:.16,d:2,solid:true}];
 const axes=(b)=>{

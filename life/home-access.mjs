@@ -1,3 +1,4 @@
+import { noteWorkMotion } from './work-motion.mjs';
 import { residentialSite } from '../shared/camp-layout.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { isAlive } from './viability.mjs';
@@ -56,10 +57,12 @@ export function doorWork(w,id,room,kind,tool) {
     if (!(bag.wood>=1)) return fail('NO_MATERIAL');
     bag.wood-=1;
     delete doors[room];
+    noteWorkMotion(w,id,'hammer',{door:room});
     return ok;
   }
   if (homeEntry(w,id,room).ok) return fail('DOOR_OPEN');
   doors[room]=Math.min(1,damage+.5);
+  noteWorkMotion(w,id,'hammer',{door:room});
   for (const a of Object.values(w.agents)) {
     if (a.id===id || !isAlive(a) || !householdAccess(w,a.id,room)) continue;
     a.relations.meet(id,w.t,{delta:{trust:-15},why:'破门'});

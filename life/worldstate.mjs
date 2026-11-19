@@ -2,6 +2,7 @@
 //   土壤/水分/天气 → 植物生长 → 收获入仓 → 居民每日消耗 → 缺口产生存续压力 → 失败/目标。
 // 只在 world.survival 存在时生效（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
+import { noteWorkMotion } from './work-motion.mjs';
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, addFood, takeFood, FOOD_KINDS, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
@@ -239,6 +240,7 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   if (!p) return { ok: false, code: 'NO_MATURE' };
   const mods = effectiveMods(world);
   p.growth = 0;
+  noteWorkMotion(world,agentId,'pick',{plot:p.id,rect:p.bed,item:'crop'});
   const base = SURV.yieldPerPlot + mods.yieldBonus;
   const yieldAmt = s.eco === true ? Math.max(1, Math.round(base * (0.8 + 0.2 * s.soil))) : base; // §12 缓和曲线候选（0.5+0.5 被 G1 否）
   s.soil = clamp01(s.soil - 0.15);
@@ -270,6 +272,7 @@ export function doPlant(world, agentId, plot) {
   if (s.water < (s.plantWater ?? 0.1)) return { ok: false, code: 'NO_WATER' };
   s.water = clamp01(s.water - (s.plantWater ?? 0.1)); // §15.5 M2 播种耗水挂开关
   p.growth = 0.1;
+  noteWorkMotion(world,agentId,'sow',{plot:p.id,rect:p.bed});
   return { ok: true, code: 'OK' };
 }
 

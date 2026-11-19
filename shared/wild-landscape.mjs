@@ -1,11 +1,21 @@
 import { campHash, campTerrain, hash2, reliefAt } from './camp-terrain.mjs';
 import { TOWN_SIZE } from './camp-layout.mjs';
-import { wildVegetation } from './camp-scene.mjs';
+import { addWildLandmarks, wildVegetation } from './camp-scene.mjs';
 
 export const REGION_SIZE=24;
 export const WILDS=Object.freeze({west:-240,east:TOWN_SIZE.width+240,north:-220,south:TOWN_SIZE.depth+270});
 const {west,east,north,south}=WILDS;
 const WORLD_FLOOR=-29;
+const LANDMARKS=[
+  {id:'fork-cairn',name:'河岔叠石',side:-1,offset:6,cores:[[-.59,-.51,1.18,1.02,1.22]]},
+  {id:'boundary-wall',name:'旧边界墙',x:-48,z:56,cores:[[-1.88,-.4,3.76,.8,.68],[-1.98,-.5,.76,1,1.16],[1.10,-.5,.76,1,.94]]},
+  {id:'falls-rocks',name:'瀑缘岩台',side:1,offset:10,cores:[[-.76,-.65,1.52,1.3,.88],[.52,-.28,.88,.9,.53]]},
+];
+
+export function regionSlotPosition(seed,cx,cz,slot) {
+  const salt=seed+slot*13;
+  return [cx*REGION_SIZE+3+hash2(cx,cz,salt+109)*18,cz*REGION_SIZE+3+hash2(cx,cz,salt+110)*18];
+}
 export const inCamp=(x,z)=>x>=0 && x<TOWN_SIZE.width && z>=0 && z<TOWN_SIZE.depth;
 
 const smooth=(a,b,v)=>{
@@ -96,17 +106,26 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
     return channel(x,z)<=0 &&
       Math.max(Math.abs(height(x+.42,z)-height(x-.42,z)),Math.abs(height(x,z+.42)-height(x,z-.42)))<.8;
   }
-  const cleared=(x,z)=>clearing.some(p=>x>=p.x && x<=p.x+p.w && z>=p.z && z<=p.z+p.d);
-  function plantAt(tx,tz) {
+  const cleared=(x,z,pad=0)=>clearing.some(p=>x>=p.x-pad && x<=p.x+p.w+pad && z>=p.z-pad && z<=p.z+p.d+pad);
+  function plantAt(tx,tz,crossing=24) {
     const x=tx+.23+hash2(tx,tz,seed+94)*.54;
     const z=tz+.23+hash2(tx,tz,seed+95)*.54;
     if (cleared(x,z) || plantClearance?.(x,z)===false || harvestNodes.some(p=>Math.hypot(p.x-x,p.z-z)<1.1)) return null;
     const bank=bankGap(x,z);
-    if (bank<.34 || !walkable(x,z)) return null;
+    if (bank<.23 || !walkable(x,z,crossing) || landmarkAt(x,z,.46)) return null;
+    const nearBridge=Math.abs(z-crossing)<2.4 && Math.abs(x-river(crossing))<width(crossing)+3.8;
     const patch=noise(seed+96,x,z,10);
+    const variant=Math.floor(hash2(tx,tz,seed+92)*4);
+    const roll=hash2(tx,tz,seed+91);
+    if (bank<2.45 && !nearBridge && roll<.15+patch*.30 && (roadDistance?.(x,z)??3)>1.3 &&
+        height(x,z)>=waterHeight(z)-.08) {
+      const kind=bank<.94?'reed':variant===0?'iris':'rush';
+      return {x,z,y:height(x,z),variant,kind};
+    }
+    if (bank<.34) return null;
     const density=.13+patch*.16+(bank<3?.085:0);
-    if (hash2(tx,tz,seed+91)>=density) return null;
-    const species=hash2(tx,tz,seed+93), variant=Math.floor(hash2(tx,tz,seed+92)*4);
+    if (roll>=density) return null;
+    const species=hash2(tx,tz,seed+93);
     return {x,z,y:height(x,z),variant,kind:species<.29?'flower':species>.83?'shrub':'grass'};
   }
   function treeAt(x,z,crossing) {
@@ -116,14 +135,50 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
   }
   const treeScale=(x,z)=>.72+hash2(x,z,seed+66)*.53;
   function walkable(x,z,crossing=24) {
-    if (!groundAllows(x,z,crossing)) return false;
+    if (!groundAllows(x,z,crossing) || landmarkAt(x,z,.21)) return false;
     const tx=Math.round((x-1)/2)*2+1, tz=Math.round((z-1)/2)*2+1;
     return Math.hypot(x-tx,z-tz)>=.33+.22*treeScale(tx,tz) || treeAt(tx,tz,crossing)===null;
   }
   let fall=270;
   while (fall<324 && land(river(fall),fall+1)>0) fall++;
+  let features;
+  function landmarks() {
+    if (features) return features;
+    features=[];
+    if (!joined) return features;
+    for (const form of LANDMARKS) {
+      const az=form.z??(form.side<0?junction+10:fall-13);
+      const ax=form.x??river(az)+form.side*(width(az)+form.offset);
+      const angle=campHash(seed,'landmark:'+form.id)*Math.PI*2;
+      for (let i=0;i<80;i++) {
+        const a=angle+i*2.39996,r=2.8*Math.sqrt(i);
+        const x=Math.floor(ax+Math.cos(a)*r)+.5,z=Math.floor(az+Math.sin(a)*r)+.5;
+        if (inCamp(x,z) || bankGap(x,z)<3.8 || rim(x,z)<9 || land(x,z)<5 || cleared(x,z,14)) continue;
+        const samples=[0,-2.4,2.4].flatMap(dx=>[0,-1.4,1.4].map(dz=>[x+dx,z+dz]));
+        if (samples.some(([px,pz])=>!groundAllows(px,pz) ||
+          Math.abs(height(px,pz)-height(x,z))>.58)) continue;
+        // Keep existing trees and the stable region harvest/animal slots.
+        const trees=Array.from({length:3},(_,j)=>Math.round((x-1)/2)*2-1+j*2)
+          .flatMap(tx=>Array.from({length:3},(_,j)=>[tx,Math.round((z-1)/2)*2-1+j*2]));
+        if (trees.some(([tx,tz])=>Math.abs(tx-x)<2.7 && Math.abs(tz-z)<1.75 && treeAt(tx,tz,24)!==null)) continue;
+        const cx=Math.floor(x/REGION_SIZE),cz=Math.floor(z/REGION_SIZE);
+        const slots=Array.from({length:9},(_,j)=>[cx+j%3-1,cz+Math.floor(j/3)-1])
+          .flatMap(([rx,rz])=>Array.from({length:4},(_,slot)=>regionSlotPosition(seed,rx,rz,slot)));
+        if (slots.some(([px,pz])=>Math.abs(px-x)<2.8 && Math.abs(pz-z)<1.8)) continue;
+        const cores=form.cores.map(([dx,dz,w,d,h])=>({x:x+dx,z:z+dz,w,d,h}));
+        features.push({id:form.id,name:form.name,x,z,cores});
+        break;
+      }
+    }
+    return features;
+  }
+  function landmarkAt(x,z,pad) {
+    if (inCamp(x,z)) return false;
+    return landmarks().some(feature=>feature.cores.some(b=>
+      x>=b.x-pad && x<=b.x+b.w+pad && z>=b.z-pad && z<=b.z+b.d+pad));
+  }
   return {seed,joined,roadDistance,river,width,sourceWidth,sideWidth,source,branchSource,junction,sideStream,southEdge,rim,land,channel,bankGap,waterHeight,
-    isBridge,rawHeight,height,groundAllows,cleared,walkable,plantAt,treeAt,treeScale,fall};
+    isBridge,rawHeight,height,groundAllows,cleared,walkable,plantAt,treeAt,treeScale,fall,landmarks};
 }
 
 export function moveWildWalker(landscape,x,z,dx,dz,crossing) {
@@ -240,10 +295,11 @@ export function wildDetails(world,cx,cz,crossing) {
     if (r!==null) trees.push({x,z,y:world.height(x,z),variant,scale:world.treeScale(x,z)});
   }
   for (let tz=z0;tz<z0+REGION_SIZE;tz++) for (let tx=x0;tx<x0+REGION_SIZE;tx++) {
-    const plant=world.plantAt(tx,tz);
+    const plant=world.plantAt(tx,tz,crossing);
     if (plant) plants.push(plant);
   }
   const detail=wildVegetation(trees,plants);
+  addWildLandmarks(detail,world.landmarks().filter(p=>p.x>=x0 && p.x<x0+REGION_SIZE && p.z>=z0 && p.z<z0+REGION_SIZE),world.height);
   const x=world.river(crossing);
   if (!world.joined && Math.floor(x/REGION_SIZE)===cx && Math.floor(crossing/REGION_SIZE)===cz) {
     for(let i=0;i<19;i++) detail.box(x-3.65+i*.39,world.waterHeight(crossing)+.46,crossing-1.12,.385,.12,2.24,

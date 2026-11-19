@@ -63,6 +63,11 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     let {comparison: pair} = snapshot();
     assert.equal(pair.mapSeed, official.mapSeed);
     assert.equal(pair.startTick, official.t);
+    const initial=host.replay({t:pair.startTick,revision:pair.revision});
+    assert.equal(initial.scenes.A.t,pair.startTick);
+    assert.deepEqual(initial.scenes.A.playerPos,official.playerPos);
+    assert.deepEqual(initial.scenes.B.layout,official.layout);
+    assert.ok(host.replay({revision:pair.revision}).frames.every(frame=>!frame.scene));
     for (const key of ['A','B']) {
       for (const field of ['layout','rooms','districts','occupancy','pinv','plots','buildings','households','ecoSources','camp','player']) {
         assert.deepEqual(pair[key][field], official[field], `${key}.${field} 应至起点与正式档一致`);
@@ -78,6 +83,10 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     const {x,z}=official.playerPos;
     const synced=await act('player_sync',{from:[x-.5,z+.5],otherContact:{from:[x+.5,z+.5]}});
     assert.equal(synced.sides.A.ok,true);
+    const later=host.replay({t:pair.startTick+1,revision:pair.revision});
+    assert.deepEqual(later.scenes.A.playerPos,{x:x-.5,z:z+.5,t:pair.startTick+1});
+    assert.deepEqual(later.scenes.B.playerPos,{x:x+.5,z:z+.5,t:pair.startTick+1});
+    assert.deepEqual(host.replay({t:pair.startTick}).scenes.A.playerPos,official.playerPos);
     assert.equal(synced.sides.B.ok,true);
     assert.deepEqual(snapshot().comparison.B.playerPos,{x:x+.5,z:z+.5,t:pair.startTick+1});
     assert.deepEqual(snapshot().survival.playerPos,official.playerPos);
