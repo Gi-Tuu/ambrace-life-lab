@@ -234,7 +234,7 @@ export function campAction(world,body) {
     if (site!=='garden') return fail('NOT_GARDEN');
     const field = s.plots.find(p => p.id === plot);
     if (plot!==undefined && !field) return fail('BAD_PLOT');
-    if (!amount(bag,'water')) return fail('EMPTY');
+    // 井水/河水都可直接浇地：不再强制先装桶；身上有井水时优先用掉。
     if (field && s.farmLife) {
       if ((field.moisture ?? 0) >= 1) return fail('WATER_FULL');
       field.moisture = Math.min(1, (field.moisture ?? 0) + .4);
@@ -242,7 +242,7 @@ export function campAction(world,body) {
       if (s.water>=1) return fail('WATER_FULL');
       s.water=Math.min(1,s.water+.12);
     }
-    bag.water-=1;
+    if (amount(bag,'water')) bag.water-=1;
     noteWorkMotion(world,'p1','water',{plot,rect:field?.bed});
     pay(world,0.01);
     return ok();
