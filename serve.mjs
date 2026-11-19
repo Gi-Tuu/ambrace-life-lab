@@ -6,7 +6,8 @@ import { createServer } from 'node:http';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import { extname, join, sep, resolve } from 'node:path';
 import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
-import { mutatingDenied, isJson } from './life/request-guard.mjs';
+import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson, DESTRUCTIVE_CTL } from './life/request-guard.mjs';
+import { createHash, randomBytes } from 'node:crypto';
 import { normalizeName } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -39,8 +40,15 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+// SEC5-06：统一安全头。CSP 只放同源脚本/样式/图片；frame-ancestors 'none' 防点击劫持。
+const SECURITY_HEADERS = Object.freeze({
+  'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'same-origin',
+});
 const send = (res, code, body, type = 'application/json; charset=utf-8') => {
-  res.writeHead(code, { 'content-type': type });
+  res.writeHead(code, { ...SECURITY_HEADERS, 'content-type': type });
   res.end(body);
 };
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj));
@@ -58,18 +66,19 @@ async function readBody(req) {
 
 // BUG-19：静态面改**白名单 + realpath**。原来的黑名单挡不住 Windows 的大小写不敏感、
 // %2e%2e%2f、junction，也没列举过 /docs、/.git、/contest.txt —— 本地跑 serve 就能读到仓库内部文件。
-// 镜像里静态资源只有 web/ 一样（Dockerfile 只 COPY 四样），所以只放行 web/ 就够了。
-const STATIC_BASE = join(ROOT, 'web');
+// V7.3 去 3D 后浏览器会 import shared/ 的纯数据/几何，所以白名单只有两棵树：web/ 与 shared/。
+const STATIC_BASES = { web: join(ROOT, 'web'), shared: join(ROOT, 'shared') };
 
 async function serveStatic(res, urlPath) {
   let rel;
   try { rel = decodeURIComponent(String(urlPath)); } catch { return json(res, 400, { error: 'BAD_PATH' }); }
   if (rel === '/index.html') rel = '/web/index.html';
-  if (!rel.startsWith('/web/')) return json(res, 404, { error: 'NOT_FOUND' });
+  const tree = rel.startsWith('/web/') ? 'web' : rel.startsWith('/shared/') ? 'shared' : null;
+  if (!tree) return json(res, 404, { error: 'NOT_FOUND' });
   const target = resolve(ROOT, '.' + rel);
   let real, base;
   try {
-    [real, base] = await Promise.all([realpath(target), realpath(STATIC_BASE)]);
+    [real, base] = await Promise.all([realpath(target), realpath(STATIC_BASES[tree])]);
   } catch { return json(res, 404, { error: 'NOT_FOUND' }); }
   // realpath 之后再比：符号链接 / junction / .. 都已经被展开。Windows 路径不区分大小写，统一小写比。
   const r = real.toLowerCase();
@@ -81,7 +90,7 @@ async function serveStatic(res, urlPath) {
     const info = await stat(real);
     if (info.isDirectory()) return json(res, 404, { error: 'NOT_FOUND' });
     const buf = await readFile(real);
-    res.writeHead(200, { 'content-type': MIME[extname(real)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': MIME[extname(real)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
     res.end(buf);
   } catch {
     json(res, 404, { error: 'NOT_FOUND' });
@@ -158,10 +167,12 @@ const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
 // 第七轮更正：**不能按 remoteAddress 分桶**——创空间网关把所有访客都送到同一个地址，
 // 按 IP 限等于给整站设一个"每分钟 5 人建档"的总闸（第 6 人起 429）。现在按**营地名**分桶，
 // 另设一个显式的全局桶当防滥用层；两层都是限速，回显的错误码不区分是哪一层挡的（不透露内部阈值）。
-const OPEN_LIMIT = Number(process.env.OPEN_LIMIT ?? 5);          // 同一个营地名，每分钟最多这么多次
-const OPEN_LIMIT_GLOBAL = Number(process.env.OPEN_LIMIT_GLOBAL ?? 60); // 整站每分钟总量（防刷名造营地）
+const positiveInt = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : d; };
+const OPEN_LIMIT = positiveInt(process.env.OPEN_LIMIT, 5);          // 同一个营地名，每分钟最多这么多次
+const OPEN_LIMIT_GLOBAL = positiveInt(process.env.OPEN_LIMIT_GLOBAL, 60); // 整站每分钟总量（防刷名造营地）
+const OPEN_SESSION_LIMIT = positiveInt(process.env.OPEN_SESSION_LIMIT, 5); // 同一个浏览器会话最多建几个营地/分钟
 const OPEN_WINDOW_MS = 60_000;
-const CAMP_TOTAL_MAX = Number(process.env.CAMP_TOTAL_MAX ?? 50);
+const CAMP_TOTAL_MAX = positiveInt(process.env.CAMP_TOTAL_MAX, 50);
 const openBuckets = new Map();
 function openAllowed(bucket, limit) {
   const now = Date.now();
@@ -230,9 +241,107 @@ async function chatProxy(req, res) {
   }
 }
 
+function cookieValue(req, name) {
+  return String(req?.headers?.cookie ?? '').split(';').map((x) => x.trim())
+    .find((x) => x.startsWith(`${name}=`))?.slice(name.length + 1) ?? null;
+}
+const ownerHashOf = (token) => createHash('sha256').update(String(token)).digest('hex');
+// SEC5-02：非 MAIN 营地的读路径也必须出示匹配的 camp_owner。MAIN 没有 owner，读/普通动作开放；
+// 它的破坏性重置由 /ctl 的会话 nonce（未设令牌时）或 CTL_TOKEN（设了令牌时）单独把关。
+const ownerAllows = (req, key) => {
+  if (!key || key === 'MAIN') return true;
+  const hash = host.campOwnerHash(key);
+  const tokenOk = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+  if (tokenOk) return true;
+  const owner = cookieValue(req, 'camp_owner');
+  if (!hash) {
+    // 旧档没有 ownerHash：第一次带 owner cookie 的访客绑定它；无 cookie 一律拒绝。
+    if (!owner) return false;
+    try { host.claimCamp(key, ownerHashOf(owner)); } catch { /* 索引锁冲突：本次按无 owner 拒绝 */ return false; }
+    return true;
+  }
+  return Boolean(owner) && ownerHashOf(owner) === hash;
+};
+
+// ── SEC5-01：服务端签发的会话 + nonce ───────────────────────────────
+// nonce 不是客户端自选值：服务端为每个 ctl_sid 生成随机 nonce 并保存在进程内；
+// 校验时必须同时满足 ① 会话存在 ② cookie nonce == 服务端 nonce ③ 请求头 nonce == 服务端 nonce。
+// 这样“自设 cookie/header 对”无法通过。HttpOnly 会话 cookie 防 JS 读取；SameSite=Strict 防跨站携带。
+// 注意：这是 CSRF 防护，不是账号体系——未配置 CTL_TOKEN 时，能完成一次 GET 的脚本仍能拿到会话；
+// 公开部署应配置 CTL_TOKEN（破坏性动作只认令牌）。
+const CTL_SESSION_TTL_MS = positiveInt(process.env.CTL_SESSION_TTL_MS, 12 * 60 * 60 * 1000);
+const CTL_SESSION_MAX = positiveInt(process.env.CTL_SESSION_MAX, 5000);
+// MAIN reset 用的一次性 nonce 窗口：60s 内有效，用过即轮换；并做全局 3 次/分钟限速。
+const CTL_NONCE_TTL_MS = positiveInt(process.env.CTL_NONCE_TTL_MS, 60_000);
+const MAIN_RESET_LIMIT = positiveInt(process.env.MAIN_RESET_LIMIT, 3);
+const MAIN_RESET_WINDOW_MS = positiveInt(process.env.MAIN_RESET_WINDOW_MS, 60_000);
+const ctlSessions = new Map();
+const mainResetTimes = [];
+const secureCookie = (req) => process.env.COOKIE_SECURE === '1'
+  || Boolean(req?.socket?.encrypted)
+  || String(req?.headers?.['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase() === 'https';
+const cookieSecureFlag = (req) => secureCookie(req) ? '; Secure' : '';
+const mainResetSid = (req) => String(req?.ctlSid ?? '').slice(0, 8);
+function auditMainReset(req, result) {
+  // 审计事件只落 stderr：时间 / sid 前缀 / 结果。不写令牌、不写 nonce 原文。
+  console.error('[audit] main_reset ' + JSON.stringify({ at: new Date().toISOString(), sid: mainResetSid(req), result: String(result) }));
+}
+function rotateNonce(rec) {
+  rec.nonce = randomBytes(16).toString('hex');
+  rec.nonceAt = Date.now();
+}
+function pruneSessions(now) {
+  for (const [sid, rec] of ctlSessions) if (rec.expires <= now) ctlSessions.delete(sid);
+  if (ctlSessions.size <= CTL_SESSION_MAX) return;
+  // 极端覆盖：按过期时间删最旧的一半，保证表有界。
+  const olds = [...ctlSessions.entries()].sort((a, b) => a[1].expires - b[1].expires);
+  for (let i = 0; i < Math.ceil(olds.length / 2); i += 1) ctlSessions.delete(olds[i][0]);
+}
+function issueCtlSession(req, res) {
+  const now = Date.now();
+  pruneSessions(now);
+  const sid = cookieValue(req, 'ctl_sid');
+  let rec = sid ? ctlSessions.get(sid) : null;
+  if (!rec || rec.expires <= now) {
+    const freshSid = randomBytes(16).toString('hex');
+    rec = { nonce: randomBytes(16).toString('hex'), nonceAt: now, expires: now + CTL_SESSION_TTL_MS };
+    ctlSessions.set(freshSid, rec);
+    req.ctlSid = freshSid;
+    req.ctlNonce = rec.nonce;
+    res.appendHeader('set-cookie', `ctl_sid=${freshSid}; Path=/; HttpOnly; SameSite=Strict${cookieSecureFlag(req)}`);
+  } else {
+    req.ctlSid = sid;
+    // 短 TTL：nonce 过期自动轮换（前端每次请求都会从响应拿到新 cookie）。
+    if (!(now - (rec.nonceAt ?? 0) <= CTL_NONCE_TTL_MS)) rotateNonce(rec);
+    req.ctlNonce = rec.nonce;
+    rec.expires = now + CTL_SESSION_TTL_MS;
+  }
+  // 总是覆盖客户端传来的 nonce cookie，服务端值才是唯一真相。
+  res.appendHeader('set-cookie', `ctl_nonce=${rec.nonce}; Path=/; SameSite=Strict${cookieSecureFlag(req)}`);
+  return rec;
+}
+function consumeCtlNonce(req, res) {
+  const rec = req.ctlSid ? ctlSessions.get(req.ctlSid) : null;
+  if (!rec) return;
+  rotateNonce(rec);
+  res.appendHeader('set-cookie', `ctl_nonce=${rec.nonce}; Path=/; SameSite=Strict${cookieSecureFlag(req)}`);
+}
+function ctlNonceValid(req) {
+  const rec = req.ctlSid ? ctlSessions.get(req.ctlSid) : null;
+  if (!rec || rec.expires <= Date.now()) return false;
+  if (!(Date.now() - (rec.nonceAt ?? 0) <= CTL_NONCE_TTL_MS)) return false;
+  const cookieNonce = cookieValue(req, 'ctl_nonce');
+  const headerNonce = String(req.headers['x-ctl-nonce'] ?? '');
+  return Boolean(cookieNonce && headerNonce)
+    && tokenMatches(cookieNonce, rec.nonce)
+    && tokenMatches(headerNonce, rec.nonce);
+}
+
 const healthStatus = ({ saveError, tickError }) => saveError || tickError ? 503 : 200;
 
 async function handle(req, res) {
+  // SEC5-01：先签发/续期服务端会话；nonce 只从服务端记录派生，绝不采信客户端自选值。
+  if (req.method !== 'HEAD') issueCtlSession(req, res);
   // H-01：new URL 在旧版位于 try 之外。一条 `GET http://[ HTTP/1.1` 就会抛 ERR_INVALID_URL，
   // 变成未捕获 rejection ⇒ 进程 exit 1（已复现）。这里先兜住，任何解析失败一律 400。
   let url;
@@ -247,7 +356,7 @@ async function handle(req, res) {
   if (req.method === 'HEAD') {
     if (p === '/' || p === '/index.html' || p === '/world' || p === '/healthz') {
       const status = p === '/healthz' ? healthStatus(host.status()) : 200;
-      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.writeHead(status, { ...SECURITY_HEADERS, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       return res.end();
     }
     return json(res, 404, { error: 'NOT_FOUND' });
@@ -258,25 +367,38 @@ async function handle(req, res) {
     // 名字存档：公开列表只投影六项；进场是写路由（同源/令牌守卫）。
   if (p === '/saves' && req.method === 'GET') return json(res, 200, { entries: listCamps() });
   if (p === '/saves/back' && req.method === 'POST') {
-    const denied = mutatingDenied(req, CTL_TOKEN);
+    const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     const back = await backToMainCamp();
-    res.setHeader('set-cookie', 'camp=; Path=/; Max-Age=0; SameSite=Lax');
+    res.appendHeader('set-cookie', `camp=; Path=/; Max-Age=0; SameSite=Lax${cookieSecureFlag(req)}`);
     return json(res, 200, back);
   }
   if (p === '/saves/open' && req.method === 'POST') {
-    const denied = mutatingDenied(req, CTL_TOKEN);
+    const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     if (listCamps().length >= CAMP_TOTAL_MAX) return json(res, 429, { error: 'CAMP_LIMIT' });
     let body;
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
-    // 限速按**营地名**分桶（反代下 IP 恒等，见上方注释）+ 一层全局桶。
-    if (!openAllowed(openBucketKey(body?.name), OPEN_LIMIT) || !openAllowed('g:open', OPEN_LIMIT_GLOBAL)) {
+    // 限速按**营地名**分桶（反代下 IP 恒等，见上方注释）+ 一层全局桶 + 会话配额。
+    // SEC5-04：会话配额是“同一个浏览器最多占几个营地”的可用性闸；脚本仍可换会话，但不再是 50 次零成本占满。
+    if (!openAllowed(openBucketKey(body?.name), OPEN_LIMIT)
+      || !openAllowed('g:open', OPEN_LIMIT_GLOBAL)
+      || !openAllowed(`s:${req.ctlSid ?? 'anon'}`, OPEN_SESSION_LIMIT)) {
       return json(res, 429, { error: 'RATE_LIMITED' });
     }
     const opened = await openCamp(body?.name);
     if (!opened.ok) return json(res,['CAMP_UNAVAILABLE','SAVE_FAILED'].includes(opened.code)?503:400,{error:opened.code});
-    res.setHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax`);
+    // SEC3-02 / SEC5-05：创建者拿 camp_owner（HttpOnly）；索引只存 sha256。
+    // 已有 owner 的营地绝不换绑：非 owner 重开不签发新 cookie，明确 403 CAMP_OWNED。
+    const presented = cookieValue(req, 'camp_owner');
+    const ownerToken = presented || randomBytes(16).toString('hex');
+    let claim;
+    try { claim = host.claimCamp(opened.key, ownerHashOf(ownerToken)); }
+    catch { return json(res, 503, { error: 'SAVE_FAILED' }); }
+    if (!claim.ok) return json(res, 503, { error: claim.code === 'NO_CAMP' ? 'SAVE_FAILED' : claim.code });
+    if (!claim.owned) return json(res, 403, { error: 'CAMP_OWNED' });
+    res.appendHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax${cookieSecureFlag(req)}`);
+    res.appendHeader('set-cookie', `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax${cookieSecureFlag(req)}`);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
@@ -318,7 +440,16 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     });
   }
 
+  // 阶段 5：A/B 只读回放（range 或单刻）。历史浏览不写任何世界。
+  if (req.method === 'GET' && p === '/replay') {
+    const q = url.searchParams;
+    const num = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
+    const out = host.replay({ from: num('from'), to: num('to'), t: num('t'), revision: num('rev') });
+    return json(res, out.code === 'REPLAY_STALE' ? 409 : 200, out);
+  }
   if (req.method === 'GET' && p === '/world') {
+    // SEC5-02：非 MAIN 营地读路径必须 owner；不再“带了 cookie 才检查”。
+    if (campKey && campKey !== 'MAIN' && !ownerAllows(req, campKey)) return json(res, 403, { error: 'CAMP_NOT_OWNER' });
     try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
     catch (error) {
       if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
@@ -327,8 +458,6 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   }
 
   if (req.method === 'POST' && (p === '/act' || p === '/ctl')) {
-    const denied = mutatingDenied(req, CTL_TOKEN);
-    if (denied) return json(res, denied === 'UNAUTHORIZED' ? 401 : 403, { error: denied });
     // H-30：读体失败要分清"超长"(413) 与"JSON 坏了"(400)。旧版把两者都包在同一个 catch 里 → 全变 400。
     let rawBody;
     try {
@@ -344,13 +473,57 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
       return json(res, 400, { error: 'BAD_JSON' });
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
+    // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
+    // SEC5-05：只有 MAIN 的 survival_reset 允许“服务端会话 nonce”作为令牌姿态下的浏览器授权；
+    // 全局 reset / 具名营地仍只认 Bearer 或 owner（nonce 不越权）。
+    const isMainCamp = !campKey || campKey === 'MAIN';
+    const allowNonce = p === '/ctl' && body?.action === 'survival_reset' && isMainCamp;
+    const denied = p === '/act'
+      ? interactionDenied(req, CTL_TOKEN)
+      : ctlDenied(req, body, CTL_TOKEN, () => ctlNonceValid(req), { allowNonce });
+    if (denied) return json(res, p === '/ctl' ? 403 : (denied === 'UNAUTHORIZED' ? 401 : 403), { error: denied });
+    // nonce 一次性：任何“靠 nonce 放行”的破坏性动作成功后立即轮换（响应里带回新 cookie）。
+    const tokenAuthorized = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+    const nonceAuthorized = !tokenAuthorized && p === '/ctl'
+      && DESTRUCTIVE_CTL.includes(String(body?.action ?? '')) && ctlNonceValid(req);
+    if (nonceAuthorized) consumeCtlNonce(req, res);
+    if (campKey && !ownerAllows(req, campKey) && !(p === '/ctl' && body?.action === 'survival_reset')) {
+      return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+    }
     // H-02c：reset 是唯一会把整段历史丢掉的动作，必须显式确认，避免误点与 CSRF 成功。
     if (p === '/ctl' && ['reset', 'compare_reset', 'survival_reset'].includes(body?.action) && body?.confirm !== true) {
       return json(res, 400, { error: 'RESET_NEEDS_CONFIRM', note: '重置世界需要 confirm: true' });
     }
+    // SEC3-02：营地归属。survival_reset 只有 owner cookie 或 CTL_TOKEN 能做；旧营地没 owner 的不得匿名重置。
+    // SEC5-05：MAIN 没有 ownerHash，令牌姿态下由上面的 allowNonce 分支授权；未设令牌时同样由 nonce 授权。
+    if (p === '/ctl' && body?.action === 'survival_reset') {
+      const tokenOk = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
+      const isMain = !campKey || campKey === 'MAIN';
+      if (!tokenOk && !isMain) {
+        const ownerToken = cookieValue(req, 'camp_owner');
+        const ownerHash = host.campOwnerHash(campKey);
+        if (!ownerHash || !ownerToken || ownerHashOf(ownerToken) !== ownerHash) {
+          return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+        }
+      }
+    }
+    // SEC5-05 约束：MAIN 重开加频率限制 + 审计事件，防止脚本拿着可获取的 nonce 反复重开。
+    const mainReset = p === '/ctl' && body?.action === 'survival_reset' && isMainCamp;
+    if (mainReset) {
+      const now = Date.now();
+      while (mainResetTimes.length && now - mainResetTimes[0] >= MAIN_RESET_WINDOW_MS) mainResetTimes.shift();
+      if (mainResetTimes.length >= MAIN_RESET_LIMIT) {
+        auditMainReset(req, 'rate_limited');
+        return json(res, 429, { error: 'RESET_RATE_LIMITED' });
+      }
+      mainResetTimes.push(now);
+    }
     try {
-      return json(res,200,await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined)));
+      const out = await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined));
+      if (mainReset) auditMainReset(req, out?.ok ? 'ok' : (out?.error ?? 'rejected'));
+      return json(res,200,out);
     } catch (error) {
+      if (mainReset) auditMainReset(req, error?.code ?? 'error');
       if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});
       throw error;
     }
@@ -378,7 +551,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     if (!relayAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
     if (p === '/brain/claim') {
       const job = brainRelay.claim();
-      if (!job) { res.writeHead(204); return res.end(); }
+      if (!job) { res.writeHead(204, { ...SECURITY_HEADERS }); return res.end(); }
       return json(res, 200, job);
     }
     if (p === '/brain/stats') return json(res, 200, brainRelay.view());
@@ -445,8 +618,17 @@ if (DELIBERATION_MODEL) console.error(`[serve] 审议车道指到 ${DELIBERATION
 // 播报归应用层：host 是库，往 stdout 写日志会干扰测试 runner 的消息通道
 const boot = await host.start();
 // 决策口径（所有者 2026-11-16）：生产不设 CTL_TOKEN。这条警告必须排在"就绪"之前，便于启动日志与测试都看得到。
-if (CTL_TOKEN) console.error('[serve] 警告：CTL_TOKEN 已配置 ⇒ 写路由只认 Bearer 令牌，浏览器访客的 /act、/ctl、/saves/open 会一律 401。公开演示实例应保持不配置。');
+if (CTL_TOKEN) console.error('[serve] 提示：CTL_TOKEN 已配置 ⇒ /ctl 的破坏性动作（reset/survival_reset/catchup/brain）只认 Bearer 令牌；/act 与 /saves/open 仍允许同源浏览器，不会被锁死。');
 console.log(boot.note);
 server.listen(PORT, HOST, () => {
   console.log(`life-demo 就绪 http://${HOST}:${PORT}  模型转发=${PROVIDERS.length ? PROVIDERS.length + ' 档' : '关（无端点则世界走本地替身）'}  存档=${boot.dir}`);
 });
+
+
+
+
+
+
+
+
+

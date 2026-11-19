@@ -1,11 +1,15 @@
+import { noteWorkMotion } from './work-motion.mjs';
+import { recordSettlementEvent, stormDamageForRepair } from './settlement-events.mjs';
 import { berryAmount, restoreSources, takeBerry, takeProduce } from './source-produce.mjs';
 // 生产建设层（Phase B）。服务端权威：资源库存、建筑选址/材料/工时/功能/损坏/维修。
 // 只作用于 world.survival（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 建筑功能以"生效修正"形式回灌生存循环（worldstate 读取），损坏即失效、维修恢复。
 import { siteOf } from './geometry.mjs';
-import { constructionLot, overlapsLot } from '../web/camp-layout.mjs';
+import { constructionLot, overlapsLot } from '../shared/camp-layout.mjs';
 import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
+import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -105,7 +109,7 @@ export function effectiveMods(world) {
   };
 }
 
-export function doGather(world, agentId, loc = world.loc[agentId]) {
+export function doGather(world, agentId, loc = world.loc[agentId], at) {
   const s = world.survival;
   const res = gatherResource(world,loc);
   if (!res) return { ok: false, code: 'NOT_GATHER_LOC' }; // P0-3：无资源地点不能采集
@@ -116,6 +120,9 @@ export function doGather(world, agentId, loc = world.loc[agentId]) {
   stock[loc] = have - take;
   const bag = (world.pinv ??= {})[agentId] ??= { wood: 0, stone: 0 }; // §15 P2-C 背包：采集入个人包
   bag[res] += take;
+  noteRes(world, 'gross', res, take); // D1：自然产出与个人获得分开记
+  noteRes(world, 'personal', res, take);
+  noteWorkMotion(world,agentId,res==='wood'?'chop':'mine',{at:at ?? world.districts?.[loc]?.source,loc});
   world.observeProduction?.('gather', res, take);
   return { ok: true, code: 'OK', res, amount: take };
 }
@@ -160,12 +167,15 @@ export function doPlan(world, agentId, type, loc = world.loc[agentId]) {
     const occupied=b.lot??buildLot(world,b.loc);
     return b.loc===loc || occupied && overlapsLot(lot,occupied,.35);
   })) return {ok:false,code:'OCCUPIED'};
+  const access = constructionAccess(world,siteRecord(world,loc,type,lot),{proposed:true});
+  if (!access.ok) return access;
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
   if (bag.wood + s.inv.wood < def.cost.wood || bag.stone + s.inv.stone < def.cost.stone) return { ok: false, code: 'NO_MATERIAL' };
   const bw = Math.min(bag.wood, def.cost.wood); bag.wood -= bw; s.inv.wood -= def.cost.wood - bw;
   const bs = Math.min(bag.stone, def.cost.stone); bag.stone -= bs; s.inv.stone -= def.cost.stone - bs;
   world.observeProduction?.('materialSpent', 'planWood', def.cost.wood);
   world.observeProduction?.('materialSpent', 'planStone', def.cost.stone);
+  noteWorkMotion(world,agentId,'hammer',{rect:lot,loc,target:`work:${loc}:${type}`});
   s.sites.push({ type, loc, at: world.districts?.[loc]?.at ?? siteOf(loc,world.campLayout), lot, progress: 0 });
   return { ok: true, code: 'OK' };
 }
@@ -174,10 +184,18 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
   const site = atLoc(s.sites, loc);
   if (!site) return { ok: false, code: 'NO_SITE' };
+  if (constructionAccessEnabled(world)) {
+    if (!world.agents[agentId]?.isPlayer && (world.loc[agentId]!==loc || s.districtTravel?.[agentId])) {
+      return {ok:false,code:'BUILD_NOT_ARRIVED'};
+    }
+    const access = constructionAccess(world,siteRecord(world,loc,site.type,site.lot));
+    if (!access.ok) return access;
+  }
   if (s.settlementLife) {
     const people=site.contributors??={};
     people[agentId]=(people[agentId]??0)+1;
   }
+  noteWorkMotion(world,agentId,'hammer',{rect:site.lot ?? buildLot(world,loc),loc,target:`work:${loc}:${site.type}`});
   site.progress += residentStage(world, agentId) === 'elder' ? 1 : LABOR_PER_ACTION; // P1-1：老年施工减产
   if (site.progress >= buildDef(world, site.type).labor) {
     s.sites = s.sites.filter((x) => x !== site);
@@ -187,19 +205,37 @@ export function doBuild(world, agentId, loc = world.loc[agentId]) {
   return { ok: true, code: 'OK', completed: null, progress: site.progress };
 }
 
+export function recordRepairFailure(world, actor, loc, code) {
+  recordSettlementEvent(world, 'repair', { ok: false, actor, loc, code });
+}
+
 export function doRepair(world, agentId, loc = world.loc[agentId]) {
   const s = world.survival;
   const b = atLoc(s.buildings, loc);
-  if (!b || b.integrity >= 1) return { ok: false, code: 'NO_REPAIR' };
+  if (!b || b.integrity >= 1) {
+    if (agentId !== 'p1') recordRepairFailure(world, agentId, loc, 'NO_REPAIR');
+    return { ok: false, code: 'NO_REPAIR' };
+  }
   const bag = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包优先、公仓兜底
-  if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) return { ok: false, code: 'NO_MATERIAL' };
+  if (bag.wood + s.inv.wood < 1 || bag.stone + s.inv.stone < 1) {
+    if (agentId !== 'p1') recordRepairFailure(world, agentId, loc, 'NO_MATERIAL');
+    return { ok: false, code: 'NO_MATERIAL' };
+  }
+  const before = b.integrity;
   const bw = Math.min(bag.wood, 1); bag.wood -= bw; s.inv.wood -= 1 - bw;
   const bs = Math.min(bag.stone, 1); bag.stone -= bs; s.inv.stone -= 1 - bs;
   world.observeProduction?.('materialSpent', 'repairWood', 1);
   world.observeProduction?.('materialSpent', 'repairStone', 1);
   b.integrity = 1;
+  noteWorkMotion(world,agentId,'hammer',{rect:b.lot ?? buildLot(world,loc),loc,target:`work:${loc}:${b.type}`});
   const task=s.coop?.task;
   if (s.settlementLife && task?.loc===loc && task.repair) (task.repairedBy??=[]).push(agentId);
+  if (world.gameRules) recordSettlementEvent(world, 'repair', {
+    ok: true, actor: agentId, loc, type: b.type, before, after: b.integrity,
+    spent: { bag: { wood: bw, stone: bs }, store: { wood: 1 - bw, stone: 1 - bs } },
+    ...(task?.loc === loc && task.repair && { taskStartedAt: task.startedAt }),
+    ...stormDamageForRepair(world, loc, b.type),
+  });
   return { ok: true, code: 'OK' };
 }
 
@@ -280,9 +316,11 @@ export function doForage(world, id, site = world.loc[id], target) {
   const s = world.survival;
   const gate = forageRule(world,id,site,target);
   if (!gate.ok) return gate;
-  if (s.wildBerries) takeBerry(s, site, target);
+  const patch = s.wildBerries ? takeBerry(s, site, target) : target;
+  noteWorkMotion(world,id,'pick',{item:'berry',target:patch,loc:site});
   s.produce ??= Object.fromEntries(PRODUCE_KINDS.map((k) => [k, 0]));
   s.produce.berry += 1;
+  noteRes(world, 'gross', 'berry', 1); // D1：树上/地面的产出（未收集），收集时再记 personal
   world.observeProduction?.('gross', 'berry', 1);
   world.observeProduction?.('stock', 'berry', 1);
   s.forageCd = world.t + FORAGE_COOLDOWN;
@@ -298,6 +336,8 @@ export function doExchange(world, id, kind) {
   // 70% 仓容门槛：粮类兑换不能把公仓顶满，否则灾害/损耗没有作用空间（P2-4 stakes）。
   if (rate.store && s.store >= cap * .7) return { ok: false, code: 'STORE_FULL' };
   takeProduce(s, kind, 1);
+  // DATA5-11：兑换把 wool/奶/蛋等产出换成木料/粮，库存消失必须在 consumed 留痕。
+  noteConsumed(world, kind, 'exchange', 1);
   let gained;
   if (rate.store) {
     const before = s.store;

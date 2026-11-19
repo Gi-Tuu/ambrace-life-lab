@@ -1,0 +1,153 @@
+{
+  "head": "76548c6",
+  "generatedAt": "2026-11-18T11:28:16.466Z",
+  "harness": "node scripts/arch-async-probe.mjs measure | crash",
+  "closure": {
+    "assertion": "子进程真实 import host.mjs / serve.mjs，加载表不含 web/、camp-3d-*、WebGL",
+    "host": {
+      "loadedModules": 71,
+      "webModules": [],
+      "threeModules": [],
+      "webglModules": []
+    },
+    "serve": {
+      "loadedModules": 74,
+      "webModules": [],
+      "threeModules": [],
+      "webglModules": []
+    },
+    "pass": true
+  },
+  "asyncPersistence": {
+    "camps": 7,
+    "ticks": 20,
+    "injectedDiskStallMs": 400,
+    "tick": {
+      "maxMs": 19.52,
+      "p95Ms": 19.52,
+      "minMs": 2.86,
+      "all": [
+        19.52,
+        9.73,
+        10.77,
+        7.49,
+        5.43,
+        7.59,
+        6.39,
+        9.2,
+        6,
+        6.36,
+        3.47,
+        4.19,
+        4.82,
+        5.08,
+        5.2,
+        5.2,
+        2.86,
+        3.35,
+        3.27,
+        3.84
+      ]
+    },
+    "flush": {
+      "ok": true,
+      "ms": 432.33
+    },
+    "archives": {
+      "indexEntries": 6,
+      "allValid": true,
+      "campsT": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "mainSurvivalT": 20,
+      "bakReadable": true
+    },
+    "tickDidNotAwaitDisk": true,
+    "oldArchiveReadable": true,
+    "pass": true
+  },
+  "crashRecovery": {
+    "exitCode": 1,
+    "main": {
+      "t": 0,
+      "survivalT": 10
+    },
+    "indexEntries": 6,
+    "archives": [
+      {
+        "key": "6237265b65cba8b86ea9dbd0448f9b8f",
+        "t": 10,
+        "valid": true
+      },
+      {
+        "key": "7627df5a9e3a383dff0d20a6752275d0",
+        "t": 10,
+        "valid": true
+      },
+      {
+        "key": "fcd3a94de066331c6ff54d407db5268f",
+        "t": 10,
+        "valid": true
+      },
+      {
+        "key": "91c872a5b1b814ada9c27f990ff449ce",
+        "t": 10,
+        "valid": true
+      },
+      {
+        "key": "3693323a53ee727e588ecabb5cfbbeae",
+        "t": 10,
+        "valid": true
+      },
+      {
+        "key": "467ebe7c8e9e6fcda88d78057f2a40ce",
+        "t": 10,
+        "valid": true
+      }
+    ],
+    "reopened": [
+      {
+        "key": "6237265b65cba8b86ea9dbd0448f9b8f",
+        "ok": true,
+        "t": 10
+      },
+      {
+        "key": "7627df5a9e3a383dff0d20a6752275d0",
+        "ok": true,
+        "t": 10
+      },
+      {
+        "key": "fcd3a94de066331c6ff54d407db5268f",
+        "ok": true,
+        "t": 10
+      },
+      {
+        "key": "91c872a5b1b814ada9c27f990ff449ce",
+        "ok": true,
+        "t": 10
+      },
+      {
+        "key": "3693323a53ee727e588ecabb5cfbbeae",
+        "ok": true,
+        "t": 10
+      },
+      {
+        "key": "467ebe7c8e9e6fcda88d78057f2a40ce",
+        "ok": true,
+        "t": 10
+      }
+    ],
+    "oldArchivesReadable": true,
+    "allReopened": true,
+    "pass": true
+  },
+  "risks": [
+    "异步 tick 存档在进程硬退出时可能丢最后一次已排但未落盘的 tick（可接受，flush/stop 会收口）。",
+    "主营地 .bak 首次保存不存在，第二次保存起才有；旧档可读性实测以 .bak 与营地档为准。"
+  ]
+}

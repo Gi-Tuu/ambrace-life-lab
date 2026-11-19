@@ -23,6 +23,8 @@ function allowed(s,a){
  // take_shared：只在"当前位置吃不到合法食物"时进入候选——这是存续逃生门，不是默认取食路径。
  // 目标集合由调用方按**当前可观察事实**给出（away 且 stash>0），不是对未来的预测。
  if(a.kind==='take_shared')return Object.keys(s.takeable??{}).length>0&&!((s.loc==='home'||s.loc==='store')&&s.pantry>0);
+ // V7.4.1 限时试验：生存劳动候选已由 affordance 校验，规划器只接受其 kind。
+ if(['gather','build','repair'].includes(a.kind))return true;
  // 同屋者只使用本刻已观察的对象与自身熟悉度；无此输入及私人物资均不推测。
  return false;
 }
@@ -109,3 +111,5 @@ export class ShortHorizonPlanner{
   this.remaining=Number.isSafeInteger(rem)?Math.min(Math.max(rem,0),Math.max(0,this.commitment-1)):Math.max(0,this.commitment-1);
  }
 }
+
+

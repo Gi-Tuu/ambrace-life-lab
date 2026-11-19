@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { doBuild, doPlan, doRepair, BUILDINGS } from './production.mjs';
 import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, survView, tickSurvPlay } from './survplay.mjs';
-import { addCampWork, homeAppearance, outdoorHomes, workModelKey } from '../web/camp-3d-scene.mjs';
+import { addCampWork, homeAppearance, homeStyle, outdoorHomes, roomStage, workModelKey } from '../web/camp-3d-scene.mjs';
 import { GAME_OPTIONS } from './long-run.mjs';
-import { CONSTRUCTION_LOTS, constructionLot, overlapsLot } from '../web/camp-layout.mjs';
+import { CONSTRUCTION_LOTS, constructionLot, generateCampLayout, overlapsLot } from '../web/camp-layout.mjs';
 
 test('预留地彼此留有间距，冲突工地拒绝奠基且不扣材料',()=>{
   const lots=Object.values(CONSTRUCTION_LOTS);
@@ -75,6 +75,9 @@ test('住宅使用真实建房和产权记录，竣工前后的外壳、底座�
   assert.ok(deed.homes.entrances.house6);
   assert.equal(deed.view.housing.a3, 'house6');
   assert.deepEqual(shell.boxes, deed.boxes);
+  const slopes=deed.boxes.filter(b=>b.rot && b.h===.13);
+  assert.deepEqual(slopes.map(b=>Math.sign(b.rot[0])).sort(),[-1,1]);
+  assert.ok(slopes.every(b=>!b.solid && b.bounds.h>1));
   assert.deepEqual(foundation.boxes.filter(b=>b.solid).map(b=>[b.x,b.z,b.w,b.d]),
     deed.boxes.filter(b=>b.solid).map(b=>[b.x,b.z,b.w,b.d]));
   const back = loadSurv(JSON.parse(JSON.stringify(dumpSurv(sp))), 13, options);
@@ -89,6 +92,43 @@ test('住宅使用真实建房和产权记录，竣工前后的外壳、底座�
   const empty = draw(sp);
   assert.ok(!empty.appearance.find(([room])=>room==='house6')[1]);
   assert.deepEqual(empty.boxes, deed.boxes);
+});
+
+test('住宅屋顶和陈设随种子变化，地基、屋内碰撞与可用家具保持一致',()=>{
+  const room='house1';
+  const props=[['bed',48,32],['hearth',160,32],['shelf',32,112],['table',128,80],['rug',96,112]];
+  const variants=new Map();
+  for (let seed=0;variants.size<3 && seed<32;seed++) {
+    const style=homeStyle(room,seed);
+    if (variants.has(style.id)) continue;
+    const world={mapSeed:seed,layout:generateCampLayout(seed,2)};
+    const a=[],b=[];
+    addCampWork(a,{...world,households:{projects:{[room]:{progress:3}}}});
+    const [deed]=addCampWork(b,world,[[room,true]]);
+    const {x,z}=deed.lot;
+    assert.deepEqual(a,b);
+    const windows=outdoorHomes(world,[[room,true]]).windows;
+    const frames=b.filter(box=>box.w===.54 && box.h===.58);
+    assert.equal(frames.length,2);
+    for (const [i,frame] of frames.entries()) assert.ok(Math.abs(windows[i][0]-frame.x-.27)<1e-8);
+    const inside=roomStage(room,props,{},16,12,style);
+    variants.set(style.id,{
+      slopes:b.filter(box=>box.rot && box.h===.13).map(box=>box.rot[0]),
+      walls:b.filter(box=>box.solid).map(box=>[box.x-x,box.z-z,box.w,box.d]),
+      furniture:inside.interactables.map(({id,kind,x,z,w,d})=>[id,kind,x,z,w,d]),
+      solids:inside.boxes.filter(box=>box.solid),
+      decor:inside.boxes.filter(box=>!box.solid),
+    });
+  }
+  assert.equal(variants.size,3);
+  const [first,...rest]=variants.values();
+  for (const v of rest) {
+    assert.notDeepEqual(v.slopes,first.slopes);
+    v.walls.forEach((wall,i)=>wall.forEach((n,j)=>assert.ok(Math.abs(n-first.walls[i][j])<1e-8)));
+    assert.deepEqual(v.furniture,first.furniture);
+    assert.deepEqual(v.solids.map(({x,z,w,d})=>[x,z,w,d]),first.solids.map(({x,z,w,d})=>[x,z,w,d]));
+    assert.notDeepEqual(v.decor,first.decor);
+  }
 });
 
 test('墙体三级、其余建筑双档、储粮四档共同驱动模型键，维修恢复初态', () => {

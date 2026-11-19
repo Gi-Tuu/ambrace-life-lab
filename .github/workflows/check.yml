@@ -1,0 +1,33 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # 浏览器用例是闸门的一部分：Runner 自带 Chrome（/usr/bin/google-chrome）。
+      # 找不到就红，而不是像旧配置那样静默 skip 两条（TEST5-02）。
+      REQUIRE_CHROME: '1'
+      CI_CHROME: 'required'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Chrome
+        run: |
+          google-chrome --version || chromium --version || chromium-browser --version
+      - name: Install
+        run: npm install --ignore-scripts
+      - name: Static check
+        run: npm run lint
+      - name: Art fingerprints
+        run: npm run art:check
+      - name: Full tests
+        run: npm test
+      - name: Save round-trip
+        run: node --test life/save-archive.test.mjs life/camp-saves.test.mjs

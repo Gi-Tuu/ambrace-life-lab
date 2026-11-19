@@ -12,9 +12,12 @@ import { householdPlans, houseLabor, laborAllowed, strictLifecycle } from './hou
 // 引擎不因此改动；这正说明人格承重的瓶颈在世界侧。
 import { PARAMS } from './params.mjs';
 import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
+import { noteConsumed } from './resource-ledger.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
-import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant } from './worldstate.mjs';
+import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecastDisasters } from './worldstate.mjs';
+import { recordSettlementEvent } from './settlement-events.mjs';
+import { constructionDestination, residentConstructionAccess } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 
@@ -202,13 +205,18 @@ export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
   const peripheral=loc=>world.districts?.[loc] || world.peripheralHomes?.[loc];
-  if (!peripheral(from) && !peripheral(to)) {
+  const target = constructionDestination(world,to);
+  const access = target && residentConstructionAccess(world,id,target);
+  if (access && !access.ok) return access;
+  if (!target && !peripheral(from) && !peripheral(to)) {
     move(world,id,to);
     return;
   }
   const start=worldSite(world,from), end=worldSite(world,to);
-  const ticks=Math.max(2,Math.ceil((start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0)/RESIDENT_UNITS_PER_TICK)+1);
-  (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks};
+  const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
+  const ticks=Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
+  (world.survival.districtTravel??={})[id]={from,to,arrive:world.t+ticks,
+    ...(access?.destination && {at:access.destination})};
 }
 
 export function move(world, id, to) {
@@ -544,7 +552,9 @@ function actuateInner(world, agentId, action, actionLoc) {
         if (world.loc[me] !== 'store') return { action, ok: false, code: 'NOT_PRESENT', observation: '要去公仓才能取粮' };
         if ((s.store ?? 0) < 1) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
         if (self?.mealDay === day) return { action, ok: false, code: 'ALREADY_ATE', observation: '今天已经吃过一份了' };
-        if (!takeFoodKind(s)) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        const eatenKind = takeFoodKind(s);
+        if (!eatenKind) return { action, ok: false, code: 'EMPTY', observation: '公仓空了' };
+        noteConsumed(world, eatenKind, 'resident');
         if (self) self.mealDay = day;
         return { action, ok: true, code: 'OK', observation: `从公仓吃了一份（余 ${s.store}）`, satiated: 'energy', amount: s.feedViab ?? 0.5, evt: evt({ kind: 'eat', valence: 0.2, selfCaused: true, serves: 'energy' }) };
       }
@@ -601,7 +611,8 @@ function actuateInner(world, agentId, action, actionLoc) {
     case 'move_to': {
       const access=homeEntry(world,agentId,action.to);
       if (!access.ok) return {...access,action};
-      startMove(world, agentId, action.to);
+      const travel = startMove(world, agentId, action.to);
+      if (travel && !travel.ok) return {...travel,action};
       if (world.survival?.districtTravel?.[agentId])
         return { action, ok:true, code:'OK', observation:'出发前往'+world.locs[action.to], novel:true };
       const crowd = othersAt(world, agentId);
@@ -612,7 +623,13 @@ function actuateInner(world, agentId, action, actionLoc) {
       startMove(world, agentId, 'watch');
       if (world.survival?.districtTravel?.[agentId]) return { action, ok:true, code:'OK', observation:'出发前往瞭望台' };
       // AUD-08：只有真的看一眼（look_out）才获得当日预报；讨论不再凭空读 forecast。
-      if (world.survival && world.gameRules) world.survival.forecastKnown = Math.floor(world.t / (world.dayTicks ?? 24));
+      if (world.survival && world.gameRules) {
+        const day = Math.floor(world.t / (world.dayTicks ?? 24));
+        if (world.survival.forecastKnown !== day && forecastDisasters(world).stormTomorrow) {
+          recordSettlementEvent(world, 'storm_observed', { stormDay: dayOf(world.t) + 1, actor: agentId, loc: 'watch' });
+        }
+        world.survival.forecastKnown = day;
+      }
       return { action, ok: true, code: 'OK', observation: '外面还是那片灰', satiated: 'social', amount: 0.12, novel: true, evt: evt({ kind: 'observed', valence: 0.35, serves: 'stimulation', novel: true }) };
     }
     case 'work': {

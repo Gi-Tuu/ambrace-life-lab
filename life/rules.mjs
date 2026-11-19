@@ -5,11 +5,18 @@ import { houseLabor, housingMode, laborAllowed, strictLifecycle } from './househ
 // L9 规则/校验层。它管「能不能」，与模型「想不想」彻底分开（§2.1 依赖铁律 3）。
 // 这段是从旧原型里唯一保留下来的东西：意图合法性 + 驳回原因回喂 + 要求重新决策。
 import { BASE_KINDS, LOCS, workCapLeft } from './body.mjs';
+import { CAMP_FREE, isCampKind } from './camp-catalog.mjs';
+import { costFor, SHARED_COST } from './action-cost.mjs';
+import { campStaticPrecheck } from './camp-precheck.mjs';
 import { isNight } from './clock.mjs';
 import { reachableOf } from './coupling.mjs';
 import { tillRule } from './farmland.mjs';
 import { maturePlots } from './worldstate.mjs';
 import { buildDef, gatherResource, forageRule } from './production.mjs';
+
+import { constructionAccess, constructionDestination, residentConstructionAccess, siteRecord } from './construction-access.mjs';
+import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
+import { houseConstructionAccess } from './households.mjs';
 
 export function validate(world, agentId, intent, here = world.loc[agentId]) {
   const locs = world.locs ?? LOCS;
@@ -22,7 +29,11 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
   if (strictLifecycle(world) && !laborAllowed(world, agentId, kind)) {
     return fail('TOO_YOUNG', '未成年居民不能执行劳动');
   }
-  if (kind === 'house_work' && !houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
+  if (kind === 'house_work') {
+    const access = houseConstructionAccess(world,agentId);
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]);
+    if (!houseLabor(world, agentId)) return fail('NO_HOUSE_WORK', '今天没有可做的建房工作');
+  }
   if (kind === 'eat') {
     if (world.survival) {
       if ((world.survival.store ?? 0) < 1) return fail('DEPLETED', '公仓空了');
@@ -39,6 +50,11 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
     if (!Object.hasOwn(locs,intent.to)) return fail('NO_LOC', `没有 ${intent.to} 这个地方`);
     const access=homeEntry(world,agentId,intent.to);
     if (!access.ok) return fail(access.code,'住宅没有开放进入');
+    const target = constructionDestination(world,intent.to);
+    if (target && !world.agents[agentId]?.isPlayer) {
+      const travel = residentConstructionAccess(world,agentId,target);
+      if (!travel.ok) return fail(travel.code,CONSTRUCTION_CODES[travel.code]);
+    }
   }
   if (kind==='road_lay' || kind==='road_remove') return roadRule(world,agentId,intent);
   if (kind.startsWith('discuss_') && !discussionAction(world,agentId,kind).ok)
@@ -84,12 +100,17 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
     const def = buildDef(world, intent.type);
     if (!def) return fail('NO_TYPE', '未知建筑类型');
     if (world.survival.sites.some((s) => s.loc === here) || world.survival.buildings.some((b) => b.loc === here)) return fail('OCCUPIED', '这里已经有建筑或工地');
+    const access = constructionAccess(world,siteRecord(world,here,intent.type),{proposed:true});
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]??'当前地点不能奠基');
     const bagP = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 }; // §15 P2-C 背包+公仓合计
     if (bagP.wood + world.survival.inv.wood < def.cost.wood || bagP.stone + world.survival.inv.stone < def.cost.stone) return fail('NO_MATERIAL', '材料不够');
   }
   if (kind === 'build') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有工地');
-    if (!world.survival.sites.some((s) => s.loc === here)) return fail('NO_SITE', '这里没有工地');
+    const site = world.survival.sites.find(s => s.loc===here);
+    if (!site) return fail('NO_SITE', '这里没有工地');
+    const access = constructionAccess(world,siteRecord(world,here,site.type,site.lot));
+    if (!access.ok) return fail(access.code,CONSTRUCTION_CODES[access.code]);
   }
   if (kind === 'repair') {
     if (!world.survival) return fail('NOT_AVAILABLE', '这里没有可维修的建筑');
@@ -115,6 +136,27 @@ export function validate(world, agentId, intent, here = world.loc[agentId]) {
   // 行为层看不见的硬规则：保证校验层真的会变红，而不是永远绿灯
   if (kind === 'look_out' && isNight(world.t)) return fail('LOCKED_HOUR', '夜里瞭台封禁，这不是意志问题');
   return { ok: true, code: 'OK' };
+}
+
+export function validateCamp(world, body, reachFn = null) {
+  const fail = (code, why) => ({ ok: false, code, why });
+  const kind = body?.kind;
+  if (!isCampKind(kind)) return fail('NOT_CAMP_ACTION', '规则层不认识这个动作');
+  const free = CAMP_FREE.includes(kind);
+  // ARCH5-02：注册闸门与运行时扣费必须同源（costFor → SHARED_COST）。
+  // 旧 PLAYER_TIME 只是 actTimeModel=false 的兼容预算表，不能再单独充当“已登记”凭据。
+  const cost = costFor(kind, body);
+  if (!free && (cost.shared === 'unknown' || !Object.hasOwn(SHARED_COST, cost.shared))) {
+    return fail('UNKNOWN_CAMP_ACTION', '营地动作未登记成本：' + kind);
+  }
+  // ARCH5 剩余：工具/品类这类静态前置只有一份实现，validateCamp 与 campAction 共用。
+  const pre = campStaticPrecheck(world, body);
+  if (pre) return pre;
+  if (reachFn && world?.independentWorld && world?.gameRules && body?.from && !free) {
+    const reach = reachFn(world, body.from);
+    if (!reach?.ok) return reach;
+  }
+  return null;
 }
 
 export const impulseOf = (kind) => BASE_KINDS[kind]?.impulse ?? 0.5;
@@ -145,3 +187,6 @@ export function markKnown(secret, who) {
 
 // 动作身份：路径级（带对象/目的地），不再只有 kind
 export const actionId = (a) => a.id ?? `${a.kind}${a.target ? ':' + a.target : ''}${a.to ? ':' + a.to : ''}`;
+
+
+

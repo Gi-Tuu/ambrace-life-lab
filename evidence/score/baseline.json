@@ -1,0 +1,690 @@
+{
+  "kind": "author-side-ablation",
+  "externalValidation": false,
+  "claim": "作者侧消融/负控：同 seeds、同 tick 数比较内部通道开/关/随机策略；不是外部独立基准。",
+  "generatedAt": "2026-11-18T13:12:15.773Z",
+  "environment": {
+    "node": "v24.18.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "config": {
+    "ticks": 240,
+    "seeds": [
+      7,
+      13
+    ],
+    "repeats": 2,
+    "arms": [
+      "internal",
+      "cut",
+      "random"
+    ],
+    "base": {
+      "gameRules": true,
+      "independentWorld": true,
+      "unifiedCooperation": true,
+      "ecosystem": true,
+      "wildFood": true,
+      "autonomousGoals": true,
+      "farmLife": true,
+      "settlementLife": true,
+      "playerRation": true,
+      "discussions": true,
+      "actTimeModel": true,
+      "eventRulesVersion": 2
+    }
+  },
+  "arms": {
+    "internal": {
+      "seeds": {
+        "7": {
+          "reproducible": true,
+          "digest": "5c5e90b21a5ec95eba4d430cb3f1cf430e3e540c5f9b464f4e42bc7a12252edc",
+          "t": 240,
+          "day": 10,
+          "alive": 4,
+          "deaths": 0,
+          "store": 17,
+          "viabMean": 0.8512,
+          "counters": {
+            "triggered": 44,
+            "asked": 0,
+            "skipped": 0,
+            "askedRetry": 0,
+            "informed": 0
+          },
+          "decisions": 862,
+          "distribution": {
+            "move_to": 0.549884,
+            "rest": 0.097448,
+            "look_out": 0.068445,
+            "gather": 0.054524,
+            "exchange": 0.048724,
+            "deposit": 0.030162,
+            "withdraw": 0.027842,
+            "forage": 0.026682,
+            "talk": 0.023202,
+            "build": 0.019722,
+            "repair": 0.011601,
+            "plant": 0.010441,
+            "harvest": 0.009281,
+            "discuss_open": 0.0058,
+            "discuss_decline": 0.00464,
+            "eat": 0.00348,
+            "plan": 0.00348,
+            "discuss_share": 0.00232,
+            "discuss_join": 0.00116,
+            "till": 0.00116
+          },
+          "kindCounts": {
+            "move_to": 474,
+            "rest": 84,
+            "look_out": 59,
+            "gather": 47,
+            "exchange": 42,
+            "deposit": 26,
+            "withdraw": 24,
+            "forage": 23,
+            "talk": 20,
+            "build": 17,
+            "repair": 10,
+            "plant": 9,
+            "harvest": 8,
+            "discuss_open": 5,
+            "discuss_decline": 4,
+            "eat": 3,
+            "plan": 3,
+            "discuss_share": 2,
+            "discuss_join": 1,
+            "till": 1
+          }
+        },
+        "13": {
+          "reproducible": true,
+          "digest": "d948f2408add6a134a91495078182c2ce62e4d71bdcb1715a076d563429bc3da",
+          "t": 240,
+          "day": 10,
+          "alive": 3,
+          "deaths": 0,
+          "store": 13,
+          "viabMean": 0.712,
+          "counters": {
+            "triggered": 43,
+            "asked": 0,
+            "skipped": 0,
+            "askedRetry": 0,
+            "informed": 0
+          },
+          "decisions": 904,
+          "distribution": {
+            "move_to": 0.528761,
+            "rest": 0.165929,
+            "gather": 0.051991,
+            "exchange": 0.048673,
+            "look_out": 0.043142,
+            "deposit": 0.037611,
+            "withdraw": 0.026549,
+            "talk": 0.021018,
+            "build": 0.018805,
+            "forage": 0.018805,
+            "discuss_share": 0.00885,
+            "repair": 0.00885,
+            "discuss_open": 0.005531,
+            "harvest": 0.004425,
+            "discuss_decline": 0.003319,
+            "discuss_join": 0.003319,
+            "plan": 0.003319,
+            "plant": 0.001106
+          },
+          "kindCounts": {
+            "move_to": 478,
+            "rest": 150,
+            "gather": 47,
+            "exchange": 44,
+            "look_out": 39,
+            "deposit": 34,
+            "withdraw": 24,
+            "talk": 19,
+            "build": 17,
+            "forage": 17,
+            "discuss_share": 8,
+            "repair": 8,
+            "discuss_open": 5,
+            "harvest": 4,
+            "discuss_decline": 3,
+            "discuss_join": 3,
+            "plan": 3,
+            "plant": 1
+          }
+        }
+      },
+      "aggregate": {
+        "seeds": 2,
+        "ticks": 240,
+        "decisions": 1766,
+        "distinctKinds": 20,
+        "entropyBits": 2.542412,
+        "distribution": {
+          "move_to": 0.539071,
+          "rest": 0.132503,
+          "look_out": 0.055493,
+          "gather": 0.053228,
+          "exchange": 0.048698,
+          "deposit": 0.033975,
+          "withdraw": 0.02718,
+          "forage": 0.02265,
+          "talk": 0.022084,
+          "build": 0.019253,
+          "repair": 0.010193,
+          "harvest": 0.006795,
+          "discuss_open": 0.005663,
+          "discuss_share": 0.005663,
+          "plant": 0.005663,
+          "discuss_decline": 0.003964,
+          "plan": 0.003398,
+          "discuss_join": 0.002265,
+          "eat": 0.001699,
+          "till": 0.000566
+        },
+        "kindCounts": {
+          "move_to": 952,
+          "rest": 234,
+          "look_out": 98,
+          "gather": 94,
+          "exchange": 86,
+          "deposit": 60,
+          "withdraw": 48,
+          "forage": 40,
+          "talk": 39,
+          "build": 34,
+          "repair": 18,
+          "harvest": 12,
+          "discuss_open": 10,
+          "discuss_share": 10,
+          "plant": 10,
+          "discuss_decline": 7,
+          "plan": 6,
+          "discuss_join": 4,
+          "eat": 3,
+          "till": 1
+        }
+      }
+    },
+    "cut": {
+      "seeds": {
+        "7": {
+          "reproducible": true,
+          "digest": "7ccd37ea888413e6c79c8e111407576a6a2daacfc98958cc067c91df1ebde150",
+          "t": 240,
+          "day": 10,
+          "alive": 4,
+          "deaths": 0,
+          "store": 18,
+          "viabMean": 0.7837,
+          "counters": {
+            "triggered": 46,
+            "asked": 0,
+            "skipped": 0,
+            "askedRetry": 0,
+            "informed": 0
+          },
+          "decisions": 912,
+          "distribution": {
+            "move_to": 0.531798,
+            "rest": 0.171053,
+            "gather": 0.053728,
+            "exchange": 0.052632,
+            "deposit": 0.039474,
+            "forage": 0.026316,
+            "look_out": 0.023026,
+            "talk": 0.023026,
+            "withdraw": 0.023026,
+            "build": 0.016447,
+            "repair": 0.012061,
+            "plant": 0.006579,
+            "discuss_open": 0.004386,
+            "harvest": 0.004386,
+            "discuss_join": 0.003289,
+            "plan": 0.003289,
+            "discuss_decline": 0.002193,
+            "discuss_share": 0.002193,
+            "till": 0.001096
+          },
+          "kindCounts": {
+            "move_to": 485,
+            "rest": 156,
+            "gather": 49,
+            "exchange": 48,
+            "deposit": 36,
+            "forage": 24,
+            "look_out": 21,
+            "talk": 21,
+            "withdraw": 21,
+            "build": 15,
+            "repair": 11,
+            "plant": 6,
+            "discuss_open": 4,
+            "harvest": 4,
+            "discuss_join": 3,
+            "plan": 3,
+            "discuss_decline": 2,
+            "discuss_share": 2,
+            "till": 1
+          }
+        },
+        "13": {
+          "reproducible": true,
+          "digest": "ed68343564933623201364c26f0835422e9bc7dbfb8da0931bd938bf0a0a48df",
+          "t": 240,
+          "day": 10,
+          "alive": 3,
+          "deaths": 0,
+          "store": 24,
+          "viabMean": 0.742,
+          "counters": {
+            "triggered": 46,
+            "asked": 0,
+            "skipped": 0,
+            "askedRetry": 0,
+            "informed": 0
+          },
+          "decisions": 869,
+          "distribution": {
+            "move_to": 0.561565,
+            "rest": 0.141542,
+            "gather": 0.055236,
+            "exchange": 0.052934,
+            "look_out": 0.034522,
+            "deposit": 0.028769,
+            "build": 0.027618,
+            "forage": 0.021864,
+            "talk": 0.021864,
+            "withdraw": 0.011507,
+            "repair": 0.008055,
+            "harvest": 0.006904,
+            "discuss_open": 0.005754,
+            "discuss_share": 0.004603,
+            "plan": 0.004603,
+            "plant": 0.004603,
+            "discuss_join": 0.003452,
+            "discuss_decline": 0.002301,
+            "eat": 0.001151,
+            "till": 0.001151
+          },
+          "kindCounts": {
+            "move_to": 488,
+            "rest": 123,
+            "gather": 48,
+            "exchange": 46,
+            "look_out": 30,
+            "deposit": 25,
+            "build": 24,
+            "forage": 19,
+            "talk": 19,
+            "withdraw": 10,
+            "repair": 7,
+            "harvest": 6,
+            "discuss_open": 5,
+            "discuss_share": 4,
+            "plan": 4,
+            "plant": 4,
+            "discuss_join": 3,
+            "discuss_decline": 2,
+            "eat": 1,
+            "till": 1
+          }
+        }
+      },
+      "aggregate": {
+        "seeds": 2,
+        "ticks": 240,
+        "decisions": 1781,
+        "distinctKinds": 20,
+        "entropyBits": 2.449833,
+        "distribution": {
+          "move_to": 0.546322,
+          "rest": 0.156654,
+          "gather": 0.054464,
+          "exchange": 0.052779,
+          "deposit": 0.03425,
+          "look_out": 0.028636,
+          "forage": 0.024144,
+          "talk": 0.022459,
+          "build": 0.021898,
+          "withdraw": 0.017406,
+          "repair": 0.010107,
+          "harvest": 0.005615,
+          "plant": 0.005615,
+          "discuss_open": 0.005053,
+          "plan": 0.00393,
+          "discuss_join": 0.003369,
+          "discuss_share": 0.003369,
+          "discuss_decline": 0.002246,
+          "till": 0.001123,
+          "eat": 0.000561
+        },
+        "kindCounts": {
+          "move_to": 973,
+          "rest": 279,
+          "gather": 97,
+          "exchange": 94,
+          "deposit": 61,
+          "look_out": 51,
+          "forage": 43,
+          "talk": 40,
+          "build": 39,
+          "withdraw": 31,
+          "repair": 18,
+          "harvest": 10,
+          "plant": 10,
+          "discuss_open": 9,
+          "plan": 7,
+          "discuss_join": 6,
+          "discuss_share": 6,
+          "discuss_decline": 4,
+          "till": 2,
+          "eat": 1
+        }
+      }
+    },
+    "random": {
+      "seeds": {
+        "7": {
+          "reproducible": true,
+          "digest": "d1b80870228ba8d578797c85e736ae1c678fc26b52868009c64123db4c1d7125",
+          "t": 240,
+          "day": 10,
+          "alive": 4,
+          "deaths": 0,
+          "store": 20,
+          "viabMean": 0.8287,
+          "counters": {
+            "triggered": 48,
+            "asked": 51,
+            "skipped": 742,
+            "askedRetry": 8,
+            "informed": 0
+          },
+          "decisions": 879,
+          "distribution": {
+            "move_to": 0.54835,
+            "rest": 0.136519,
+            "gather": 0.056883,
+            "exchange": 0.055745,
+            "deposit": 0.035267,
+            "look_out": 0.028441,
+            "build": 0.025028,
+            "forage": 0.025028,
+            "talk": 0.021615,
+            "repair": 0.015927,
+            "harvest": 0.009101,
+            "plant": 0.009101,
+            "withdraw": 0.009101,
+            "discuss_open": 0.006826,
+            "plan": 0.004551,
+            "discuss_join": 0.003413,
+            "discuss_share": 0.003413,
+            "discuss_decline": 0.002275,
+            "eat": 0.002275,
+            "till": 0.001138
+          },
+          "kindCounts": {
+            "move_to": 482,
+            "rest": 120,
+            "gather": 50,
+            "exchange": 49,
+            "deposit": 31,
+            "look_out": 25,
+            "build": 22,
+            "forage": 22,
+            "talk": 19,
+            "repair": 14,
+            "harvest": 8,
+            "plant": 8,
+            "withdraw": 8,
+            "discuss_open": 6,
+            "plan": 4,
+            "discuss_join": 3,
+            "discuss_share": 3,
+            "discuss_decline": 2,
+            "eat": 2,
+            "till": 1
+          }
+        },
+        "13": {
+          "reproducible": true,
+          "digest": "c58ea2ed563a05cf0f25c9ab527e02b5f5888e7528c7771c54b3a1f59dfd8dc5",
+          "t": 240,
+          "day": 10,
+          "alive": 4,
+          "deaths": 0,
+          "store": 12,
+          "viabMean": 0.7918,
+          "counters": {
+            "triggered": 49,
+            "asked": 52,
+            "skipped": 820,
+            "askedRetry": 10,
+            "informed": 0
+          },
+          "decisions": 1001,
+          "distribution": {
+            "move_to": 0.492507,
+            "rest": 0.212787,
+            "exchange": 0.053946,
+            "gather": 0.052947,
+            "deposit": 0.040959,
+            "look_out": 0.031968,
+            "talk": 0.021978,
+            "withdraw": 0.020979,
+            "forage": 0.018981,
+            "build": 0.014985,
+            "repair": 0.005994,
+            "discuss_open": 0.004995,
+            "expand": 0.004995,
+            "harvest": 0.004995,
+            "discuss_decline": 0.003996,
+            "plant": 0.003996,
+            "discuss_join": 0.002997,
+            "plan": 0.002997,
+            "discuss_share": 0.000999,
+            "eat": 0.000999,
+            "till": 0.000999
+          },
+          "kindCounts": {
+            "move_to": 493,
+            "rest": 213,
+            "exchange": 54,
+            "gather": 53,
+            "deposit": 41,
+            "look_out": 32,
+            "talk": 22,
+            "withdraw": 21,
+            "forage": 19,
+            "build": 15,
+            "repair": 6,
+            "discuss_open": 5,
+            "expand": 5,
+            "harvest": 5,
+            "discuss_decline": 4,
+            "plant": 4,
+            "discuss_join": 3,
+            "plan": 3,
+            "discuss_share": 1,
+            "eat": 1,
+            "till": 1
+          }
+        }
+      },
+      "aggregate": {
+        "seeds": 2,
+        "ticks": 240,
+        "decisions": 1880,
+        "distinctKinds": 21,
+        "entropyBits": 2.530196,
+        "distribution": {
+          "move_to": 0.518617,
+          "rest": 0.177128,
+          "exchange": 0.054787,
+          "gather": 0.054787,
+          "deposit": 0.038298,
+          "look_out": 0.030319,
+          "forage": 0.021809,
+          "talk": 0.021809,
+          "build": 0.019681,
+          "withdraw": 0.015426,
+          "repair": 0.010638,
+          "harvest": 0.006915,
+          "plant": 0.006383,
+          "discuss_open": 0.005851,
+          "plan": 0.003723,
+          "discuss_decline": 0.003191,
+          "discuss_join": 0.003191,
+          "expand": 0.00266,
+          "discuss_share": 0.002128,
+          "eat": 0.001596,
+          "till": 0.001064
+        },
+        "kindCounts": {
+          "move_to": 975,
+          "rest": 333,
+          "exchange": 103,
+          "gather": 103,
+          "deposit": 72,
+          "look_out": 57,
+          "forage": 41,
+          "talk": 41,
+          "build": 37,
+          "withdraw": 29,
+          "repair": 20,
+          "harvest": 13,
+          "plant": 12,
+          "discuss_open": 11,
+          "plan": 7,
+          "discuss_decline": 6,
+          "discuss_join": 6,
+          "expand": 5,
+          "discuss_share": 4,
+          "eat": 3,
+          "till": 2
+        }
+      }
+    }
+  },
+  "comparisons": {
+    "internal_vs_cut": {
+      "kl": 0.017097,
+      "jsd": 0.003904,
+      "decisions": {
+        "internal": 1766,
+        "cut": 1781
+      }
+    },
+    "internal_vs_random": {
+      "kl": 0.024346,
+      "jsd": 0.006029,
+      "decisions": {
+        "internal": 1766,
+        "random": 1880
+      }
+    },
+    "cut_vs_random": {
+      "kl": 0.006471,
+      "jsd": 0.001894,
+      "decisions": {
+        "cut": 1781,
+        "random": 1880
+      }
+    }
+  },
+  "reproducibility": {
+    "ok": true,
+    "runs": [
+      {
+        "arm": "internal",
+        "seed": 7,
+        "rep": 0,
+        "digest": "5c5e90b21a5ec95eba4d430cb3f1cf430e3e540c5f9b464f4e42bc7a12252edc"
+      },
+      {
+        "arm": "internal",
+        "seed": 7,
+        "rep": 1,
+        "digest": "5c5e90b21a5ec95eba4d430cb3f1cf430e3e540c5f9b464f4e42bc7a12252edc"
+      },
+      {
+        "arm": "internal",
+        "seed": 13,
+        "rep": 0,
+        "digest": "d948f2408add6a134a91495078182c2ce62e4d71bdcb1715a076d563429bc3da"
+      },
+      {
+        "arm": "internal",
+        "seed": 13,
+        "rep": 1,
+        "digest": "d948f2408add6a134a91495078182c2ce62e4d71bdcb1715a076d563429bc3da"
+      },
+      {
+        "arm": "cut",
+        "seed": 7,
+        "rep": 0,
+        "digest": "7ccd37ea888413e6c79c8e111407576a6a2daacfc98958cc067c91df1ebde150"
+      },
+      {
+        "arm": "cut",
+        "seed": 7,
+        "rep": 1,
+        "digest": "7ccd37ea888413e6c79c8e111407576a6a2daacfc98958cc067c91df1ebde150"
+      },
+      {
+        "arm": "cut",
+        "seed": 13,
+        "rep": 0,
+        "digest": "ed68343564933623201364c26f0835422e9bc7dbfb8da0931bd938bf0a0a48df"
+      },
+      {
+        "arm": "cut",
+        "seed": 13,
+        "rep": 1,
+        "digest": "ed68343564933623201364c26f0835422e9bc7dbfb8da0931bd938bf0a0a48df"
+      },
+      {
+        "arm": "random",
+        "seed": 7,
+        "rep": 0,
+        "digest": "d1b80870228ba8d578797c85e736ae1c678fc26b52868009c64123db4c1d7125"
+      },
+      {
+        "arm": "random",
+        "seed": 7,
+        "rep": 1,
+        "digest": "d1b80870228ba8d578797c85e736ae1c678fc26b52868009c64123db4c1d7125"
+      },
+      {
+        "arm": "random",
+        "seed": 13,
+        "rep": 0,
+        "digest": "c58ea2ed563a05cf0f25c9ab527e02b5f5888e7528c7771c54b3a1f59dfd8dc5"
+      },
+      {
+        "arm": "random",
+        "seed": 13,
+        "rep": 1,
+        "digest": "c58ea2ed563a05cf0f25c9ab527e02b5f5888e7528c7771c54b3a1f59dfd8dc5"
+      }
+    ]
+  },
+  "caveats": [
+    "随机臂只替换事件门控真的问到模型的那一次选择；其余时刻仍走同一确定性替身，因此它不是“通用随机策略”。",
+    "C2-neg 是登记过的负向对照，不是外部基线；本文件不证明机制在真实模型或真实玩家下同样成立。",
+    "行为分布只统计成功执行的动作 kind；被驳回/中止的单列在原有 trace 中，不在本表里。"
+  ],
+  "checks": {
+    "reproducible": true,
+    "distributionsDiffer": true,
+    "hasDecisions": true,
+    "pass": true
+  },
+  "durationMs": 2935
+}

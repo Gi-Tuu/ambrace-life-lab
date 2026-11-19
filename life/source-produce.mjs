@@ -1,5 +1,6 @@
-import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../web/camp-interaction.mjs';
+import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../shared/camp-interaction.mjs';
 import { DAY_TICKS } from './clock.mjs';
+import { noteRes } from './resource-ledger.mjs';
 
 const GROUPS = { fruit: 'orchards', egg: 'chickens', milk: 'cows', wool: 'sheep' };
 export const MATURE_DAYS = Object.freeze({ orchards: 6, chickens: 4 });
@@ -13,8 +14,11 @@ function sources(w, item) {
   if (population) return population.map(row => {
     const age = (w.t - row.born) / DAY_TICKS;
     const mature = age >= MATURE_DAYS[group];
+    const stormLoss = (row.stormRecovery ?? row.health) - row.health;
     return {
       id: item === 'fruit' ? `fruit:${row.id}` : `${group}:${row.id}`, slot: row.slot, mature,
+      ...(item === 'fruit' ? { healthGrade:row.health<=.3?0:row.health<.78?1:2,
+        stormDamage:stormLoss>.105?2:stormLoss>1e-6?1:0 } : {}),
       ...(item === 'egg' ? { stage: !mature ? 'juvenile' : age >= CHICKEN_ELDER_DAYS ? 'elder' : 'adult' } : {}),
     };
   });
@@ -52,7 +56,8 @@ export function sourceView(w) {
   const s = w.survival;
   if (!s.farmLife) return undefined;
   // §3：坐标是服务端的权威值，同时给离线 harness 用（客户端不再自己推 from/to）。
-  const layout = w.layout;
+  // NEW-01：布局 1/2 的世界只有 campLayout（w.layout 是旧字段）⇒ 必须统一取 campLayout。
+  const layout = w.campLayout ?? w.layout;
   const garden = campSite('garden', layout);
   const bed = campBeds(garden, w.mapSeed ?? 0, w.layoutVersion ?? 0)[0];
   const pen = campPen(campSite('yard', layout));
@@ -95,6 +100,7 @@ export function addStanding(w, item, units, cap, eligible) {
     s.produce[item] += 1;
     accepted += 1;
   }
+  if (accepted > 0 && item === 'wool') noteRes(w, 'gross', 'wool', accepted);
   return accepted;
 }
 
@@ -131,9 +137,13 @@ export function berryAmount(s, site, target) {
 
 export function takeBerry(s, site, target) {
   const patches = s.berryPatches?.[site];
+  let picked = target;
   if (patches) {
     const index = patches.findIndex((n, i) => n >= 1 && (target === undefined || target === `berry:${site}:${i}`));
     patches[index] -= 1;
+    picked = `berry:${site}:${index}`;
   }
   s.wildBerries[site] -= 1;
+  return picked;
 }
+

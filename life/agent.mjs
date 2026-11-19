@@ -9,7 +9,12 @@ import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed, SURV_COST } from './body.mjs';
 import { validate, actionId } from './rules.mjs';
+import { residentTimeModel, clockOf, residentBeginTime, attachBusyAction, residentRefundTime, laborEnergy } from './resident-time.mjs';
+import { isLaborAction } from './households.mjs';
 import { noteAction, noteRefusal } from './action-ledger.mjs';
+import { costFor } from './action-cost.mjs';
+import { recordRepairFailure } from './production.mjs';
+import { recordConstructionBlock } from './construction-access.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
@@ -105,6 +110,11 @@ export class Organism {
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
     this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
+    // V7.3.2 P0：同一世界刻的后续 episode 复用已结算的基础代谢/感知，不重复扣需求。
+    if (this.lastMetabTick === world.t && this.lastMetab) {
+      if (this.fairSuppress) return null;
+      return this.decideOn(world, { metab: this.lastMetab, reason: null, told: false, silent: true });
+    }
     // M3 的目标只属于"本刻真的做过非反射决策"的那些刻：反射提前 return 时不得沿用上一次的目标，否则特征表会把反射刻当成 M3 决策
     this.m3Last = null;
     // M4：τ 按刻计（不按决策机会计）——"躲一阵子"是时间量，不是机会量。关闭时不写任何状态。
@@ -148,6 +158,7 @@ export class Organism {
     // P1-A：基础代谢只结算一次；正式游戏先于反射判断（反射不免代谢），
     // 研究模式保持旧顺序（反射提前 return 不结算），保护既有实验轨迹。
     const metabolize = () => {
+      this.metabCount = (this.metabCount ?? 0) + 1; // 观测用，不进入存档
       // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
       const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
       const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
@@ -179,6 +190,13 @@ export class Organism {
       return { ch, prediction };
     };
     const preMetab = world.independentWorld ? metabolize() : null;
+    // V7.3.2 P0：被 episode 配额挡下的居民只结算基础代谢/感知，不做自主决策。
+    if (this.fairSuppress) {
+      const metab = preMetab ?? metabolize();
+      this.lastMetab = metab;
+      this.lastMetabTick = world.t;
+      return null;
+    }
 
     for (const p of percepts) {
       for (const r of REFLEXES) {
@@ -191,18 +209,41 @@ export class Organism {
       }
     }
 
+    // V7.2：进行中的动作占住这一刻的决策机会（推进由 tickSurvPlay 提前结算）；代谢照常只跑一次。
+    if (residentTimeModel(world) && clockOf(world, this.id).busy) return null;
+
     const metab = preMetab ?? metabolize();
+    this.lastMetab = metab;
+    this.lastMetabTick = world.t;
+    return this.decideOn(world, { metab, reason, told, silent: external.length === 0 });
+  }
+
+  // V7.2：把"选一个动作并执行"从 tick 里拆出来。代谢/感知/反射只在 tick 里结算一次；
+  // 个人时间模型允许同一刻再追加决策（reason=null ⇒ 不会问模型，模型预算仍在 host 资源层）。
+  async decideOn(world, { metab, reason = null, told = false, silent = true, sameKind = null } = {}) {
+    this.world = world;
+    const t = world.t;
     const { ch, prediction } = metab;
     const affs = affordancesFor(world, this.id);
     const weights = ch.precision ? prediction.weights : null;
     const visible = visibleActions(affs, this.traits, ch, this.bank, weights);
     // 被喊住：这几刻不换地方（仍要决定做什么，只是去掉移动路径）。
     // 不用"冻结整个 tick"：那样它会连带停止吃喝与反应，测到的就不是"站着别动"而是"死机"。
-    const paths0 = isHailed(world, this.id) ? visible.filter((p) => p.kind !== 'move_to') : visible;
+    let paths0 = isHailed(world, this.id) ? visible.filter((p) => p.kind !== 'move_to') : visible;
+    // 同一刻的追加动作只沿着同一个动作继续（采集完再采集），不重新规划人生；
+    // 否则一次 tick 里"采集→存仓→再跑一趟"会把家庭目标冲掉。
+    if (sameKind) paths0 = paths0.filter((p) => p.kind === sameKind);
     if (!paths0.length) return null;
     // M3 行为状态：在习惯/审议之前先定功能目标，承诺期内只保留落在该目标上的候选。
     // 只过滤候选集——评分、习惯分支、真模型、驳回重决策、告知都还是原来的链条，所以它"承重"的方式是改变比较而不是加常数。
-    const paths = ch.m3 ? this.m3Choose(world, paths0) : paths0;
+    let paths = ch.m3 ? this.m3Choose(world, paths0) : paths0;
+    if (ch.m3) {
+      // 目标过滤后再兜底一次：每刻最多保留 1 个 talk 候选（仅 m3=on）。
+      const rest = paths.filter((p) => p.kind !== 'talk');
+      const one = paths.find((p) => p.kind === 'talk') ?? paths0.find((p) => p.kind === 'talk');
+      if (one) rest.push(one);
+      paths = rest;
+    }
 
     const mem = this.condition === 'C0' ? { bonus: {}, retrieved: [] } : this.memory.stateBonus(this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights });
     const memBonus = mem.bonus;
@@ -233,13 +274,15 @@ export class Organism {
         if (pick && pick.id !== top.id) this.counters.cfHabit = (this.counters.cfHabit ?? 0) + 1;
       }
       this.counters.habit += 1;
-      return this.execute(world, hbPick.act, 'habit', t, external.length === 0, { temp, scored });
+      return this.execute(world, hbPick.act, 'habit', t, silent, { temp, scored });
     }
 
     this.counters.deliberation += 1;
     let chosen = await this.choose({ scored, temp, ch, world, paths, reason });
     let v = validate(world, this.id, chosen.act);
     if (!v.ok) {
+      if (chosen.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], v.code);
+      recordConstructionBlock(world,this.id,chosen.act.to ?? world.loc[this.id],chosen.act.kind,v.code);
       this.counters.rejected += 1;
       this.noteDayReject(t);
       const rest = scored.filter((s) => s.id !== chosen.id);
@@ -251,7 +294,10 @@ export class Organism {
       // 等于"被驳回一次之后就免检"——实测夜里 eat 被 DEPLETED 驳回、重选到 look_out
       // （validate 明确返回 LOCKED_HOUR）仍然执行，角色夜里上了瞭台。
       // 不无限重试，也不重复计数：一次驳回只记一次 rejected（askedRetry === rejected 这条恒等式靠它）。
-      if (!validate(world, this.id, again.act).ok) {
+      const retryGate = validate(world, this.id, again.act);
+      if (!retryGate.ok) {
+        if (again.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], retryGate.code);
+        recordConstructionBlock(world,this.id,again.act.to ?? world.loc[this.id],again.act.kind,retryGate.code);
         // 重选后仍非法 ⇒ 本刻不行动。但仍然留一条 trace（带 scored、不带 action），
         // 否则引擎内的 cfDecisions 会比"从 trace 独立重算的决策数"多出来，
         // o1-counterfactual 的装置交叉核对（两条实现必须一致）就会红。
@@ -260,7 +306,7 @@ export class Organism {
       }
       chosen = again;
     }
-    return this.execute(world, chosen.act, 'deliberation', t, external.length === 0, { temp, scored });
+    return this.execute(world, chosen.act, 'deliberation', t, silent, { temp, scored });
   }
 
   // 审议层：插了 deliberator 且**这一刻有事件**才走真模型，否则走确定性替身。
@@ -390,36 +436,57 @@ export class Organism {
       takeable[id] = world.riskyPortion ?? PARAMS.risky.portion;
     }
     // PLAN §28：房间表随世界预设走；规划器的合法性校验以这份为准（lab 下键集与原 KNOWN_LOCS 相同）。
-    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: world.pantry, energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
+    return { selfId: this.id, loc, locs: Object.keys(world.locs ?? {}), energy: this.drives.v.energy, social: this.drives.v.social, pantry: Number.isFinite(world.pantry) ? world.pantry : (world.survival?.store ?? 0), energySetpoint: this.drives.setpoint.energy, socialSetpoint: this.drives.setpoint.social, companions, lookOutLegal: !isNight(world.t), takeable };
   }
 
   m3Choose(world, paths) {
-    // 决策②(a)：M4 的三条耦合动作不进 M3 的两步搜索（规划器的 kind 白名单是硬校验）。
-    // 局限要写清：闭门/捂耳朵期间 M3 不会把它们排进路径目标，两者的取舍仍由同一个评分器在同一刻比较，但不是同一个规划器规划。
-    const planned = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind)); // PLAN §28：新动作不进 M3 两步搜索（规划器不认它们；取舍仍由同一评分器比较）
+    const M3_KINDS = new Set(['rest', 'eat', 'move_to', 'talk', 'look_out', 'take_shared']);
+    // V7.4.1 修复：规划器只接受白名单 kind、有限成本、唯一 id；生存候选先做最小 sanitize，不重写规划器。
+    const source = paths.filter((p) => !COUPLING_KINDS.includes(p.kind) && !['work', 'buy', 'trade', 'companion'].includes(p.kind) && M3_KINDS.has(p.kind));
+    const planned = [];
+    const rev = new Map();
+    source.forEach((p, i) => {
+      const id = `${p.id}:m3:${i}`;
+      planned.push({ ...p, id, cost: Number.isFinite(p.cost) ? p.cost : costFor(p.kind).minutes });
+      rev.set(id, p.id);
+    });
     if (!planned.length) {
       this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'only_coupling_actions' };
-      return paths;
+      return this.m3CapTalk(paths);
     }
-    const r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
+    let r;
+    try {
+      r = this.m3Planner.step({ snapshot: this.m3Snapshot(world), actions: planned, catalog: planned });
+    } catch {
+      // 规划器仍拒绝时退回完整候选集，绝不让 M3 把每拍决策全部吃掉。
+      this.m3Last = { previous: this.m3PrevGoal, goal: null, remaining: this.m3Planner.remaining, reused: false, interrupted: 'planner_rejected' };
+      this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
+      return this.m3CapTalk(paths);
+    }
     const previous = this.m3PrevGoal;
     this.m3PrevGoal = r.goal;
     this.m3Last = { previous, goal: r.goal, remaining: r.remaining, reused: r.reused, interrupted: r.interrupted };
     this.counters.m3Decisions = (this.counters.m3Decisions ?? 0) + 1;
     if (r.reused) this.counters.m3Reused = (this.counters.m3Reused ?? 0) + 1;
     if (r.interrupted) this.counters.m3Interrupted = (this.counters.m3Interrupted ?? 0) + 1;
-    // 目标内的可行首步由规划器自己的 plans 给出，不另写 kind→目标 的映射（否则又造出一张会漂移的表）
-    const keep = new Set(r.plans.filter((p) => p.goal === r.goal).map((p) => p.first.id));
-    // 耦合动作不进规划，但**仍然进比较**：把它们一并留在候选集里，否则"排除在 M3 之外"会变成"被 M3 否决"，
-    // 那是决策 ②(a) 没有授权的效果。
-    const filtered = paths.filter((p) => keep.has(p.id) || COUPLING_KINDS.includes(p.kind));
+    const keep = new Set(r.plans.filter((p) => p.goal === r.goal).map((p) => rev.get(p.first.id) ?? p.first.id).filter(Boolean));
+    // 非 M3 白名单的生存动作（采集/建造等）不进规划，但必须保留在候选集，否则 M3 会把人饿死。
+    const filtered = paths.filter((p) => keep.has(p.id) || COUPLING_KINDS.includes(p.kind) || !M3_KINDS.has(p.kind));
     if (!filtered.length) {
-      // 这一刻这个目标没有可见动作：不许把人饿死，退回完整候选集，并把这次中断记进轨迹
       this.counters.m3Fallback = (this.counters.m3Fallback ?? 0) + 1;
       this.m3Last.interrupted ??= 'goal_has_no_visible_action';
-      return paths;
+      return this.m3CapTalk(paths);
     }
-    return filtered;
+    return this.m3CapTalk(filtered);
+  }
+
+  // V7.4.1：仅 m3=on 时每刻最多保留 1 个 talk 候选；不改其他 keep 规则。
+  m3CapTalk(paths) {
+    if (!this.ch.m3) return paths;
+    const rest = paths.filter((p) => p.kind !== 'talk');
+    const one = paths.find((p) => p.kind === 'talk');
+    if (one) rest.push(one);
+    return rest;
   }
 
   // M6-L（PLAN §25.6）：相对进度 g∈[0,1]；slow=0（还没样本）时 g=0 ⇒ 不加探索预算。
@@ -474,24 +541,77 @@ export class Organism {
     // 原因（习惯那条漏了三个月）。这里再验一次：非法就拒绝，并且**不消耗任何资源**。
     const gate = validate(world, this.id, action);
     if (!gate.ok) {
+      if (action?.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], gate.code);
+      recordConstructionBlock(world,this.id,action?.to ?? world.loc[this.id],action?.kind,gate.code);
       noteRefusal(world, 'resident', action?.kind);
       this.counters.refused = (this.counters.refused ?? 0) + 1;
       this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: gate.code, why: gate.why, m: this.bank.snapshot(), cond: this.condition });
       return null;
     }
+    let timeSpent = 0;
     if (world.unifiedCooperation) {
-      const spent = world.survival.residentActionsAt ??= {};
-      if (spent[this.id] === world.t) return null;
-      spent[this.id] = world.t;
+      if (residentTimeModel(world)) {
+        // V7.2：居民不再"每刻一次"。在当天/本刻分钟预算内可连续动作；同一时刻只有一个进行中动作。
+        const clock = clockOf(world, this.id);
+        if (clock.busy) {
+          this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: 'BUSY', why: '手上还有没做完的动作', m: this.bank.snapshot(), cond: this.condition });
+          return null;
+        }
+        const budget = residentBeginTime(world, this.id, action.kind);
+        if (!budget.ok) {
+          noteRefusal(world, 'resident', action?.kind);
+          this.counters.refused = (this.counters.refused ?? 0) + 1;
+          this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: budget.code, why: budget.code === 'TIME_WAIT' ? '这一天的时间用完了' : budget.code === 'BUSY' ? '手上还有没做完的动作' : '这一刻的动作数到顶了', m: this.bank.snapshot(), cond: this.condition });
+          return null;
+        }
+        if (budget.staged) {
+          // 装不下本刻剩余分钟：转成进行中动作，下一（几）刻推进；这一下不产生效果。
+          attachBusyAction(world, this.id, action);
+          return { action, ok: true, code: 'BUSY_START', staged: true, remainMin: budget.remainMin };
+        }
+        timeSpent = budget.minutes ?? 0;
+        // 体力门：普通劳动要先有体力，否则连开工都不行（不会白扣时间）。
+        const energyCost = laborEnergy(action.kind, world);
+        if (energyCost > 0 && (this.drives?.v?.energy ?? 0) + 1e-9 < energyCost) {
+          residentRefundTime(world, this.id, timeSpent);
+          noteRefusal(world, 'resident', action?.kind);
+          this.counters.refused = (this.counters.refused ?? 0) + 1;
+          this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: 'STAMINA', why: '体力不够做这件活', m: this.bank.snapshot(), cond: this.condition });
+          return null;
+        }
+      } else {
+        const spent = world.survival.residentActionsAt ??= {};
+        if (spent[this.id] === world.t) return null;
+        spent[this.id] = world.t;
+      }
     }
     const result = actuate(world, this.id, action);
-    noteAction(world, 'resident', action?.kind, !!result?.ok, layer);
+    // 失败的动作退还个人时间：误点/被驳回不占当天预算。
+    if (timeSpent > 0 && !result?.ok) residentRefundTime(world, this.id, timeSpent);
     // 行动要消耗存续（贵动作更耗）；吃到东西按进食量补回**存续**，但补不回已被侵蚀的部件——这就是 D1
     const actionCost = (world.unifiedCooperation ? SURV_COST[action.kind] : undefined) ?? action.cost ?? 0.06;
-    const eBeforeSpend = this.viab.v + this.viab.reserve;
-    const spentNow = this.viab.spend(actionCost);
-    const paid = Number((eBeforeSpend - (this.viab.v + this.viab.reserve)).toFixed(6)); // 实际扣掉的：v 归零时少于名义值
+    let spentNow = null;
+    let paid = 0;
+    let energyPaid = 0;
+    if (residentTimeModel(world)) {
+      // V7.2：普通劳动扣体力（drives.energy），viab 只承担长期损耗；力气不够就不扣 viab。
+      const energyCost = laborEnergy(action.kind, world);
+      if (result?.ok && energyCost > 0) {
+        this.drives.v.energy = Math.max(0, this.drives.v.energy - energyCost);
+        energyPaid = energyCost;
+      }
+    } else {
+      const eBeforeSpend = this.viab.v + this.viab.reserve;
+      spentNow = this.viab.spend(actionCost);
+      paid = Number((eBeforeSpend - (this.viab.v + this.viab.reserve)).toFixed(6)); // 实际扣掉的：v 归零时少于名义值
+    }
     if (spentNow) this.noteErosion(spentNow, t);
+    // E2/E3：玩家与居民同一口径的累计账本（时间/体力/劳动成败；位置同步不在此处进账）。
+    noteAction(world, 'resident', action?.kind, !!result?.ok, layer, {
+      minutes: result?.ok ? timeSpent : 0,
+      energy: energyPaid,
+      labor: isLaborAction(action.kind),
+    });
     // 记录用四舍五入，喂给模型的必须是原值：进食量是 0.26+0.24×熟悉度 这类带小数的量，舍一下就会改变收支
     const ateAmount = result.ok && result.satiated === 'energy' ? result.amount ?? 0 : 0;
     const eBeforeRegen = this.viab.v + this.viab.reserve;
@@ -518,7 +638,7 @@ export class Organism {
     this.habit.observe(id, result.ok ? uAtDecision : -0.2, this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1);
 
     this.counters.actions += 1;
-    if (result.ok) world.observeResidentAction?.({ id: this.id, t, kind: action.kind, cooperation: Boolean(action.cooperation), goal: action.goal, paid });
+    if (result.ok) world.observeResidentAction?.({ id: this.id, t, kind: action.kind, cooperation: Boolean(action.cooperation), goal: action.goal, paid, energyPaid });
     if ((world.unifiedCooperation || world.autonomousGoals) && result.ok) {
       const audit = world.survival.actionAudit ??= {};
       const row = audit[this.id] ??= { ordinary: {}, cooperation: {}, paid: 0 };
@@ -553,3 +673,13 @@ export class Organism {
     return { id, ...result };
   }
 }
+
+
+
+
+
+
+
+
+
+

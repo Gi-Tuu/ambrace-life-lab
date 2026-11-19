@@ -8,7 +8,7 @@ process.env.DATA_DIR=mkdtempSync(join(tmpdir(),'ambrace-compare-'));
 process.env.SEED_FILE=join(process.env.DATA_DIR,'none.json');
 process.env.GAME_MODE='game';
 process.env.TICK_MS='1000000';
-const {host}=await import('./host.mjs');
+const {host,flushWrites}=await import('./host.mjs');
 const {PLAYER_UNITS_PER_TICK}=await import('./body.mjs');
 
 test('game mode advances both comparison worlds while the A/B entry is being viewed',async()=>{
@@ -63,6 +63,11 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     let {comparison: pair} = snapshot();
     assert.equal(pair.mapSeed, official.mapSeed);
     assert.equal(pair.startTick, official.t);
+    const initial=host.replay({t:pair.startTick,revision:pair.revision});
+    assert.equal(initial.scenes.A.t,pair.startTick);
+    assert.deepEqual(initial.scenes.A.playerPos,official.playerPos);
+    assert.deepEqual(initial.scenes.B.layout,official.layout);
+    assert.ok(host.replay({revision:pair.revision}).frames.every(frame=>!frame.scene));
     for (const key of ['A','B']) {
       for (const field of ['layout','rooms','districts','occupancy','pinv','plots','buildings','households','ecoSources','camp','player']) {
         assert.deepEqual(pair[key][field], official[field], `${key}.${field} 应至起点与正式档一致`);
@@ -78,6 +83,10 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     const {x,z}=official.playerPos;
     const synced=await act('player_sync',{from:[x-.5,z+.5],otherContact:{from:[x+.5,z+.5]}});
     assert.equal(synced.sides.A.ok,true);
+    const later=host.replay({t:pair.startTick+1,revision:pair.revision});
+    assert.deepEqual(later.scenes.A.playerPos,{x:x-.5,z:z+.5,t:pair.startTick+1});
+    assert.deepEqual(later.scenes.B.playerPos,{x:x+.5,z:z+.5,t:pair.startTick+1});
+    assert.deepEqual(host.replay({t:pair.startTick}).scenes.A.playerPos,official.playerPos);
     assert.equal(synced.sides.B.ok,true);
     assert.deepEqual(snapshot().comparison.B.playerPos,{x:x+.5,z:z+.5,t:pair.startTick+1});
     assert.deepEqual(snapshot().survival.playerPos,official.playerPos);
@@ -116,11 +125,11 @@ test('游戏 A/B 从同一生存快照起步，两侧独立裁决，研究命令
     pair = snapshot().comparison;
     assert.equal(pair.A.t, pair.startTick);
     assert.equal(pair.B.t, pair.startTick);
-    assert.equal(pair.A.agents.a1.layers.m3, 1);
+    assert.equal(pair.A.agents.a1.layers.m3, 0, 'M3 已退出正式对照入口');
     assert.equal(pair.B.agents.a1.layers.m3, 0);
     assert.equal(pair.A.pinv.p1.wood, official.pinv.p1.wood);
     await control('step');
-    assert.equal(snapshot().comparison.A.agents.a1.layers.m3, 1, '生存刻不能清掉实验掩码');
+    assert.equal(snapshot().comparison.A.agents.a1.layers.m3, 0, 'M3 不再进入对照入口');
     assert.equal(snapshot().comparison.B.agents.a1.layers.m3, 0);
     assert.equal(readFileSync(worldFile, 'utf8'), officialFile);
   } finally {
@@ -139,6 +148,7 @@ test('A 侧默认通道与相同生存快照的本地运行轨迹完全一致', 
       await host.ctl({action:'step'});
       await host.ctl({mode:'compare', action:'step'});
     }
+    await flushWrites();
     const state = read();
     const { A, B } = state.comparison;
     const compareFile = join(process.env.DATA_DIR,'comparison.json');
@@ -177,3 +187,5 @@ test('一侧对照档缺失居民状态时提示重开，正式生存档照常�
     host.stop();
   }
 });
+
+

@@ -4,7 +4,8 @@ import { createCampOutskirts, moveJoinedWalker } from '../web/camp-outskirts.mjs
 import { campCamera, coveredModels } from '../web/camp-3d-render.mjs';
 import { bodyGrid } from '../web/camp-3d-physics.mjs';
 import { campTerrain } from '../web/camp-terrain.mjs';
-import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, REGION_SIZE } from '../web/wild-landscape.mjs';
+import { campDistricts, districtPads } from '../shared/camp-districts.mjs';
+import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, regionSlotPosition, REGION_SIZE } from '../web/wild-landscape.mjs';
 
 function vertices(mesh) {
   const result=[];
@@ -123,6 +124,64 @@ test('同一河面保留深浅水值，湿岸有连续距离，花草和灌木�
   assert.ok(detail.some(b=>flowerColors.has(b.color) && b.wind && !b.wind.rooted));
   assert.ok(detail.some(b=>b.color==='#6B994D' && b.wind.rooted));
   assert.ok(detail.some(b=>b.h>.3 && b.wind?.rooted));
+});
+
+test('村内外和支流都能长水边植被，桥头、道路和用地保持净空',()=>{
+  const seed=13, crossing=34;
+  const w=wildLandscape(seed,2,{joined:true});
+  const closed=wildLandscape(seed,2,{joined:true,roadDistance:()=>0});
+  const banks=new Set(['reed','rush','iris']);
+  const rows=(center,start,end)=>{
+    const plants=[];
+    for (let z=start;z<end;z++) for (let x=Math.floor(center(z))-6;x<center(z)+6;x++) {
+      const p=w.plantAt(x,z,crossing);
+      if (!banks.has(p?.kind)) continue;
+      assert.ok(w.bankGap(p.x,p.z)>=.23 && w.bankGap(p.x,p.z)<2.45);
+      assert.ok(p.y>=w.waterHeight(p.z)-.08);
+      assert.ok(Math.abs(p.z-crossing)>=2.4 || Math.abs(p.x-w.river(crossing))>=w.width(crossing)+3.8);
+      assert.ok(!banks.has(closed.plantAt(x,z,crossing)?.kind));
+      plants.push(p);
+    }
+    return plants;
+  };
+  for (const [center,start,end] of [[w.river,5,75],[w.river,82,110],[w.sideStream,-147,-113]]) {
+    const plants=rows(center,start,end);
+    assert.deepEqual(new Set(plants.map(p=>p.kind)),banks);
+    const {x,z}=plants.find(p=>p.kind==='reed');
+    const {boxes}=wildDetails(w,Math.floor(x/REGION_SIZE),Math.floor(z/REGION_SIZE),crossing);
+    assert.ok(boxes.some(b=>b.wind?.rooted && !b.solid && b.color==='#497245'));
+  }
+  assert.equal(wildLandscape(seed,2,{joined:true,plantClearance:()=>false}).plantAt(42,14,crossing),null);
+});
+
+test('地标跨区只绘制一次，避让用地和区域交互点，石体匹配行走碰撞',()=>{
+  const seed=13, version=2;
+  const pads=districtPads(campDistricts(seed,version));
+  const w=wildLandscape(seed,version,{joined:true,flats:pads,clearing:pads});
+  const landmarks=w.landmarks();
+  assert.deepEqual(landmarks.map(p=>p.id),['fork-cairn','boundary-wall','falls-rocks']);
+  assert.deepEqual(landmarks,wildLandscape(seed,version,{joined:true,clearing:pads}).landmarks());
+  assert.notDeepEqual(landmarks,wildLandscape(42,version,{joined:true}).landmarks());
+  for (const {id,x,z,cores} of landmarks) {
+    const cx=Math.floor(x/REGION_SIZE),cz=Math.floor(z/REGION_SIZE);
+    const boxes=wildDetails(w,cx,cz,34).boxes.filter(b=>b.occluder==='landmark:'+id);
+    assert.ok(boxes.every(b=>b.landmark.name && b.landmark.at[0]===x));
+    const solids=boxes.filter(b=>b.solid);
+    assert.deepEqual(solids.map(({x,z,w,d})=>({x,z,w,d})),cores.map(({h,...b})=>b));
+    for (const b of solids) {
+      assert.ok(w.groundAllows(b.x+b.w/2,b.z+b.d/2,34));
+      assert.ok(!w.walkable(b.x+b.w/2,b.z+b.d/2,34));
+      assert.ok(b.y<=w.height(b.x,b.z) && b.y+b.h>w.height(b.x,b.z));
+    }
+    for (const [dx,dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      assert.ok(!wildDetails(w,cx+dx,cz+dz,34).boxes.some(b=>b.occluder==='landmark:'+id));
+    }
+    for (const pad of pads) assert.ok(x<pad.x-14 || x>pad.x+pad.w+14 || z<pad.z-14 || z>pad.z+pad.d+14);
+    for (const slot of [0,1,2,3]) {
+      const [px,pz]=regionSlotPosition(seed,cx,cz,slot);
+      assert.ok(Math.abs(px-x)>=2.8 || Math.abs(pz-z)>=1.8);
+    }
+  }
 });
 
 test('聚落与外围由同一规则生成花草，避让用地，外围树冠参与玩家遮挡',()=>{

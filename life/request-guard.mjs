@@ -61,7 +61,42 @@ export function mutatingDenied(req, token = '') {
   if (token) return tokenMatches(bearerOf(req), token) ? null : 'UNAUTHORIZED';
   if (!sameOrigin(req)) return 'CROSS_SITE';
   if (browserEvidence(req)) return null;
-  // 反向代理下 remoteAddress 恒为 loopback，不能再把 loopback 当"本机开发者"。
   if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
   return 'UNAUTHORIZED';
 }
+
+// SEC3-01：普通交互（/act、/saves/open、/saves/back）在配了 CTL_TOKEN 时也允许同源浏览器通过；
+// 令牌只锁破坏性控制面。否则"设了令牌 = 浏览器全 401"（11-16 线上全停的形态）。
+export function interactionDenied(req, token = '') {
+  if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
+  if (token && tokenMatches(bearerOf(req), token)) return null;
+  if (!sameOrigin(req)) return 'CROSS_SITE';
+  if (browserEvidence(req)) return null;
+  if (isLoopback(req) && !req?.headers?.['x-forwarded-host']) return null;
+  return 'UNAUTHORIZED';
+}
+
+// SEC3-02 / SEC5-01：/ctl 的破坏性动作（reset/survival_reset/catchup/brain/compare_reset）。
+// 授权只认两种**服务端可验证**的凭据：
+//   ① 配置了 CTL_TOKEN ⇒ 只认 Bearer/ x-ctl-token（令牌不再落入 nonce 分支）；
+//   ② 未配置令牌 ⇒ 必须出示服务端签发、与会话 cookie 绑定的 nonce（nonceValid 由 serve 注入）。
+// Origin / Sec-Fetch-Site / x-forwarded-host 都是任意脚本可伪造的头，不再单独作为授权证据。
+// nonceValid 缺省 ⇒ 一律拒绝（fail-closed）：纯函数测试不会因为“客户端自选了 nonce 对”而放行。
+export const DESTRUCTIVE_CTL = Object.freeze(['reset', 'survival_reset', 'catchup', 'brain', 'compare_reset']);
+export function ctlDenied(req, body, token = '', nonceValid = null, { allowNonce = false } = {}) {
+  if (DESTRUCTIVE_CTL.includes(String(body?.action ?? ''))) {
+    if (!isJson(req?.headers?.['content-type'])) return 'NEED_JSON';
+    if (token) {
+      if (tokenMatches(bearerOf(req), token)) return null;
+      // SEC5-05：只有显式允许的浏览器动作（MAIN survival_reset）可以用服务端会话 nonce。
+      if (allowNonce && String(body?.action ?? '') === 'survival_reset' && typeof nonceValid === 'function' && nonceValid(req)) return null;
+      return 'UNAUTHORIZED';
+    }
+    return typeof nonceValid === 'function' && nonceValid(req) ? null : 'UNAUTHORIZED';
+  }
+  return interactionDenied(req, token);
+}
+
+
+
+

@@ -73,17 +73,21 @@ test('T25 模型等待期间排队采集、奠基、施工、睡眠和保存', a
     release();
     await running;
     const results=await Promise.all(requests);
-    // P0-A：同一刻已有一次重劳动（gather），后续重劳动必须被行动预算拒绝；移动/睡眠仍可用。
+    // V7.3：队首 4 个动作（采集×2 + 奠基 + 施工）刚好用满本刻 60 分钟池 ⇒ 第 5 个移动 TIME_WAIT；
+    // 移动没发生，所以睡眠因不在家被拒（NOT_HOME）。存档仍成功。这不是 ACTION_BUDGET。
     assert.equal(results[0].ok,true,JSON.stringify(results));
-    assert.equal(results[1].code,'ACTION_BUDGET',JSON.stringify(results));
-    assert.equal(results[2].code,'ACTION_BUDGET',JSON.stringify(results));
-    assert.equal(results[3].code,'ACTION_BUDGET',JSON.stringify(results));
-    assert.equal(results[4].ok,true,JSON.stringify(results));
-    assert.equal(results[5].ok,true,JSON.stringify(results));
-    const after=host.snapshot().survival;
+    assert.equal(results[1].ok,true,JSON.stringify(results));
+    assert.equal(results[2].ok,true,JSON.stringify(results));
+    assert.equal(results[3].ok,true,JSON.stringify(results));
+    assert.equal(results[4].code,'TIME_WAIT',JSON.stringify(results));
+    assert.equal(results[5].code,'NOT_HOME',JSON.stringify(results));
+    assert.ok(results.every(r=>r.code!=='ACTION_BUDGET'),JSON.stringify(results));
     const disk=JSON.parse(await readFile(join(dir,'world.json'),'utf8'));
+    const clock=disk.survival.survival.actClock?.p1;
+    assert.equal(clock?.tick?.usedMin,60,`本刻池应用满 60 分钟，实测 ${JSON.stringify(clock?.tick)}`);
+    const after=host.snapshot().survival;
     assert.equal(disk.survival.t,after.t);
-    assert.equal(after.t,before.t+results[5].ticks);
+    assert.ok(after.t >= before.t, '世界只推进、不回退（睡眠被拒没有 ticks）');
     assert.deepEqual(disk.survival.pinv,after.pinv);
     assert.ok(disk.survival.log.find(x=>x.kind==='gather'&&x.ok));
   } finally {
@@ -93,3 +97,4 @@ test('T25 模型等待期间排队采集、奠基、施工、睡眠和保存', a
     await rm(dir,{recursive:true,force:true});
   }
 });
+

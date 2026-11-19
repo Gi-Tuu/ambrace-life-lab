@@ -76,7 +76,6 @@ export function pack(dir) {
   }
   if (Object.keys(manifest.scenes).length) {
     const expected = [
-      ...['home', 'yard', 'hall', 'store', 'workshop', 'garden', 'watch', 'well'].map(x => `house_${x}`),
       ...[0, 1, 2].map(x => `tree_oak${x}`),
       ...['grass', 'dirt', 'water', 'wood', 'stone'].flatMap(x => [0, 1, 2, 3].map(i => `terrain_${x}${i}`)),
       ...['bed', 'table', 'longTable', 'bench', 'hearth', 'rug', 'shelf', 'crate', 'barrel', 'telescope', 'furnace', 'anvil', 'planter', 'trellis', 'well', 'bucket', 'fence', 'cart', 'banner', 'boulder', 'workbench'].map(x => `prop_${x}`),

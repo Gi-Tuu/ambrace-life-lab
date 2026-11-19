@@ -1,8 +1,8 @@
 import { dayOf } from './clock.mjs';
-import { campEntrance, distanceToRect } from '../web/camp-interaction.mjs';
-import { residentialSite } from '../web/camp-layout.mjs';
+import { campEntrance, distanceToRect } from '../shared/camp-interaction.mjs';
+import { residentialSite } from '../shared/camp-layout.mjs';
 import { worldSite } from './geometry.mjs';
-import { regionPoint } from '../web/camp-region-entities.mjs';
+import { regionPoint } from '../shared/camp-region-entities.mjs';
 import { isAlive } from './viability.mjs';
 
 const fail=code=>({ok:false,code});

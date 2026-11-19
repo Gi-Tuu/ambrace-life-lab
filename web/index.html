@@ -104,6 +104,7 @@
   <button class="slot icon bare" id="btnExchange" type="button" title="收成兑换" aria-label="收成兑换"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M4 3h4l1 2 1 5H2l1-5z" fill="#C18F58"/><path d="M4 3h4" stroke="#5B4434" stroke-width=".8"/><path d="M4.4 1.6h3.2l-.5 1.5H4.9z" fill="#D8A667"/><circle cx="6" cy="7.2" r="1.3" fill="#FFEC27"/></svg></button>
   <button class="slot icon bare" id="btnBuild" type="button" title="建造" aria-label="建造"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M8.5 2.2 10 3.7 8.9 4.8 7.4 3.3z" fill="#9DA8A8"/><path d="M7.6 3.1 2.6 8.1l1.4 1.4 5-5z" fill="#976744"/><path d="M2.2 8.5 4 10.3 2.6 11z" fill="#72513B"/></svg></button>
   <button class="slot icon bare" id="btnVillage" type="button" title="聚落一览" aria-label="聚落一览"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1 5 3 3l2 2v5H1z" fill="#8D593F"/><path d="M7 5 9 3l2 2v5H7z" fill="#526B54"/><path d="M3.6 3h1v2h-1zM8.6 3h1v2h-1z" fill="#FFEC27"/><circle cx="6" cy="1.6" r="1.1" fill="#EDC787"/></svg></button>
+  <button class="slot" id="btnJournal" type="button" title="聚落事件记录">事件</button>
   <button class="slot icon bare" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg></button>
   <button class="slot icon bare" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg></button>
       </div>
@@ -162,6 +163,14 @@
       <summary>研究面板 · 判据 / 对照 / 日志</summary>
       <p class="compare-status" id="compareOrigin"></p>
       <output class="compare-status" id="compareAction"></output>
+      <section id="replayPanel" hidden aria-label="A/B 历史回放（只读）">
+        <div class="replay-head"><b>历史回放 · 只读</b><button id="replayLive" type="button">返回实时</button></div>
+        <div class="replay-range"><span>刻</span><output id="replayTick">—</output><input id="replayRange" type="range" min="0" max="0" step="1" aria-label="回放时间轴"></div>
+        <p id="replayNote" class="note"></p>
+        <div class="ab-pair"><div class="ab-col"><div id="replayCardA"></div></div><div class="ab-col"><div id="replayCardB"></div></div></div>
+        <h2>事件（按同刻顺序）</h2>
+        <ol id="replayEvents" class="journal-list"></ol>
+      </section>
       <div class="inner lab-cols">
         <div class="lab-left">
           <div class="ab-pair">
@@ -174,7 +183,8 @@
         </div>
         <div class="lab-right">
           <div id="labCoop"></div>
-          <h2>事件</h2>
+          <button id="btnJournalCompare" type="button">查看 A/B 聚落事件</button>
+          <h2>动作日志</h2>
           <div class="log" id="log"></div>
         </div>
       </div>
@@ -195,6 +205,15 @@
 <dialog id="exchangeDlg" aria-labelledby="exchangeTitle"><h2 id="exchangeTitle">收成兑换</h2><div id="exchangeBody"></div><div class="dlg-foot"><button data-close="exchangeDlg">关闭（Esc）</button></div></dialog>
 <dialog id="buildDlg" aria-labelledby="buildTitle"><h2 id="buildTitle">建造</h2><div id="buildBody"></div><div class="dlg-foot"><button data-close="buildDlg">关闭（Esc）</button></div></dialog>
 <dialog id="villageDlg" aria-labelledby="villageTitle"><h2 id="villageTitle">聚落一览</h2><div id="villageBody"></div><div class="dlg-foot"><button data-close="villageDlg">关闭（Esc）</button></div></dialog>
+<dialog id="journalDlg" aria-labelledby="journalTitle">
+  <h2 id="journalTitle">聚落事件</h2>
+  <div class="journal-controls">
+    <label id="journalSideControl">对照侧 <select id="journalSide"><option value="A">A</option><option value="B">B</option></select></label>
+    <label>筛选 <select id="journalFilter"><option value="">全部事件</option></select></label>
+  </div>
+  <div id="journalBody" class="journal-list"></div>
+  <form method="dialog" class="dlg-foot"><button>关闭（Esc）</button></form>
+</dialog>
 <dialog id="backpack" aria-labelledby="bpTitle">
   <div class="bp-row">
     <h2 id="bpTitle">背包与公仓</h2>
@@ -205,6 +224,7 @@
 </dialog>
 <dialog id="talkDlg" aria-labelledby="talkTitle">
   <div class="bp-row">
+    <img id="talkPortrait" class="resident-portrait" width="32" height="32" alt="" hidden />
     <h2 id="talkTitle">交谈</h2>
     <button id="talkClose" type="button">走开（Esc）</button>
   </div>
@@ -248,3 +268,9 @@
 <script type="module" src="/web/app.js"></script>
 </body>
 </html>
+  /* V7.3 第三批：进行中的动作与取消按钮 */
+  #survPanel .busy-on { color:var(--gold); }
+  #btnBusyCancel { font:inherit; font-size:12px; color:var(--ink); background:var(--sunken);
+    border:2px solid var(--line); padding:2px 8px; cursor:pointer; }
+  #btnBusyCancel:hover { border-color:var(--gold); }
+

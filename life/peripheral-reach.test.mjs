@@ -116,12 +116,15 @@ test('V4-07 lab/town 不受影响：无 districts 的世界外围校验不生效
   const r=survAct(lab,{kind:'move',room:'yard'});
   assert.ok(r.ok,'核心移动不受外围校验影响');
 });
-test('A09 新档和旧档首次同步允许出生槽的小偏移，远处仍拒绝', () => {
+test('A09 首次同步只容出生槽小偏移；同刻多步按本刻额度，超额度仍拒（V7.3）', () => {
   for (const sp of [start(),copy(start())]) {
     const w=sp.world, [x,z]=worldSite(w,w.loc.p1);
-    assert.equal(survAct(sp,{kind:'player_sync',from:[x+4,z]}).code,'TELEPORT');
+    delete w.survival.playerPos; w.survival.playerReachState=null; // 首次
+    assert.equal(survAct(sp,{kind:'player_sync',from:[x+50,z]}).code,'TELEPORT','首次远点必须拒');
     const first=survAct(sp,{kind:'player_sync',from:[x-.5,z+.5]});
     assert.equal(first.ok,true);
-    assert.equal(survAct(sp,{kind:'player_sync',from:[x+1,z]}).code,'TELEPORT');
+    // 同一刻的连续小步在 10 单位额度内允许（旧实现 dt=0 ⇒ 恒拒）；超出额度仍 TELEPORT。
+    assert.ok(survAct(sp,{kind:'player_sync',from:[x+1,z]}).ok,'同刻下一步应放行');
+    assert.equal(survAct(sp,{kind:'player_sync',from:[x+50,z]}).code,'TELEPORT');
   }
 });

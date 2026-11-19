@@ -214,25 +214,18 @@ export function generate(outDir) {
   const override = overridesFor(outDir, PALETTE.length);
   mkdirSync(outDir, { recursive: true });
   const files = [];
-  for (const [id, A] of Object.entries(CHARS)) {
-    const s = actionSheet(A, id);
-    writeFileSync(join(outDir, `${id}.png`), encodePNG(s.w, s.h, override(`${id}.png`, s.w, s.h, s.px)));
-    files.push(`${id}.png`);
+  // 2D 动作精灵与 fx 表已无消费者（2026-11-18 清理）；只保留 UI 头像。
+  for (const id of Object.keys(CHARS)) {
     const face = resident(id, 'idle', 0, 'down'), portrait = face.slice(4, 36).flat();
     writeFileSync(join(outDir, `portrait_${id}.png`), encodePNG(32, 32, override(`portrait_${id}.png`, 32, 32, portrait)));
     files.push(`portrait_${id}.png`);
   }
-  const fx = fxSheet();
-  writeFileSync(join(outDir, 'fx.png'), encodePNG(fx.w, fx.h, override('fx.png', fx.w, fx.h, fx.px)));
-  files.push('fx.png');
   const manifest = {
     version: 'v2',
     frame: [W, H], anchor: [16, 48], directions: DIRECTIONS, framesPerAction: FRAMES_PER_ACTION, fps: FPS,
     fxCell: [FW, FH], fxRows: FX_ROWS,
     palette: '/web/assets/palette.json',
     clock: 'independent render clock; A/B share the same frame index; never derived from w.t',
-    chars: Object.fromEntries(Object.keys(CHARS).map((id) => [id, `/web/assets/actions/${id}.png`])),
-    fx: '/web/assets/actions/fx.png',
     portraits: Object.fromEntries(Object.keys(CHARS).map(id => [id, `/web/assets/actions/portrait_${id}.png`])),
     actions: ACTIONS.map((a) => ({ id: a.id, label: a.label })),
   };
@@ -245,5 +238,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const out = resolve('web/assets/actions');
   const files = generate(out);
   writeEditorCatalog(resolve('web/assets'));
-  console.log(`generated ${ACTIONS.length} actions x ${FRAMES_PER_ACTION} frames x ${Object.keys(CHARS).length} chars + ${FX_ROWS.length} fx rows -> ${out} (${files.length} files)`);
+  console.log(`generated ${Object.keys(CHARS).length} portraits -> ${out} (${files.length} files)`);
 }

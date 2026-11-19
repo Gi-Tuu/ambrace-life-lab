@@ -1,15 +1,19 @@
-import { findRegionEntity, regionPoint, regionReady } from '../web/camp-region-entities.mjs';
+import { findRegionEntity, regionPoint, regionReady } from '../shared/camp-region-entities.mjs';
+import { recordResidentHit } from './resident-injury.mjs';
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
-import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../web/camp-interaction.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../shared/camp-interaction.mjs';
 import { worldSite, WORLD_TW, WORLD_TH } from './geometry.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
-import { TIMBER_GROVE } from '../web/camp-layout.mjs';
+import { TIMBER_GROVE } from '../shared/camp-layout.mjs';
 import { doForage, doGather, takeFoodKind } from './production.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
+import { campStaticPrecheck } from './camp-precheck.mjs';
 
+import { noteWorkMotion } from './work-motion.mjs';
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],
@@ -24,7 +28,7 @@ const setCount=(bag,item,n)=>{bag[item]=n;};
 
 const playerHome=(world,site)=>site==='home' || (Boolean(site) && (world.survival.settlementLife ? householdAccess(world,'p1',site) : site===world.housing?.p1));
 // P0-3：玩家动作与居民同权，也付存续代价（只在动作成功时扣）。
-const pay=(world,cost)=>{world.agents.p1?.viab?.spend?.(cost);};
+const pay=(world,cost)=>{ if(world.survival?.actTimeModel===true) return; /* V7.3：正式游戏走共享体力表，不再伤 viab */ world.agents.p1?.viab?.spend?.(cost); };
 export function campTimberView(world) {
   const cut=world.survival.campTrees??{};
   return Object.fromEntries((world.campLayout?.grove??TIMBER_GROVE).map(tree=>{
@@ -76,7 +80,7 @@ function interactWithResident(world,body) {
     npc.hurtBy='受伤'; // P0-1：致死原因可追溯
     npc.viab.v=Math.max(0,before-.14);
     const damage=before-npc.viab.v;
-    wounds[target]={t:world.t,total:(wounds[target]?.total??0)+damage};
+    recordResidentHit(world,npc,before);
     npc.relations.meet('p1',world.t,{delta:{trust:-15}});
     world.pending.push({for:target,evt:{kind:'injury',valence:-.8,about:'p1',selfCaused:false,serves:'safety'}});
     return {...ok(),code:'RESIDENT_HURT',damage,name:npc.name};
@@ -131,6 +135,9 @@ export function campAction(world,body) {
   const {kind,type:item,target,tool,plot}=body, s=world.survival;
   let site=world.loc.p1, node;
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
+  // 静态前置（工具/品类）与 validateCamp 共用同一实现；位置/容器/库存仍在这里按解析后的 site 判断。
+  const pre = campStaticPrecheck(world, body);
+  if (pre) return pre;
   if (kind==='camp_resident') return interactWithResident(world,body);
   const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);
   if (s.farmLife && kind==='camp_collect' && item!=='water' && !Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');
@@ -167,6 +174,7 @@ export function campAction(world,body) {
       if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
       const kindEaten = takeFoodKind(s);
       if (!kindEaten) return fail('EMPTY');
+      noteConsumed(world, kindEaten, 'player'); // D1/D2：这一份只在这里消费一次
       s.mealsToday = (s.mealsToday ?? 0) + 1;
       s.mealsEaten = (s.mealsEaten ?? 0) + 1;
       pl0?.viab?.regen?.(s.feedViab ?? 0.5);
@@ -185,6 +193,7 @@ export function campAction(world,body) {
     // RES-02：不饿就不吃——居民只有日界一次配给，玩家不能把进食当存续药水。
     if ((pl0?.drives?.v?.energy ?? 1) > 0.6) return fail('NOT_HUNGRY');
     setCount(meal,item,amount(meal,item)-1);
+    noteConsumed(world, item, 'player:meal');
     s.mealsToday = (s.mealsToday ?? 0) + 1;
     const pl=world.agents.p1;
     // V7.1：一份饭与居民日界配给同一折算（feedViab/feedReward），不是玩家专属的 1.0/0.35。
@@ -194,12 +203,11 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind==='camp_chop') {
-    if (tool!=='axe') return fail('NEED_TOOL');
     const tree=(world.campLayout?.grove??TIMBER_GROVE).find(t=>t.id===target);
     if (!tree || tree.site!==site) return fail('NO_TREE');
     const trees=(s.campTrees??={});
     if ((trees[target]??0)>world.t) return fail('TREE_GROWING');
-    const cut=doGather(world,'p1',site);
+    const cut=doGather(world,'p1',site,[tree.x,tree.z]);
     if (!cut.ok) return cut; // P0-3：储量采空不能砍，树不标记（与资源账同步，等再生）
     trees[target]=world.t+3*DAY_TICKS;
     pay(world,SURV_COST.gather); // P0-2：与 AI gather 同价
@@ -207,17 +215,16 @@ export function campAction(world,body) {
   }
   if (kind==='camp_craft') {
     if (!['workshop','yard'].includes(site)) return fail('NOT_WORKBENCH');
-    if (item!=='tray') return fail('BAD_ITEM');
     if (amount(bag,'wood')<2) return fail('NO_MATERIAL');
     bag.wood-=2;
     world.observeProduction?.('materialSpent', 'craftWood', 2);
     bag.tray=amount(bag,'tray')+1;
+    noteWorkMotion(world,'p1','hammer',{prop:'workbench'});
     pay(world,0.01);
     return ok();
   }
   if (kind==='camp_plant') {
     if (site!=='garden') return fail('NOT_GARDEN');
-    if (tool!=='hoe') return fail('NEED_TOOL');
     if (!Number.isInteger(plot)) return fail('BAD_PLOT');
     const done=doPlant(world,'p1',plot);
     if (done.ok) pay(world,SURV_COST.plant); // P0-2：与 AI plant 同价
@@ -225,7 +232,6 @@ export function campAction(world,body) {
   }
   if (kind==='camp_water') {
     if (site!=='garden') return fail('NOT_GARDEN');
-    if (tool!=='bucket') return fail('NEED_TOOL');
     const field = s.plots.find(p => p.id === plot);
     if (plot!==undefined && !field) return fail('BAD_PLOT');
     if (!amount(bag,'water')) return fail('EMPTY');
@@ -237,12 +243,11 @@ export function campAction(world,body) {
       s.water=Math.min(1,s.water+.12);
     }
     bag.water-=1;
+    noteWorkMotion(world,'p1','water',{plot,rect:field?.bed});
     pay(world,0.01);
     return ok();
   }
   if (kind!=='camp_collect') return fail('UNKNOWN_KIND');
-  if (!Object.hasOwn(TOOLS,item)) return fail('BAD_ITEM');
-  if (tool!==TOOLS[item]) return fail('NEED_TOOL');
   let cost=0.02; // P0-2：与 AI 基础动作同表；crop/berry 分别对齐 harvest/forage，其余营地采集保留小成本
   if (node) {
     const picked=s.regionHarvest??={};
@@ -273,7 +278,14 @@ export function campAction(world,body) {
     if (!takeProduce(s,item,1,target)) return fail('NO_PRODUCE');
     world.observeProduction?.('collected', item, 1);
   }
+  // Local berries and crops already emit at the shared harvest settlement.
+  if (node || ['fruit','egg','wool','milk'].includes(item)) {
+    const motion=item==='wool'?'shear':item==='milk'?'milk':'pick';
+    noteWorkMotion(world,'p1',motion,{item,target,at:node?[node.x,node.z]:undefined});
+  }
   bag[item]=amount(bag,item)+1;
+  noteRes(world, 'personal', item, 1); // D1：从来源/树上收进个人包
   pay(world,cost);
   return ok();
 }
+

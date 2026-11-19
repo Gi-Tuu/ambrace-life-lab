@@ -1,6 +1,63 @@
 # 变更记录
 
-## [未发布]
+## [0.1.6] — 2026-11-19
+
+### 场景表现与美术图鉴
+
+- 加入九类劳动动作与落点特效。风暴水花、飞叶、寒潮挂霜、旱地裂纹和倒伏植株反映游戏状态。
+- 补充地块轮廓、入口、操作位及受阻提示。居民四龄各有身型和头像，果树表现花期与受灾状态，动物表现警觉和进食。
+- 修正桥、井台、工坊、墙体和门口的接地及湿面，调整室内遮光。补充河岸植被、荒野地标和住宅内外造型变体。
+- A/B 选刻可重建两侧场景。较早记录缺少场景数据时显示提示。
+- 运行 `npm run art:catalog` 在本机查看美术图鉴。补录狐狸、人物四龄、作物状态和天气共 20 张预览卡。牛羊及野生动物的幼体、老体待生命周期数据接入。
+
+### 3D 画面丰富化（2026-11-19）
+
+- 所有者要求"全部都要做"的第二轮细节增加（61 族）：23 件手持/背包物品各加 1–3 个结构小件
+  （扣带/柄箍/刃口高光/织带/年轮/苔面/斑点/骨脂/标签/扎口等），**场景聚合道具与背包图标同源同改**；
+  环境层：树根盘＋断枝＋落叶、岩石苔面＋伴石、草丛野花（纯哈希门控）；
+  建筑侧：门口灯笼（glow 夜间光晕）、住所/住宅窗箱花、粮仓扫帚、旧壳货堆、工棚淬水桶＋柴堆、
+  主厅长凳＋桌、瞭望塔旗幡、水井辘绳＋吊桶、菜园稻草人、畜栏食槽＋干草捆＋水桶、牛铃。
+- **不变量**：61/61 族碰撞体逐字节不变；新增全部非碰撞；灯笼 glow 经 transform 对象 spread 传递
+  （stage 与 addCampWork 两套 box 参数位不同，位置参数会吞 glow——本轮实测抓到并修）。
+- 确定性：环境细节走 `campHash`，不消费 rng、不进世界 tick；研究面不受影响（表现层-only）。
+- 对照总览 `docs/enrich-compare.html`（61 族左旧右新）；图鉴物品/树木标签同步「已翻新」。
+- 闸门：新增丰富化结构断言（灯笼 glow/稻草人/根盘/物品件数/确定性）；`npm run check` 实测 **995/995** 全绿。
+
+### 3D 资产批量细化（2026-11-18）
+
+- 所有者放行一次性细化剩余 3D 家族（32 族）：私人住宅入口门框/窗台窗楣、围墙壁柱帽（随破损递减）、
+  菜园/水井/畜栏棚/室内外顶棚全部换连续双坡（`roof()` 层叠顶在生存场景至此无消费者）、
+  鸡成鸡双翼、牛尾穗、羊额毛、鸟冠羽尾尖、兔内耳、鹿角；20 件室内道具各加结构细节
+  （横撑/床尾板/烟囱帽箍/流苏/顶冠/盆沿/杆帽/盖压条/八角倒角/三脚垫/底座/柱帽/栏桩握把等）。
+- **不变量**：32/32 族碰撞体（solid 部件）逐字节不变；新增细节全部非碰撞；围墙部件数断言同步 24/23/22 → 30/28/26（柱帽 6/5/4）。
+- 手持/背包物品 23 件**不动**：与背包图标共用同一套 0–1 归一化形体，改会连坐 UI 图标语言。
+- 对照总览 `docs/refine-compare.html`（32 族左旧右新同镜头）；图鉴标签同步「已翻新」。
+- 闸门：`camp-geometry.test.mjs` 新增批量细化结构断言；`npm run check` 实测 **994/994** 全绿（lint 433 文件 / 179 测试文件）。
+
+### 像素资产清理（2026-11-18）
+
+- 删除 31 张无绘制消费者的 2D 遗留 PNG：`room_*` 8、`thing_*` 5、`icon_*` 5、`house_*` 8、`actions/{a1,a2,a3,p1,fx}` 5。
+  逐张枚举过消费者：它们只被加载进内存、从未被绘制（2D 视口退役后）；HUD 图标现为程序化绘制，不依赖 icon PNG。
+- **UI 保留**：头像 `actions/portrait_*` 4 张、角色帧 `char_*` 16 张（头像兜底）、OFL 字体、palette.json 不动。
+- 生成器同步停产上述死类别（`gen-pixel-assets.mjs` / `gen-actions.mjs`），`npm run assets` 不再复活它们；
+  `pack-assets.mjs` 必需场景表移除 house_*；闸门测试改断言新产出表（4 角色×4 帧＋44 场景皮肤、死类别 0）。
+- `app.js` 动作精灵加载改为缺失只放弃精灵、**不连坐 UI 头像**（此前 fx 缺失会使整组 ACT 加载失败）。
+- 指纹重钉 64 张（60 顶层＋4 头像）；实跑展开态对照面板确认头像 `<img>` 正常；`npm run check` 992/992 全绿。
+- **仍在服役的 44 张场景皮肤**（terrain 20 / prop 21 / tree 3）是 3D 地面与道具贴图来源；所有者裁决**保留**（删它们会回退程序化色块）。图鉴中标「服役中」，角色帧标「UI 保留」，不再混入「未翻新」清理候选。
+
+### 审计5 修复（2026-11-18）
+
+- **SEC5-01**：`ctl_nonce` 改为服务端签发、绑定 `ctl_sid` 会话并在服务端存储校验；自选 cookie/header 对与伪造 `Origin`/`x-forwarded-host`/`Sec-Fetch-Site` 不再能授权。配置 `CTL_TOKEN` 时破坏性 `/ctl` 只认 Bearer，nonce 分支彻底关闭。
+- **SEC5-02**：非 MAIN 的 `/world?camp=` 无 owner cookie 一律 403；已归属营地重开不换绑、不给非 owner 发新 cookie（`CAMP_OWNED`）。
+- **SEC5-03/04**：MAIN 与营地统一 `catchup` 冷却 + 每日累计上限；`/saves/open` 增加会话配额（默认 5/分钟），NaN env 回落不再归零。
+- **SEC5-06**：CSP / nosniff / XFO / Referrer-Policy 全套安全头；cookie 支持 Secure（`COOKIE_SECURE=1`）；存档错误只回错误码，不回显绝对路径。
+- **DATA5-02/03**：`flushWrites` 改为硬屏障（必要时强制保存、返回营地错误明细）；营地写失败不再报 `ok:true`；SIGTERM 等待 flush，未完成以非零码退出。
+- **DATA5-04/06**：索引 key 严格 32hex；sweep 只操作 `saves/` 内且 realpath 校验的文件；索引锁超时 fail-fast、stale lock 按 owner/时间戳回收、唯一 tmp + 代际；6 进程 ×8 轮 48/48 不丢。
+- **ARCH5-01/02**：`validateCamp` 非 camp 分支改用字符串返回 `NOT_CAMP_ACTION`；成本注册与运行时统一走 `costFor`/`SHARED_COST`。
+- **DATA5-09**：`settlementLife` 旧档按“分城区证据”显式 OR 迁移，不再因 false 永久丢 districts/peripheralHomes。
+- **DATA5-11/13/14**：wool 兑换/屠宰/喂食记入 consumed；deaths 封顶 200 并累计总数；observer 默认 cap 降到 2 万；分营地 tick 支持墙钟预算。
+- **测试/CI**：`REQUIRE_CHROME=1` 真正驱动浏览器用例失败（新增 `chrome-gate.mjs` 与 Linux Chrome 路径）；CI 显式验证 Chrome；文档测试数、Dockerfile、SECURITY 白名单同步到 178 文件 / 976 条。
+- **第二轮补齐**：MAIN `survival_reset` 在令牌姿态下可用服务端 nonce（一次性 + 60s TTL + 3 次/分钟 + `[audit] main_reset`）；owner/名字侧车 `saves/<key>.owner.json` 与索引重建；`S.model.calls/attempts/survivalChoices` 统一走预算域；启动基线档 + `SAVE_EVERY` 可配 + `.bak` 回退测试；camp_* 工具/品类前置收敛到 `camp-precheck.mjs`。
 
 ### 外围同权收口（P0）
 
@@ -24,7 +81,24 @@
 
 - README/创作手记/CHANGELOG 同源刷新：测试 556 项/82 文件、模块 180、覆盖率行 90.24%/分支 88.35%/函数 92.10%（2026-11-15 实测）。
 
-## [Unreleased]
+## [0.1.5] — 2026-11-18
+
+### 主路径可读性（行为等价拆分）
+
+- `life/host.mjs` 1747 → 约 460 行：拆出 `host-world.mjs`（世界创建/装载、tick 串行链、定时器、离线补时、存档、营地生命周期）、`host-model.mjs`（配置、预算/车道、审议提示词、modelBrain/modelTalk）、`host-replay.mjs`（A/B 对照、回放帧、comparison.json）。`S`/`CFG` 仍是单例引用，不复制；`host.mjs` 保留 facade 与全部原导出。
+- `life/survplay.mjs` 1342 → 约 630 行：拆出 `survplay-actions.mjs`（时间/体力/成本、busy 跨刻、失败回滚与账本）、`survplay-camp.mjs`（营地/住房/设施/建造/家庭/合作动作入口）、`survplay-save.mjs`（dump/load 与旧档迁移）。依赖方向单向，`survplay` 保留 tick/view/原导出。
+- 新增 `life/split-boundaries.test.mjs`：行数、域模块存在性、依赖方向、原导出兼容六条边界闸门（先红后绿）。
+- 行为等价：`npm run check` 全绿；测试 179 文件 / 982 条；五份研究面 md5 与 `seed/world.json` 旧档载入未变。
+
+### 交付项
+
+- `package.json` 增加 `"type": "module"`（消除 lint/ESM 重解析警告）、`repository`/`bugs` 字段，版本 `0.1.5`；新增 `.github/ISSUE_TEMPLATE/bug.md`。
+- 新增根目录 `QUICKSTART.md`（3 条命令 + 5 分钟真实路径）与 `ARCHITECTURE.md`（模块边界、host/survplay 拆分、默认开关、已知限制），clone 后不读 gitignored `docs/` 也能接手。
+- 新增 `BENCHMARK.md` + `scripts/score-baseline.mjs`：同 seeds/同 tick 比较内部通道开/关/随机策略的行为分布与可复现性；明确为**作者侧消融/负控**，不是外部独立基准，附第三方复现协议与未验证声明；证据 `evidence/score/baseline.json`。
+- 新增 `scripts/quickstart-browser.mjs`：真实 Chrome 跑起服→进游戏→走→采集→吃→睡→HUD→死亡后世界继续，证据 `evidence/score/quickstart-browser.log`。
+- 公仓谷仓新增「在公仓吃一份」按钮（与服务端 `camp_eat` 的谷仓分支同源；不饿时按钮给出原因）。
+
+## [0.1.5 之前的未发布]
 
 ### 游戏模式规则层（2026-11-15）
 - 新增 `GAME_BUILDINGS` 与 `buildDef(world, type)`：**研究世界逐位沿用 `BUILDINGS`**，正式游戏走游戏表。

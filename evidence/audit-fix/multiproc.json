@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-11-18T10:48:11.592Z",
+  "dataDir": "C:\\Users\\sheng\\AppData\\Local\\Temp\\audit-mp-nbvH7h",
+  "workers": 6,
+  "rounds": 8,
+  "expected": 48,
+  "indexEntries": 48,
+  "campFiles": 48,
+  "ok": 48,
+  "fail": 0,
+  "errors": [],
+  "runs": [
+    {
+      "id": "0",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    },
+    {
+      "id": "1",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    },
+    {
+      "id": "2",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    },
+    {
+      "id": "3",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    },
+    {
+      "id": "4",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    },
+    {
+      "id": "5",
+      "rounds": 8,
+      "ok": 8,
+      "fail": 0,
+      "errors": []
+    }
+  ],
+  "elapsedMs": 2880,
+  "lost": 0,
+  "pass": true
+}

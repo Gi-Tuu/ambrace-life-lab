@@ -13,10 +13,11 @@ ENV NODE_ENV=production \
     GAME_RULES=1 \
     DATA_DIR=/data
 
-# 只需要这四样：服务器、引擎、前端、固定历史起点
+# 只需要这五样：服务器、引擎、前端、共享纯数据/几何、固定历史起点
 COPY serve.mjs ./
 COPY life/ ./life/
 COPY web/ ./web/
+COPY shared/ ./shared/
 COPY seed/ ./seed/
 
 # 世界状态必须落在持久卷上；容器临时文件系统随时会没

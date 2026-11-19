@@ -2,10 +2,13 @@
 //   土壤/水分/天气 → 植物生长 → 收获入仓 → 居民每日消耗 → 缺口产生存续压力 → 失败/目标。
 // 只在 world.survival 存在时生效（preset=survival）；lab/town 无此字段 ⇒ 逐位不变。
 // 低频推进：每游戏日一次（由 body.scanSecrets 在日界调用），不每帧跑。
+import { noteWorkMotion } from './work-motion.mjs';
 import { dayOf, weatherFor, seasonOf } from './clock.mjs';
 import { siteOf } from './geometry.mjs';
 import { initProduction, effectiveMods, addFood, takeFood, FOOD_KINDS, dailyWear, regrowWildBerries, regenResources } from './production.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
+import { noteRes, noteConsumed } from './resource-ledger.mjs';
+import { recordSettlementEvent } from './settlement-events.mjs';
 
 export const SURV = Object.freeze({
   startStore: 6,          // 初始公共粮仓
@@ -70,10 +73,12 @@ const PANTRY_FOOD = [...PANTRY_FIRST, ...FOOD_KINDS.filter(item => !PANTRY_FIRST
 // 家里容器是公仓缺口的第一层缓冲（玩家与居民同享）：按容器键序确定性地吃掉食物。
 function drainCampPantry(world, need) {
   const all = world.survival.campContainers ?? {};
+  // A2：只征用公共容器（store:*）。私人餐台（home:meal 等）必须由所有者明确捐赠/转移才能进入公共配给。
   for (const key of Object.keys(all)) {
+    if (!key.startsWith('store:')) continue;
     const bag = all[key];
     for (const item of PANTRY_FOOD) {
-      while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; }
+      while (need > 0 && (bag?.[item] ?? 0) > 0) { bag[item] -= 1; need -= 1; noteConsumed(world, item, 'store'); }
     }
   }
   return need;
@@ -116,39 +121,65 @@ export function advanceSurvival(world) {
     if (!world.ecologyExperiment?.noStorm && stormOn(day, s.lastStormDay, world.seed ?? 7)) {
       s.lastStormDay = day;
       s.disasterToday = 'storm';
-      for (const b of s.buildings) b.integrity = Math.max(0, Number((b.integrity - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2))); // 备选档伤害 0.25→0.15
+      const buildings = [];
+      for (const b of s.buildings) {
+        const before = b.integrity;
+        b.integrity = Math.max(0, Number((before - 0.15 * (mods.shield ? 0.4 : 1)).toFixed(2)));
+        if (b.integrity < before) buildings.push({ loc: b.loc, type: b.type, before, after: b.integrity });
+      }
+      let plot = null;
       const growing = s.plots.filter((p) => p.growth > 0 && p.growth < 1);
       if (growing.length) {
         const p = growing[Math.floor(hash01(world.seed ?? 7, day * 13 + 5) * growing.length)];
-        p.growth = Math.max(0, Number((p.growth - 0.5).toFixed(2)));
+        const before = p.growth;
+        p.growth = Math.max(0, Number((before - 0.5).toFixed(2)));
+        plot = { id: p.id, before, after: p.growth };
       }
+      recordSettlementEvent(world, 'storm_impact', { stormDay: day, buildings, plot });
     } else if (!world.ecologyExperiment?.noColdsnap && s.coldStreak >= 2) s.disasterToday = 'coldsnap';
   }
 
   regrowWildBerries(world, day);
 
   // 居民每日消耗公共粮仓（§11 裁决②：playerEats 开则玩家也占一份）。P0-1：死者不占配给。
-  const pop = livingResidents(world).length;
+  // D2：当天已经吃过实物的人不再占这份配给（同一份食物只消费一次），也不再重复回补能量/存续。
+  const today = dayOf(world.t);
+  const fedToday = (a) => Boolean(a) && (a.isPlayer
+    ? (s.mealsDay === today && (s.mealsToday ?? 0) > 0)
+    : a.mealDay === today);
+  const needers = world.gameRules ? livingResidents(world).filter(a => !fedToday(a)) : livingResidents(world);
+  const pop = needers.length;
   // 审计 LIFE-05：玩家"是否吃这一份"只能有一个判据；否则会出现扣粮不回补/回补不扣粮。
-  const playerShares = isAlive(world.agents.p1) && (world.gameRules ? s.playerRation === true : s.playerEats === true);
+  const playerShares = isAlive(world.agents.p1) && (world.gameRules ? s.playerRation === true : s.playerEats === true) &&
+    !(world.gameRules && fedToday(world.agents.p1));
   const eaters = pop + (playerShares ? 1 : 0);
   const need = eaters * SURV.foodPerPersonDay + (s.disasterToday === 'coldsnap' ? eaters : 0);
   const ended = !world.independentWorld && (s.failed || s.ended) && s.endFreeze === true; // §15 P2-B：终局/失败后冻结；won 仅作里程碑不终局（无尽）
   let shortfall = 0;
   if (!ended) {
     world.observeProduction?.('ration', 'store', Math.min(s.store, need));
+    const beforeFood = s.food ? { ...s.food } : null;
     // gameRules：按品类扣配给；研究世界保持原算术
     if (s.food) { const taken = takeFood(s, null, need); shortfall = need - taken; }
     else if (s.store >= need) s.store -= need;
     else { shortfall = need - s.store; s.store = 0; }
+    // D1：配给入口的消费按品类入账
+    if (beforeFood) for (const k of FOOD_KINDS) {
+      const used = (beforeFood[k] ?? 0) - (s.food[k] ?? 0);
+      if (used > 0) noteConsumed(world, k, 'ration', used);
+    }
   }
 
   // 灯火燃料（仅 gameRules）：每天烧 1 份木料；没柴就熄灯，屋里夜里变暗。
   // 先烧公共柴堆，再烧玩家背包——居民与玩家同一条规则。
   if (world.gameRules && !ended) {
-    const bag = (world.pinv ?? {})['p1'] ?? {};
-    if ((s.inv?.wood ?? 0) >= 1) { s.inv.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
-    else if ((bag.wood ?? 0) >= 1) { bag.wood -= 1; s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1; }
+    // A3：公共设施只烧公共柴堆。私人木材（玩家或其他居民）必须通过明确的捐赠/运输行动进入公仓。
+    if ((s.inv?.wood ?? 0) >= 1) {
+      s.inv.wood -= 1;
+      s.fuelBurnDays = (s.fuelBurnDays ?? 0) + 1;
+      // V7.3 第三批：灯火燃料是真实的公共消费，补记资源账本（D1 口径）。
+      noteConsumed(world, 'wood', 'fuel', 1);
+    }
     // 亮不亮由当前柴量推导（见 survView.light），这里只负责每天烧一份。
   }
 
@@ -159,6 +190,7 @@ export function advanceSurvival(world) {
     s.wasCrisis = true;
     for (const a of Object.values(world.agents)) {
       if (!a.viab || !isAlive(a)) continue; // P0-1：死者不再受饥饿压力
+      if (world.gameRules && fedToday(a)) continue; // D2：吃过实物的人不再因配给缺口被二次惩罚
       a.hurtBy = '饥饿';
       a.viab.v = Math.max(0, a.viab.v - SURV.starvePressure * mods.pressureMul * shortfall);
     }
@@ -169,6 +201,7 @@ export function advanceSurvival(world) {
     // §15 同权驱动同步：吃饱的一天给能量驱动回补；§16 E1 workFeeds 开时取消自动喂饱（改劳动换食）
     if (s.workFeeds !== true) for (const a of Object.values(world.agents)) {
       if (!a.drives || !isAlive(a)) continue; // P0-1：死者不再被喂饱
+      if (world.gameRules && fedToday(a)) continue; // D2：今天已经吃过实物的人不再重复回补
       a.hurtBy = null;
       a.drives.reward('energy', s.feedReward ?? 0.5); // §15.3 喂饱系数挂开关供平衡网格
       // P1-1：households 游戏模式下居民每日配给真正养命（支撑长寿生命周期）；玩家靠 camp_eat 手动进食（同权不同入口，已披露）；
@@ -207,6 +240,7 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   if (!p) return { ok: false, code: 'NO_MATURE' };
   const mods = effectiveMods(world);
   p.growth = 0;
+  noteWorkMotion(world,agentId,'pick',{plot:p.id,rect:p.bed,item:'crop'});
   const base = SURV.yieldPerPlot + mods.yieldBonus;
   const yieldAmt = s.eco === true ? Math.max(1, Math.round(base * (0.8 + 0.2 * s.soil))) : base; // §12 缓和曲线候选（0.5+0.5 被 G1 否）
   s.soil = clamp01(s.soil - 0.15);
@@ -214,8 +248,19 @@ export function doHarvest(world, agentId, plot, personalPortion = 0) {
   s.harvestCount = (s.harvestCount ?? 0) + 1;
   const before = s.store;
   // gameRules：收获按品类入库；研究世界保持原算术
-  if (s.food) addFood(s, 'crop', Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  const added = Math.max(0, Math.min(mods.storeCap - before, yieldAmt - personalPortion));
+  if (s.food) addFood(s, 'crop', added);
   else s.store = Math.min(mods.storeCap, before + yieldAmt - personalPortion);
+  // D1：实际采收 / 个人获得 / 公共入库 / 超容量损失 分开记账；溢出给可见反馈。
+  noteRes(world, 'gross', 'crop', yieldAmt);
+  noteRes(world, 'personal', 'crop', personalPortion);
+  noteRes(world, 'publicIn', 'crop', added);
+  const overflow = Math.max(0, yieldAmt - personalPortion - added);
+  if (overflow > 0) {
+    noteRes(world, 'overflow', 'crop', overflow);
+    s.lastOverflow = { t: world.t, kind: 'crop', n: overflow, code: 'STORE_FULL' };
+    world.survival.lastStoreFullAt = world.t;
+  }
   world.observeProduction?.('gross', 'crop', yieldAmt);
   world.observeProduction?.('food', 'crop', s.store - before);
   return { ok: true, code: 'OK', amount: yieldAmt };
@@ -227,5 +272,7 @@ export function doPlant(world, agentId, plot) {
   if (s.water < (s.plantWater ?? 0.1)) return { ok: false, code: 'NO_WATER' };
   s.water = clamp01(s.water - (s.plantWater ?? 0.1)); // §15.5 M2 播种耗水挂开关
   p.growth = 0.1;
+  noteWorkMotion(world,agentId,'sow',{plot:p.id,rect:p.bed});
   return { ok: true, code: 'OK' };
 }
+

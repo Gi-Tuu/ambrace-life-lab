@@ -183,16 +183,28 @@ test('D13 玩家同等生存：有存续、会因归零死亡，尸检后动作�
   assert.equal(survAct(sp, { kind: 'move', room: 'garden' }).ok, false);
 });
 
-test('D14 家里容器是日耗缓冲：公仓空时浆果或肉均可抵掉当日饥荒', async () => {
+test('D14 日耗缓冲只来自公共容器；私人餐台不被自动征用（V7.2 A2）', async () => {
   for (const item of ['berry', 'meat']) {
-    const sp = createSurvPlay(7);
-    const w = sp.world, s = w.survival;
+    // 公共容器：可作日耗缓冲
+    const pub = createSurvPlay(7);
+    const wp = pub.world, sp2 = wp.survival;
+    sp2.store = 0;
+    sp2.campContainers = { 'store:1': { [item]: 4 } };
+    for (const a of Object.values(wp.agents)) a.viab.v = 1;
+    wp.t = 23;
+    await tickSurvPlay(pub);
+    assert.equal(sp2.starveDays, 0, item + ' 公共容器应抵饥荒');
+    assert.equal(sp2.campContainers['store:1'][item], 0, item + ' 公共容器应被消耗');
+
+    // 私人餐台：不被自动征用，缺粮照常计入饥荒
+    const priv = createSurvPlay(7);
+    const w = priv.world, s = w.survival;
     s.store = 0;
     s.campContainers = { 'home:meal': { [item]: 4 } };
     for (const a of Object.values(w.agents)) a.viab.v = 1;
     w.t = 23;
-    await tickSurvPlay(sp);
-    assert.equal(s.starveDays, 0, item);
-    assert.equal(s.campContainers['home:meal'][item], 0, item);
+    await tickSurvPlay(priv);
+    assert.ok(s.starveDays > 0, item + ' 私人餐台不能替公仓兜底');
+    assert.equal(s.campContainers['home:meal'][item], 4, item + ' 私人餐台不得被自动清空');
   }
 });

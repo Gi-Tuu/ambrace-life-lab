@@ -4,6 +4,7 @@ import { laborStage } from './households.mjs';
 import { isAlive, livingResidents } from './viability.mjs';
 import { REL_NEUTRAL } from './relations.mjs';
 import { forecastDisasters } from './worldstate.mjs';
+import { recordSettlementEvent } from './settlement-events.mjs';
 import { farmGroundReady, nextFarmBed } from './farmland.mjs';
 
 const TOPICS = {
@@ -102,6 +103,9 @@ export function finishDiscussion(w,log) {
   (d.history??=[]).push(record);
   if (d.history.length>80) d.history.shift();
   log.push({t:w.t,kind:'discussion',ok:present.length>=2,code:record.result,topic:m.topic});
+  recordSettlementEvent(w, 'discussion', { actor: m.by, loc: m.room, topic: m.topic,
+    result: record.result, startedAt: m.t, members: { ...m.members }, advice,
+    ...(m.topic === 'storm' && { stormDay: dayOf(m.t) + 1 }) });
   d.active=null;
 }
 

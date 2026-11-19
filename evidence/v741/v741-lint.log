@@ -1,0 +1,9 @@
+
+> ambrace-life-lab@0.1.4 lint
+> node scripts/check.mjs
+
+✔ 静态检查通过：语法 398 个文件 · import 图已解析 · JSON 12 份 · 引擎纪律 23 个模块 · 测试文件 162 个
+(node:55116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///E:/Competition/AMBRACElife/web/app.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\E:\Competition\AMBRACElife\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)

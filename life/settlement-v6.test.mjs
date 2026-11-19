@@ -96,6 +96,18 @@ test('真实居民决策发起、谢绝、离开及产生分歧，关闭后无�
   assert.deepEqual(survView(restore(sp)).social.discussions.history,history);
 });
 
+test('讨论分歧：在场两人判断不同时记为 split（确定性分支闸门）',()=>{
+  const sp=make(),w=sp.world,s=w.survival;
+  w.loc.a1='hall'; w.loc.a2='hall';
+  w.agents.a1.drives.v.energy=.9; // 头脑清醒：按议题给建议
+  w.agents.a2.drives.v.energy=.3; // 低于 .48 ⇒ 建议"先休整"
+  s.discussions.active={t:w.t,until:w.t+3,by:'a1',room:'hall',topic:'storm',severity:.8,members:{a1:'joined',a2:'joined'}};
+  finishDiscussion(w,sp.log);
+  const rec=s.discussions.history.at(-1);
+  assert.equal(rec.result,'split',JSON.stringify(rec));
+  assert.equal(new Set(Object.values(rec.advice)).size,2,'两人的判断必须真的不同');
+});
+
 test('有共识时建议进入实际行动比较，没有工地或缺料仍由原规则驳回',()=>{
   const sp=make(),w=sp.world,s=w.survival;
   s.store=0;

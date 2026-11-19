@@ -20,7 +20,7 @@ const TICK = 40;
 process.env.TICK_MS = String(TICK);
 process.env.MAX_CALLS = process.env.MAX_CALLS ?? '120';
 
-const { host } = await import('./host.mjs');
+const { host, flushWrites } = await import('./host.mjs');
 
 const SLEEP = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -420,9 +420,11 @@ test('D10 每次存档要留一份 .bak 【变红法：删掉 save() 里 rename(
   await boot();
   const f = join(DIR, 'world.json');
   for (let i = 0; i < 10; i++) await host.tickOnce(); // 第 10 刻触发一次 save
+  await flushWrites(); // V7.3：tick 只排队，断言文件前显式收口
   assert.equal(existsSync(f), true, '第一次 save 没写出 world.json');
   const first = readFileSync(f, 'utf8');
   for (let i = 0; i < 10; i++) await host.tickOnce(); // 再 10 刻，第二次 save
+  await flushWrites();
   const bak = `${f}.bak`;
   assert.equal(existsSync(bak), true, '第二次 save 没有留下 .bak ⇒ 坏档时无法回到上一个存档点');
   assert.equal(readFileSync(bak, 'utf8'), first, '.bak 不是上一份存档');

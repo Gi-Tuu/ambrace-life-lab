@@ -72,7 +72,7 @@ test('BUG-19 静态面只放行 web/，仓库内部文件不可读 【变红法�
   const { child, base } = await bootServer();
   try {
     // 正控：页面与前端资源必须照常可读（否则等于把站点锁死）
-    for (const p of ['/', '/index.html', '/web/app.js', '/web/index.html', '/web/assets/manifest.json']) {
+    for (const p of ['/', '/index.html', '/web/app.js', '/web/index.html', '/web/assets/manifest.json', '/shared/camp-layout.mjs']) {
       const r = await get(base, p);
       assert.equal(r.status, 200, `${p} 返回 ${r.status}，静态面被锁过头了`);
     }
@@ -190,15 +190,15 @@ test('H-02 CSRF：text/plain 与跨站请求必须被挡住 【变红法：删�
     assert.equal(plain.status, 403, `text/plain 的 reset 返回 ${plain.status} ⇒ CSRF 可抹档`);
     assert.equal((await plain.json()).error, 'NEED_JSON');
 
-    // (b) 跨站 Origin
+    // (b) 跨站 Origin：不再用可伪造的 Origin 做授权判定；没有服务端会话 nonce 一律未授权。
     const cross = await fetch(`${base}/ctl`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ action: 'reset', confirm: true }) });
     assert.equal(cross.status, 403, `跨站 reset 返回 ${cross.status}`);
-    assert.equal((await cross.json()).error, 'CROSS_SITE');
+    assert.equal((await cross.json()).error, 'UNAUTHORIZED');
 
     // (c) reset 必须带 confirm
     const noConfirm = await post(base, '/ctl', { action: 'reset' });
-    assert.equal(noConfirm.status, 400, `没有 confirm 的 reset 返回 ${noConfirm.status}`);
-    assert.equal((await noConfirm.json()).error, 'RESET_NEEDS_CONFIRM');
+    assert.equal(noConfirm.status, 403, `无凭据的 reset 被鉴权拒绝，返回 ${noConfirm.status}`);
+    assert.equal((await noConfirm.json()).error, 'UNAUTHORIZED');
 
     // 三种攻击之后世界必须还在原刻度
     const t1 = (await (await get(base, '/world')).json()).A.t;
@@ -244,11 +244,13 @@ test('H-30 超长 body 映射成 413（不是 400）【变红法：把 readBody 
 test('存档故障通过 GET 和 HEAD 探活报告 503，恢复写入后返回 200', async () => {
   const {child,base,dir}=await bootServer({GAME_MODE:'game',CTL_TOKEN:'',ACT_SAVE_COALESCE_MS:'0',TICK_MS:'1000000'});
   try {
-    const camp=await (await post(base,'/saves/open',{name:'探活回归'})).json();
+    const campRes=await post(base,'/saves/open',{name:'探活回归'});
+    const camp=await campRes.json();
+    const campOwner=/camp_owner=([^;]+)/.exec(campRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
     assert.ok(camp.ok);
     const tempPath=join(dir,'saves',camp.key+'.json.gz.tmp');
     mkdirSync(tempPath);
-    const act=room=>post(base,'/act?camp='+camp.key,{mode:'survival',kind:'move',room}).then(r=>r.json());
+    const act=room=>fetch(base+'/act?camp='+camp.key,{method:'POST',headers:{'content-type':'application/json',cookie:'camp_owner='+campOwner},body:JSON.stringify({mode:'survival',kind:'move',room})}).then(r=>r.json());
     assert.equal((await act('yard')).persisted,false);
     const health=await get(base,'/healthz');
     assert.equal(health.status,503);
@@ -281,17 +283,28 @@ test('已授权的正常对话请求遇到未配置供应商时返还预留额�
 test('SEC-03b 建档限速必须按营地名分桶，不是按 IP（反代下 IP 恒等 ⇒ 会变成整站总闸）【变红法：把桶键改回 req.socket.remoteAddress】', async () => {
   const { child, base } = await bootServer({ CTL_TOKEN: '', OPEN_LIMIT: '2', OPEN_LIMIT_GLOBAL: '50' });
   try {
+    // SEC5-05：同一个浏览器重开同名营地必须带自己的 camp_owner，否则会被 403 CAMP_OWNED 挡掉。
+    const jar = {};
+    const open = async (name) => {
+      const r = await post(base, '/saves/open', { name }, { cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') });
+      for (const line of r.headers.getSetCookie?.() ?? []) {
+        const pair = line.split(';')[0];
+        const i = pair.indexOf('=');
+        if (i > 0) jar[pair.slice(0, i)] = pair.slice(i + 1);
+      }
+      return r;
+    };
     const codes = [];
-    for (let i = 0; i < 3; i += 1) codes.push((await post(base, '/saves/open', { name: '阿禾' })).status);
+    for (let i = 0; i < 3; i += 1) codes.push((await open('阿禾')).status);
     assert.deepEqual(codes, [200, 200, 429], `同一个名字应撞上限：${codes}`);
-    const other = await post(base, '/saves/open', { name: '林三' });
+    const other = await open('林三');
     assert.equal(other.status, 200, '换了名字就该放行——来源地址与上面完全相同，按 IP 分桶做不到这件事');
     // 前后空白会被正典归一化吃掉 ⇒ 同一个名字、同一个桶
-    const same = await post(base, '/saves/open', { name: ' 阿禾 ' });
+    const same = await open(' 阿禾 ');
     assert.equal(same.status, 429, '归一化后同名必须共用一个桶');
     // 非法名字（分隔符/..）全部落到同一个桶：刷随机名字蹭不到新额度，也撑不爆桶表
     const junk = [];
-    for (const nm of ['a/b', 'c\\d', '..', 'e'.repeat(40)]) junk.push((await post(base, '/saves/open', { name: nm })).status);
+    for (const nm of ['a/b', 'c\\d', '..', 'e'.repeat(40)]) junk.push((await open(nm)).status);
     assert.ok(junk.filter((c) => c === 429).length >= 2, `非法名字应共用一个桶并很快撞上限：${junk}`);
   } finally { await stopServer(child); }
 });
@@ -306,13 +319,20 @@ test('SEC-03c 全局桶兜住"刷名字造营地"：不同名字也要被总量�
   } finally { await stopServer(child); }
 });
 
-test('SEC-02b 配了 CTL_TOKEN 就只认令牌：浏览器访客必被拒，且 boot 要警告出来【变红法：把 boot 警告删掉或让同源证据重新放行】', async () => {
+test('SEC-02b 配了 CTL_TOKEN：浏览器交互不被锁；破坏性 /ctl 只认令牌；boot 仍警告', async () => {
   const { child, base, out } = await bootServer({ CTL_TOKEN: 'top-secret', OPEN_LIMIT: '50' });
   try {
     const r = await post(base, '/saves/open', { name: '令牌下访客' });
-    assert.ok(r.status === 401 || r.status === 403, `无令牌的浏览器式请求必须被拒，实测 ${r.status}`);
-    const withToken = await post(base, '/saves/open', { name: '持令牌脚本' }, { authorization: 'Bearer top-secret' });
-    assert.equal(withToken.status, 200, '带正确令牌的脚本仍要能建档');
-    assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把"设了令牌会锁死访客"这条警告打出来');
+    assert.equal(r.status, 200, `同源浏览器建档不该被令牌锁死，实测 ${r.status}`);
+    const act = await post(base, '/act', { mode: 'survival', kind: 'move', room: 'hall' });
+    assert.equal(act.status, 200, '浏览器 /act 不该被令牌锁死');
+    const anonReset = await post(base, '/ctl', { action: 'reset', confirm: true });
+    assert.ok([401, 403].includes(anonReset.status), `匿名 reset 必须被拒，实测 ${anonReset.status}`);
+    const tokenReset = await post(base, '/ctl', { action: 'reset', confirm: true }, { authorization: 'Bearer top-secret' });
+    assert.ok(![401, 403].includes(tokenReset.status), `带令牌 reset 不该被拒，实测 ${tokenReset.status}`);
+    assert.ok(String(out ?? '').includes('CTL_TOKEN'), 'boot 必须把令牌姿态打印出来');
   } finally { await stopServer(child); }
 });
+
+
+

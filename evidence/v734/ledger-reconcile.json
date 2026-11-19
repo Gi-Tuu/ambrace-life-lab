@@ -1,0 +1,118 @@
+{
+  "generatedAt": "2026-11-18T07:33:49.994Z",
+  "seed": 7,
+  "days": 3,
+  "ticks": 72,
+  "instances": 210,
+  "anomalyCount": 0,
+  "anomalies": [],
+  "observedByKind": {
+    "move_to": {
+      "minutes": 495,
+      "energy": 0,
+      "n": 99
+    },
+    "gather": {
+      "minutes": 350,
+      "energy": 1.0500000000000007,
+      "n": 35
+    },
+    "forage": {
+      "minutes": 35,
+      "energy": 0.21,
+      "n": 7
+    },
+    "talk": {
+      "minutes": 15,
+      "energy": 0.03,
+      "n": 3
+    },
+    "deposit": {
+      "minutes": 15,
+      "energy": 0.03,
+      "n": 3
+    },
+    "exchange": {
+      "minutes": 110,
+      "energy": 0.22000000000000006,
+      "n": 22
+    },
+    "plan": {
+      "minutes": 20,
+      "energy": 0.04,
+      "n": 2
+    },
+    "rest": {
+      "minutes": 270,
+      "energy": 0,
+      "n": 18
+    },
+    "build": {
+      "minutes": 300,
+      "energy": 0.9999999999999999,
+      "n": 10
+    },
+    "look_out": {
+      "minutes": 10,
+      "energy": 0.02,
+      "n": 2
+    },
+    "eat": {
+      "minutes": 15,
+      "energy": 0.03,
+      "n": 3
+    },
+    "harvest": {
+      "minutes": 30,
+      "energy": 0.15000000000000002,
+      "n": 3
+    },
+    "withdraw": {
+      "minutes": 15,
+      "energy": 0.03,
+      "n": 3
+    }
+  },
+  "ledgerByKind": {
+    "minutes": {
+      "move_to": 495,
+      "gather": 350,
+      "forage": 35,
+      "talk": 15,
+      "deposit": 15,
+      "exchange": 110,
+      "plan": 20,
+      "rest": 270,
+      "build": 300,
+      "look_out": 10,
+      "eat": 15,
+      "harvest": 30,
+      "withdraw": 15
+    },
+    "energy": {
+      "gather": 1.05,
+      "forage": 0.21,
+      "talk": 0.03,
+      "deposit": 0.03,
+      "exchange": 0.22,
+      "plan": 0.04,
+      "build": 1,
+      "look_out": 0.02,
+      "eat": 0.03,
+      "harvest": 0.15,
+      "withdraw": 0.03
+    }
+  },
+  "sync": {
+    "ledgerSync": 0,
+    "observerSync": 0
+  },
+  "aggregateMismatches": [],
+  "counts": {
+    "instances": 210,
+    "instanceAnomalies": 0,
+    "duplicateFinal": 0,
+    "beforeStart": 0,
+    "aggregateMismatches": 0
+  }
+}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 const mode=process.argv[2],dir=process.env.DATA_DIR;
-const {host}=await import('./host.mjs');
+const {host,flushWrites}=await import('./host.mjs');
 if(mode==='bad'||mode==='badseed'){
  const path=mode==='badseed'?process.env.SEED_FILE:join(dir,'world.json');
  const before=await readFile(path);
@@ -29,6 +29,7 @@ if(mode==='first'){
  const oldTick=a.tick.bind(a);
  a.tick=async w=>{const r=await oldTick(w);if(w.t===10)a.assess({kind:'shortfall',valence:-.4,violates:null,selfCaused:false,about:null});return r;};
  await host.tickOnce();
+ await flushWrites(); // V7.3：tick 只排队存档，读档/断言前显式收口
  const raw=await read(),saved=raw.A.agents.a1.m5;
  assert.ok(saved);assert.deepEqual(saved,a.bank.dumpM5());assert.ok(saved.slow>0);assert.ok(saved.exposure.pending>0);
  console.log(JSON.stringify({mode,saved,bM5:Boolean(b.ch.m5),masks:host.status().masks}));
@@ -36,6 +37,7 @@ if(mode==='first'){
  assert.ok(!a.ch.m5);const prior=(await read()).A.agents.a1.m5;assert.ok(prior);
  assert.deepEqual(a.bank.snapshot(),prior.fast,'关闭载档应回快仓而非把慢分量双算');
  for(let i=0;i<10;i++)await host.tickOnce();
+ await flushWrites(); // V7.3：tick 只排队存档
  const saved=(await read()).A.agents.a1.m5;assert.ok(saved,'关闭时抹掉慢状态');
  for(const k of ['slow','load','queue','exposure','pending','delay'])assert.deepEqual(saved[k],prior[k],`休眠慢字段 ${k} 被改写`);
  assert.deepEqual(saved.fast,a.bank.snapshot(),'休眠状态未跟上关闭档真实快仓');
@@ -46,6 +48,7 @@ if(mode==='first'){
  const before=a.bank.dumpM5(),actions=a.counters.actions;let expected=before.load;
  for(let i=0;i<3;i++)expected=Math.max(0,Math.min(1,expected-expected/160+(i===0?before.exposure.pending:0)));
  await host.ctl({action:'catchup',minutes:3});
+ await flushWrites();
  const after=a.bank.dumpM5();assert.equal(after.load,expected,'休眠期间待暴露未恰好消费一次');
  assert.equal(after.exposure.pending,0);assert.equal(after.exposure.count,before.exposure.count);assert.ok(Object.values(after.pending).every(v=>v===0));assert.equal(a.counters.actions,actions,'休眠虚构行动');
  console.log(JSON.stringify({mode,before,after,bM5:Boolean(b.ch.m5),masks:host.status().masks}));

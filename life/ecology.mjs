@@ -7,6 +7,8 @@ import { dayOf, seasonOf, DAY_TICKS } from './clock.mjs';
 import { survivalRoll } from './rng.mjs';
 import { MATURE_DAYS, takeProduce } from './source-produce.mjs';
 import { takeFood } from './production.mjs';
+import { noteConsumed } from './resource-ledger.mjs';
+import { FOOD_KINDS } from './production.mjs';
 
 export const ECO = Object.freeze({
   orchardCap: 12, chickenCap: 12,
@@ -45,7 +47,11 @@ export function stepEcosystem(world, log) {
   for (const tr of orchards) {
     const wf = 0.4 + 0.6 * water;
     tr.health = clamp01(tr.health + (drought ? -0.08 : 0.02 * wf));
-    if (storm) tr.health = clamp01(tr.health - (shield ? 0.06 : 0.15)); // P1-6 墙庇护减损
+    if (storm) {
+      // The crown stays damaged until the health lost in the storm has grown back.
+      tr.stormRecovery = Math.max(tr.stormRecovery ?? 0, tr.health);
+      tr.health = clamp01(tr.health - (shield ? 0.06 : 0.15)); // P1-6 墙庇护减损
+    } else if (tr.health >= tr.stormRecovery - 1e-6) delete tr.stormRecovery;
     if (ageDays(t, tr.born) > ECO.orchardLifespan) tr.health = 0; // 自然衰老
   }
   for (let i = orchards.length - 1; i >= 0; i -= 1) if (orchards[i].health <= 0) { orchards.splice(i, 1); deaths += 1; }
@@ -73,16 +79,26 @@ export function stepEcosystem(world, log) {
     const take = Math.min(have, need - consumed);
     if (take > 0) {
       takeProduce(s, k, take);
+      noteConsumed(world, k, 'animalFeed', take);
       consumed += take;
       world.observeProduction?.('chickenFeed', k, take);
     }
   }
   if (consumed < need) {
     const take = Math.min(s.store ?? 0, need - consumed);
-    if (s.food) takeFood(s, null, take); else s.store -= take;
+    if (s.food) {
+      // V7.3.1：动物吃掉的粮也要进 consumed 账本，否则库存消失但账本无记录。
+      const before = { ...s.food };
+      takeFood(s, null, take);
+      for (const k of FOOD_KINDS) {
+        const used = (before[k] ?? 0) - (s.food[k] ?? 0);
+        if (used > 0) noteConsumed(world, k, 'animalFeed', used);
+      }
+    } else s.store -= take;
     consumed += take;
     world.observeProduction?.('chickenFeed', 'store', take);
   }
+  if (consumed > 0) s.lastChickenMeal = { t, ids: chickens.map(c => `chickens:${c.id}`) };
   world.observeProduction?.('chickenFeed', 'unmet', need - consumed);
   const fedRatio = need > 0 ? consumed / need : 1;
   for (const c of chickens) {

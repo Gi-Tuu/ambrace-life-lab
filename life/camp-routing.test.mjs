@@ -37,17 +37,23 @@ const get = async (base, path) => (await fetch(base + path)).json();
 test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则主营地', async () => {
   const { child, base } = await boot();
   try {
-    const a = await (await post(base, '/saves/open', { name: '甲' })).json();
-    const b = await (await post(base, '/saves/open', { name: '乙' })).json();
+    const aRes = await post(base, '/saves/open', { name: '甲' });
+    const a = await aRes.json();
+    const aOwner = /camp_owner=([^;]+)/.exec(aRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
+    const bRes = await post(base, '/saves/open', { name: '乙' });
+    const b = await bRes.json();
+    const bOwner = /camp_owner=([^;]+)/.exec(bRes.headers.get('set-cookie') ?? '')?.[1] ?? '';
+    const auth = (owner) => ({ cookie: 'camp_owner=' + owner });
+    const postAuth = (path, body, owner) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...auth(owner) }, body: JSON.stringify(body) });
     assert.ok(a.ok && b.ok);
     assert.notEqual(a.key, b.key);
 
     // 只对甲发动作（query 指定营地，完全不带 cookie）
-    const act = await (await post(base, `/act?camp=${a.key}`, { mode: 'survival', kind: 'move', room: 'garden' })).json();
+    const act = await (await postAuth(`/act?camp=${a.key}`, { mode: 'survival', kind: 'move', room: 'garden' }, aOwner)).json();
     assert.ok(act.ok, JSON.stringify(act));
 
-    const wa = await get(base, `/world?camp=${a.key}`);
-    const wb = await get(base, `/world?camp=${b.key}`);
+    const wa = await (await fetch(base + `/world?camp=${a.key}`, { headers: auth(aOwner) })).json();
+    const wb = await (await fetch(base + `/world?camp=${b.key}`, { headers: auth(bOwner) })).json();
     const wm = await get(base, '/world');
     assert.equal(wa.camp?.key, a.key, '带 camp 应返回该营地');
     assert.equal(wa.camp?.name, '甲', 'camp.name 必须是名字而不是哈希（P2-a）');
@@ -61,31 +67,37 @@ test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则�
   }
 });
 
-test('SA11 非法/未登记 camp 回落主营地：survival 不为空、不回显输入、camp=null', async () => {
+test('SA11 非法/未登记 camp：无 owner 403；带 owner 仍回落主营地、不回显输入', async () => {
   const { child, base } = await boot();
   try {
-    const a = await (await post(base, '/saves/open', { name: '甲' })).json();
+    const rOpen = await post(base, '/saves/open', { name: '甲' });
+    const a = await rOpen.json();
+    const ownerA = /camp_owner=([^;]+)/.exec(rOpen.headers.get('set-cookie') ?? '')?.[1] ?? '';
     assert.ok(a.ok);
-    // 畸形 key：不回显、camp=null、世界仍可用
+    assert.ok(ownerA, '首次打开必须发 owner cookie');
+    // SEC5-02：非 MAIN 读路径一律先过 owner 门，畸形 key 也一样（不回显请求原语）。
     {
-      const r = await (await fetch(base + '/world?camp=' + encodeURIComponent('../etc/passwd'))).json();
-      assert.equal(r.camp, null, '畸形 camp 不得回流');
-      assert.notEqual(r.survival, null, '不得把空世界发给访客');
-      assert.ok(!JSON.stringify(r).includes('../etc/passwd'), '不得回显请求原语');
+      const r = await fetch(base + '/world?camp=' + encodeURIComponent('../etc/passwd'));
+      assert.equal(r.status, 403, '无 owner cookie 不得读非 MAIN');
+      const body = await r.text();
+      assert.ok(!body.includes('../etc/passwd'), '不得回显请求原语');
     }
-    // 格式合法但未登记（等价 TTL 已回收）：显式 invalid，仍给主营地世界（SAV-05）
+    // 格式合法但未登记（等价 TTL 已回收）：有 owner cookie 时显式 invalid，仍给主营地世界（SAV-05）
     {
       const bad = 'a'.repeat(32);
-      const r = await (await fetch(base + '/world?camp=' + bad)).json();
+      const r = await (await fetch(base + '/world?camp=' + bad, { headers: { cookie: 'camp_owner=' + 'f'.repeat(32) } })).json();
       assert.equal(r.camp?.invalid, true, '失效 key 必须显式标记 invalid');
       assert.equal(r.camp?.key, bad);
       assert.notEqual(r.survival, null, '仍要给出可看的世界');
     }
-    const ok = await (await fetch(base + '/world?camp=' + a.key)).json();
-    assert.equal(ok.camp?.key, a.key, '合法已登记 key 仍然正常');
+    const noOwner = await fetch(base + '/world?camp=' + a.key);
+    assert.equal(noOwner.status, 403, '无 cookie 不得读已登记营地');
+    const ok = await (await fetch(base + '/world?camp=' + a.key, { headers: { cookie: 'camp_owner=' + ownerA } })).json();
+    assert.equal(ok.camp?.key, a.key, '合法已登记 key + owner 仍然正常');
     assert.notEqual(ok.survival, null);
   } finally {
     child.kill();
     await new Promise((r) => setTimeout(r, 300));
   }
 });
+

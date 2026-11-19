@@ -387,11 +387,8 @@ export function generate(outDir) {
   mkdirSync(outDir, { recursive: true });
   const files = [];
   const put = (name, c) => { writeFileSync(join(outDir, name), encodePNG(c.w, c.h, override(name, c.w, c.h, c.px))); files.push(name); };
-  for (const r of ['home', 'yard', 'hall', 'store', 'workshop', 'garden', 'watch', 'well']) put(`room_${r}.png`, room(r));
+  // 2D 视口退役后 room_/thing_/icon_/house_ 已无消费者，不再生成（2026-11-18 清理）。
   for (const [id, col] of Object.entries(CHARS)) for (let f = 0; f < 4; f++) put(`char_${id}_${f}.png`, charFrame(col, f));
-  for (const [id, fn] of Object.entries(THINGS)) put(`thing_${id}.png`, fn());
-  for (const [id, fn] of Object.entries(ICONS)) put(`icon_${id}.png`, fn());
-  for (const r of ['home', 'yard', 'hall', 'store', 'workshop', 'garden', 'watch', 'well']) put(`house_${r}.png`, houseArt(r));
   for (let i = 0; i < 3; i++) put(`tree_oak${i}.png`, treeArt(i * 17));
   for (const kind of ['grass', 'dirt', 'water', 'wood', 'stone']) for (let i = 0; i < 4; i++) put(`terrain_${kind}${i}.png`, terrainArt(kind, i));
   for (const kind of ['bed', 'table', 'longTable', 'bench', 'hearth', 'rug', 'shelf', 'crate', 'barrel', 'telescope', 'furnace', 'anvil', 'planter', 'trellis', 'well', 'bucket', 'fence', 'cart', 'banner', 'boulder', 'workbench']) put(`prop_${kind}.png`, propArt(kind));
