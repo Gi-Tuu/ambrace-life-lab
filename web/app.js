@@ -2662,6 +2662,9 @@ function residentInReach(s, player, crowd, room) {
 
 async function useResident(person) {
   const {target}=person;
+  // 叫住：先把居民在客户端的行走器停住，避免他一边走一边判距离。
+  const rw=WALK['cvA:'+target];
+  if (rw && rw.moving) { rw.path=[]; rw.pi=0; rw.moving=false; }
   // P0 对话：空手按 F = 打开对话；重工具仍保留"会击伤"的代价交互。
   if (ui.tool==='hand') { await openTalkWith(target,person); return; }
   const {room,from,to}=person, tool=ui.tool;
@@ -4777,8 +4780,8 @@ function pickRoom(ev, cv) {
     }
     if (hit?.kind==='resident') {
       const from=[(IPOS.x+8)/TILE,(IPOS.y+16)/TILE];
-      if (nearResident(from,hit.at)) void useResident({target:hit.target,room:site,from,to:hit.at});
-      else toast('走近后再交谈。');
+      if (nearResident(from,hit.at) || Math.hypot(from[0]-hit.at[0],from[1]-hit.at[1])<=5) void useResident({target:hit.target,room:site,from,to:hit.at});
+      else toast('太远了，先走近再叫住他。');
       return;
     }
     const props=roomProps(site);
@@ -5019,7 +5022,7 @@ loadAssets().finally(() => {
         const world=campWorlds.get(cvId);
         if (!world) continue;
         const trip=snapshot.districtTravel?.[who];
-        const rate=trip?Math.max(mstep,(walker.tripSpeed??0)*dt*1000):mstep;
+        const rate=trip?Math.min(mstep*1.35,Math.max(mstep,(walker.tripSpeed??0)*dt*1000)):mstep; // 限速：tripSpeed 在快 tick 下会放大成瞬移
         let step=manual?playerStep:rate;
         // 要求2：玩家出村钳到世界时允许速度（禁冲刺）；村内保留冲刺
         if (player && manual && !inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
