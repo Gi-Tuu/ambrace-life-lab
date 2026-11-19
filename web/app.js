@@ -3859,8 +3859,15 @@ async function refresh() {
     if (!current()) return;
     refreshApplied=id;
     $('log').innerHTML=`<div class="rej">与服务端断开：${esc(e.message)}</div>`;
-    const message=e.code==='CAMP_UNAVAILABLE'
-      ? '当前名字营地暂时无法加载，正在重试。' : '无法连接生存服务，正在重试。';
+    // 403「这个营地不是你的」不是网络故障：当成故障去重试，玩家看到的就是一片白屏。
+    // 清掉营地指针落回主营地（那里恒可读），并把该做什么说清楚。
+    const notOwner = e.code === 'CAMP_NOT_OWNER';
+    const message = notOwner
+      ? '这个营地认不出当前浏览器。回到主营地，或用名字重新进入即可。'
+      : e.code === 'CAMP_UNAVAILABLE'
+        ? '当前名字营地暂时无法加载，正在重试。'
+        : '无法连接生存服务，正在重试。';
+    if (notOwner) setCampKey(null);
     if (ui.menu) $('startStatus').textContent=message;
     $('playNoticeText').textContent=message;
     $('playNotice').hidden=false;

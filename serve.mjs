@@ -282,6 +282,11 @@ const secureCookie = (req) => process.env.COOKIE_SECURE === '1'
   || Boolean(req?.socket?.encrypted)
   || String(req?.headers?.['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase() === 'https';
 const cookieSecureFlag = (req) => secureCookie(req) ? '; Secure' : '';
+// 线上创空间是把 ms.show 嵌进 modelscope.cn 的第三方 iframe：这种请求里 SameSite=Lax 的 cookie
+// **不会被带上**，于是"建档成功、下一次读营地就 403"——名字存档在创空间页面里等于不可用。
+// 跨站携带只有 SameSite=None; Secure 能过；本地 http（非安全上下文）浏览器会丢掉 None 的 cookie，
+// 所以只在安全上下文用 None，其余保持 Lax。
+const campCookieScope = (req) => secureCookie(req) ? 'SameSite=None; Secure' : 'SameSite=Lax';
 const mainResetSid = (req) => String(req?.ctlSid ?? '').slice(0, 8);
 function auditMainReset(req, result) {
   // 审计事件只落 stderr：时间 / sid 前缀 / 结果。不写令牌、不写 nonce 原文。
@@ -371,7 +376,7 @@ async function handle(req, res) {
     const denied = interactionDenied(req, CTL_TOKEN);
     if (denied) return json(res, 403, { error: denied });
     const back = await backToMainCamp();
-    res.appendHeader('set-cookie', `camp=; Path=/; Max-Age=0; SameSite=Lax${cookieSecureFlag(req)}`);
+    res.appendHeader('set-cookie', `camp=; Path=/; Max-Age=0; ${campCookieScope(req)}`);
     return json(res, 200, back);
   }
   if (p === '/saves/open' && req.method === 'POST') {
@@ -398,8 +403,8 @@ async function handle(req, res) {
     catch { return json(res, 503, { error: 'SAVE_FAILED' }); }
     if (!claim.ok) return json(res, 503, { error: claim.code === 'NO_CAMP' ? 'SAVE_FAILED' : claim.code });
     if (!claim.owned) return json(res, 403, { error: 'CAMP_OWNED' });
-    res.appendHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; SameSite=Lax${cookieSecureFlag(req)}`);
-    res.appendHeader('set-cookie', `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax${cookieSecureFlag(req)}`);
+    res.appendHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; ${campCookieScope(req)}`);
+    res.appendHeader('set-cookie', `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; ${campCookieScope(req)}`);
     return json(res, 200, opened);
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
@@ -450,6 +455,8 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   }
   if (req.method === 'GET' && p === '/world') {
     // SEC5-02：非 MAIN 营地读路径必须 owner；不再“带了 cookie 才检查”。
+    // 但“营地已经不在了”（平台重建清空 /data，名字档随之消失）不能继续报 403：那是“别人的营地”
+    // 的语气，客户端只会当成网络故障无限重试成白屏。410 给它一个出口。
     if (campKey && campKey !== 'MAIN' && !ownerAllows(req, campKey)) return json(res, 403, { error: 'CAMP_NOT_OWNER' });
     try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
     catch (error) {
