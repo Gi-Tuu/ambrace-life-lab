@@ -228,14 +228,20 @@ test('SEC5-05 MAIN survival_reset：未设令牌时服务端 nonce 可重开一�
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-06 安全头/ cookie 标志：CSP、nosniff、DENY、Secure', async () => {
+test('SEC5-06 安全头/ cookie 标志：CSP、nosniff、frame-ancestors 白名单、Secure', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '', COOKIE_SECURE: '1' });
   try {
     const res = await jsonGet(h.base, '/');
-    assert.match(res.headers.get('content-security-policy') ?? '', /default-src 'self'/);
-    assert.match(res.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+    const csp = res.headers.get('content-security-policy') ?? '';
+    assert.match(csp, /default-src 'self'/);
+    // 所有者口径（2026-11-19 线上白屏复盘）：创空间永远用 iframe 嵌 *.ms.show 呈现，
+    // frame-ancestors 'none' 会让平台那一格被浏览器拦成空白页——白屏真因就是这个。
+    // 所以按源放行只放魔搭，绝不放开成 *。
+    assert.match(csp, /frame-ancestors 'self' https:\/\/modelscope\.cn https:\/\/www\.modelscope\.cn/);
+    assert.equal(/frame-ancestors[^;]*\*/.test(csp), false, 'frame-ancestors 不许出现 *：那等于放弃防点击劫持');
+    assert.equal(/frame-ancestors 'none'/.test(csp), false, "'none' 会把创空间自己也挡掉，线上就是白屏");
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(res.headers.get('x-frame-options'), 'DENY');
+    assert.equal(res.headers.get('x-frame-options'), null, 'XFO 表达不了"按源放行"，留着 DENY 会比 CSP 更严、再次挡掉 iframe');
     const setCookies = res.headers.getSetCookie().join('\n');
     assert.match(setCookies, /ctl_sid=[0-9a-f]{32}[^\n]*Secure/i);
     assert.match(setCookies, /ctl_sid=[^\n]*HttpOnly/i);
