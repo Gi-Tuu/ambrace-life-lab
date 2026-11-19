@@ -1525,6 +1525,10 @@ function drawTitleScene(now,reduced) {
   const g=canvas.getContext('2d'), time=reduced?0:titleTime;
   if (campRenderer && titleWorld.scene3d) {
     const landscape=titleWorld.landscape, x=29,z=28, span=height/width<.62?47:50;
+    // 相机跟随平滑：室外视角指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
+    const smoothKey=historical?'replay':overview?'overview':room?'room:'+site:'outdoor';
+    if(!camSmooth||camSmooth.key!==smoothKey||Math.hypot(x-camSmooth.x,z-camSmooth.z)>9) camSmooth={key:smoothKey,x,z};
+    else { const k=.28; camSmooth.x+=(x-camSmooth.x)*k; camSmooth.z+=(z-camSmooth.z)*k; x=camSmooth.x; z=camSmooth.z; }
     const camera=campCamera({x,z,width,height,span,yaw:.30,pitch:.69,targetY:.9});
     const regions=landscape.regions(x,z);
     const weather=[time,.65,0,Math.max(.57,titleSun.glow)];
@@ -4932,8 +4936,8 @@ loadAssets().finally(() => {
     ACT.motionTime=reduced.matches?0:elapsed;
     const mstep=SPEED*ACT.fps*dt, playerStep=mstep*(keys.has('sprint')?1.75:1);
     if (guidance && now>guidance.until) { guidance=null; forceRepaint=true; }
-    const repaint3d=forceRepaint || changed || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24)) ||
-      mdx || mdy || roomRoute || Object.values(WALK).some(walker=>walker.pi<walker.path?.length);
+    const walking=mdx||mdy||Boolean(roomRoute)||Object.values(WALK).some(walker=>walker.pi<walker.path?.length||walker.moving);
+    const repaint3d=forceRepaint || changed || walking || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24));
     // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
     if (ui.interior) {
