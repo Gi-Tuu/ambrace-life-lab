@@ -1,16 +1,17 @@
 import { hash2 } from './camp-terrain.mjs';
 
 export function materialGrain() {
+  // 各向同性颗粒：不再用正弦线，避免贴到斜面/墙面后读成规则斜条纹。
   const pixels=new Uint8Array(64*64);
   for (let y=0;y<64;y++) for(let x=0;x<64;x++) {
     const wood=y<32;
-    const line=wood?Math.sin(y*1.29+Math.sin(x*.13)*.85):Math.sin(y*2.43+x*.035);
-    const pores=hash2(x,wood?Math.floor(y/2):y,811);
-    pixels[y*64+x]=Math.round(130+line*(wood?36:22)+(pores-.5)*52);
+    const fine=hash2(x,y,811);
+    const patch=hash2(Math.floor(x/4),Math.floor(y/4),812);
+    const pore=hash2(x,Math.floor(y/2),813);
+    pixels[y*64+x]=Math.round(128+(patch-.5)*26+(fine-.5)*34+(wood?(pore-.5)*18:0));
   }
   return pixels;
 }
-
 const cached=new WeakMap();
 const ring=Array.from({length:9},(_,i)=>[Math.cos(i*Math.PI/4),Math.sin(i*Math.PI/4)]);
 
