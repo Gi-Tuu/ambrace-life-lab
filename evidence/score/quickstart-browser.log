@@ -1,14 +1,14 @@
-{"at":"2026-11-19T04:43:44.707Z","kind":"server.started","port":8958,"dataDir":"C:\\Users\\sheng\\AppData\\Local\\Temp\\quickstart-data-vrBgBR","gameMode":"game","gameRules":1}
-{"at":"2026-11-19T04:43:46.344Z","kind":"ui.menu","survival":"继续生存","newGame":"新开一局","camp":"进入 / 开新营地","compare":"进入对照"}
-{"at":"2026-11-19T04:43:47.631Z","kind":"ui.hud.initial","date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1本刻行动60/60","place":"走廊 · 户外"}
-{"at":"2026-11-19T04:43:47.666Z","kind":"walk.before","key":"cvA:p1","x":30,"y":24,"menu":false}
-{"at":"2026-11-19T04:43:48.839Z","kind":"walk","before":{"key":"cvA:p1","x":30,"y":24,"menu":false},"after":{"x":32.149800000000006,"y":24},"moved":2.15}
-{"at":"2026-11-19T04:43:48.895Z","kind":"act.move.watch","ok":true,"persisted":true}
-{"at":"2026-11-19T04:43:48.938Z","kind":"act.gather","result":{"action":{"kind":"gather"},"ok":true,"code":"OK","observation":"采集到 2 份石料","evt":{"kind":"gather","valence":0.2,"selfCaused":true,"serves":"stimulation","about":null,"violates":null,"novel":false},"persisted":true},"stone0":0,"stone1":2}
-{"at":"2026-11-19T04:43:48.955Z","kind":"act.move.store","ok":true,"persisted":true}
-{"at":"2026-11-19T04:43:49.200Z","kind":"act.eat","energy":0.5979999999999999,"steps":6,"result":{"ok":true,"code":"OK","persisted":true},"store0":17,"store1":16,"energyAfter":1}
-{"at":"2026-11-19T04:43:49.229Z","kind":"act.move.home","ok":true,"persisted":true}
-{"at":"2026-11-19T04:43:49.306Z","kind":"act.sleep","before":966,"after":970,"result":{"ok":true,"code":"OK","ticks":4,"persisted":true}}
-{"at":"2026-11-19T04:43:49.322Z","kind":"death.fixture","ok":true,"dead":true,"t":970}
-{"at":"2026-11-19T04:43:50.590Z","kind":"death.after","beforeDeathT":970,"tAfterDeath":972,"banner":"你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。"}
-{"at":"2026-11-19T04:43:50.590Z","kind":"summary","ok":true,"result":"起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续","hud":{"date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1本刻行动60/60","place":"走廊 · 户外"},"walkMoved":2.15,"gather":{"stone0":0,"stone1":2},"eat":{"energy":0.598,"store0":17,"store1":16},"sleep":{"ticks":4,"t0":966,"t1":970},"death":{"beforeDeathT":970,"tAfterDeath":972,"banner":"你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。"}}
+{"at":"2026-11-19T04:56:15.479Z","kind":"server.started","port":8910,"dataDir":"C:\\Users\\sheng\\AppData\\Local\\Temp\\quickstart-data-2OSWzc","gameMode":"game","gameRules":1}
+{"at":"2026-11-19T04:56:17.257Z","kind":"ui.menu","survival":"继续生存","newGame":"新开一局","camp":"进入 / 开新营地","compare":"进入对照"}
+{"at":"2026-11-19T04:56:18.610Z","kind":"ui.hud.initial","date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1本刻行动60/60","place":"走廊 · 户外"}
+{"at":"2026-11-19T04:56:18.666Z","kind":"walk.before","key":"cvA:p1","x":30,"y":24,"menu":false}
+{"at":"2026-11-19T04:56:19.937Z","kind":"walk","before":{"key":"cvA:p1","x":30,"y":24,"menu":false},"after":{"x":32.04990000000002,"y":24},"moved":2.05}
+{"at":"2026-11-19T04:56:20.002Z","kind":"act.move.watch","ok":true,"persisted":true}
+{"at":"2026-11-19T04:56:20.044Z","kind":"act.gather","result":{"action":{"kind":"gather"},"ok":true,"code":"OK","observation":"采集到 2 份石料","evt":{"kind":"gather","valence":0.2,"selfCaused":true,"serves":"stimulation","about":null,"violates":null,"novel":false},"persisted":true},"stone0":0,"stone1":2}
+{"at":"2026-11-19T04:56:20.079Z","kind":"act.move.store","ok":true,"persisted":true}
+{"at":"2026-11-19T04:56:20.369Z","kind":"act.eat","energy":0.5979999999999999,"steps":6,"result":{"ok":true,"code":"OK","persisted":true},"store0":17,"store1":16,"energyAfter":1}
+{"at":"2026-11-19T04:56:20.399Z","kind":"act.move.home","ok":true,"persisted":true}
+{"at":"2026-11-19T04:56:20.476Z","kind":"act.sleep","before":966,"after":970,"result":{"ok":true,"code":"OK","ticks":4,"persisted":true}}
+{"at":"2026-11-19T04:56:20.491Z","kind":"death.fixture","ok":true,"dead":true,"t":970}
+{"at":"2026-11-19T04:56:21.761Z","kind":"death.after","beforeDeathT":970,"tAfterDeath":972,"banner":"你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。"}
+{"at":"2026-11-19T04:56:21.761Z","kind":"summary","ok":true,"result":"起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续","hud":{"date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1本刻行动60/60","place":"走廊 · 户外"},"walkMoved":2.05,"gather":{"stone0":0,"stone1":2},"eat":{"energy":0.598,"store0":17,"store1":16},"sleep":{"ticks":4,"t0":966,"t1":970},"death":{"beforeDeathT":970,"tAfterDeath":972,"banner":"你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。"}}

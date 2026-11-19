@@ -46,10 +46,10 @@ export function roomExposure(open,daylight,fire=0) {
   return open ? .92 : .49+.18*daylight+.21*fire;
 }
 
-export function contactShadowMesh({source,x,z,height},sun) {
+export function contactShadowMesh({source,x,z,height},sun,{soft=false}={}) {
   if (sun.phase==='夜晚' || !sun.direct) return new Float32Array();
   const quantize=n=>Math.round(n*12);
-  const heading=sun.sunVector, key=[Math.floor(x/2),Math.floor(z/2),...heading.map(quantize),quantize(sun.direct)].join(',');
+  const heading=sun.sunVector, key=[Math.floor(x/2),Math.floor(z/2),...heading.map(quantize),quantize(sun.direct),soft?'s':'h'].join(',');
   const old=cached.get(source);
   if (old?.key===key) return old.mesh;
   const out=[];
@@ -71,6 +71,16 @@ export function contactShadowMesh({source,x,z,height},sun) {
     });
     for(let i=0;i<8;i++) {
       put(center,alpha);put(edge[i],0);put(edge[i+1],0);
+    }
+    // 软阴影：同中心再铺两层更大、更淡的伞面，边缘自然衰减。
+    if(soft) for(const [scale,strength] of [[1.42,.38],[1.95,.16]]){
+      const softEdge=ring.map(([u,v])=>{
+        const end=u*heading[0]+v*heading[2]<0 ? top : bottom;
+        return ground(cx+u*rx*scale-heading[0]*end,cz+v*rz*scale-heading[2]*end);
+      });
+      for(let i=0;i<8;i++){
+        put(center,alpha*strength);put(softEdge[i],0);put(softEdge[i+1],0);
+      }
     }
   }
   const mesh=new Float32Array(out);

@@ -49,6 +49,7 @@ test('B′-03 daylight casts a contact mesh, nighttime omits it and footprints a
   assert.ok(contactShadowMesh(geometry,evening)[0]>4.5);
   assert.ok(contactShadowMesh(geometry,noon).length>0);
   assert.equal(contactShadowMesh(geometry,night).length,0);
+    assert.equal(contactShadowMesh(geometry,morning,{soft:true}).length,3*24*MODEL_STRIDE); // soft shadow
   assert.deepEqual(collisionFootprint(source[0],16),footprint);
   assert.equal(source.length,1);
 });

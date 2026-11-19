@@ -612,6 +612,9 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
       shelter=max(shelter,smoothstep(-.05,.19,min(edge.x,edge.y)));
     }
     lit*=1.-shelter*.27;
+      // contact AO：竖直面靠近地面的一圈压暗，替代完整 SSAO 的接地感（不采样深度）。
+      float contactAO=(1.-smoothstep(0.,.75,vHeight))*smoothstep(.15,.8,1.-abs(vUp));
+      lit*=1.-.20*contactAO;
     float hardGround=uTexture || uRegionTexture || finish>0. || (color.r<color.g*1.2 && color.b>color.g*.7) ? 1. : .22;
     float wet=water<.5 ? uWetness*hardGround*(1.-shelter*.92)*(.26+.74*max(0.,vUp)) : 0.;
     lit*=1.-wet*.26;
@@ -981,7 +984,7 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded);
       if (physical && shadows) {
         const base=groundContactMesh(shadows);
-        const cast=sun?.direct ? contactShadowMesh(shadows,sun) : null;
+        const cast=sun?.direct ? contactShadowMesh(shadows,sun,{soft:true}) : null;
         gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(false);gl.uniform1i(uniform.Shadow,1);
         if (cast?.length) {

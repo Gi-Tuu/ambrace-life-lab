@@ -2,6 +2,13 @@
 
 ## [未发布]
 
+### 软阴影 + 接地 AO
+
+- contactShadowMesh 增加可选 soft 模式：同中心铺两层更大、更淡的伞面，渲染器使用；测试默认仍用硬影，避免改变足迹断言。
+- 场景 shader 增加竖直面近地的 contact AO（非屏幕空间 SSAO）；完整 SSAO 的深度纹理合成尝试因黑屏回滚，未计入。
+
+
+
 ### 电影化后处理第一档
 
 - 离屏 HDR 帧缓冲 + 单 pass bloom/ACES tone mapping/冷暗部暖高光分级/暗角/胶片颗粒；WebGL 不支持 FBO 时自动回退直绘。
