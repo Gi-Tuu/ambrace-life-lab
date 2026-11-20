@@ -1,110 +1,38 @@
 #!/usr/bin/env node
 // V7.3 第三批浏览器夹具：真实服务 + Chrome（CDP pipe），验证 busy HUD/取消按钮/幂等/账本。
 // 一条命令：node scripts/v73-busy-cancel-browser.mjs
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createCdpHarness } from './lib/cdp-harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'docs');
 mkdirSync(OUT, { recursive: true });
 const log = [];
 const note = (kind, data) => { log.push({ at: new Date().toISOString(), kind, ...data }); };
-const CHROME = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const PORT = 8500 + (process.pid % 300);
-const DATA = mkdtempSync(join(tmpdir(), 'v73-cancel-data-'));
-const PROFILE = mkdtempSync(join(tmpdir(), 'v73-cancel-chrome-'));
-let server, chrome, cdp;
-
-function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
-async function startServer() {
-  server = spawn(process.execPath, ['serve.mjs'], {
-    cwd: ROOT,
-    env: {
-      ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA,
-      SEED_FILE: join(ROOT, 'seed', 'world.json'), GAME_MODE: 'game', GAME_RULES: '1',
-      BRAIN: 'local', TICK_MS: '10000000', MODEL_UNATTENDED: '0', V73_TEST: '1',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let out = '';
-  server.stdout.on('data', (d) => { out += String(d); });
-  server.stderr.on('data', (d) => { out += String(d); });
-  for (let i = 0; i < 120 && !out.includes('就绪'); i += 1) await wait(150);
-  if (!out.includes('就绪')) throw new Error('服务未就绪：' + out.slice(0, 300));
-}
-
-function startChrome() {
-  chrome = spawn(CHROME, [
-    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-pipe', `--user-data-dir=${PROFILE}`, 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
-  const writeFd = chrome.stdio[3];
-  const readFd = chrome.stdio[4];
-  let buf = '';
-
-  function write(obj) {
-    // Chrome pipe 协议：每条 JSON 消息以 NUL 结尾。
-    writeFd.write(JSON.stringify(obj) + '\u0000');
-  }
-  function send(method, params = {}, sessionId) {
-    return new Promise((resolvePromise, reject) => {
-      const id = (send.seq = (send.seq ?? 0) + 1);
-      cdp.pending.set(id, { resolvePromise, reject });
-      write({ id, method, params, ...(sessionId ? { sessionId } : {}) });
-    });
-  }
-  cdp = { pending: new Map(), send };
-  readFd.on('data', (chunk) => {
-    buf += chunk.toString('utf8');
-    for (;;) {
-      const end = buf.indexOf('\u0000');
-      if (end < 0) return;
-      const raw = buf.slice(0, end);
-      buf = buf.slice(end + 1);
-      if (!raw.trim()) continue;
-      const msg = JSON.parse(raw);
-      const p = cdp.pending.get(msg.id);
-      if (p) { cdp.pending.delete(msg.id); msg.error ? p.reject(new Error(JSON.stringify(msg.error))) : p.resolvePromise(msg.result); }
-    }
-  });
-}
-
-async function evaluate(expression, sessionId) {
-  const r = await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }, sessionId);
-  if (r.exceptionDetails) throw new Error('JS 异常：' + r.exceptionDetails.text + ' ' + (r.result?.description ?? ''));
-  return r.result.value;
-}
-
-async function post(path, body) {
-  const r = await fetch(`http://127.0.0.1:${PORT}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  return { status: r.status, body: await r.json().catch(() => null) };
-}
-
-async function waitFor(fn, ms = 15000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    if (await fn()) return true;
-    await wait(200);
-  }
-  return false;
-}
+const h = createCdpHarness({
+  root: ROOT,
+  port: 8500 + (process.pid % 300),
+  dataPrefix: 'v73-cancel-data-',
+  profilePrefix: 'v73-cancel-chrome-',
+  chrome: 'fixed',
+  serverEnv: {
+    GAME_MODE: 'game', GAME_RULES: '1', BRAIN: 'local', TICK_MS: '10000000',
+    MODEL_UNATTENDED: '0', V73_TEST: '1',
+  },
+  waitMs: 15000,
+});
+const wait = h.wait;
+const post = (path, body) => h.post(path, body);
 
 try {
-  await startServer();
-  startChrome();
-  const target = await cdp.send('Target.createTarget', { url: 'about:blank' });
-  const attached = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
-  const sid = attached.sessionId;
-  await cdp.send('Page.enable', {}, sid);
-  await cdp.send('Runtime.enable', {}, sid);
-  await cdp.send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?room=hall` }, sid);
-  if (!(await waitFor(async () => Boolean(await evaluate('!!window.__lifeDebug', sid))))) throw new Error('页面未就绪');
+  await h.startServer();
+  h.startChrome();
+  const sid = await h.openPage({ url: `${h.origin}/?room=hall` });
+  if (!(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug', sid))))) throw new Error('页面未就绪');
   await wait(1200);
-  note('ready', { port: PORT, href: await evaluate('location.href', sid) });
+  note('ready', { port: h.port, href: await h.evaluate('location.href', sid) });
 
   // 受控夹具：院子工地 + 木石（V73_TEST=1）
   const fixture = await post('/ctl', { action: 'v73_fixture', confirm: true });
@@ -112,7 +40,7 @@ try {
   if (!fixture.body?.ok) throw new Error('夹具注入失败');
 
   // 真实动作消耗 35 分钟，再发起 30 分钟施工 ⇒ busy（剩 5 分钟）
-  const setup = await evaluate(`(async()=>{
+  const setup = await h.evaluate(`(async()=>{
     const rooms=['yard','hall','yard','hall','yard','hall','yard'];
     const moves=[];
     for (const room of rooms) moves.push(await fetch('/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'survival',kind:'move',room})}).then(r=>r.json()));
@@ -124,14 +52,14 @@ try {
 
   // 等页面刷新出 busy HUD（TICK_MS 很大，服务端状态稳定）
   await wait(1200);
-  const hud = await evaluate(`(()=>{const p=window.__lifeDebug.S.view?.player;return JSON.stringify({busy:p?.busy??null,hud:document.getElementById('playerHud')?.textContent??'',btn:!!document.getElementById('btnBusyCancel')})})()`, sid);
+  const hud = await h.evaluate(`(()=>{const p=window.__lifeDebug.S.view?.player;return JSON.stringify({busy:p?.busy??null,hud:document.getElementById('playerHud')?.textContent??'',btn:!!document.getElementById('btnBusyCancel')})})()`, sid);
   note('hud', JSON.parse(hud));
-  const h = JSON.parse(hud);
-  if (!h.busy || !h.btn) throw new Error('HUD 未出现忙态/取消按钮：' + hud);
-  if (!h.hud.includes('⏳ 动作') || !h.hud.includes('剩 5 分')) throw new Error('HUD 文案不对：' + h.hud);
+  const hudState = JSON.parse(hud);
+  if (!hudState.busy || !hudState.btn) throw new Error('HUD 未出现忙态/取消按钮：' + hud);
+  if (!hudState.hud.includes('⏳ 动作') || !hudState.hud.includes('剩 5 分')) throw new Error('HUD 文案不对：' + hudState.hud);
 
   // 点击取消按钮
-  await evaluate(`document.getElementById('btnBusyCancel').click()`, sid);
+  await h.evaluate(`document.getElementById('btnBusyCancel').click()`, sid);
   await wait(800);
   const after = await post('/ctl', { action: 'v73_state', confirm: true });
   note('afterCancel', after.body);
@@ -154,22 +82,15 @@ try {
   if ((finalState.body?.events ?? []).filter((e) => e.status === 'cancelled').length !== 1) throw new Error('事件重复结算');
   if (finalState.body?.progress !== 0) throw new Error('推进后补结算了成果');
 
-  const btnGone = await evaluate(`!document.getElementById('btnBusyCancel')`, sid);
+  const btnGone = await h.evaluate(`!document.getElementById('btnBusyCancel')`, sid);
   note('uiAfter', { btnGone });
   writeFileSync(join(OUT, 'v73-busy-cancel-browser.log'), log.map((x) => JSON.stringify(x)).join('\n') + '\n');
-  console.log(JSON.stringify({ ok: true, hud: h.hud, after: st, again: again.body, final: finalState.body }, null, 2));
+  console.log(JSON.stringify({ ok: true, hud: hudState.hud, after: st, again: again.body, final: finalState.body }, null, 2));
 } catch (error) {
   note('error', { message: String(error?.message ?? error) });
   writeFileSync(join(OUT, 'v73-busy-cancel-browser.log'), log.map((x) => JSON.stringify(x)).join('\n') + '\n');
   console.error('FAILED:', error?.message ?? error);
   process.exitCode = 1;
 } finally {
-  try { chrome?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await wait(400);
-  try { rmSync(DATA, { recursive: true, force: true }); } catch {}
-  try { rmSync(PROFILE, { recursive: true, force: true }); } catch {}
+  await h.close({ settleMs: 400, removeTemp: true });
 }
-
-
-

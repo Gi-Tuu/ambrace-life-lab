@@ -2,103 +2,40 @@
 // P2c 室内空间真实浏览器验收：用页面里的正式房间路径函数（roomSurface + moveRoomSurface）
 // 验证门 portal、墙/家具/越界拒绝，以及 animate 里 IPOS 的真实按键位移（不是 Node 复刻）。
 // 输出 evidence/redo-p2c/room-browser.log；不写真实存档。
-import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromeGate } from '../life/chrome-gate.mjs';
+import { createCdpHarness } from './lib/cdp-harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'evidence', 'redo-p2c', 'room-browser.log');
 mkdirSync(dirname(OUT), { recursive: true });
-const gate = chromeGate({ requireChrome: true });
-if (gate.fail || !gate.path) throw new Error(gate.reason ?? '找不到 Chrome');
-const CHROME = process.env.CHROME_PATH ?? gate.path;
-const PORT = 9100 + (process.pid % 90);
-const DATA = mkdtempSync(join(tmpdir(), 'p2c-room-data-'));
-const PROFILE = mkdtempSync(join(tmpdir(), 'p2c-room-chrome-'));
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let server, chrome, cdp;
+const h = createCdpHarness({
+  root: ROOT,
+  port: 9100 + (process.pid % 90),
+  dataPrefix: 'p2c-room-data-',
+  profilePrefix: 'p2c-room-chrome-',
+  serverEnv: {
+    GAME_MODE: 'game', GAME_RULES: '1', BRAIN: 'local', TICK_MS: '10000000',
+    MODEL_UNATTENDED: '0', V73_TEST: '1',
+  },
+});
 const lines = [];
 const note = (kind, data) => { lines.push({ at: new Date().toISOString(), kind, ...data }); };
-
-function startServer() {
-  server = spawn(process.execPath, ['serve.mjs'], {
-    cwd: ROOT,
-    env: {
-      ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA,
-      SEED_FILE: join(ROOT, 'seed', 'world.json'), GAME_MODE: 'game', GAME_RULES: '1',
-      BRAIN: 'local', TICK_MS: '10000000', MODEL_UNATTENDED: '0', V73_TEST: '1',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let out = '';
-  server.stdout.on('data', (d) => { out += String(d); });
-  server.stderr.on('data', (d) => { out += String(d); });
-  return { ready: async () => {
-    for (let i = 0; i < 120 && !out.includes('就绪'); i += 1) await wait(150);
-    if (!out.includes('就绪')) throw new Error('服务未就绪：' + out.slice(0, 300));
-  } };
-}
-
-function startChrome() {
-  chrome = spawn(CHROME, [
-    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-pipe', `--user-data-dir=${PROFILE}`, 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
-  const writeFd = chrome.stdio[3], readFd = chrome.stdio[4];
-  let buf = '';
-  cdp = { pending: new Map() };
-  cdp.send = (method, params = {}, sessionId) => new Promise((res, rej) => {
-    const id = (cdp.seq = (cdp.seq ?? 0) + 1);
-    cdp.pending.set(id, { res, rej });
-    writeFd.write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\u0000');
-  });
-  readFd.on('data', (chunk) => {
-    buf += chunk.toString('utf8');
-    for (;;) {
-      const end = buf.indexOf('\u0000');
-      if (end < 0) return;
-      const raw = buf.slice(0, end); buf = buf.slice(end + 1);
-      if (!raw.trim()) continue;
-      const msg = JSON.parse(raw);
-      const p = cdp.pending.get(msg.id);
-      if (p) { cdp.pending.delete(msg.id); msg.error ? p.rej(new Error(JSON.stringify(msg.error))) : p.res(msg.result); }
-    }
-  });
-}
-
-async function evaluate(expression, sessionId) {
-  const r = await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }, sessionId);
-  if (r.exceptionDetails) throw new Error('JS 异常：' + r.exceptionDetails.text + ' ' + (r.result?.description ?? ''));
-  return r.result.value;
-}
-async function waitFor(fn, ms = 20000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) { if (await fn()) return true; await wait(200); }
-  return false;
-}
 const assert = (cond, message) => { if (!cond) throw new Error(message); };
 
 try {
-  const srv = startServer();
-  await srv.ready();
-  startChrome();
-  const target = await cdp.send('Target.createTarget', { url: 'about:blank' });
-  const attached = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
-  const sid = attached.sessionId;
-  await cdp.send('Page.enable', {}, sid);
-  await cdp.send('Runtime.enable', {}, sid);
-  await cdp.send('Page.navigate', { url: `http://127.0.0.1:${PORT}/` }, sid);
-  assert(await waitFor(async () => Boolean(await evaluate('!!window.__lifeDebug', sid))), '页面未就绪');
-  await wait(1200);
-  assert(await waitFor(async () => !(await evaluate(`document.querySelector('#startSurvival')?.disabled ?? true`, sid))), '继续生存按钮一直禁用');
-  await evaluate(`document.querySelector('#startSurvival').click()`, sid);
-  assert(await waitFor(async () => await evaluate('window.__lifeDebug.S.playing === true', sid), 30000), '未进入游戏');
-  await wait(800);
+  await h.startServer();
+  h.startChrome();
+  const sid = await h.openPage({ url: `${h.origin}/` });
+  assert(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug', sid))), '页面未就绪');
+  await h.wait(1200);
+  assert(await h.waitFor(async () => !(await h.evaluate(`document.querySelector('#startSurvival')?.disabled ?? true`, sid))), '继续生存按钮一直禁用');
+  await h.evaluate(`document.querySelector('#startSurvival').click()`, sid);
+  assert(await h.waitFor(async () => await h.evaluate('window.__lifeDebug.S.playing === true', sid), 30000), '未进入游戏');
+  await h.wait(800);
 
-  const probe = await evaluate(`(()=>{
+  const probe = await h.evaluate(`(()=>{
     const d=window.__lifeDebug, s=d.roomSpaceFor('hall'), R=d.roomDoorWorld();
     const px=x=>x*16, py=z=>z*16;
     const wall=d.moveRoomSurface('hall', px(8), py(6), -px(8), 0);
@@ -125,12 +62,12 @@ try {
   assert(probe.doorMove.z >= 11.6 * 16 && probe.doorMove.z <= 12 * 16 + .5, `门口必须可到且不得越过 12×16，实测 z=${probe.doorMove.z}`);
 
   // 真实 animate 路径：把 ui.interior 设成 hall，按 A 向右（左）走，看 IPOS 真的动且不穿墙。
-  const before = await evaluate(`(()=>{const d=window.__lifeDebug;d.ui.interior='hall';d.ui.room='hall';d.IPOS.x=8*16-8;d.IPOS.y=8*16-16;return {x:d.IPOS.x,y:d.IPOS.y}})()`, sid);
-  await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',key:'a',bubbles:true}))`, sid);
-  await wait(700);
-  await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyA',key:'a',bubbles:true}))`, sid);
-  await wait(200);
-  const after = await evaluate(`(()=>{const d=window.__lifeDebug,s=d.roomSpaceFor('hall');const fx=(d.IPOS.x+8)/16,fz=(d.IPOS.y+16)/16;return {x:d.IPOS.x,y:d.IPOS.y,walkable:s.walkable(fx,fz,.33)}})()`, sid);
+  const before = await h.evaluate(`(()=>{const d=window.__lifeDebug;d.ui.interior='hall';d.ui.room='hall';d.IPOS.x=8*16-8;d.IPOS.y=8*16-16;return {x:d.IPOS.x,y:d.IPOS.y}})()`, sid);
+  await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',key:'a',bubbles:true}))`, sid);
+  await h.wait(700);
+  await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyA',key:'a',bubbles:true}))`, sid);
+  await h.wait(200);
+  const after = await h.evaluate(`(()=>{const d=window.__lifeDebug,s=d.roomSpaceFor('hall');const fx=(d.IPOS.x+8)/16,fz=(d.IPOS.y+16)/16;return {x:d.IPOS.x,y:d.IPOS.y,walkable:s.walkable(fx,fz,.33)}})()`, sid);
   note('keyboardWalk', { before, after });
   assert(after.x < before.x - 2, `按 A 后 IPOS.x 必须真实左移，实测 ${before.x}→${after.x}`);
   assert(after.walkable === true, '键盘走完的脚点必须仍在房间可走面上');
@@ -146,7 +83,5 @@ try {
   console.error(`[p2c-room] evidence: ${OUT}`);
   process.exitCode = 1;
 } finally {
-  try { chrome?.kill(); } catch { /* ignore */ }
-  try { server?.kill(); } catch { /* ignore */ }
-  await wait(300);
+  await h.close({ settleMs: 300 });
 }

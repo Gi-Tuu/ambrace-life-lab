@@ -1,0 +1,2 @@
+[p3-perf] PASS {"coldSurvival":{"first3d":852.2,"requests":52},"warmTitle":{"first3d":642.7,"requests":52},"coldTitle":{"first3d":820.1,"requests":46},"buildWorld":{"p50":261.4,"max":292.3,"rows":[{"mapSeed":7,"ms":261.4},{"mapSeed":123456,"ms":292.3},{"mapSeed":654321,"ms":254.1}]},"fps":{"place":"走廊 · 户外","frames":129,"fps":32.3,"p50ms":33.3,"p95ms":50,"maxMs":83.4,"longFrames50":5,"longFrames33":23},"clickToFirstFrame":{"ok":true,"clickAt":30025.2,"first3d":30708,"deltaMs":682.8,"place":"走廊 · 户外"}}
+[p3-perf] wrote E:\Competition\AMBRACElife\evidence\redo-p3\perf.json

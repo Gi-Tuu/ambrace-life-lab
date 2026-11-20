@@ -1,0 +1,105 @@
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 13:12] (9 lines, 73 tokens)
+   p3-perf-browser.mjs [16:1 - 24:12]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 13:35] (9 lines, 79 tokens)
+   quickstart-browser.mjs [7:1 - 15:35]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:43 - 13:6] (9 lines, 65 tokens)
+   redo-p0-golden.mjs [17:41 - 25:6]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [24:94 - 40:24] (17 lines, 165 tokens)
+   p3-perf-browser.mjs [35:24 - 51:24]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [26:1 - 38:58] (13 lines, 146 tokens)
+   v73-busy-cancel-browser.mjs [23:7 - 35:58]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [31:86 - 40:24] (10 lines, 101 tokens)
+   redo-p0-golden.mjs [48:50 - 57:24]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [38:35 - 77:15] (40 lines, 489 tokens)
+   quickstart-browser.mjs [40:35 - 80:15]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [42:5 - 76:2] (35 lines, 411 tokens)
+   redo-p0-golden.mjs [59:21 - 93:2]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [42:6 - 50:34] (9 lines, 58 tokens)
+   v73-busy-cancel-browser.mjs [37:89 - 45:34]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [50:43 - 55:39] (6 lines, 83 tokens)
+   v731-browser.mjs [43:36 - 48:39]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [52:30 - 72:15] (21 lines, 253 tokens)
+   p3-perf-browser.mjs [68:43 - 88:15]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [57:5 - 67:58] (11 lines, 125 tokens)
+   v73-busy-cancel-browser.mjs [60:37 - 71:58]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [58:9 - 72:36] (15 lines, 160 tokens)
+   v731-browser.mjs [51:6 - 64:36]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [67:107 - 77:15] (11 lines, 91 tokens)
+   v73-busy-cancel-browser.mjs [71:121 - 82:15]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [69:4 - 77:32] (9 lines, 88 tokens)
+   p3-perf-browser.mjs [100:17 - 109:32]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [77:1 - 86:21] (10 lines, 94 tokens)
+   quickstart-browser.mjs [88:1 - 97:21]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [86:19 - 95:14] (10 lines, 124 tokens)
+   quickstart-browser.mjs [98:87 - 107:14]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [86:18 - 93:66] (8 lines, 92 tokens)
+   v73-busy-cancel-browser.mjs [97:20 - 104:66]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [88:78 - 93:18] (6 lines, 63 tokens)
+   p3-perf-browser.mjs [138:35 - 143:18]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [88:3 - 93:18] (6 lines, 78 tokens)
+   redo-p0-golden.mjs [116:3 - 121:18]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [146:46 - 151:14] (6 lines, 38 tokens)
+   v731-browser.mjs [192:86 - 197:14]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [34:1 - 51:24] (18 lines, 193 tokens)
+   quickstart-browser.mjs [25:1 - 42:24]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [34:1 - 42:51] (9 lines, 85 tokens)
+   redo-p0-golden.mjs [40:1 - 48:51]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [106:24 - 115:6] (10 lines, 60 tokens)
+   redo-p0-golden.mjs [123:13 - 135:6]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [293:55 - 301:86] (9 lines, 34 tokens)
+   p3-perf-browser.mjs [306:49 - 314:86]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [293:55 - 301:60] (9 lines, 31 tokens)
+   p3-perf-browser.mjs [316:38 - 324:60]
+[1mClone found (javascript)[22m
+ - [1m[32mquickstart-browser.mjs[39m[22m [76:60 - 82:96] (7 lines, 69 tokens)
+   v73-busy-cancel-browser.mjs [78:60 - 83:153]
+[1mClone found (javascript)[22m
+ - [1m[32mquickstart-browser.mjs[39m[22m [76:60 - 82:96] (7 lines, 69 tokens)
+   v731-browser.mjs [66:52 - 70:153]
+[1mClone found (javascript)[22m
+ - [1m[32mquickstart-browser.mjs[39m[22m [87:82 - 92:2] (6 lines, 55 tokens)
+   v731-browser.mjs [74:73 - 79:2]
+[1mClone found (javascript)[22m
+ - [1m[32mv73-busy-cancel-browser.mjs[39m[22m [4:1 - 14:29] (11 lines, 101 tokens)
+   v731-browser.mjs [4:1 - 13:29]
+[1mClone found (javascript)[22m
+ - [1m[32mv73-busy-cancel-browser.mjs[39m[22m [89:14 - 100:8] (12 lines, 58 tokens)
+   v731-browser.mjs [77:14 - 85:8]
+[1mClone found (javascript)[22m
+ - [1m[32mv73-busy-cancel-browser.mjs[39m[22m [167:7 - 172:2] (6 lines, 72 tokens)
+   v731-browser.mjs [195:7 - 200:2]
+[90m┌────────────┬────────────────┬─────────────┬──────────────┬──────────────┬──────────────────┬───────────────────┐[39m
+[90m│[39m[31m Format     [39m[90m│[39m[31m Files analyzed [39m[90m│[39m[31m Total lines [39m[90m│[39m[31m Total tokens [39m[90m│[39m[31m Clones found [39m[90m│[39m[31m Duplicated lines [39m[90m│[39m[31m Duplicated tokens [39m[90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m javascript [90m│[39m 6              [90m│[39m 1402        [90m│[39m 14097        [90m│[39m 32           [90m│[39m 374 (26.68%)     [90m│[39m 3703 (26.27%)     [90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m [1mTotal:[22m     [90m│[39m 6              [90m│[39m 1402        [90m│[39m 14097        [90m│[39m 32           [90m│[39m 374 (26.68%)     [90m│[39m 3703 (26.27%)     [90m│[39m
+[90m└────────────┴────────────────┴─────────────┴──────────────┴──────────────┴──────────────────┴───────────────────┘[39m
+[90mFound 32 clones.[39m
+[90mtime: 31.732ms[39m

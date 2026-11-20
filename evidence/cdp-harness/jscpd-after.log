@@ -1,0 +1,48 @@
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 11:12] (7 lines, 57 tokens)
+   p3-perf-browser.mjs [16:1 - 22:12]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 11:35] (7 lines, 63 tokens)
+   quickstart-browser.mjs [7:1 - 13:35]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 11:6] (7 lines, 55 tokens)
+   redo-p0-golden.mjs [17:1 - 23:6]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 11:23] (7 lines, 61 tokens)
+   v73-busy-cancel-browser.mjs [4:1 - 10:23]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [5:1 - 11:23] (7 lines, 61 tokens)
+   v731-browser.mjs [4:1 - 10:23]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [17:36 - 23:6] (7 lines, 34 tokens)
+   quickstart-browser.mjs [21:38 - 27:6]
+[1mClone found (javascript)[22m
+ - [1m[32mp2c-room-browser.mjs[39m[22m [25:75 - 30:50] (6 lines, 31 tokens)
+   v73-busy-cancel-browser.mjs [27:48 - 32:50]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [136:39 - 142:62] (7 lines, 37 tokens)
+   p3-perf-browser.mjs [216:38 - 222:62]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [214:55 - 222:88] (9 lines, 52 tokens)
+   p3-perf-browser.mjs [227:49 - 235:88]
+[1mClone found (javascript)[22m
+ - [1m[32mp3-perf-browser.mjs[39m[22m [214:55 - 222:62] (9 lines, 49 tokens)
+   p3-perf-browser.mjs [237:38 - 245:62]
+[1mClone found (javascript)[22m
+ - [1m[32mredo-p0-golden.mjs[39m[22m [193:65 - 199:38] (7 lines, 35 tokens)
+   redo-p0-golden.mjs [211:64 - 217:38]
+[1mClone found (javascript)[22m
+ - [1m[32mv73-busy-cancel-browser.mjs[39m[22m [7:34 - 13:29] (7 lines, 58 tokens)
+   v731-browser.mjs [7:34 - 12:29]
+[1mClone found (javascript)[22m
+ - [1m[32mv73-busy-cancel-browser.mjs[39m[22m [27:47 - 34:14] (8 lines, 74 tokens)
+   v731-browser.mjs [30:72 - 37:14]
+[90m┌────────────┬────────────────┬─────────────┬──────────────┬──────────────┬──────────────────┬───────────────────┐[39m
+[90m│[39m[31m Format     [39m[90m│[39m[31m Files analyzed [39m[90m│[39m[31m Total lines [39m[90m│[39m[31m Total tokens [39m[90m│[39m[31m Clones found [39m[90m│[39m[31m Duplicated lines [39m[90m│[39m[31m Duplicated tokens [39m[90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m javascript [90m│[39m 6              [90m│[39m 976         [90m│[39m 9086         [90m│[39m 13           [90m│[39m 95 (9.73%)       [90m│[39m 667 (7.34%)       [90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m [1mTotal:[22m     [90m│[39m 6              [90m│[39m 976         [90m│[39m 9086         [90m│[39m 13           [90m│[39m 95 (9.73%)       [90m│[39m 667 (7.34%)       [90m│[39m
+[90m└────────────┴────────────────┴─────────────┴──────────────┴──────────────┴──────────────────┴───────────────────┘[39m
+[90mFound 13 clones.[39m
+[90mtime: 35.705ms[39m

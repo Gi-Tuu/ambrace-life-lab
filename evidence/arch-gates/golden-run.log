@@ -1,0 +1,151 @@
+✔ arch-gates 金样已写入 evidence/redo-p0/arch-gates.json
+{
+  "survival": {
+    "first3d": 971.4000000003725,
+    "longtasks": [
+      [
+        123,
+        159
+      ],
+      [
+        307,
+        666
+      ],
+      [
+        1000,
+        557
+      ]
+    ],
+    "resources": {
+      "count": 69,
+      "transferBytes": 2229503,
+      "encodedBytes": 2208803,
+      "assetCount": 23,
+      "pngCount": 20,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          35
+        ],
+        [
+          "/life/space.mjs",
+          26
+        ],
+        [
+          "/shared/room-layout.mjs",
+          25
+        ],
+        [
+          "/shared/camp-physics.mjs",
+          23
+        ],
+        [
+          "/shared/camp-scene.mjs",
+          23
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          22
+        ],
+        [
+          "/web/collision.mjs",
+          21
+        ],
+        [
+          "/shared/asset-collision.mjs",
+          21
+        ]
+      ]
+    }
+  },
+  "compare": {
+    "rendererA": "3d",
+    "rendererB": "3d"
+  },
+  "title": {
+    "first3d": 1101.5,
+    "resources": {
+      "count": 68,
+      "transferBytes": 458096,
+      "encodedBytes": 2062909,
+      "assetCount": 23,
+      "pngCount": 20,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          53
+        ],
+        [
+          "/life/space.mjs",
+          23
+        ],
+        [
+          "/shared/camp-physics.mjs",
+          21
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          21
+        ],
+        [
+          "/shared/room-layout.mjs",
+          21
+        ],
+        [
+          "/shared/camp-scene.mjs",
+          19
+        ],
+        [
+          "/web/collision.mjs",
+          18
+        ],
+        [
+          "/shared/asset-collision.mjs",
+          18
+        ]
+      ]
+    }
+  },
+  "cache": {
+    "/web/app.js": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"a32e7950dcfea28ce16c28aa9faa7c48\"",
+      "contentEncoding": null,
+      "bytes": 265427,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/manifest.json": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"9f82a3ad583ad23058b93934062e7956\"",
+      "contentEncoding": null,
+      "bytes": 1143,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/terrain_grass0.png": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+      "contentEncoding": null,
+      "bytes": 286,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/shared/camp-layout.mjs": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+      "contentEncoding": null,
+      "bytes": 5925,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "immutableProbe": {
+      "status": 200,
+      "cacheControl": "public, max-age=31536000, immutable"
+    }
+  }
+}
