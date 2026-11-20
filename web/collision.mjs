@@ -1,65 +1,37 @@
 import { astar, isWalkable } from './walk.mjs';
 import { pixelPath } from '../shared/asset-collision.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
-import { ROOM_BOUNDS, ROOM_GRID } from '../shared/room-layout.mjs';
+import { ROOM_GRID } from '../shared/room-layout.mjs';
 
 export const COLLISION_CELL = 1;
-export { ROOM_BOUNDS, ROOM_GRID };
+export { ROOM_GRID };
 
 export function collisionIndex(grid, x, y) {
   if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return -1;
   return Math.floor(y / grid.cell) * (grid.width / grid.cell) + Math.floor(x / grid.cell);
 }
 
-export function roomAllows(cells, x, y, pixels, bounds = ROOM_BOUNDS) {
-  const { left, right, top, bottom } = bounds;
-  if (x < left || x > right || y < top || y > bottom) return false;
-  const index = roomPixel(x, y, bounds);
-  return pixels?.[index] !== 0 && cells.get(index) !== 0;
-}
-
-function roomPixel(x, y, bounds) {
-  return Math.min(Math.floor(y), bounds.bottom - 1) * ROOM_GRID.width +
-    Math.min(Math.floor(x), bounds.right - 1);
-}
-
-export function moveRoomFeet(cells, x, y, dx, dy, pixels, fits, bounds = ROOM_BOUNDS) {
-  const initial = roomPixel(x, y, bounds);
-  const clear = (px, py) => (!fits || fits(x,y,px,py)) &&
-    (roomAllows(cells,px,py,pixels,bounds) || roomPixel(px,py,bounds)===initial);
-  const steps = pixels || cells.size ? Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)))) : 1;
-  for (let i = 0; i < steps; i += 1) {
-    const nextX = Math.max(bounds.left, Math.min(bounds.right, x + dx / steps));
-    const nextY = Math.max(bounds.top, Math.min(bounds.bottom, y + dy / steps));
-    if (clear(nextX, y)) x = nextX;
-    if (clear(x, nextY)) y = nextY;
-  }
-  return [x, y];
-}
-
-// 行走器仍使用 16px 地图坐标。细网格把同一脚点换算到逐像素网格。
+// 行走器仍使用 16px 地图坐标。寻路索引把同一脚点换算到逐像素网格。
 const mapCell = (point, scale) => Math.floor((point + 0.5) * scale);
 const mapCenter = (index, scale) => (index + 0.5) / scale - 0.5;
 
+// P4：可走性只有一个答案 —— world.space（地形链 + collidersNear + 体半径）。
+// 像素栅格降级为寻路索引（world.pathGrid），不再参与“能不能站”的裁决，也没有第二套回退。
 export function mapAllows(world, x, y) {
-  // P2：一个碰撞查询（life/space.mjs）；world.space 缺失时回退旧像素栅格。
-  if (world.space) return world.space.walkable(x + 0.5, y + 0.5, CAMP_BODY_RADIUS);
-  const grid = world.collisionGrid ?? world;
-  const scale = grid.tw / world.tw;
-  return isWalkable(grid, mapCell(x, scale), mapCell(y, scale));
+  const space = world?.space;
+  if (!space) return false; // 正式世界必有 space；缺失是构造错误，宁可站住也不回退另一套几何
+  return space.walkable(x + 0.5, y + 0.5, CAMP_BODY_RADIUS);
 }
 
 export function moveMapFeet(world, x, y, dx, dy, fits) {
-  const grid = world.collisionGrid ?? world;
-  const scale = grid.tw / world.tw;
+  const index = world.pathGrid ?? world;
+  const scale = index.tw / world.tw;
   const startX = mapCell(x, scale), startY = mapCell(y, scale);
   const clear = (px, py) => {
     const tx = mapCell(px, scale), ty = mapCell(py, scale);
-    const escape = tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < grid.tw && ty < grid.th;
-    // P2：逐轴分步仍保留；可走性改由 space 统一回答（含体半径）；起始格豁免保留编辑期逃生。
-    const walkable = world.space
-      ? world.space.walkable(px + 0.5, py + 0.5, CAMP_BODY_RADIUS)
-      : isWalkable(grid, tx, ty);
+    const escape = tx === startX && ty === startY && tx >= 0 && ty >= 0 && tx < index.tw && ty < index.th;
+    // 逐轴分步保留（防穿角）；可走性由 space 统一回答（含体半径），起始格豁免保留编辑期逃生。
+    const walkable = Boolean(world.space) && world.space.walkable(px + 0.5, py + 0.5, CAMP_BODY_RADIUS);
     return (!fits || fits(x, y, px, py)) && (walkable || escape);
   };
   const steps = scale > 2 ? Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * scale)) : 1;
@@ -71,7 +43,7 @@ export function moveMapFeet(world, x, y, dx, dy, fits) {
 }
 
 export function pathFromWalker(world, walker, goal) {
-  const grid = world.collisionGrid ?? world;
+  const grid = world.pathGrid ?? world;
   const scale = grid.tw / world.tw;
   // 细网格（像素级）下逐像素 A* 太慢且易失败 ⇒ 采样回 tile 级走格寻路（点击移动/引擎挪人共用）
   if (scale > 2) {

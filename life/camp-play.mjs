@@ -15,10 +15,8 @@ import { campStaticPrecheck } from './camp-precheck.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
 import { roomContains } from './space.mjs';
-// P2：房间区域改成显式世界单位（16×12）判定；SPACE_V1=0 回退旧的隐式 16.01/12.01 判据。
-const roomPoint = (p) => process.env.SPACE_V1 === '0'
-  ? pointIn(p,16.01,12.01)
-  : roomContains(p[0],p[1]);
+// P4：房间区域只有显式世界单位（16×12）判定；旧的隐式 16.01/12.01 回退开关已退役。
+const roomPoint = (p) => roomContains(p[0],p[1]);
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],

@@ -1,16 +1,21 @@
-// P2 第一刀：唯一世界空间查询（纯模块，Node / 浏览器同构）。
+// P2/P4：唯一世界空间查询（纯模块，Node / 浏览器同构）。
 //
 // 原则：1 世界单位 = 1 tile = 16 像素；本模块不画图、不读 DOM、不持有时钟。
-// 输入是现有几何的**适配器**（camp stage/floors + wild-landscape），不是重写：
-//   · 营地地面：campTerrain 的河道 + hash2 岸线噪声（与 web/app.js terrainKinds 同一条公式）；
-//   · 桥：campBridgeBounds（与客户端 bridgeCells 同一条）；桥面高度来自 stage.floors；
+// 正式游戏里 heightAt / walkable / collidersNear / portalAt 只有这一个来源，没有运行时开关：
+//   · 地形高度：campTerrain + wild-landscape 的 joined 高度链（村内地面与野外同一条），
+//     客户端 buildWorld 与刷新后的服务端用的是同一份 content.landscape；
+//   · stage.floors 只注册“可站表面/建筑地板”（桥面、连廊、房间地板），不再是第二个地形高度源；
+//     组合规则唯一：max(0, 地形链高度, 已注册表面高度) —— 村内/野外同一公式，见 campSurface.heightAt
+//     与 createSpace.heightAt；
+//   · 营地地面分类：campTerrain 的河道 + hash2 岸线噪声（与 web/app.js terrainKinds 同一条公式）；
+//   · 桥：campBridgeBounds（与客户端 bridgeCells 同一条）；桥面是 stage.floors 里的可站表面；
 //   · 碰撞：stage.boxes.filter(solid) 的 AABB（含 bounds，旋转件也走 modelBounds）；
-//   · 高度：stage.floors（floorContains），房间地板显式 0；
+//   · 房间：显式 16×12 体积 + 唯一门 portal（roomSurface），室内移动只走它；
 //   · 门户：stage.entrances（campEntrance）+ 桥带；房间区域显式 16×12，不再靠隐式 /16 判位置。
 //
-// 服务端 construction-access 与客户端玩家移动都走这里；旧实现保留为 fallback 开关：
-//   · 服务端 env SPACE_V1=0；客户端 ?space=legacy 或 globalThis.__SPACE_LEGACY__=true。
-import { campTerrain, floorHeight, hash2 } from '../shared/camp-terrain.mjs';
+// 退役的旧实现（服务端旧地面回退谓词、客户端每帧包裹像素栅格的体半径包装、房间像素行走）
+// 只在 life/research-space.mjs 里作为研究夹具保留，正式模块不得 import 它们。
+import { campTerrain, floorHeight, floorSurface, hash2 } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { modelBounds } from '../shared/camp-geometry.mjs';
 import { inCamp } from '../shared/wild-landscape.mjs';
@@ -67,7 +72,7 @@ export const worldToRoom = (p) => ({ x: p.x * PIXELS_PER_UNIT, z: p.z * PIXELS_P
 
 /**
  * 房间空间：16×12 世界单位，门是唯一出路。
- * walkable 复刻旧 roomBodyFits：可行走矩形按身体半径收缩；门宽范围允许脚点贴到底边。
+ * walkable 复刻旧室内贴合判定：可行走矩形按身体半径收缩；门宽范围允许脚点贴到底边。
  * @param {{room?:string, stage?:object, bounds?:object, door?:object, extraSolids?:Array}} spec
  */
 export function roomSurface({ room = null, stage = null, bounds = null, door = null, extraSolids = [] } = {}) {
@@ -83,7 +88,7 @@ export function roomSurface({ room = null, stage = null, bounds = null, door = n
   function walkable(x, z, r = 0) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
     const radius = Number.isFinite(r) ? Math.max(0, r) : 0;
-    // 门只放宽"脚点贴到底边"（旧 roomBodyFits 的口径），绝不放宽到 16×12 之外。
+    // 门只放宽"脚点贴到底边"（旧室内贴合判定的口径），绝不放宽到 16×12 之外。
     if (z > b.bottom + 1e-9) return false;
     const left = x - radius, right = x + radius;
     const top = z - radius;
@@ -177,12 +182,13 @@ function nearColliders(index, colliders, x, z, radius = 0) {
  * @param {number} spec.layoutVersion
  * @param {object|null} spec.layout   camp layout（提供 crossZ）
  * @param {object|null} spec.stage    outdoorStage()/roomStage() 结果（boxes/floors/entrances）
+ * @param {{height?:Function}|null} [spec.terrain] 地形链（camp-outskirts/wild-landscape）；缺省时只有 stage 表面
  * @param {number} [spec.raised]      campTerrain 的 raised（营地= true）
  * @param {Array}  [spec.bridges]     campBridgeBounds 结果数组；缺省按 layout.crossZ ±1
  * @param {Array}  [spec.extraSolids] 额外 AABB
  */
 export function campSurface({ mapSeed = 0, layoutVersion = 0, layout = null, stage = null,
-  raised = true, bridges = null, extraSolids = [] } = {}) {
+  terrain = null, raised = true, bridges = null, extraSolids = [] } = {}) {
   const { riverCenter, riverHalfWidth } = campTerrain(mapSeed, raised, layoutVersion);
   const crossing = layout?.crossZ ?? 24;
   const bridgeList = bridges ?? (layout
@@ -233,10 +239,19 @@ export function campSurface({ mapSeed = 0, layoutVersion = 0, layout = null, sta
   const floors = stage?.floors ?? [];
 
   return Object.freeze({
-    crossing, raised, bridgeList, portals, colliders,
+    crossing, raised, bridgeList, portals, colliders, floors,
     classify,
     terrainAllows,
-    heightAt: (x, z) => floorHeight(floors, x, z),
+    // 已注册的可站表面/建筑地板（桥面、连廊、房间地板）。只回答“表面比地面高多少”，
+    // 不当地形基座：地图地坪由 terrain 链给。
+    surfaceHeight: (x, z) => floorHeight(floors, x, z),
+    // 唯一高度组合（村内/野外同一公式）：max(0, 地形链, 已注册表面)。
+    // 0 是地面基准面：河床/洼地的负高度不参与脚底高度，避免村内与野外出现两套口径。
+    // 没有 terrain 时只剩表面（纯几何单测；正式路径必须给 terrain）。
+    heightAt: (x, z) => {
+      const base = terrain?.height?.(x, z) ?? 0;
+      return Math.max(0, base, floorSurface(floors, x, z) ?? 0);
+    },
     collidersNear: (x, z, r = 0) => nearColliders(index, colliders, x, z, r),
     portalAt(x, z, r = 0) {
       return portals.find((p) => rectGap(x, z, p.rect) <= Math.max(0, r)) ?? null;
@@ -261,9 +276,10 @@ export function wildSurface(landscape, { crossing = 24, solids = [], height = nu
 
 /**
  * 唯一空间查询。camp 负责营地矩形内；wild 负责矩形外；rooms 是显式室内空间工厂。
- * @param {{camp?:object|null,wild?:object|null,crossing?:number,rooms?:object|Function|null}} spec
+ * terrain 是唯一地形链（camp-outskirts/wild-landscape 的 joined 高度）；camp/wild 必须由它派生。
+ * @param {{camp?:object|null,wild?:object|null,terrain?:object|null,crossing?:number,rooms?:object|Function|null}} spec
  */
-export function createSpace({ camp = null, wild = null, crossing = null, rooms = null } = {}) {
+export function createSpace({ camp = null, wild = null, terrain = null, crossing = null, rooms = null } = {}) {
   const colliders = [...(camp?.colliders ?? []), ...(wild?.colliders ?? [])];
   const index = indexColliders(colliders);
   const cross = crossing ?? camp?.crossing ?? wild?.crossing ?? 24;
@@ -286,7 +302,9 @@ export function createSpace({ camp = null, wild = null, crossing = null, rooms =
   }
   function heightAt(x, z) {
     if (isCamp(x, z)) return camp.heightAt(x, z);
-    return wild?.height?.(x, z) ?? 0;
+    // 野外与营地同一条公式：max(0, 地形链)。野外没有可站表面，只叠地面基准面。
+    const base = wild?.height ? wild.height(x, z) : (terrain?.height?.(x, z) ?? 0);
+    return Math.max(0, base);
   }
   // 房间仍是区域：显式给 room 时用房间地板高度（0），不再靠 /16 反推。
   function roomHeightAt(x, z, room) {
@@ -316,7 +334,7 @@ export function createSpace({ camp = null, wild = null, crossing = null, rooms =
   }
   return Object.freeze({
     crossing: cross,
-    camp, wild,
+    camp, wild, terrain,
     colliders,
     walkable, heightAt, roomHeightAt, roomPortal, collidersNear, portalAt, surface, terrainWalkable,
     roomSpace, roomContains,

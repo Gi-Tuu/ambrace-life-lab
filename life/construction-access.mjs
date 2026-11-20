@@ -1,16 +1,13 @@
 import { campEntrance, campSite } from '../shared/camp-interaction.mjs';
-import { campBridgeBounds, TOWN_SIZE, overlapsLot, HOUSING_PLOTS, residentialSite } from '../shared/camp-layout.mjs';
-import { campTerrain } from '../shared/camp-terrain.mjs';
-import { districtPads } from '../shared/camp-districts.mjs';
-import { outdoorStage, roomStage, homeStyle, timberStage } from '../shared/camp-scene.mjs';
+import { overlapsLot, HOUSING_PLOTS, residentialSite } from '../shared/camp-layout.mjs';
+import { roomStage, homeStyle, timberStage } from '../shared/camp-scene.mjs';
 import { facilityGate, facilityOf } from '../shared/camp-facility.mjs';
 import { hallFrontGeometry, roomPropsPx, ROOM_DOOR_WORLD } from '../shared/room-layout.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
-import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { campSurface, createSpace, roomSurface, wildSurface } from './space.mjs';
-import { campSceneContent, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
+import { campSceneBundle, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
@@ -23,8 +20,9 @@ export function siteRecord(w, loc, type, lot = constructionFootprint(loc,w.campL
 }
 
 const sceneCache = new WeakMap();
-// P2b：服务端 stage 与客户端 buildWorld 用同一份内容生成器。无 campLayout 的旧世界（layout 0）
-// 也走这里，供空间一致性闸门与只读查询使用；施工可达性仍只对 constructionAccessEnabled 生效。
+// P2b/P4：服务端 stage 与客户端 buildWorld 用同一份内容生成器（campSceneBundle：同一输入→同一 stage）。
+// 无 campLayout 的旧世界（layout 0）也走这里，供空间一致性闸门与只读查询使用；
+// 施工可达性仍只对 constructionAccessEnabled 生效。
 function sceneGeometry(w) {
   const layout = w.campLayout ?? null;
   let g = sceneCache.get(w);
@@ -33,38 +31,34 @@ function sceneGeometry(w) {
     .map(loc => [loc,campSite(loc,layout)]));
   const liveSites = campSitesOf({ rooms:w.locs, districts:w.districts, layout, peripheralHomes:w.peripheralHomes });
   const sites = staticCampSites(liveSites, w.districts, w.peripheralHomes);
-  const content = campSceneContent({
+  const { content, stage } = campSceneBundle({
     mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout,
     camp:true, timber:true, sites,
     districts:w.districts, peripheralHomes:w.peripheralHomes,
     households:w.survival?.households, homeRoads:w.survival?.homeRoads,
   });
-  const stage = outdoorStage({
-    tw:TOWN_SIZE.width, th:TOWN_SIZE.depth, sites,
-    trees:content.trees, grass:[], hills:content.landscape ? [] : content.hills,
-    height:content.landscape?.height, layoutSeed:layout ? w.mapSeed : null,
-  }, content.bridges, content.rocks);
   g = { layout, districts:w.districts, landmarks, sites, content, stage };
   sceneCache.set(w,g);
   return g;
 }
 
-// 只读空间查询（含无 campLayout 的世界）：与客户端 world.space 同一份 stage/floors。
+// 只读空间查询（含无 campLayout 的世界）：与客户端 world.space 同一份 stage + 同一条地形高度链。
 // 按世界缓存：playerReach 每次上报都会问它，不能每次重建 wildLandscape。
 const spaceCache = new WeakMap();
 export function sceneSpace(w) {
   if (!w?.survival) return null;
   const hit = spaceCache.get(w);
-  if (hit && hit.layout === (w.campLayout ?? null) && hit.districts === w.districts) return hit.space;
+  const layout = w.campLayout ?? null;
+  if (hit && hit.layout === layout && hit.districts === w.districts) return hit.space;
   const g = sceneGeometry(w);
-  const layout = g.layout;
-  const pads = districtPads(w.districts);
-  const terrain = wildLandscape(w.mapSeed,w.layoutVersion,{joined:true,flats:pads,clearing:pads});
+  // 地形链只有一条：营地内与野外都由 campSceneContent 生成的同一份 content.landscape 回答。
+  const terrain = g.content.landscape;
   const space = createSpace({
-    camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage }),
+    camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain }),
     wild: wildSurface(terrain, { crossing:layout?.crossZ ?? 24 }),
+    terrain,
   });
-  spaceCache.set(w, { layout: layout ?? null, districts: w.districts, space });
+  spaceCache.set(w, { layout, districts: w.districts, space });
   return space;
 }
 
@@ -75,21 +69,7 @@ function mapFor(w) {
   if (!map || map.layout !== layout || map.districts !== w.districts) {
     const g = sceneGeometry(w);
     const { landmarks, stage } = g;
-    const {riverCenter,riverHalfWidth} = campTerrain(w.mapSeed,true,w.layoutVersion);
-    const bridge = campBridgeBounds(layout.crossZ-1, layout.crossZ+1, riverCenter, riverHalfWidth);
-    const [x,z,X,Z] = bridge;
-    const ground = (px,pz) => px>=x && px<=X && pz>=z && pz<=Z ||
-      Math.abs(px-riverCenter(pz*16)/16) > riverHalfWidth(pz*16)/16;
-    const pads = districtPads(w.districts);
-    const terrain = wildLandscape(w.mapSeed,w.layoutVersion,{joined:true,flats:pads,clearing:pads});
-    const anchor = [landmarks.hall[0]+.5,landmarks.hall[1]+2.7];
-    // P2：服务端与客户端共用同一套空间查询；旧 ground 保留给 SPACE_V1=0 fallback。
-    // P2b：campSurface 的桥默认值必须与客户端一致（无 layout 时不带桥；有 layout 时用 crossZ ±1）。
-    const space = createSpace({
-      camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion, layout, stage }),
-      wild: wildSurface(terrain, { crossing:layout.crossZ }),
-    });
-    map = { layout,districts:w.districts,anchor,ground,terrain,space,
+    map = { layout,districts:w.districts,anchor:[landmarks.hall[0]+.5,landmarks.hall[1]+2.7],
       fixed:stage.boxes.filter(b=>b.solid), entries:Object.values(stage.entrances), results:new Map() };
     cache.set(w,map);
   }
@@ -108,15 +88,14 @@ function mapFor(w) {
   return map;
 }
 
-// P2 开关：默认走 space；SPACE_V1=0 恢复旧的“营地解析河 + 村外 wildLandscape”两套谓词。
-export const spaceQueriesEnabled = () => process.env.SPACE_V1 !== '0';
+// P4：地面谓词只有 space 一处。旧的“解析河 + 村外 wildLandscape”双谓词回退已退役
+// （只在 life/research-space.mjs 作为研究夹具保留），正式路径没有运行时开关。
 export function constructionSpace(w) {
-  return constructionAccessEnabled(w) ? mapFor(w).space : null;
+  return constructionAccessEnabled(w) ? sceneSpace(w) : null;
 }
-function groundQuery(w, map) {
-  return spaceQueriesEnabled()
-    ? (x, z) => map.space.walkable(x, z, 0)
-    : (x, z) => inCamp(x, z) ? map.ground(x, z) : map.terrain.walkable(x, z, w.campLayout.crossZ);
+function groundQuery(w) {
+  const space = constructionSpace(w);
+  return (x, z) => Boolean(space) && space.walkable(x, z, 0);
 }
 
 // P2c：房间是显式 16×12 世界空间；服务端与客户端用同一份 roomStage/家具规格。
@@ -167,7 +146,7 @@ export function constructionAccess(w, record, { proposed = false, from, entrance
   const others = map.records.filter(b=>b.loc!==record.loc || b.type!==record.type);
   const fixed = map.solids;
   const occupied = others.map(b=>b.lot);
-  const ground = groundQuery(w, map);
+  const ground = groundQuery(w);
   const clearOutside = (x,z) => ground(x,z) && clearOfLots(fixed,x,z) && clearOfLots(occupied,x,z);
   const allows = (x,z) => clearOutside(x,z) && clearOfLots([record.lot],x,z);
   const key = JSON.stringify([record,proposed]);
@@ -257,7 +236,7 @@ export function residentConstructionAccess(w, id, record) {
   const finishedHome = record.type==='house' && w.survival.households?.deeds[record.loc];
   const destination = finishedHome ? site.entryPoint : site.workPoint;
   const lots = map.records.map(b=>b.lot).concat(record.lot);
-  const allows = (x,z) => groundQuery(w,map)(x,z) &&
+  const allows = (x,z) => groundQuery(w)(x,z) &&
     clearOfLots(lots,x,z) && clearOfLots(map.solids,x,z);
   const starts = [from,...(gate ? entrancePoints(gate) : [])].filter(p=>p && allows(...p));
   // A logical indoor location has no outdoor foot position; its exit is the start of the route.

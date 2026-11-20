@@ -17,7 +17,7 @@ import { campBeds, CAMP_SITES, campPlants } from './camp-interaction.mjs';
 import { districtPads } from './camp-districts.mjs';
 import { createCampOutskirts } from './camp-outskirts.mjs';
 import { forestDensity } from './wild-landscape.mjs';
-import { penLayout } from './camp-scene.mjs';
+import { outdoorStage, penLayout } from './camp-scene.mjs';
 
 export const TILE = 16;
 export const WORLD_TW = TOWN_SIZE.width;
@@ -250,4 +250,20 @@ export function campSceneContent({
     river, streamCenter, streamHalfWidth,
     helpers: { onRoad, onRiver, byBridge, nearSite, nearLot, nearGrove, onFarm, inPen, highGround, terrainHash },
   };
+}
+
+/**
+ * 正式营地几何的唯一入口：同一份输入 → 同一份 content + stage。
+ * 客户端 buildWorld 与服务端 construction-access 都只调这里；两边再各自与同一份
+ * content.landscape 组合出 space（地形高度链 + stage 可站表面），因此“输入/结果”只有一个版本。
+ * @param {Parameters<typeof campSceneContent>[0]} spec 与 campSceneContent 完全同一组参数
+ */
+export function campSceneBundle(spec = {}) {
+  const content = campSceneContent(spec);
+  const stage = outdoorStage({
+    tw: TOWN_SIZE.width, th: TOWN_SIZE.depth, sites: spec.sites ?? {},
+    trees: content.trees, grass: [], hills: content.landscape ? [] : content.hills,
+    height: content.landscape?.height, layoutSeed: spec.layout ? (spec.mapSeed ?? 0) : null,
+  }, content.bridges, content.rocks);
+  return { content, stage };
 }

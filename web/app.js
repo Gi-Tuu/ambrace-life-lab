@@ -16,28 +16,28 @@ import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CA
 import { floorContains, hash2 } from '../shared/camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, residentialSite, HOUSING_PLOTS, TOWN_SIZE } from '../shared/camp-layout.mjs';
-import { campSitesOf, staticCampSites, campSceneContent, tileKey } from '../shared/camp-scene-content.mjs';
+import { campSceneBundle, campSitesOf, staticCampSites, tileKey } from '../shared/camp-scene-content.mjs';
 import { CONSTRUCTION_CODES, CONSTRUCTION_REACH } from '../shared/camp-construction-access.mjs';
 import * as audio from './audio.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
 // 之前浏览器自己跑一套 sim，关标签页就归零 —— 那等于当面推翻「内部状态持续存在」这个主张。
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
-import { TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
+import { TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
 import { postJson, persistNotices, setCampProvider } from './net.mjs';
 
 
 import {
-  COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
-  overrideWalk, pathFromWalker, roomAllows,
+  COLLISION_CELL, ROOM_GRID, mapAllows, moveMapFeet,
+  overrideWalk, pathFromWalker,
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
-import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
+import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
-import { CAMP_BODY_RADIUS, bodyGrid, separates } from '../shared/camp-physics.mjs';
+import { bodyGrid, CAMP_BODY_RADIUS, separates } from '../shared/camp-physics.mjs';
 import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD } from '../shared/room-layout.mjs';
-import { campSurface, createSpace, roomSurface, unitsForRealMs } from '../life/space.mjs';
+import { campSurface, createSpace, roomSurface, unitsForRealMs, wildSurface } from '../life/space.mjs';
 
 // P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
 // 隐私模式写不进 localStorage 时，首轮重定向之后的轮询仍然带得上 camp。
@@ -48,12 +48,8 @@ const urlCampKey = (() => {
   } catch { return null; }
 })();
 let campKeyNow = urlCampKey ?? (() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } })();
-// P2 fallback：默认走 space；URL space=legacy 或宿主注入 __SPACE_LEGACY__ 时回到旧像素栅格/旧速度钳。
-const SPACE_LEGACY = (() => {
-  try {
-    return new URLSearchParams(location.search).get('space') === 'legacy' || globalThis.__SPACE_LEGACY__ === true;
-  } catch { return false; }
-})();
+// P4：客户端只有一个空间来源 —— buildWorld 的 world.space（life/space.mjs）。
+// 旧的 URL/宿主注入回退开关已删除；退役实现只在 life/research-space.mjs 作为研究夹具保留。
 setCampProvider(() => campKeyNow);
 function setCampKey(key) {
   campKeyNow = key || null;
@@ -316,6 +312,12 @@ function campOutskirts(w, world) {
   }
   return terrain;
 }
+// P4：室外脚底/地面高度只有一个入口 —— world.space.heightAt（地形链 + 已注册可站表面）。
+// 旧写法是它的逐项展开（营地内 max(stage.heightAt, landscape.height)，营地外 landscape.height），
+// 数值逐位相同；保留唯一入口后，视觉、拾取与碰撞不会再各算一套。
+function groundHeightOf(world,x,z) {
+  return world?.space ? world.space.heightAt(x,z) : 0;
+}
 function terrainPixels() {
   if (worldCache.terrainWalk3d) return worldCache.terrainWalk3d;
   return worldCache.terrainPixels ??= expandWalk(worldCache.movementWalk, WORLD_TW, TILE);
@@ -383,9 +385,12 @@ function worldWithCollisions(sites, w) {
   if (worldCache.collisionRevision !== collisionEditor.revision) {
     const cells = worldCache.mapSeed ? new Map() : collisionEditor.cells('map');
     const base = worldCache.pixelBase ?? (cells.size ? terrainPixels() : null);
-    worldCache.collisionGrid = base ? {
+    const grid = base ? {
       tw: WORLD_W, th: WORLD_H, walk: overrideWalk(base, cells, worldCache.assetPixels),
     } : null;
+    // P4：像素栅格降级为**寻路索引** world.pathGrid —— 构建期按身体半径膨胀一次。
+    // 它只回答“A* 走哪”，不再回答“能不能站”：后者唯一问 world.space。
+    worldCache.pathGrid = grid ? bodyGrid(grid, TILE) : null;
     worldCache.collisionRevision = collisionEditor.revision;
   }
   const { scene3d, lifeLayers } = worldCache;
@@ -439,9 +444,10 @@ function buildWorld(w) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
   }
-  // P2b：树/岩/山丘/桥与地形/植被输入的**唯一生成器**（shared/camp-scene-content.mjs）。
-  // 服务端 construction-access 用同源参数调用同一函数，stage 几何因此逐位一致。
-  const content = campSceneContent({
+  // P2b/P4：树/岩/山丘/桥与地形/植被输入的**唯一生成器**（shared/camp-scene-content.mjs）。
+  // campSceneBundle 同时给出 content 与 stage；服务端 construction-access 用同一函数、同一组输入，
+  // 所以两边拿到的是同一份 stage/floors，不存在第二套几何。
+  const { content, stage: scene3d } = campSceneBundle({
     mapSeed, layoutVersion:w.layoutVersion??0, layout:w.layout,
     camp:w.camp, timber:Boolean(w.camp?.timber), sites:staticSites,
     districts:w.districts, peripheralHomes:w.peripheralHomes,
@@ -524,20 +530,14 @@ function buildWorld(w) {
     walk[index] = Number(traversable && !blockers.has(key));
     movementWalk[index] = Number(traversable && !movementBlockers.has(key));
   }
-  const scene3d = outdoorStage({ tw: WORLD_TW, th: WORLD_TH, sites, trees, grass:landscape?[]:grass, hills:landscape?[]:hills, height:landscape?.height, layoutSeed:w.layout?mapSeed:null }, bridges, rocks);
-  // P2：客户端玩家移动的碰撞查询走 life/space.mjs；几何仍来自本函数的 stage/floors（不重写渲染）。
-  // 旧分支保留：?space=legacy 或 globalThis.__SPACE_LEGACY__=true 时 space=null，所有调用点回退旧栅格。
-  let space=null;
-  if (!SPACE_LEGACY && w.camp) {
-    try {
-      const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,raised:Boolean(w.camp)});
-      const crossing=w.layout?.crossZ??24;
-      space=createSpace({camp,wild:{
-        walkable:(x,z)=>Boolean(landscape?.walkable(x,z,crossing)),
-        height:(x,z)=>landscape?.height(x,z)??0,
-      }});
-    } catch { space=null; }
-  }
+  // P4：唯一空间查询（life/space.mjs）。营地内地面与野外共用同一份 content.landscape 高度链；
+  // scene3d.floors 只作为“可站表面/建筑地板”注册进 space（桥面、连廊、房间地板）。
+  const crossing=w.layout?.crossZ??24;
+  const space=createSpace({
+    camp:campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape}),
+    wild:wildSurface(landscape,{crossing}),
+    terrain:landscape,
+  });
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -618,16 +618,16 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
   const fits=(x,z,nx,nz)=>separates(x+.5,z+.5,nx+.5,nz+.5,neighbours,radius);
   const step=manual?speed:Math.min(speed,distance);
   const connected=Boolean(snapshot.camp);
-  const map=campBodyWorld(world,connected);
+  // P4：可走性直接问 world.space；不再每帧复制 world/膨胀栅格。
   const dxStep=dx/distance*step, dzStep=dz/distance*step;
   const x0=walker.x+.5,z0=walker.y+.5;
   const joined=connected &&
     (!inCamp(x0,z0) || !inCamp(x0+dxStep,z0+dzStep));
   const [x,z]=joined
     ? moveJoinedWalker(x0,z0,dxStep,dzStep,
-      (x,z,px,pz)=>mapAllows(map,x-.5,z-.5) && fits(px-.5,pz-.5,x-.5,z-.5),
+      (x,z,px,pz)=>mapAllows(world,x-.5,z-.5) && fits(px-.5,pz-.5,x-.5,z-.5),
       (x,z,px,pz)=>exteriorAllows(world,x,z) && fits(px-.5,pz-.5,x-.5,z-.5)).map(v=>v-.5)
-    : moveMapFeet(map,walker.x,walker.y,dxStep,dzStep,fits);
+    : moveMapFeet(world,walker.x,walker.y,dxStep,dzStep,fits);
   walker.moving=Math.hypot(x-walker.x,z-walker.y)>.00001;
   walker.x=x; walker.y=z;
   if (manual) return;
@@ -642,7 +642,7 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
       const goal=walker.path.at(-1);
       const crossRegion=connected && (!inCamp(x0,z0) || !inCamp(goal[0]+.5,goal[1]+.5));
       const nearby=neighbours.filter(o=>Math.hypot(o.x-x0,o.z-z0)<5);
-      const path=crossRegion ? routeForWalker(world,walker,goal,nearby) : detourAroundBodies(map,walker,neighbours);
+      const path=crossRegion ? routeForWalker(world,walker,goal,nearby) : detourAroundBodies(world,walker,neighbours);
       if (path?.length) { walker.path=path; walker.pi=0; }
     }
   }
@@ -651,13 +651,7 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
 
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
-// P2：正式游戏的每帧步长由 space.mjs 的“单位/游戏分钟”换算；这里的 cap 只是防作弊上限，
-// 村外同样允许冲刺（服务端预算 = 冲刺预算 39.375/刻）。旧快照仍按 10/刻 的村外钳制回退。
-function peripheralStepCap(snapshot, dt) {
-  const ups = snapshot?.playerUnitsPerTick ?? 10;
-  const tickMs = S.tickMs ?? 7500;
-  return ups * 1000 / tickMs * dt; // tile/帧（1 tile = 1 世界单位）
-}
+// P4：每帧步长只由 space.mjs 的“单位/游戏分钟”换算；旧的“村外 10/刻”钳制已随回退分支删除。
 function playerGameStep(snapshot, dt) {
   // 表现层在“世界钟被冻住/超慢”时不能跟着冻死（金样/quickstart 用 TICK_MS=10000000）：
   // 超过 60s/刻时按名义 7.5s 刻换算；正常 6s/7.5s 刻仍按真实 tickMs，保持单位/游戏分钟口径。
@@ -804,7 +798,7 @@ function ensureWalker(cvId, who, world, slots) {
 // 不新增世界状态字段、不消费 rng、不动读数；A/B 各画自己世界的屋内人，保持对照。
 const hallFront = hallFrontGeometry();
 const roomDoor = site => roomDoorPx(site === 'hall' ? hallFront : null);
-const roomMasks = new Map(), campRooms = new Map(), campRoomBounds = new Map();
+const campRooms = new Map();
 function campRoom(site,w=S.view) {
   const style=residentialSite(site,w?.peripheralHomes) ? homeStyle(site,w?.layout?w.mapSeed:0) : null;
   const key=style ? site+'|'+style.id : site;
@@ -817,29 +811,8 @@ function campRoom(site,w=S.view) {
   }
   return campRooms.get(key);
 }
-function roomBounds(site) {
-  if (!campRoomBounds.has(site)) {
-    const {left,right,top,bottom}=campRoom(site).walkBounds;
-    campRoomBounds.set(site,{left:Math.ceil(left*TILE),right:Math.floor(right*TILE),
-      top:Math.ceil(top*TILE),bottom:Math.floor(bottom*TILE)});
-  }
-  return campRoomBounds.get(site);
-}
-function roomPixelWalk(site) {
-  const key = site + '|' + (campCart?.site===site?'cart':'');
-  if (!roomMasks.has(key)) {
-    const { width, height } = ROOM_GRID;
-    const walk = new Uint8Array(width * height).fill(1);
-    stampSceneCollision(walk,width,height,roomRenderStage(site));
-    if (site === 'hall') {
-      for (const rail of hallFront.rails) fillCollisionRect(walk, width, height, ...rail, 0);
-    }
-    roomMasks.set(key, walk);
-  }
-  return roomMasks.get(key);
-}
-// P2c：正式室内移动走显式 16×12 世界空间（与服端 roomSurface 同一份 stage/门数据）；
-// 像素掩码 roomPixelWalk/moveRoomFeet 只在 ?space=legacy 与绘制里保留。
+// P4：室内只有一套几何 —— 显式 16×12 世界空间的 roomSurface（与服务端 roomSpaceOf 同一份 stage/门）。
+// 旧像素掩码与其逐像素推进已删除；绘制遮罩也不需要它（3D 渲染直接从 stage.boxes 取投影）。
 const roomSpaces = new Map();
 function roomSpaceFor(site) {
   const key = site + '|' + (campCart?.site===site && campCart.prop ? campCart.prop.id : '');
@@ -898,11 +871,7 @@ function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   x=Math.round(x*4)/4;z=Math.round(z*4)/4;
   const key=x+','+z+'|'+radius;
   if (sameScene && previous.key===key) return previous.mask;
-  const height=(px,pz)=>{
-    const surface=world.scene3d.heightAt(px,pz);
-    const ground=extended?.height(px,pz);
-    return ground===undefined ? surface : inCamp(px,pz)?Math.max(surface,ground):ground;
-  };
+  const height=(px,pz)=>groundHeightOf(world,px,pz);
   const scene=sameScene?previous.scene:sightScene(height,lists);
   const mask=campSight(scene,x,z,radius);
   views.set(cvId,{lists,key,scene,mask});
@@ -1182,26 +1151,10 @@ let campHover=null, outdoorIntent=null, guidance=null;
 function roomCrowd(w,site) {
   const ids=(w.occupancy?.[site]??[]).filter(who=>who!=='p1');
   const slots=[[6,9],[9.6,9],[5.65,5.4],[9.45,5.4],[4,9],[11.7,9],[6.7,7.3],[9.6,7.3]];
-  if (!SPACE_LEGACY) {
-    const space=roomSpaceFor(site);
-    return slots.filter(([x,z])=>space.walkable(x,z,CAMP_BODY_RADIUS)).slice(0,ids.length)
-      .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
-  }
-  const pixels=roomPixelWalk(site), cells=collisionEditor.cells(site), bounds=roomBounds(site);
-  return slots.filter(([x,z])=>roomBodyFits(site,cells,pixels,bounds,x*TILE,z*TILE)).slice(0,ids.length)
+  // P4：占位点是否站得住只问 roomSurface（16×12 世界单位 + 家具/墙 + 门）。
+  const space=roomSpaceFor(site);
+  return slots.filter(([x,z])=>space.walkable(x,z,CAMP_BODY_RADIUS)).slice(0,ids.length)
     .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
-}
-function roomBodyFits(site,cells,pixels,bounds,x,z) {
-  const [doorX,,doorW]=roomDoor(site), r=CAMP_BODY_RADIUS*TILE;
-  const inDoor=x>=doorX+r && x<=doorX+doorW-r;
-  const left=x-r, right=x+r, top=z-r, bottom=inDoor?Math.min(z+r,bounds.bottom):z+r;
-  if (left<bounds.left || right>bounds.right || top<bounds.top || bottom>bounds.bottom) return false;
-  for (let y=Math.floor(top);y<=Math.floor(bottom);y+=1) {
-    for (let px=Math.floor(left);px<=Math.floor(right);px+=1) {
-      if (!roomAllows(cells,px,y,pixels,bounds)) return false;
-    }
-  }
-  return true;
 }
 const campWorlds=new Map(), campHerds=new Map();
 function animalGround(world,a,x,z) {
@@ -1296,17 +1249,18 @@ function startCart(prop) {
   campCart.attached=true;
   toast('推车中 · F 松手');
 }
-function cartAllows(site,cells,pixels,bounds,x,z,nx,nz,crowd) {
-  if (campCart?.site!==site) return true;
+function cartAllows(site,space,x,z,nx,nz,crowd) {
+  if (campCart?.site!==site || !space) return true;
   const {prop,attached}=campCart;
   const tx=campCart.x+(attached?(nx-IPOS.x-8)/TILE:0), tz=campCart.z+(attached?(nz-IPOS.y-16)/TILE:0);
   const gap=rectGap(nx/TILE,nz/TILE,tx,tz,prop.w,prop.d);
   if (!attached) return gap>=CAMP_BODY_RADIUS ||
     gap>rectGap(x/TILE,z/TILE,tx,tz,prop.w,prop.d);
+  // P4：推车体积逐格问 roomSurface（同一套 16×12 空间），不再扫第二份像素掩码。
   const left=tx*TILE,right=(tx+prop.w)*TILE,top=tz*TILE,bottom=(tz+prop.d)*TILE;
   for (let row=Math.floor(top);row<=Math.floor(bottom);row+=1)
     for (let col=Math.floor(left);col<=Math.floor(right);col+=1)
-      if (!roomAllows(cells,col,row,pixels,bounds)) return false;
+      if (!space.walkable((col+.5)/TILE,(row+.5)/TILE,0)) return false;
   return crowd.every(p=>rectGap(p.x,p.z,tx,tz,prop.w,prop.d)>=p.r);
 }
 function roomPropsMesh(site,s,stage,livePlayer) {
@@ -1436,8 +1390,7 @@ function drawCamp(cv,w,historical=false) {
           regions=[...regions,regional];
           exterior={...world,regional};
         }
-        targetY=(inCamp(playerX,playerZ)?Math.max(stage.heightAt(playerX,playerZ),extended.height(playerX,playerZ)):
-          extended.height(playerX,playerZ))+.55;
+        targetY=groundHeightOf(world,playerX,playerZ)+.55;
       }
     }
     animals=historical
@@ -1476,9 +1429,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const sunHint=$('campSunPhase');
   if (!right && sun && sunHint.textContent!==sun.phase) sunHint.textContent=sun.phase;
   for(const person of people){
-        const surface=stage.heightAt(person.x,person.z);
-    const ground=extended?.height(person.x,person.z);
-    person.y=person.poseY??(ground===undefined ? surface : inCamp(person.x,person.z)?Math.max(surface,ground):ground);
+    // 室外只问 world.space；室内视图没有 exterior，房间地板就是 stage 的可站表面（y=0）。
+    person.y=person.poseY??(exterior?.space ? groundHeightOf(exterior,person.x,person.z) : stage.heightAt(person.x,person.z));
     person.settledWork=Array.isArray(w.workMotions);
     const resident=w.agents?.[person.who];
     person.sex=resident?.sex;
@@ -1500,15 +1452,14 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
         if (landscape.rim(px,pz)<0 || landscape.land(px,pz)<0) return null;
         const water=landscape.bankGap(px,pz)<0, surface=landscape.waterHeight(pz);
         const bridge=inCamp(px,pz) && landscape.isBridge(px,pz,w.layout?.crossZ??34);
-        return bridge?{y:stage.heightAt(px,pz),water:false}:{y:water?surface:extended.height(px,pz),water};
+        return bridge?{y:groundHeightOf(exterior,px,pz),water:false}:{y:water?surface:extended.height(px,pz),water};
       }
       // 没有外围地形就没有水面：2D 水掩码已随 P0 删除，不再用旧底图近似。
-      return {y:stage.heightAt(px,pz),water:false};
+      return {y:exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz),water:false};
     }});
   const weatherGeometry=impacts.length;
   if (time && !S.replay && active.length) {
-    const heightAt=(px,pz)=>extended && !inCamp(px,pz) ? extended.height(px,pz)
-      : Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??-Infinity);
+    const heightAt=(px,pz)=>exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz);
     for (const clip of active) {
       const {row,phase}=clip;
       const person=people.find(q=>q.who===row.actor);
@@ -1530,10 +1481,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   if (!historical && !right && S.playing && player && !overview && !campPose && !campCart?.attached) {
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
-  const surfaceHeight=(px,pz)=>{
-    const ground=extended?.height(px,pz);
-    return ground!==undefined && !inCamp(px,pz)?ground:Math.max(stage.heightAt(px,pz),ground??-Infinity);
-  };
+  const surfaceHeight=(px,pz)=>exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz);
   const shadows=!overview ? {source:room?roomContactSource(stage):campShadows(exterior,regions??[]),x,z,height:surfaceHeight}:undefined;
   const daylight=room?Math.max(0,Math.min(1,daylightDirect/.5)):0;
   const wetness=open&&climate.rain?(climate.storm?.95:.65):0;
@@ -1566,7 +1514,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const speaking = !historical && paintResidentSpeech(cv, w, people, (p) => camera.project(p.x, p.y+actorLabelHeight(p.stage), p.z), overview);
   if (residentHint && residentHint.target !== speaking) {
     const [nx,nz]=residentHint.to, npc=w.agents[residentHint.target];
-    const ny=Math.max(stage.heightAt(nx,nz),extended?.height(nx,nz)??0)+actorLabelHeight(npc.stage)+.04;
+    // 室外问 space；室内视图没有 exterior，用房间 stage 的可站表面（旧标签高度口径）。
+    const ny=(exterior?.space ? groundHeightOf(exterior,nx,nz) : stage.heightAt(nx,nz))+actorLabelHeight(npc.stage)+.04;
     const heavy=HEAVY_CAMP_TOOLS.includes(ui.tool);
     const hint=ui.tool==='hand'?'F 交谈':heavy?'F 会击伤':'收起工具';
     campBadge(g,camera,[nx,ny,nz],`${npc.name} · ${hint}`,heavy?'build':'talk',16,ratio);
@@ -1584,7 +1533,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     if (hit && (!speaking || hit.target!==speaking) && now-Math.max(h.t,h.since??h.t)>=200) {
       hoverLabel=hit.name;
       const [px,pz]=hit.at;
-      campBadge(g,camera,[px,hit.labelHeight??Math.max(stage.heightAt(px,pz),extended?.height(px,pz)??0)+1.15,pz],hit.name,'',16,ratio);
+      const baseY=exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz);
+      campBadge(g,camera,[px,hit.labelHeight??baseY+1.15,pz],hit.name,'',16,ratio);
     }
   }
   cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null};
@@ -3920,24 +3870,19 @@ function walkToEntrance(room) {
 function walkInside(site,x,z,prop=null,exit=false) {
   if (!campRenderer || !S.playing || campCart?.attached) return;
   const cell=4, tw=ROOM_GRID.width/cell, th=ROOM_GRID.height/cell;
-  const cells=collisionEditor.cells(site), pixels=roomPixelWalk(site), bounds=roomBounds(site);
   const crowd=roomCrowd(S.view,site), walk=new Uint8Array(tw*th), goals=[];
-  const space=SPACE_LEGACY?null:roomSpaceFor(site);
+  // P4：室内可走格只问 roomSurface（16×12 世界单位 + 家具/墙 + 门 portal）。
+  const space=roomSpaceFor(site);
   const start=[Math.floor((IPOS.x+8)/cell),Math.min(th-1,Math.floor((IPOS.y+16)/cell))];
-  const [dx,dz,dw,dd]=roomDoor(site);
-  const door=SPACE_LEGACY?{x:dx,z:dz,w:dw,d:dd}:ROOM_DOOR_WORLD;
   for (let row=0;row<th;row+=1) for (let col=0;col<tw;col+=1) {
     const px=(col+.5)*cell,pz=(row+.5)*cell;
-    const clear=space
-      ? space.walkable(px/TILE,pz/TILE,CAMP_BODY_RADIUS)
-      : roomBodyFits(site,cells,pixels,bounds,px,pz);
-    if (!clear ||
-        !cartAllows(site,cells,pixels,bounds,px,pz,px,pz,crowd) ||
+    if (!space.walkable(px/TILE,pz/TILE,CAMP_BODY_RADIUS) ||
+        !cartAllows(site,space,px,pz,px,pz,crowd) ||
         !separates(px/TILE,pz/TILE,px/TILE,pz/TILE,crowd)) continue;
     walk[row*tw+col]=1;
     const gap=prop?rectGap(px/TILE,pz/TILE,prop.x,prop.z,prop.w,prop.d):0;
-    const doorGap=SPACE_LEGACY?rectGap(px,pz,door.x,door.z,door.w,door.d):rectGap(px/TILE,pz/TILE,door.x,door.z,door.w,door.d);
-    if ((prop && gap>PROP_REACH-.1) || (exit && doorGap>(SPACE_LEGACY?5:.35))) continue;
+    const doorGap=rectGap(px/TILE,pz/TILE,ROOM_DOOR_WORLD.x,ROOM_DOOR_WORLD.z,ROOM_DOOR_WORLD.w,ROOM_DOOR_WORLD.d);
+    if ((prop && gap>PROP_REACH-.1) || (exit && doorGap>.35)) continue;
     goals.push({col,row,distance:(px-x)**2+(pz-z)**2});
   }
   goals.sort((a,b)=>a.distance-b.distance);
@@ -4230,8 +4175,8 @@ async function useOutdoorEntity(e,from) {
 }
 
 function approachAllows(world) {
-  const map=campBodyWorld(world,true);
-  return (x,z)=>inCamp(x,z)?mapAllows(map,x-.5,z-.5):exteriorAllows(world,x,z);
+  // P4：室外“能不能站”只问 world.space；营地外仍按同一份 landscape 地形链 + 外围实体。
+  return (x,z)=>inCamp(x,z)?mapAllows(world,x-.5,z-.5):exteriorAllows(world,x,z);
 }
 
 function rememberGuidance(entity,result={}) {
@@ -4263,10 +4208,9 @@ function sceneGuidance(view,w,player,hover,right) {
       label:roomRoute.exit?'出口':'操作位'});
     if (hover?.kind==='exit' && !roomRoute) hints.push({kind:'door',point:hover.at,label:'出口'});
     if (hover?.kind==='prop' && !goal) {
-      const rect=hover.prop, site=view.site, cells=collisionEditor.cells(site);
-      const pixels=roomPixelWalk(site), bounds=roomBounds(site), crowd=roomCrowd(w,site);
-      const allows=(x,z)=>roomBodyFits(site,cells,pixels,bounds,x*TILE,z*TILE) && separates(x,z,x,z,crowd) &&
-        (right || cartAllows(site,cells,pixels,bounds,x*TILE,z*TILE,x*TILE,z*TILE,crowd));
+      const rect=hover.prop, site=view.site, space=roomSpaceFor(site), crowd=roomCrowd(w,site);
+      const allows=(x,z)=>space.walkable(x,z,CAMP_BODY_RADIUS) && separates(x,z,x,z,crowd) &&
+        (right || cartAllows(site,space,x*TILE,z*TILE,x*TILE,z*TILE,crowd));
       const preview=planApproach({kind:'plot',rect,reach:PROP_REACH},from,allows);
       if (preview.point) hints.push({kind:'stand',point:preview.point,label:'操作位'});
       else addFailure(preview);
@@ -4582,15 +4526,13 @@ loadAssets();
         const site=ui.interior, n=Math.hypot(dx,dz);
         const maxStep=playerStep*TILE*(campCart?.attached?.68:1), step=routeMove?Math.min(maxStep,n):maxStep;
         pairedDX=dx; pairedDZ=dz; pairedStep=step;
-        const cells=collisionEditor.cells(site), pixels=roomPixelWalk(site), bounds=roomBounds(site);
         const crowd=campRenderer?roomCrowd(S.view,site):[];
-        const space=SPACE_LEGACY?null:roomSpaceFor(site);
+        // P4：室内移动只有 roomSurface（16×12 世界空间）；没有第二套像素推进。
+        const space=roomSpaceFor(site);
         const fits=campRenderer?(x,z,nx,nz)=>
-          cartAllows(site,cells,pixels,bounds,x,z,nx,nz,crowd) &&
+          cartAllows(site,space,x,z,nx,nz,crowd) &&
           separates(x/TILE,z/TILE,nx/TILE,nz/TILE,crowd):undefined;
-        const [footX, footY]=space
-          ? moveRoomSurface(space,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,fits)
-          : moveRoomFeet(cells,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,pixels,fits,bounds);
+        const [footX, footY]=moveRoomSurface(space,IPOS.x+8,IPOS.y+16,dx/n*step,dz/n*step,fits);
         IPOS.moving = footX !== IPOS.x + 8 || footY !== IPOS.y + 16;
         if (campCart?.attached && campCart.site===site) {
           campCart.x+=(footX-IPOS.x-8)/TILE;
@@ -4600,16 +4542,14 @@ loadAssets();
         IPOS.x = footX - 8;
         IPOS.y = footY - 16;
         if (dx) IPOS.face=dx>0?1:-1;
-        if (!SPACE_LEGACY && S.playing) scheduleRoomSync();
+        if (S.playing) scheduleRoomSync();
         if (routeMove && step>.01 && !IPOS.moving) {
           roomRoute=null;
           guidance={site,blockedAt:[(footX+step*dx/n)/TILE,(footY+step*dy/n)/TILE],until:now+5000};
           forceRepaint=true;
           toast('路上有障碍，换个方向试试。');
         }
-        if (!campCart?.attached && (space
-          ? Boolean(space.portalAt((IPOS.x+8)/TILE,(IPOS.y+16)/TILE,0.35))
-          : atRoomDoor(ui.interior,true))) { closeRoom(); return; }
+        if (!campCart?.attached && space.portalAt((IPOS.x+8)/TILE,(IPOS.y+16)/TILE,0.35)) { closeRoom(); return; }
       } else { IPOS.moving = false; pairedDX=pairedDZ=0; }
     }
     const siteB=S.viewB?.campPlayerRoom;
@@ -4617,16 +4557,12 @@ loadAssets();
       const pos=roomPlayerPosition(compareInterior,siteB), length=Math.hypot(pairedDX,pairedDZ);
       pos.moving=false;
       if (length>0) {
-        const cells=collisionEditor.cells(siteB), pixels=roomPixelWalk(siteB), bounds=roomBounds(siteB);
         const crowd=campRenderer?roomCrowd(S.viewB,siteB):[];
-        const space=SPACE_LEGACY?null:roomSpaceFor(siteB);
+        const space=roomSpaceFor(siteB);
         const fits=campRenderer ? (x,z,nx,nz)=>
-          (space || roomBodyFits(siteB,cells,pixels,bounds,nx,nz)) &&
           separates(x/TILE,z/TILE,nx/TILE,nz/TILE,crowd) : undefined;
         const oldX=pos.x+8, oldZ=pos.y+16;
-        const [x,z]=space
-          ? moveRoomSurface(space,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,fits)
-          : moveRoomFeet(cells,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,pixels,fits,bounds);
+        const [x,z]=moveRoomSurface(space,oldX,oldZ,pairedDX/length*pairedStep,pairedDZ/length*pairedStep,fits);
         pos.moving=x!==oldX || z!==oldZ;
         pos.direction=walkDirection(x-oldX,z-oldZ,pos.direction);
         pos.x=x-8; pos.y=z-16;
@@ -4653,24 +4589,16 @@ loadAssets();
         if (!world) continue;
         const trip=snapshot.districtTravel?.[who];
         const rate=trip?Math.min(mstep*1.35,Math.max(mstep,(walker.tripSpeed??0)*dt*1000)):mstep; // 限速：tripSpeed 在快 tick 下会放大成瞬移
-        const spaceMove=Boolean(world.space);
-        let step=manual?(player&&spaceMove?playerGameStep(snapshot,dt):playerStep):rate;
-        // P2：正式游戏玩家步长由 space.mjs 换算，村内/村外同一预算（冲刺不再被村外禁用）；
-        // 旧快照/旧分支仍按“村外 10/刻”钳制，保证 fallback 行为不变。
-        if (player && manual) {
-          if (spaceMove) step=Math.min(step, playerStepCap(snapshot,dt));
-          else if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
-        }
+        // P4：步长只由 space.mjs 的“单位/游戏分钟”换算，村内/村外同一预算（旧“村外 10/刻”已删）。
+        let step=manual&&player?playerGameStep(snapshot,dt):rate;
+        if (player && manual) step=Math.min(step, playerStepCap(snapshot,dt));
         stepCampWalker(world,walker,cvId,snapshot,who,dx,dy,step,manual);
         if (player && cvId==='cvA') syncPlayerPos(walker, snapshot); // 要求3：节流上报＋被拒钳位
       } else if (manual) {
         const n=Math.hypot(dx,dy);
-        const world=buildWorld(snapshot), spaceMove=Boolean(world.space);
-        let step=player&&spaceMove?playerGameStep(snapshot,dt):playerStep;
-        if (player) {
-          if (spaceMove) step=Math.min(step, playerStepCap(snapshot,dt));
-          else if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));
-        }
+        const world=buildWorld(snapshot);
+        let step=player?playerGameStep(snapshot,dt):playerStep;
+        if (player) step=Math.min(step, playerStepCap(snapshot,dt));
         const [x,y]=moveMapFeet(world,walker.x,walker.y,dx/n*step,dy/n*step);
         walker.moving=x!==walker.x || y!==walker.y;
         walker.x=x; walker.y=y;
@@ -4709,7 +4637,8 @@ Object.assign(window.__lifeDebug, {
     return { allowed: space.walkable(x / TILE, z / TILE, radius ?? CAMP_BODY_RADIUS), moved: moveRoomSurface(space, x, z, dx, dz) };
   },
   roomDoorWorld: () => ({ ...ROOM_DOOR_WORLD }),
-  hallWalkable: (x,y) => roomAllows(collisionEditor.cells('hall'),x,y,roomPixelWalk('hall'),roomBounds('hall')),
+  // P4：室内可走性也只有一个来源 —— roomSpaceFor(site).walkable（不再是像素掩码）。
+  hallWalkable: (x,y) => roomSpaceFor('hall').walkable(x/TILE,y/TILE,CAMP_BODY_RADIUS),
   replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
     actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },
 });

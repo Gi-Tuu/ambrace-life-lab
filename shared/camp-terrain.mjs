@@ -67,6 +67,21 @@ export function floorContains(f, x, z) {
     (f.triangle===1 ? u>=v : f.triangle===2 ? u<=v : true);
 }
 
+// 已注册表面的高度：没有表面覆盖时返回 null（≠0）。
+// P4 的唯一高度组合 max(0, 地形链, 已注册表面) 用它区分“脚下没有表面”与“表面高度恰好是 0”，
+// 不会把 0 地面基准误当成桥面/房间地板这类真实表面。
+export function floorSurface(floors, x, z) {
+  let y = null;
+  for (const f of floors) {
+    if (!floorContains(f, x, z)) continue;
+    const h = f.triangle
+      ? f.y + f.ax * (x - f.x) + f.az * (z - f.z)
+      : f.y + (f.end - f.y) * (f.axis === 'x' ? (x - f.x) / f.w : f.axis === 'z' ? (z - f.z) / f.d : 0);
+    y = y === null ? h : Math.max(y, h);
+  }
+  return y;
+}
+
 // 脚底高度唯一实现：life/space 与 shared/camp-scene 都只调用这里。
 // 逐字保留原循环顺序与 Math.max 累积，避免浮点/覆盖顺序变化。
 export function floorHeight(floors, x, z) {
