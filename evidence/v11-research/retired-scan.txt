@@ -1,0 +1,5 @@
+retired modules: life/research-time.mjs (deleted), life/research-space.mjs (deleted)
+runtime files scanned: 300
+retired module references: 0
+runtime oracle import specifiers: 0
+runtime oracle mentions (comments/rule text): 7

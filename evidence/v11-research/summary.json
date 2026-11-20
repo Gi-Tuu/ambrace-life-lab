@@ -1,0 +1,60 @@
+{
+  "_说明": "1.1 第 6 项：研究态旧时间/空间路径收口。行为保持优先；A-D 四组 dumpSurv 与五面 md5 均未变。",
+  "baseline": {
+    "repo": "E:/Competition/AMBRACElife",
+    "branch": "main",
+    "head": "e65105f",
+    "capturedAt": "2026-11-21",
+    "note": "baseline-probe.log 在改动前采集；after-probe.log 在改动后复跑，A-D 逐位相同"
+  },
+  "researchDumpSurv": {
+    "algorithm": "md5(JSON.stringify(dumpSurv(sp)))",
+    "baselines": {
+      "A_research-base": { "seed": 7, "ticks": 12, "bytes": 40405, "md5": "62ccc1af1b9d45d34d145aedc468b539" },
+      "B_research-gameopts": { "seed": 13, "ticks": 24, "bytes": 54778, "md5": "052b65f18591b7308bc9f20dbf6684da" },
+      "C_legacy-formal": { "seed": 7, "ticks": 24, "bytes": 54953, "md5": "8622d4070400cfbc6a76a86f04c0ae46" },
+      "D_research-independent": { "seed": 7, "ticks": 24, "bytes": 58875, "md5": "41f75f8e5cd3c9472274584a608e3842" }
+    },
+    "beforeAfterIdentical": true,
+    "gate": "life/v11-research-legacy.test.mjs V11-RESEARCH-05"
+  },
+  "researchFiveFaces": {
+    "algorithm": "md5 after CRLF normalization (same as evidence/redo-p3/research-md5.corrected.json)",
+    "faces": {
+      "report": { "bytes": 1886, "md5": "de764430c8bc88cd8dbbc24512621e4f", "match": true },
+      "sweep": { "bytes": 2850, "md5": "aadd4895e84ae657d5a1e22c132228b1", "match": true },
+      "viab": { "bytes": 4526, "md5": "b923787830eb26c3853ecf959987cf9d", "match": true },
+      "recover": { "bytes": 12150, "md5": "fe198109386d048356f2fa69312e5183", "match": true },
+      "metab": { "bytes": 13357, "md5": "5ea0ae6473c4f0ff46f47b7a2463b409", "match": true }
+    },
+    "allMatch": true,
+    "evidence": "evidence/v11-research/research-md5.json"
+  },
+  "gates": {
+    "fullTest": { "pass": 1163, "fail": 0, "log": "evidence/v11-research/full-test-after.log", "before": "evidence/v11-research/full-test-before.log (1155/1155)" },
+    "staticCheck": { "ok": true, "log": "evidence/v11-research/check.log", "detail": "488 files, 206 test files, arch 341 files / 12 whitelist" },
+    "archGates": { "ok": true, "log": "evidence/v11-research/arch-gates.log", "detail": "341 runtime files, 6 rules, 12 whitelist" },
+    "researchBehaviorGates": { "pass": 17, "fail": 0, "log": "evidence/v11-research/research-gates.log" },
+    "compareTests": { "pass": 9, "fail": 0, "log": "evidence/v11-research/compare-tests.log" },
+    "golden": { "same": 45, "total": 45, "diffs": 0, "log": "evidence/v11-research/golden-compare.log" },
+    "parity": { "samplesPerCase": 11000, "cases": 2, "terrainDiff": 0, "walkDiff": 0, "heightDiff": 0, "portalDiff": 0, "log": "evidence/v11-research/parity.log" },
+    "quickstart": { "ok": true, "log": "evidence/v11-research/quickstart-browser.log" }
+  },
+  "retired": {
+    "life/research-time.mjs": "并入 life/research-policy.mjs（唯一研究策略声明）",
+    "life/research-space.mjs": "迁到 test-support/legacy-space-oracle.mjs（测试 oracle，运行路径 0 import）",
+    "scan": "evidence/v11-research/retired-scan.txt"
+  },
+  "adapters": {
+    "life/research-policy.mjs": "60/1440 从 sim-clock 派生；4 动作 cap/2 chain/100 点池/旧超时码的显式策略",
+    "life/space.mjs": "LEGACY_RESEARCH_UNITS_PER_TICK={resident:12,player:10,playerSyncInCamp:40}；researchTravelTicks 与 travelTicksAt 同一公式",
+    "life/body.mjs": "居民 startMove 直线策略仅调用 researchTravelTicks；12/10 常量改为 space legacy 行引用",
+    "life/survplay-camp.mjs": "旧玩家预算改为 space legacy 行引用",
+    "life/scripts/arch-gates.mjs": "ARCH-RESEARCH-01：退役模块/测试 oracle/60/1440/12/10 第二套字面量均判红"
+  },
+  "commits": ["2e81701 refactor: 研究态旧时间/空间收为 legacy 配置，退役第二套模块", "HEAD evidence: 1.1 第 6 项研究态收口证据"],
+  "report": "docs/回报-1.1-研究态收口-2026-11-21.md（按仓库 .gitignore 留在本地，不入库）",
+  "pushed": false,
+  "masterUntouched": "4f2577b"
+}
+

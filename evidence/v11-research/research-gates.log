@@ -1,0 +1,25 @@
+✔ ARCH-GATE-00 当前仓库六条闸门全绿（基线不假红） (365.4592ms)
+✔ ARCH-2D-01 退役 2D 符号逐条能变红 (0.4886ms)
+✔ ARCH-2D-01 TIME_WAIT 只放行研究态隔离模块，正式路径 0 (0.1955ms)
+✔ ARCH-CLOCK-01 正式模块写 world.t 即红，存档/研究夹具不误报 (0.1417ms)
+✔ ARCH-2D-01 测试/文档/证据/实验目录不计入运行路径 (0.1131ms)
+✔ ARCH-STEP-01 peripheralStepCap 已退役：任何运行路径出现即红 (0.1683ms)
+✔ ARCH-SPACE-01 旧空间开关/包装/房间像素行走逐条能变红，测试与 docs 不误报 (0.2348ms)
+✔ ARCH-POS-01 位置字段只允许白名单整字段写入 (0.2174ms)
+✔ ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时钟/空间常量逐条变红 (0.2302ms)
+✔ 每条问题都带 file:line + 规则名，便于直接定位 (0.1867ms)
+✔ V11-RESEARCH-01 研究策略常量只留一份：60/1440 从 sim-clock 派生，12/10 在 space 的 legacy 行 (1.0937ms)
+✔ V11-RESEARCH-02 研究态 tick 语义：每 tick +1 刻 = 60 游戏分，不创建 simClock/minuteMetab/space (16.2724ms)
+✔ V11-RESEARCH-03 旧时间池适配：玩家每刻 100 点，居民 60/1440/4/2 由策略常量提供 (12.692ms)
+✔ V11-RESEARCH-04 居民研究态旅行：同一 travelTicks 公式 + 12/刻，且没有 space 路径 (10.0436ms)
+✔ V11-RESEARCH-05 四组研究态 dumpSurv 逐位基线（md5/字节） (94.1256ms)
+✔ V11-RESEARCH-06 正式连续钟不被适配层劫持：simClock 存在时仍按分钟推进 (20.5844ms)
+✔ V11-RESEARCH-07 运行时只允许三个共享模块 import 研究策略；测试 oracle 运行路径 0 import (16.4398ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 431.5069

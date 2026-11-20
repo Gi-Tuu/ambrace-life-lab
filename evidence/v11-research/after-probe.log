@@ -1,0 +1,8 @@
+A research-base tick 12 bytes 40405 md5 62ccc1af1b9d45d34d145aedc468b539
+B research-gameopts tick 24 bytes 54778 md5 052b65f18591b7308bc9f20dbf6684da
+C legacy-formal tick 24 bytes 54953 md5 8622d4070400cfbc6a76a86f04c0ae46
+D research-independent tick 24 bytes 58875 md5 41f75f8e5cd3c9472274584a608e3842
+travel C arrive-t 4 expected 5 hasPath true
+act A NOT_GATHER_LOC NOT_GATHER_LOC budgetLeft undefined tickUsed undefined
+act D NOT_GATHER_LOC NOT_GATHER_LOC budgetLeft undefined tickUsed 0
+act C NOT_GATHER_LOC NOT_GATHER_LOC budgetLeft undefined tickUsed 0

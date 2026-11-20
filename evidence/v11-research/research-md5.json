@@ -1,0 +1,52 @@
+{
+  "algorithm": "md5",
+  "generatedAt": "2026-11-20T17:39:54.740Z",
+  "faces": {
+    "report": {
+      "rawBytes": 1886,
+      "rawMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "crlfBytes": 1886,
+      "crlfMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedBytes": 1886,
+      "match": true
+    },
+    "sweep": {
+      "rawBytes": 2850,
+      "rawMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "crlfBytes": 2850,
+      "crlfMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedBytes": 2850,
+      "match": true
+    },
+    "viab": {
+      "rawBytes": 4526,
+      "rawMd5": "b923787830eb26c3853ecf959987cf9d",
+      "crlfBytes": 4526,
+      "crlfMd5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedBytes": 4526,
+      "match": true
+    },
+    "recover": {
+      "rawBytes": 12150,
+      "rawMd5": "fe198109386d048356f2fa69312e5183",
+      "crlfBytes": 12150,
+      "crlfMd5": "fe198109386d048356f2fa69312e5183",
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "expectedBytes": 12150,
+      "match": true
+    },
+    "metab": {
+      "rawBytes": 13357,
+      "rawMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "crlfBytes": 13357,
+      "crlfMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedBytes": 13357,
+      "match": true
+    }
+  },
+  "allMatch": true
+}
