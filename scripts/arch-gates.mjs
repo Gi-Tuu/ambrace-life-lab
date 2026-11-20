@@ -17,6 +17,7 @@ export const RULES = [
   { id: 'ARCH-2D-01', title: '退役的 2D 烘焙/渲染符号不得回流' },
   { id: 'ARCH-STEP-01', title: 'peripheralStepCap 只能留在 legacy fallback 分支' },
   { id: 'ARCH-POS-01', title: '位置字段只能由白名单模块整字段写入' },
+  { id: 'ARCH-CLOCK-01', title: '正式模块不得把 world.t 当可写事实（派生时钟唯一）' },
 ];
 
 // 运行路径 = 会随应用/服务端一起加载的目录 + 入口。测试、文档、证据、实验目录整体排除。
@@ -81,32 +82,32 @@ const RETIRED_2D = [
   { re: /\bTIME_WAIT\b/, why: 'P1 正式连续时钟路径不设 TIME_WAIT 拒绝', allow: true },
 ];
 
-// TIME_WAIT 白名单：只允许 legacy（world.simClock 关闭）的 60 分钟刻/日池路径。
-// 正式连续时钟在 resident-time/survplay-actions 的 if (world.simClock) 分支里直接 return，
-// 不会产生 TIME_WAIT；这三处是研究态/旧时间模型仍在用的存量。
+// 旧超时码白名单：只允许研究态隔离模块里的那一个常量定义。
+// 正式路径（world.simClock 打开）已在 resident-time/survplay-actions 的连续分支直接返回，
+// 不再产生这个 code；host/host-world/survplay 编排层也不得 import research-time.mjs。
 const TIME_WAIT_LEGACY = [
   {
-    path: 'life/resident-time.mjs',
-    re: /if \(dayLeft \+ 1e-9 < cost\) return \{ ok: false, code: 'TIME_WAIT' \};/,
-    why: 'legacy 60 分钟刻/日池：world.simClock 关闭时（研究态/旧时间模型）才走这里',
-  },
-  {
-    path: 'life/survplay-actions.mjs',
-    re: /if \(left <= 1e-9\) return failTime\('TIME_WAIT', '这一拍的时间用完了，等下一拍'\);/,
-    why: 'legacy !w.simClock 分支：正式连续路径在 if (w.simClock) 内不设拒绝',
-  },
-  {
-    path: 'life/agent.mjs',
-    re: /budget\.code === 'TIME_WAIT' \? '这一天的时间用完了'/,
-    why: 'trace 文案映射：budget.code 只可能由上面 resident-time 的 legacy 分支产生',
+    path: 'life/research-time.mjs',
+    re: /export const LEGACY_TIME_CODE = 'TIME_WAIT';/,
+    why: '研究态旧时间模型（!world.simClock）的唯一隔离点；正式路径必须为 0',
   },
 ];
 
-// ── ARCH-STEP-01 ─────────────────────────────────────────────────────────────
 const STEP_DEF = /function\s+peripheralStepCap\s*\(/;
 const STEP_FORMAL_CONTEXT = /\bspaceMove\b|\bplayerGameStep\b/;
 const STEP_LEGACY_GUARD = /\bif\s*\(\s*spaceMove\s*\)/;
 const STEP_LEGACY_CALL = /!inCamp\(/;
+
+// ── ARCH-CLOCK-01 ────────────────────────────────────────────────────────────
+// 正式世界（world.simClock 存在）的 `t` 是 floor(nowMinutes/60) 的派生读法。
+// 这些模块是正式时间轴/结算的承载者，不得再写 `world.t =` / `w.t =`（写 = 重锚时钟）。
+// 存档/旧档迁移（survplay-save.mjs）与 A/B 研究包（host-world 的 p.world）不在集合内。
+const CLOCK_FORMAL = new Set([
+  'life/sim-clock.mjs', 'life/survplay.mjs', 'life/resident-time.mjs', 'life/survplay-actions.mjs',
+  'life/survplay-camp.mjs', 'life/agent.mjs', 'life/dialogue.mjs', 'life/camp-play.mjs',
+  'life/host-replay.mjs', 'life/host.mjs', 'life/host-model.mjs',
+]);
+const CLOCK_WRITE = /\b(?:world|w|sp\.world)\.t\s*=(?!=)/;
 
 // ── ARCH-POS-01 ──────────────────────────────────────────────────────────────
 // 唯一事实是 w.pos；loc/occupancy/playerPos/residentTravel/districtTravel 都是派生索引。
@@ -191,6 +192,10 @@ export function archGateReport({ root = ROOT, files } = {}) {
         } else {
           problems.push(problem('ARCH-POS-01', path, lineNo, line, '位置字段只能由 actor-pos.mjs 等白名单模块整字段写入（w.pos 是唯一事实）'));
         }
+      }
+
+      if (CLOCK_FORMAL.has(path) && CLOCK_WRITE.test(line)) {
+        problems.push(problem('ARCH-CLOCK-01', path, lineNo, line, '正式模块不得写 world.t：它是 simClock 的派生整数，时间只经 advanceMinutes/setGameMinutes 推进'));
       }
     }
   }

@@ -32,7 +32,7 @@ import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from 
 import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
 import { createActionDomain } from './survplay-actions.mjs';
 import { createSaveDomain } from './survplay-save.mjs';
-import { createSimClock, createTokenBucket } from './sim-clock.mjs';
+import { createSimClock, createTokenBucket, bindDerivedTick } from './sim-clock.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 import { workMotionView } from './work-motion.mjs';
@@ -97,6 +97,9 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   if (continuous) {
     world.simTime = true;
     world.simClock = simClock ?? createSimClock({ startMinutes: 0 });
+    // P1：`world.t` 在正式世界是 floor(simClock.nowMinutes()/60) 的派生读法，
+    // 不再是独立推进的计数器；写它等同于把时钟重锚到该刻（仅存档/夹具）。
+    bindDerivedTick(world);
     resetSimMinuteCursor(world);
   }
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
@@ -198,7 +201,6 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     // 决策机会与算力分离：到期节拍按游戏分钟，实际调用由真实毫秒令牌桶 + 硬并发上限约束。
     world.think = {
       everyMin: Math.max(1, Number(process.env.THINK_EVERY_MIN ?? 10)),
-      maxPerTick: Math.max(1, Number(process.env.THINK_MAX_PER_TICK ?? 2)),
       maxConcurrent: Math.max(1, Math.min(2, Number(process.env.THINK_CONCURRENCY ?? 2))),
       queue: [],
       inFlight: 0,
@@ -376,29 +378,24 @@ async function tickLegacy(sp, { now, onResidentAction }) {
 
 async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
   const w = sp.world, clock = w.simClock;
-  if (Number.isFinite(minutes)) clock.advanceMinutes(minutes);
-  else if (Number.isFinite(advanceMinutes)) clock.advanceMinutes(advanceMinutes);
-  else if (w.fastForward) clock.advanceMinutes(60);
-  // 默认按真实 elapsed：目标分钟来自时钟，分钟游标保证不重复消费。
-  const targetMinute = Math.floor(clock.nowMinutes() + 1e-9);
+  // 目标分钟来自时钟 + 本次显式步长；不再先把时钟整段推到头，再逐分钟处理——
+  // 否则 w.t 在整段循环里都是终点派生的刻，分钟边界/感知/日界会错位。
+  const requested = Number.isFinite(minutes) ? minutes : Number.isFinite(advanceMinutes) ? advanceMinutes : 0;
+  const targetMinute = Math.floor(clock.nowMinutes() + requested + 1e-9);
   const cursor = simMinuteCursor(w);
-  if (targetMinute <= cursor) {
-    w.t = Math.max(w.t, Math.floor(clock.nowMinutes() / 60));
-    return w;
-  }
+  if (targetMinute <= cursor) return w;
   const to = Math.min(targetMinute, cursor + MAX_SIM_STEP_MIN);
-  const explicit = Number.isFinite(minutes) || Number.isFinite(advanceMinutes) || Boolean(w.fastForward);
+  const explicit = requested > 0;
   let dispatched = false;
   for (let minute = cursor + 1; minute <= to; minute += 1) {
-    const prevT = w.t;
-    w.t = Math.max(prevT, Math.floor(minute / 60));
+    clock.setGameMinutes(minute);
     advancePlayerBusy(sp, minute);
-    if (w.t > prevT) await worldTick(sp, { now, onResidentAction, think: false });
+    // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
+    if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;
     if (dispatched) await Promise.resolve(); // 让本地替身的 think 在下一分钟前落地；慢模型不会被等
   }
   simCursors.set(w, to);
-  w.t = Math.max(w.t, Math.floor(to / 60));
   return w;
 }
 
@@ -507,7 +504,13 @@ async function worldTick(sp, { now, onResidentAction, think }) {
   // 研究态/旧时间模型不调用，保持原"到点瞬移"逐位不变。
   if (w.survival?.actTimeModel === true) advanceTravels(w);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
-  w.percepts = [];
+  // P1：正式连续世界不再"每 60 分整清"感知——事件按 seq 由每个居民的 think 消费一次；
+  // 这里只做容量上限。研究态保持旧的每刻清空，dump/轨迹逐位不变。
+  if (w.simClock) {
+    if ((w.percepts?.length ?? 0) > 200) w.percepts = w.percepts.slice(-200);
+  } else {
+    w.percepts = [];
+  }
   w.pending = (w.pending ?? []).filter((x) => x.for !== 'p1');
   scanSecrets(w);           // 内含 advanceSurvival(日界) + stepCooperation(coop 开)
   if (w.gameRules && forecastDisasters(w).stormTomorrow) recordStormWarning(w, dayOf(w.t) + 1);
@@ -604,9 +607,9 @@ async function worldTick(sp, { now, onResidentAction, think }) {
       if (adv.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: adv.code });
     }
     try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
-    // V7.2：个人时间模型下，同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX ⇒ 不会 CPU 爆炸）。
-    // 追加决策 reason=null ⇒ 不问模型；模型预算/熔断仍只归 host 资源层。
-    if (residentTimeModel(w) && a.lastMetabTick === w.t) {
+    // 旧路径：同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX）。
+    // 正式连续世界不存在"同一拍最多 N 次"：决策机会由 ThinkScheduler 按游戏分钟发放。
+    if (!w.simClock && residentTimeModel(w) && a.lastMetabTick === w.t) {
       const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
       const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
       for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {

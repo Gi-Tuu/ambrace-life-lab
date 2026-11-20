@@ -78,8 +78,13 @@ function buildDeliberationPrompt({ agent, scored, world, rejected, memories, tri
   lines.push('只输出 JSON：{"id":"照抄上面某个 id","reason":"不超过6字"}，不要复述选项、不要写过程。');
   lines.push('如果此刻有在场的人、你想顺带说一句话，再加三个字段："act" 从 request/offer/warn/inform/greet/accuse/thank/decline/refuse 里选一个；"topic" 从 food/firewood/shelter/child/work/weather/boundary/trust 里选一个；"text" 不超过 28 字。不想说就省略这三项。');
 
-  // 返回字符串（不是数组）：调用方与采集脚本用的是同一份成品，避免出现 join 位置不一致造成的静默失配
   return lines.join(String.fromCharCode(10));
+}
+
+// P1c：正式连续时钟没有"每拍最多 N 次"配额；模型调用由真实毫秒令牌桶/全局预算/并发上限约束。
+// 研究态（没有 simClock）保留旧每拍配额与无人时压缩，既有轨迹逐位不变。
+function continuousWorld() {
+  return Boolean((S.mainSurv ?? S.surv)?.world?.simClock);
 }
 
 // 审议输入边界：仅保留原版构造器（实验态 compact 已移除）。
@@ -103,10 +108,11 @@ async function modelBrain(args) {
   }
   // 无人观看：研究态照旧直接走替身（既有轨迹逐位不变）；游戏态继续上真模型，让世界自洽。
   if (!watched && !UNATTENDED_ON) return null;
-  // 单拍上限：默认 0 = 不限（保证默认行为逐位不变）。见 PER_TICK_CAP 的注释。
+  // 单拍上限：默认 0 = 不限（研究态保证默认行为逐位不变）。
   // 无人时压到 UNATTENDED_CALLS_PER_TICK：看得见的时刻优先，没人看时吃吞吐而不是抢并发。
-  const askCap = watched ? PER_TICK_CAP
-    : (PER_TICK_CAP > 0 ? Math.min(PER_TICK_CAP, UNATTENDED_ASK_CAP) : UNATTENDED_ASK_CAP);
+  // P1c：正式连续世界不设每拍上限（世界按分钟推进，"拍"不是时间单位）。
+  const askCap = continuousWorld() ? 0 : (watched ? PER_TICK_CAP
+    : (PER_TICK_CAP > 0 ? Math.min(PER_TICK_CAP, UNATTENDED_ASK_CAP) : UNATTENDED_ASK_CAP));
   if (askCap > 0 && (S.asksThisTick ?? 0) >= askCap) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
   const note = (msg) => budget.attempt(msg);
@@ -171,7 +177,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
   const campKey = world.campKey ?? 'MAIN';
   const lastVisitor = campKey === 'MAIN' ? S.viewers.survival : S.campViewers[campKey];
   if (!observerActive(lastVisitor, Date.now())) return null;
-  if (PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
+  if (!continuousWorld() && PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
   const here = (world.locs ?? LOCS)[world.loc[npc.id]] ?? world.loc[npc.id];
   const turns = (history ?? []).slice(-6).map((h) => `${h.who === 'p1' ? '对方' : npc.name}：${h.text}`).join('\n');

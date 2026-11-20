@@ -6,7 +6,7 @@ import { makeWorld, spawn, scanSecrets } from './body.mjs';
 import { weatherFor, dayOf } from './clock.mjs';
 import { presetOf } from './presets.mjs';
 import { speechLine } from './speech.mjs';
-import { openTalk, sayTo, closeTalk } from './dialogue.mjs';
+import { openTalk, sayTo, closeTalk, prepareSay, finishSay } from './dialogue.mjs';
 import { socialRound } from './social.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, CURRENT_EVENT_RULES } from './rng.mjs';
@@ -16,6 +16,7 @@ import { campSleepTicks } from './camp-play.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex, readOwnerSidecar, writeOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
 import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy, advancePlayerBusy, simMinuteCursor } from './survplay.mjs';
 import { createSimScheduler, gameMinutesForRealMinutes } from './sim-scheduler.mjs';
+import { worldTick } from './sim-clock.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
 import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive, publicSaveError } from './host-saves.mjs';
 
@@ -463,17 +464,14 @@ async function actInSurvival(sp, body, ask, now) {
 async function sleepSurvival(sp) {
   const result=campSleepTicks(sp.world);
   if (!result.ok) return result;
-  const start=sp.world.t;
-  sp.world.fastForward = true;
-  try {
-    while (sp.world.t-start<result.ticks && !sp.world.survival.playerDead &&
-      (sp.world.independentWorld || !sp.world.survival.ended && !sp.world.survival.failed))
-      await tickSurvPlay(sp);
-  } finally {
-    delete sp.world.fastForward;
-  }
-  const ticks=sp.world.t-start;
-  sp.log.push({t:sp.world.t,kind:'camp_sleep',ok:true,code:'OK'});
+  const w=sp.world, start=worldTick(w);
+  // P1c：睡眠不再是"内嵌等整拍"的旧链，而是在短锁内显式按 60 游戏分推进同一个连续时钟。
+  // 其它输入是否要等这段睡眠见 docs/回报-债务-时间-2026-11-20.md（一次睡眠是短锁内的原子事务）。
+  while (worldTick(w)-start<result.ticks && !w.survival.playerDead &&
+    (w.independentWorld || !w.survival.ended && !w.survival.failed))
+    await tickSurvPlay(sp, w.simClock ? { minutes: 60 } : undefined);
+  const ticks=worldTick(w)-start;
+  sp.log.push({t:w.t,kind:'camp_sleep',ok:true,code:'OK'});
   return {ok:true,code:'OK',ticks,persisted:await saveWorld(sp)};
 }
 function enqueueTick(auto = false) {
@@ -866,7 +864,7 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
       S.startRaw = structuredClone(loaded.raw);
       S.model = loaded.raw.model ?? S.model;
       S.saveError = loaded.warning ?? S.saveError;
-      if (minutes > 1) catchUp(minutes);
+      if (minutes > 1 && !S.surv?.world?.simClock) catchUp(minutes);
       await catchUpSurvival(S.missed.minutes);
       note = `载入${label}：第 ${S.packs.A.world.t} 刻${loaded.warning ? '；已禁用 M5 降级恢复' : ''}`;
       break;

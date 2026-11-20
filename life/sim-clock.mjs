@@ -111,6 +111,39 @@ export function createSimClock({
   return clock;
 }
 
+// 把 `world.t` 从"世界事实"降级为派生整数：正式世界（有 simClock）读到的是
+// floor(nowMinutes/60)，写入只用于存档/旧档迁移/测试夹具重锚（把时钟钉到 value*60）。
+// 新代码请优先用 worldMinutes()/worldTick()；`w.t` 只作为兼容读法保留。
+// 研究态没有 simClock ⇒ 不改变 makeWorld 的普通数据属性，dumpSurv 逐位不变。
+export function bindDerivedTick(world) {
+  const clock = world?.simClock;
+  if (!clock) return world;
+  const existing = Object.getOwnPropertyDescriptor(world, 't');
+  if (existing?.get) return world;
+  Object.defineProperty(world, 't', {
+    configurable: true,
+    enumerable: true,
+    get() { return Math.floor(clock.nowMinutes() / GAME_MINUTES_PER_HOUR); },
+    set(value) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0) clock.setGameMinutes(n * GAME_MINUTES_PER_HOUR);
+    },
+  });
+  return world;
+}
+
+export function worldMinutes(world) {
+  if (world?.simClock?.nowMinutes) return Number(world.simClock.nowMinutes());
+  const t = Number(world?.t ?? 0);
+  return Number.isFinite(t) ? Math.max(0, t) * GAME_MINUTES_PER_HOUR : 0;
+}
+
+export function worldTick(world) {
+  if (world?.simClock?.nowMinutes) return Math.floor(world.simClock.nowMinutes() / GAME_MINUTES_PER_HOUR);
+  const t = Number(world?.t ?? 0);
+  return Number.isFinite(t) ? Math.max(0, Math.floor(t)) : 0;
+}
+
 // 真实毫秒令牌桶：算力限流用，单位不是游戏分钟。
 // 容量 capacity，每 refillMs 补 1 个；`take()` 返回是否拿到令牌。
 export function createTokenBucket({ capacity = 4, refillMs = 60_000, tokens = capacity, now = Date.now } = {}) {

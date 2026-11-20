@@ -172,6 +172,17 @@ export function addSecret(world, { kind, about, holder, valence, violates, detai
   return s;
 }
 
+// P1c：感知事件入队时必须带 seq/at。正式世界的居民只消费 seq 更新的行，
+// 且超过 PERCEPT_TTL_MIN 的迟到事件会被丢弃（见 agent.tick），避免同一事件被多个 10 分 think 重复消费。
+export function emitPercept(world, row) {
+  if (!world?.percepts) return null;
+  const at = world.simClock ? world.simClock.nowMinutes() : Math.max(0, Number(world.t ?? 0)) * 60;
+  const seq = (world.perceptSeq = (Number.isSafeInteger(world.perceptSeq) ? world.perceptSeq : 0) + 1);
+  const event = { ...row, seq, at };
+  world.percepts.push(event);
+  return event;
+}
+
 // 私藏超额：门口存粮明显高于自己以为该有的量。这是"他有多的"这条可被套利的事实
 export function scanSecrets(world) {
   // Phase A：生存世界按日低频推进（host 与 simulate 每 tick 都调 scanSecrets，故在此挂日界调度）。

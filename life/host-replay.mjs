@@ -120,7 +120,9 @@ function captureComparisonFrame(pair) {
 async function tickComparison(now = Date.now()) {
   for (const key of COMPARE_SIDES) {
     const branch = S.comparison.branches[key];
-    await tickSurvPlay(branch.play, {now, onResidentAction: (agent, rows) => recordComparisonAction(branch, agent, rows)});
+    // 对照世界目前强制旧每刻结算；若将来开启连续时钟，也走同一个显式 60 分步。
+    const clockOpt = branch.play.world.simClock ? { minutes: 60 } : {};
+    await tickSurvPlay(branch.play, {now, ...clockOpt, onResidentAction: (agent, rows) => recordComparisonAction(branch, agent, rows)});
     recordComparisonSeries(branch);
   }
   captureComparisonFrame(S.comparison);

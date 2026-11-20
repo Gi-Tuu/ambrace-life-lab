@@ -12,10 +12,10 @@ import { facilityOf } from '../shared/camp-facility.mjs';
 import { recordRepairFailure } from './production.mjs';
 import { isLaborAction } from './households.mjs';
 import { playerReach, survActInner } from './survplay-camp.mjs';
+import { RESEARCH_PLAYER_BUDGET, legacyPlayerTickRefusal, legacySpendPlayerTime, legacyRefundPlayerTime, legacyPlayerTimeLeft } from './research-time.mjs';
 
 // settleSurvival 由 survplay 注入：本模块只调用，不反向持有世界单例。
 export function createActionDomain({ settleSurvival }) {
-const PLAYER_BUDGET = 100;
 const P1_TICK_MINUTES = 60; // 旧路径：与 resident-time 的 TICK_MINUTES 同源
 const P1_DAY_MINUTES = 1440; // 连续路径：只保留日统计，不再拒绝操作
 const CONTINUOUS_LONG = new Set(CONTINUOUS_LONG_ACTIONS);
@@ -25,11 +25,6 @@ function legacyPlayerTime(w, kind) {
   if (kind === 'camp_exit' || kind === 'camp_sleep' || kind.startsWith('talk_')) return 0;
   return PLAYER_TIME[kind] ?? 0;
 }
-function budgetLeft(w) {
-  const s = w.survival;
-  if (s.p1BudgetTick !== w.t) { s.p1BudgetTick = w.t; s.p1BudgetLeft = PLAYER_BUDGET; }
-  return s.p1BudgetLeft;
-}
 // 剩余可行动时间：旧路径仍是本刻 100 点/60 分池；连续路径只显示"今日剩余"，不参与拒绝。
 function playerTimeLeft(w) {
   const s = w.survival;
@@ -38,26 +33,21 @@ function playerTimeLeft(w) {
     if (w.simClock) return Math.max(0, P1_DAY_MINUTES - clock.usedMin);
     return Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
   }
-  return s.p1BudgetTick === w.t ? s.p1BudgetLeft : PLAYER_BUDGET;
+  return legacyPlayerTimeLeft(w);
 }
 function playerTimeMax(w) {
   if (w.survival?.actTimeModel === true) return w.simClock ? P1_DAY_MINUTES : P1_TICK_MINUTES;
-  return PLAYER_BUDGET;
+  return RESEARCH_PLAYER_BUDGET;
 }
 
-// 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用。
+// 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用，判定集中在 research-time。
 function spendTime(w, cost) {
   if (!w.independentWorld) return true;
-  const s = w.survival;
-  budgetLeft(w);
-  if (s.p1BudgetLeft + 1e-9 < cost) return false;
-  s.p1BudgetLeft -= cost;
-  return true;
+  return legacySpendPlayerTime(w, cost);
 }
 function refundTime(w, cost) {
   if (!w.independentWorld || cost <= 0) return;
-  budgetLeft(w);
-  w.survival.p1BudgetLeft += cost;
+  legacyRefundPlayerTime(w, cost);
 }
 function refundPlayerMinutes(w, minutes) {
   if (!(minutes > 0)) return;
@@ -116,8 +106,9 @@ function survAct(sp, body) {
           return { ok: true, code: 'BUSY_START', remainMin: cost.minutes, endMin, why: `已排入时间轴，约 ${cost.minutes} 游戏分钟后完成` };
         }
       } else {
+        // 研究态旧路径（!w.simClock）：本刻 60 分池用尽 ⇒ 研究态旧超时码。字面量只在 research-time.mjs。
         const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
-        if (left <= 1e-9) return failTime('TIME_WAIT', '这一拍的时间用完了，等下一拍');
+        if (left <= 1e-9) { const refused = legacyPlayerTickRefusal(); return failTime(refused.code, refused.why); }
         if (cost.minutes <= left + 1e-9) {
           clock.tick.usedMin += cost.minutes;
           spentMinutes = cost.minutes;

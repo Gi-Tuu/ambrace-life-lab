@@ -12,6 +12,7 @@ import { validate } from './rules.mjs';
 import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
 import { isLaborAction } from './households.mjs';
 import { costFor } from './action-cost.mjs';
+import { legacyResidentTimeRefusal } from './research-time.mjs';
 
 export const TICK_MINUTES = 60;
 export const DAY_MINUTES = 1440;
@@ -166,7 +167,9 @@ export function residentBeginTime(world, id, kind) {
   }
   const tickLeft = Math.max(0, TICK_MINUTES - clock.tick.usedMin);
   const dayLeft = Math.max(0, DAY_MINUTES - clock.usedMin);
-  if (dayLeft + 1e-9 < cost) return { ok: false, code: 'TIME_WAIT' };
+  // 研究态旧路径（world.simClock 关闭）：60 分钟刻 + 1440 日池，装不下就返回研究态旧超时码。
+  // 正式连续路径在上一分支已返回，永远走不到这里；字面量只在 research-time.mjs。
+  if (dayLeft + 1e-9 < cost) return legacyResidentTimeRefusal();
   clock.tick.n += 1;
   if (tickLeft + 1e-9 >= cost) {
     clock.tick.usedMin += cost;

@@ -24,12 +24,15 @@ import { dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
 import { PARAMS } from './params.mjs';
 import { ShortHorizonPlanner } from './m3-planner.mjs';
 import { Coupling, COUPLING_KINDS } from './coupling.mjs';
+import { legacyRefusalWhy } from './research-time.mjs';
 
 const REFLEXES = [
   { when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },
   { when: (p, d) => p.kind === 'food_available' && d.v.energy < 0.24, then: () => ({ kind: 'eat' }) },
   { when: (p, d) => p.kind === 'shortfall_visible' && d.dominant().name === 'energy', then: () => ({ kind: 'eat' }) },
 ];
+// 正式连续世界里，感知事件超过一个派生刻还没被任何 think 消费，就视为过期（丢弃并记 trace）。
+const PERCEPT_TTL_MIN = 60;
 
 export class Organism {
   constructor({ id, name, archetype, seed, condition = 'C2', mInit, rng, deliberator = null, traitsOverride = null, channelMask = null }) {
@@ -110,15 +113,15 @@ export class Organism {
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
     this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
-    // V7.3.2 P0：同一世界刻的后续 episode 复用已结算的基础代谢/感知，不重复扣需求。
-    if (this.lastMetabTick === world.t && this.lastMetab) {
-      if (this.fairSuppress) return null;
-      return this.decideOn(world, { metab: this.lastMetab, reason: null, told: false, silent: true });
-    }
+    // P1：同一世界刻可能有多轮 10 分 think。基础代谢/驱动只结算一次（不产生 6 倍），
+    // 但感知/事件/决策每轮都跑——忙碌居民同样能感知到本刻新发生的事。
+    const reuseMetab = this.lastMetabTick === t && Boolean(this.lastMetab);
     // M3 的目标只属于"本刻真的做过非反射决策"的那些刻：反射提前 return 时不得沿用上一次的目标，否则特征表会把反射刻当成 M3 决策
     this.m3Last = null;
     // M4：τ 按刻计（不按决策机会计）——"躲一阵子"是时间量，不是机会量。关闭时不写任何状态。
-    if (this.ch.coupling) this.coupling.tick(1);
+    // 正式连续世界把这一步放进 metabolize（每刻一次）；研究态保持原位置逐位不变。
+    const continuousClock = Boolean(world.simClock);
+    if (this.ch.coupling && !(continuousClock && world.independentWorld)) this.coupling.tick(1);
 
     const incoming = world.pending.filter((p) => p.for === this.id);
     world.pending = world.pending.filter((p) => p.for !== this.id);
@@ -128,7 +131,40 @@ export class Organism {
     for (const inc of incoming) this.assess(gain === 1 ? inc.evt : { ...inc.evt, valence: inc.evt.valence * gain });
 
     const percepts = perceptsAt(world, this.id);
-    const external = world.percepts.filter((p) => p.for === this.id || p.for === 'all');
+    // P1：正式世界的 world.percepts 不再按 60 分整清。每条感知带 seq，居民只消费
+    // seq > lastPerceptSeq 的新事件 ⇒ 同一事件不会被同一刻内多个 10 分 think 重复消费。
+    // 研究态没有 seq 语义（每刻整清），保持旧读法逐位不变。
+    const external = (() => {
+      const rows = (world.percepts ?? []).filter((p) => p.for === this.id || p.for === 'all');
+      if (!world.simClock) return rows;
+      const nowMin = world.simClock.nowMinutes();
+      let seq = Number.isSafeInteger(world.perceptSeq) ? world.perceptSeq : 0;
+      const fresh = [];
+      for (const p of rows) {
+        if (!Number.isSafeInteger(p.seq)) p.seq = ++seq;
+        if (p.seq <= (this.lastPerceptSeq ?? -1)) continue;
+        if (!Number.isFinite(p.at)) p.at = nowMin; // 旧代码/夹具直接 push 的行：按首次可见时刻计龄
+        // 异步/排队 think 落地时，迟到超过一个刻的事件丢弃并留 trace，不重复消费。
+        if (nowMin - p.at > PERCEPT_TTL_MIN) {
+          this.perceptExpired = (this.perceptExpired ?? 0) + 1;
+          this.trace.push({
+            t, id: this.id, layer: 'percept_expired', name: this.name,
+            kind: p.kind ?? null, subject: p.subject ?? null, at: p.at, decidedAt: nowMin,
+          });
+          continue;
+        }
+        fresh.push(p);
+      }
+      if (seq > (world.perceptSeq ?? 0)) world.perceptSeq = seq;
+      this.lastPerceptSeq = Math.max(this.lastPerceptSeq ?? -1, world.perceptSeq ?? 0);
+      // decidedAt：这一轮 think 的决策分钟。异步落地时据此判断事件是否已过期。
+      this.lastPercepts = fresh.map((p) => ({ kind: p.kind, subject: p.subject ?? null, seq: p.seq, decidedAt: nowMin }));
+      if (fresh.length) {
+        this.perceptConsumed = (this.perceptConsumed ?? 0) + fresh.length;
+        this.lastPerceptDecidedAt = nowMin;
+      }
+      return fresh;
+    })();
     if (external.length) this.counters.externalEvents += 1;
 
     const deficit = percepts.find((p) => p.kind === 'shortfall_visible');
@@ -158,7 +194,16 @@ export class Organism {
 
     // P1-A：基础代谢只结算一次；正式游戏先于反射判断（反射不免代谢），
     // 研究模式保持旧顺序（反射提前 return 不结算），保护既有实验轨迹。
+    // P1c：按"距上次结算过了几个派生刻"推进（正常 think 间隔 10 分 ⇒ 1 刻），
+    // 既不会在同一刻内 6 次扣代谢，也不会因为错过一班 think 而漏掉整刻时间。
+    // M5 快/慢仓只接受 dt=1，无法做完整的 Body micro-step：先按 1 刻结算，
+    // 缺口记在 metabRemainder（只观测、不入档），见 docs/回报-债务-时间-2026-11-20.md。
+    const elapsedTicks = reuseMetab ? 0 : Math.max(1, t - (Number.isFinite(this.lastMetabTick) ? this.lastMetabTick : t));
     const metabolize = () => {
+      // 研究态保持旧的"每次 tick 一单位"（反射刻不补代谢，逐位基线要求）；只有正式连续
+      // 世界才按错过的派生刻补时间。
+      const step = this.ch.m5 ? 1 : (world.simClock ? elapsedTicks : 1);
+      if (this.ch.m5 && world.simClock && elapsedTicks > 1) this.metabRemainder = (this.metabRemainder ?? 0) + (elapsedTicks - 1);
       this.metabCount = (this.metabCount ?? 0) + 1; // 观测用，不进入存档
       // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
       const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
@@ -167,7 +212,7 @@ export class Organism {
       // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
       if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
       const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
-      this.bank.tick(1);
+      this.bank.tick(step);
       if (this.ch.forwardLearn) this.forwardModel.observe(input, prediction, this.bank.m);
       // M6-L（PLAN §25.6）：在线相对进度 = 误差双 EMA 的 (slow−fast)/slow。只在 lpExplore 且 forwardLearn 开时写；
       // 没学习就没有"进度"（L2 负控）。误差只用本次更新前的预测 mu，因果、无未来信息。
@@ -177,25 +222,27 @@ export class Organism {
         this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
       }
       const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
-      this.drives.tick(1, contact);
+      this.drives.tick(step, contact);
       // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
       if (world.weatherEnabled && world.weather && world.weather !== 'clear' && (world.outdoor ?? []).includes(world.loc[this.id])) {
-        this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008);
+        this.drives.v.energy = Math.max(0, this.drives.v.energy - 0.0008 * step);
       }
-      const erosion = this.viab.tick(1); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
+      const erosion = this.viab.tick(step); // 维持自身组织的基础代谢：活着不花钱的话，viability 就是装饰
       if (erosion) this.noteErosion(erosion, t);
+      // M4：正式连续世界里随基础代谢一起每刻一次；研究态在 tick 顶部按旧位置结算。
+      if (this.ch.coupling && continuousClock && world.independentWorld) this.coupling.tick(step);
 
       const ch = this.ch;
       const effUtil = ch.util ? this.bank.m : { ...this.traits.baseline };
       if (ch.driveRegulation !== 0) this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
       return { ch, prediction };
     };
-    const preMetab = world.independentWorld ? metabolize() : null;
+    const preMetab = !reuseMetab && world.independentWorld ? metabolize() : null;
     // V7.3.2 P0：被 episode 配额挡下的居民只结算基础代谢/感知，不做自主决策。
     if (this.fairSuppress) {
-      const metab = preMetab ?? metabolize();
+      const metab = reuseMetab ? this.lastMetab : (preMetab ?? metabolize());
       this.lastMetab = metab;
-      this.lastMetabTick = world.t;
+      this.lastMetabTick = t;
       return null;
     }
 
@@ -214,9 +261,9 @@ export class Organism {
     // P1 连续路径：身体忙不等于头脑停——照常感知/评价/决策，行动由 execute 以 BUSY trace 拒绝。
     if (residentTimeModel(world) && !world.simClock && clockOf(world, this.id).busy) return null;
 
-    const metab = preMetab ?? metabolize();
+    const metab = reuseMetab ? this.lastMetab : (preMetab ?? metabolize());
     this.lastMetab = metab;
-    this.lastMetabTick = world.t;
+    this.lastMetabTick = t;
     return this.decideOn(world, { metab, reason, told, silent: external.length === 0 });
   }
 
@@ -563,7 +610,7 @@ export class Organism {
         if (!budget.ok) {
           noteRefusal(world, 'resident', action?.kind);
           this.counters.refused = (this.counters.refused ?? 0) + 1;
-          this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: budget.code, why: budget.code === 'TIME_WAIT' ? '这一天的时间用完了' : budget.code === 'BUSY' ? '手上还有没做完的动作' : '这一刻的动作数到顶了', m: this.bank.snapshot(), cond: this.condition });
+          this.trace.push({ t, id: this.id, layer: 'refused', name: this.name, action: action?.id ?? null, kind: action?.kind ?? null, ok: false, code: budget.code, why: legacyRefusalWhy(budget.code), m: this.bank.snapshot(), cond: this.condition });
           return null;
         }
         if (budget.staged) {

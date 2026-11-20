@@ -67,13 +67,17 @@ function loadSurv(raw,seed=7,options) {
       mapSeed: Number.isSafeInteger(raw?.mapSeed) ? raw.mapSeed : 0, layoutVersion: [1,2].includes(raw?.layoutVersion) ? raw.layoutVersion : 0 });
   if (raw && typeof raw.t === 'number' && raw.survival) {
     const w = sp.world;
-    w.t = raw.t;
-    // P1 读档连续：把连续时钟重锚到存档刻；旧档没有 clock 时按 t*60 接上，不补离线空档。
+    // P1 读档连续：正式世界只经时钟重锚（`w.t` 是派生读法；写它等于重锚，容易丢分钟）。
+    // 研究态没有 simClock，保持旧 `w.t = raw.t` 逐位行为。
     if (w.simClock) {
-      const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
+      // 兼容旧档：旧语义是 t = max(raw.t, floor(clock/60))。取两者较大值重锚，
+      // 避免旧档 clock.gameMinutes 的亚分钟余数把 t 从 960 掉到 959。
+      const clockMinutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : 0;
+      const minutes = Math.max(clockMinutes, Math.max(0, raw.t) * 60);
       w.simClock.setGameMinutes(minutes);
-      w.t = Math.max(w.t, w.simClock.nowTick());
       resetSimCursor?.(w);
+    } else {
+      w.t = raw.t;
     }
     if (w.survival.households && raw.survival.households) w.survival.households = raw.survival.households;
     for (const id of Object.keys(raw.minds ?? {})) {
@@ -227,9 +231,9 @@ function loadSurv(raw,seed=7,options) {
     // P1：装载本身会消耗真实毫秒；在最后再重锚一次，保证"读档后的世界分钟 = 存档分钟"，
     // 不让读档磁盘/反序列化的耗时偷偷写进世界时间。
     if (w.simClock) {
-      const minutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : w.t * 60;
+      const clockMinutes = Number.isFinite(raw.clock?.gameMinutes) ? Math.max(0, raw.clock.gameMinutes) : 0;
+      const minutes = Math.max(clockMinutes, Math.max(0, raw.t) * 60);
       w.simClock.setGameMinutes(minutes);
-      w.t = Math.max(w.t, w.simClock.nowTick());
       resetSimCursor?.(w);
     }
   }

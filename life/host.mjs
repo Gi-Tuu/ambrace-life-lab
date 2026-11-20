@@ -8,6 +8,7 @@ import { worldSite } from './geometry.mjs';
 import { classifySay } from './speech.mjs';
 import { tell } from './gossip.mjs';
 import { phaseOf, scheduledLoc } from './clock.mjs';
+import { prepareSay, finishSay } from './dialogue.mjs';
 import { createSurvPlay, setSurvivalDeliberator, survView, dumpSurv, settleSurvival } from './survplay.mjs';
 import { observerActive as observerActiveBase, modelChannel, breakerOpenAt, budgetTick, pickProviderKey } from './host-budget.mjs';
 import { DIMS } from './traits.mjs';
@@ -107,18 +108,53 @@ export {
 };
 
 // P1：正式生存动作走短串行（只保护状态提交），不再等当前 tick / 模型。
-// 会 await 模型或内嵌多拍的动作（talk_say、camp_sleep）仍走完整 world 写链。
+// P1c：talk_say / camp_sleep / compare 也迁到同一短锁；talk_say 的模型等待放在锁外。
 async function actSurvivalFast(body, campKey) {
   if (!S.packs) return { ok: false, error: 'NO_WORLD' };
   const reqCamp = campKey && campKey !== 'MAIN' ? String(campKey) : null;
   if (reqCamp && !validCampKey(reqCamp)) return { ok: false, code: 'CAMP_INVALID' };
   const survSel = campSurv(reqCamp);
   if (!survSel) return { ok: false, error: 'NO_SURV' };
+  const now = Date.now();
+  // 睡眠：短锁内原子推进 60 游戏分/步（见 sleepSurvival），不排在旧 tickChain 后面。
+  if (body.kind === 'camp_sleep') return queueAct(() => sleepSurvival(survSel));
+  // 对话：prepare（锁内）→ 模型（锁外）→ finish（锁内）。模型等待期间普通输入仍可推进；
+  // 同一段对话并发句子由 prepare 的 pendingSay 闸门拒绝（SAY_PENDING），不会重复调模型。
+  if (body.kind === 'talk_say') return actTalkSayFast(survSel, body, now);
   return queueAct(async () => {
-    const result = await actInSurvival(survSel, body, modelTalk);
+    const result = await actInSurvival(survSel, body, modelTalk, now);
     if (result.ok || result.settled) return { ...result, ...await persistAfterAction(survSel) };
     return result;
   });
+}
+
+async function actTalkSayFast(sp, body, now) {
+  const prep = await queueAct(() => prepareSay(sp, body, now));
+  let result = prep;
+  if (prep?.pending) {
+    const pending = prep.pending;
+    let line = null;
+    if (pending.canAsk) {
+      try { line = await modelTalk(pending.askArgs); } catch { line = null; }
+    }
+    result = await queueAct(() => finishSay(sp, pending, line));
+  }
+  if (!result?.ok && !result?.settled) return result;
+  const settledNow = settleSurvival(sp);
+  const out = settledNow ? { ...result, settled: true } : result;
+  return { ...out, ...await persistAfterAction(sp) };
+}
+
+function continuousCamp(campKey) {
+  try {
+    const reqCamp = campKey && campKey !== 'MAIN' ? String(campKey) : null;
+    if (reqCamp && !validCampKey(reqCamp)) return null;
+    return campSurv(reqCamp);
+  } catch { return null; }
+}
+
+function actComparisonFast(body) {
+  return queueAct(() => actInComparison(body));
 }
 
 export const host = {
@@ -133,7 +169,7 @@ export const host = {
   },
   async tickOnce() { await manualTick(); return this.snapshot(); },
   stop() { return stop(); },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, rate: (S.mainSurv ?? S.surv)?.world?.simClock?.rate ?? S.rate ?? 1, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
   listCamps,
   campOwnerHash,
   claimCamp,
@@ -194,10 +230,13 @@ export const host = {
     return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : (invalidCamp ? { key: invalidCamp, invalid: true } : null), saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
-    // P1 输入解耦：普通生存动作不排在 tickChain 后面；模型等待/睡眠/对照仍走原链。
-    if (body?.mode === 'survival' && body.kind !== 'camp_sleep' && body.kind !== 'talk_say') {
-      return actSurvivalFast(body, campKey);
+    // P1c：正式连续世界（simClock 存在）里，talk_say/camp_sleep/compare 与普通 /act 共用
+    // 同一把短状态锁，不再排进 tickChain；研究态没有 simClock，继续走旧完整写链。
+    if (body?.mode === 'survival') {
+      const sp = continuousCamp(campKey);
+      if (sp?.world?.simClock) return actSurvivalFast(body, campKey);
     }
+    if (body?.mode === 'compare' && GAME_MODE === 'game') return actComparisonFast(body);
     return queueWorldWrite(async () => {
       if (!S.packs) return { ok: false, error: 'NO_WORLD' };
       // Phase D：生存单世界动作独立路由（mode=survival），不落入 town A/B。
@@ -286,7 +325,7 @@ export const host = {
     });
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
-      const known = ['pause', 'resume', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death'];
+      const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death'];
       // V7.3 第三批浏览器夹具：只在 V73_TEST=1 下暴露的受控接口（不进入生产默认路径）。
       if (body.action === 'v73_fixture') {
         if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
@@ -346,6 +385,21 @@ export const host = {
             clock[body.action]();
           }
         }
+      }
+      if (body.action === 'rate') {
+        // P1c：倍速是时钟属性，不是第二套换算。在线调度、离线补时都读同一个 clock.rate。
+        const rate = Number(body.rate ?? body.value);
+        if (!Number.isFinite(rate) || rate < 0.1 || rate > 16) return { ...this.status(), ok: false, error: 'BAD_RATE' };
+        const worlds = [S.mainSurv, S.surv, ...(S.camps?.live.values() ?? [])].filter(Boolean);
+        const seen = new Set();
+        for (const entry of worlds) {
+          const clock = (entry.world ?? entry.sp?.world)?.simClock;
+          if (!clock || seen.has(clock)) continue;
+          seen.add(clock);
+          clock.setRate(rate);
+        }
+        S.rate = rate;
+        return { ...this.status(), ok: true, rate };
       }
       if (body.action === 'brain') {
         // H-02b：旧版这里调 buildPacks()，等于**静默把世界打回起点**（实测 t 5→0、stat.决策 15→0、
@@ -446,7 +500,8 @@ export const host = {
           const persisted=await saveWorld(target);
           return {...this.status(),ok:persisted,persisted,catchup:summary,...(!persisted && {error:'SAVE_FAILED'})};
         }
-        catchUp(m);
+        // P1c：正式连续世界只走 catchUpSurvival 一套 rate/step；A/B 的研究态补时不再参与正式。
+        if (!(S.mainSurv ?? S.surv)?.world?.simClock) catchUp(m);
         await catchUpSurvival(m);
         await save(); // P1-8：手动补时也推进生存世界
       }

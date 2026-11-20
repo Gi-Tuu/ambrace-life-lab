@@ -12,7 +12,7 @@ test('ARCH-GATE-00 当前仓库三条闸门全绿（基线不假红）', () => {
   assert.deepEqual(report.problems, []);
   assert.ok(report.scanned > 100, `扫描文件数太少：${report.scanned}`);
   assert.ok(report.allowed.length > 0, '白名单一条都没命中，说明规则口径可能已漂移');
-  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-POS-01']);
+  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-POS-01', 'ARCH-CLOCK-01']);
 });
 
 test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
@@ -33,20 +33,35 @@ test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
   }
 });
 
-test('ARCH-2D-01 TIME_WAIT 只对 legacy 三处放行，换文件/换分支仍红', () => {
+test('ARCH-2D-01 TIME_WAIT 只放行研究态隔离模块，正式路径 0', () => {
   const legacy = run([
-    file('life/resident-time.mjs', "  if (dayLeft + 1e-9 < cost) return { ok: false, code: 'TIME_WAIT' };\n"),
-    file('life/survplay-actions.mjs', "    if (left <= 1e-9) return failTime('TIME_WAIT', '这一拍的时间用完了，等下一拍');\n"),
-    file('life/agent.mjs', "  why: budget.code === 'TIME_WAIT' ? '这一天的时间用完了' : 'x',\n"),
+    file('life/research-time.mjs', "export const LEGACY_TIME_CODE = 'TIME_WAIT';\n"),
   ]);
   assert.deepEqual(legacy.problems, []);
-  assert.equal(legacy.allowed.length, 3);
-  // 同样的字符串出现在别的文件，或同一文件的另一行，都不得借用白名单。
+  assert.equal(legacy.allowed.length, 1);
+  // 同样的字符串出现在正式文件的注释/代码/别的分支，都不得借用白名单。
   const moved = run([
-    file('life/other.mjs', "  if (dayLeft + 1e-9 < cost) return { ok: false, code: 'TIME_WAIT' };\n"),
-    file('life/resident-time.mjs', "  if (cost > 0) return { ok: false, code: 'TIME_WAIT' };\n"),
+    file('life/resident-time.mjs', "  return { ok: false, code: 'TIME_WAIT' };\n"),
+    file('life/survplay-actions.mjs', "    if (left <= 1e-9) return failTime('TIME_WAIT', 'x');\n"),
+    file('life/other.mjs', "  // TIME_WAIT\n"),
   ]);
-  assert.equal(moved.problems.filter((p) => p.includes('ARCH-2D-01')).length, 2);
+  assert.equal(moved.problems.filter((p) => p.includes('ARCH-2D-01')).length, 3);
+});
+
+test('ARCH-CLOCK-01 正式模块写 world.t 即红，存档/研究夹具不误报', () => {
+  const bad = run([
+    file('life/survplay.mjs', '  w.t = Math.floor(minute / 60);\n'),
+    file('life/host.mjs', '  world.t = 24;\n'),
+    file('life/agent.mjs', '  sp.world.t = 1;\n'),
+  ]);
+  assert.equal(bad.problems.filter((p) => p.includes('ARCH-CLOCK-01')).length, 3);
+  // 派生读法、局部变量、存档迁移都不是写入。
+  assert.deepEqual(run([
+    file('life/survplay.mjs', '  const tick = Math.floor(w.simClock.nowMinutes() / 60);\n'),
+    file('life/host.mjs', '  const t = world.t;\n'),
+    file('life/survplay-save.mjs', '  w.t = raw.t;\n'),
+    file('life/host-world.mjs', '  p.world.t += 1;\n'),
+  ]).problems, []);
 });
 
 test('ARCH-2D-01 测试/文档/证据/实验目录不计入运行路径', () => {

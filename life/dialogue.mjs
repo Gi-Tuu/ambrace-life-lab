@@ -91,15 +91,17 @@ export function leaveTalk(sp) {
   return { name: npc.name, line: `${npc.name}等得不耐烦，走开了。` };
 }
 
-// ask(prompt 上下文) 由 host 注入真实模型；没有模型时返回 null，走模板台词。
-export async function sayTo(sp, body, ask = null, now = Date.now()) {
+// P1c：`sayTo` 拆成两阶段，供 host 在"短状态锁内 prepare → 锁外等模型 → 锁内 finish"使用。
+// 并发保护：同一段对话同一时刻只允许一个待回应的玩家发言（talk.pendingSay token）。
+// 第二句在模型返回前到达会得到 SAY_PENDING，不重复调模型、不覆盖对话状态。
+export function prepareSay(sp, body, now = Date.now()) {
   const w = sp.world, s = w.survival, target = String(body?.target ?? '');
   const text = String(body?.text ?? '').trim().slice(0, 240);
   const talk = s.talk;
   if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
   if (!talk || talk.target !== target) return { ok: false, code: 'NO_TALK' };
-  if (!talkInRange(w, talk) || talk.contact && Object.hasOwn(body,'from') &&
-      residentContact(w,{...talk.contact,from:body.from,to:body.to,room:body.room})) {
+  if (!talkInRange(w, talk) || talk.contact && Object.hasOwn(body, 'from') &&
+      residentContact(w, { ...talk.contact, from: body.from, to: body.to, room: body.room })) {
     s.talk = null;
     return { ok: false, code: 'NOT_TOGETHER' };
   }
@@ -107,6 +109,10 @@ export async function sayTo(sp, body, ask = null, now = Date.now()) {
   if (!text) return { ok: false, code: 'EMPTY_TEXT' };
   if (now - talk.openAt > talk.patienceMs) {
     return { ok: true, left: true, ...leaveTalk(sp) };
+  }
+  // 上一个发言的模型还没回来：不重复提交。超过一个 patience 周期仍未落地则允许重试。
+  if (talk.pendingSay && now - (talk.pendingSay.at ?? 0) < Math.max(1000, talk.patienceMs)) {
+    return { ok: false, code: 'SAY_PENDING', why: '上一句话还在等回应' };
   }
   talk.count += 1;
   const trust = trustOf(npc);
@@ -130,11 +136,37 @@ export async function sayTo(sp, body, ask = null, now = Date.now()) {
     if (hostile) s.talk = null;
     return { ok: true, hostile: true, attacked: hostile, name: npc.name, line };
   }
-  // 3) 正常回应：有模型用模型，没有就用状态条件化模板（态度已由服务端定好）。
-  let line = null;
-  if (talk.engage !== 'reluctant' && ask) {
-    try { line = await ask({ npc, world: w, history: talk.history, text, trust, intent: intent.kind }); } catch { line = null; }
+  // 3) 正常回应：模型锁外调用；这里只登记并返回上下文。
+  const token = `${target}:${talk.count}:${now}`;
+  const canAsk = talk.engage !== 'reluctant';
+  if (canAsk) talk.pendingSay = { token, at: now };
+  return {
+    pending: {
+      token, target, text, trust, intent, talk, npc, canAsk,
+      contactBody: Object.hasOwn(body, 'from') ? { from: body.from, to: body.to, room: body.room } : null,
+      askArgs: { npc, world: w, history: talk.history, text, trust, intent: intent.kind },
+    },
+  };
+}
+
+export function finishSay(sp, pending, line = null, now = Date.now()) {
+  const w = sp.world, s = w.survival, { target, intent, npc, talk, token } = pending;
+  if (!isAlive(w.agents.p1) || (!w.independentWorld && (s.ended || s.failed))) return { ok: false, code: 'CAMP_ENDED' };
+  if (!talk || s.talk !== talk || talk.target !== target) return { ok: false, code: 'NO_TALK' };
+  if (talk.pendingSay && talk.pendingSay.token !== token) return { ok: false, code: 'SAY_STALE', why: '对话已被另一句接管' };
+  if (talk.pendingSay?.token === token) talk.pendingSay = null;
+  if (!isAlive(npc)) { s.talk = null; return { ok: false, code: 'RESIDENT_GONE' }; }
+  if (!talkInRange(w, talk) || pending.contactBody &&
+      residentContact(w, { ...talk.contact, ...pending.contactBody })) {
+    s.talk = null;
+    return { ok: false, code: 'NOT_TOGETHER' };
   }
+  // 模型等待期间可能已过耐心：走开，不把一句迟到的话说出口。
+  if (now - talk.openAt > talk.patienceMs) {
+    if (talk.pendingSay?.token === token) talk.pendingSay = null;
+    return { ok: true, left: true, ...leaveTalk(sp) };
+  }
+  // 正常回应：有模型用模型，没有就用状态条件化模板（态度已由服务端定好）。
   if (!line) {
     line = talk.engage === 'reluctant'
       ? `"${npc.name}":（停了一下）……${speechLine(npc, { world: w, kind: 'talk', actionId: 'talk:p1', t: w.t })}`
@@ -155,4 +187,15 @@ export async function sayTo(sp, body, ask = null, now = Date.now()) {
   npc.relations?.meet?.('p1', w.t, { delta: { trust: applied, familiarity: 0.03 } });
   talk.history.push({ who: target, text: line });
   return { ok: true, name: npc.name, line, engage: talk.engage, intent: intent.kind };
+}
+
+// 兼容入口：直接调用方（测试/研究态）仍是一次 await 的 sayTo。
+export async function sayTo(sp, body, ask = null, now = Date.now()) {
+  const prep = prepareSay(sp, body, now);
+  if (!prep.pending) return prep;
+  let line = null;
+  if (prep.pending.canAsk && ask) {
+    try { line = await ask(prep.pending.askArgs); } catch { line = null; }
+  }
+  return finishSay(sp, prep.pending, line, now);
 }
