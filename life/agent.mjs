@@ -34,6 +34,8 @@ const REFLEXES = [
 ];
 // 正式连续世界里，感知事件超过一个派生刻还没被任何 think 消费，就视为过期（丢弃并记 trace）。
 const PERCEPT_TTL_MIN = 60;
+// 决策链同步/异步判定：本地替身路径必须同步落地（见 decideOn 注释）。
+const isThenable = (x) => Boolean(x) && typeof x.then === 'function';
 
 export class Organism {
   constructor({ id, name, archetype, seed, condition = 'C2', mInit, rng, deliberator = null, traitsOverride = null, channelMask = null }) {
@@ -109,7 +111,7 @@ export class Organism {
     return a;
   }
 
-  async tick(world) {
+  tick(world) {
     this.world = world;
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
@@ -271,7 +273,13 @@ export class Organism {
 
   // V7.2：把"选一个动作并执行"从 tick 里拆出来。代谢/感知/反射只在 tick 里结算一次；
   // 个人时间模型允许同一刻再追加决策（reason=null ⇒ 不会问模型，模型预算仍在 host 资源层）。
-  async decideOn(world, { metab, reason = null, told = false, silent = true, sameKind = null } = {}) {
+  //
+  // P1b-修：本地替身（没问模型）必须**同步**结算完，不能只因为 `async` 包装就欠 4~6 个微任务。
+  // 连续钟按游戏分钟推进，一次 `await Promise.resolve()` 只够还一个微任务 ⇒ 被包装的决策会在
+  // 分钟循环里挂 4~6 分钟（批量 60 分钟一步时更久），把 think 节拍从 10 分/次拖到 ~38 分/次。
+  // 因此 decideOn/choose 改为"同步返回值；只有真问模型才返回 Promise"，tick 也不再是 async。
+  // 研究态/旧路径都 await 返回值，逐位结果不变；连续路径的决策不再依赖批次/微任务排队。
+  decideOn(world, { metab, reason = null, told = false, silent = true, sameKind = null } = {}) {
     this.world = world;
     const t = world.t;
     const { ch, prediction } = metab;
@@ -329,41 +337,54 @@ export class Organism {
     }
 
     this.counters.deliberation += 1;
-    let chosen = await this.choose({ scored, temp, ch, world, paths, reason });
-    let v = validate(world, this.id, chosen.act);
-    if (!v.ok) {
-      if (chosen.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], v.code);
-      recordConstructionBlock(world,this.id,chosen.act.to ?? world.loc[this.id],chosen.act.kind,v.code);
-      this.counters.rejected += 1;
-      this.noteDayReject(t);
-      const rest = scored.filter((s) => s.id !== chosen.id);
-      if (!rest.length) return null;
-      // 被驳回本身就是"关键事件"：这次一定要问，否则重试永远走替身
-      const again = await this.choose({ scored: rest, temp, ch, world, paths: rest.map((r) => r.act), rejected: v, reason: '驳回重决策' });
-      this.trace.push({ t, id: this.id, layer: 'rejected', name: this.name, code: v.code, why: v.why, from: chosen.id, to: again.id, m: this.bank.snapshot(), cond: this.condition });
-      // BUG-1：重选出来的动作必须再过一次规则层。上一版这里直接把 again 交给 execute，
-      // 等于"被驳回一次之后就免检"——实测夜里 eat 被 DEPLETED 驳回、重选到 look_out
-      // （validate 明确返回 LOCKED_HOUR）仍然执行，角色夜里上了瞭台。
-      // 不无限重试，也不重复计数：一次驳回只记一次 rejected（askedRetry === rejected 这条恒等式靠它）。
-      const retryGate = validate(world, this.id, again.act);
-      if (!retryGate.ok) {
-        if (again.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], retryGate.code);
-        recordConstructionBlock(world,this.id,again.act.to ?? world.loc[this.id],again.act.kind,retryGate.code);
-        // 重选后仍非法 ⇒ 本刻不行动。但仍然留一条 trace（带 scored、不带 action），
-        // 否则引擎内的 cfDecisions 会比"从 trace 独立重算的决策数"多出来，
-        // o1-counterfactual 的装置交叉核对（两条实现必须一致）就会红。
-        this.trace.push({ t, id: this.id, layer: 'aborted', name: this.name, code: 'RETRY_ILLEGAL', why: `${again.id} 重选后仍不合法`, from: chosen.id, to: again.id, action: null, m: this.bank.snapshot(), scored, cond: this.condition });
-        return null;
-      }
-      chosen = again;
+    const ctx = { world, t, silent, ch, temp, scored, paths };
+    const chosen = this.choose({ scored, temp, ch, world, paths, reason });
+    return isThenable(chosen) ? chosen.then((pick) => this.landDecision(pick, ctx)) : this.landDecision(chosen, ctx);
+  }
+
+  // decideOn 的后半段：规则层裁决 + 一次驳回重决策 + 执行。同步返回；只有真问模型时返回 Promise。
+  landDecision(chosen, ctx) {
+    const { world, t, silent, ch, temp, scored } = ctx;
+    const v = validate(world, this.id, chosen.act);
+    if (v.ok) return this.execute(world, chosen.act, 'deliberation', t, silent, { temp, scored });
+    if (chosen.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], v.code);
+    recordConstructionBlock(world, this.id, chosen.act.to ?? world.loc[this.id], chosen.act.kind, v.code);
+    this.counters.rejected += 1;
+    this.noteDayReject(t);
+    const rest = scored.filter((s) => s.id !== chosen.id);
+    if (!rest.length) return null;
+    // 被驳回本身就是"关键事件"：这次一定要问，否则重试永远走替身
+    const again = this.choose({ scored: rest, temp, ch, world, paths: rest.map((r) => r.act), rejected: v, reason: '驳回重决策' });
+    return isThenable(again)
+      ? again.then((pick) => this.landRetry(chosen, pick, ctx, v))
+      : this.landRetry(chosen, again, ctx, v);
+  }
+
+  landRetry(chosen, again, ctx, v) {
+    const { world, t, silent, scored } = ctx;
+    this.trace.push({ t, id: this.id, layer: 'rejected', name: this.name, code: v.code, why: v.why, from: chosen.id, to: again.id, m: this.bank.snapshot(), cond: this.condition });
+    // BUG-1：重选出来的动作必须再过一次规则层。上一版这里直接把 again 交给 execute，
+    // 等于"被驳回一次之后就免检"——实测夜里 eat 被 DEPLETED 驳回、重选到 look_out
+    // （validate 明确返回 LOCKED_HOUR）仍然执行，角色夜里上了瞭台。
+    // 不无限重试，也不重复计数：一次驳回只记一次 rejected（askedRetry === rejected 这条恒等式靠它）。
+    const retryGate = validate(world, this.id, again.act);
+    if (!retryGate.ok) {
+      if (again.act.kind === 'repair') recordRepairFailure(world, this.id, world.loc[this.id], retryGate.code);
+      recordConstructionBlock(world, this.id, again.act.to ?? world.loc[this.id], again.act.kind, retryGate.code);
+      // 重选后仍非法 ⇒ 本刻不行动。但仍然留一条 trace（带 scored、不带 action），
+      // 否则引擎内的 cfDecisions 会比"从 trace 独立重算的决策数"多出来，
+      // o1-counterfactual 的装置交叉核对（两条实现必须一致）就会红。
+      this.trace.push({ t, id: this.id, layer: 'aborted', name: this.name, code: 'RETRY_ILLEGAL', why: `${again.id} 重选后仍不合法`, from: chosen.id, to: again.id, action: null, m: this.bank.snapshot(), scored, cond: this.condition });
+      return null;
     }
-    return this.execute(world, chosen.act, 'deliberation', t, silent, { temp, scored });
+    return this.execute(world, again.act, 'deliberation', t, silent, { temp: ctx.temp, scored });
   }
 
   // 审议层：插了 deliberator 且**这一刻有事件**才走真模型，否则走确定性替身。
   // 注意这里不再构造任何提示词 —— 提示词由 deliberator 自己建（见 loop-real.mjs / host.modelBrain），
   // 目的是让「效用数字」在结构上没法泄漏进模型视野，而不是靠自觉。
-  async choose({ scored, temp, ch, world, paths, rejected, reason = null }) {
+  // 返回同步的 picked，或（只有真问模型时）一个 Promise<picked>；调用方按 thenable 判断。
+  choose({ scored, temp, ch, world, paths, rejected, reason = null }) {
     const ask = Boolean(this.deliberator) && Boolean(ch.ask) && reason !== null;
     if (!ask) {
       // 有模型但这一刻没有事件 ⇒ 自主层自己决定。skipped 是"事件门控在起作用"的直接读数
@@ -375,13 +396,16 @@ export class Organism {
     // 第五类触发：被规则驳回后的重决策。它不在 triggerReason 的四类里（那是"世界发生了一件事"），
     // 但同样必须计入预算，否则 asked > triggered 这种差额会变成一个没人能解释的数
     if (reason === '驳回重决策') this.counters.askedRetry = (this.counters.askedRetry ?? 0) + 1;
-    const r = await this.deliberator({ world, agent: this, paths, scored, temp, ch, rejected, trigger: reason, summary: this.bank.summary(), memories: this.lastMemories ?? [], daySummary: this.daySummary(world.t) });
-    const hit = scored.find((s) => s.id === r?.id || s.kind === r?.kind);
-    // 模型不可用（超预算/端点抖动/返回清单外动作）时退回替身抽样，而不是 argmax：
-    // argmax 会让 A/B 两个世界一起变呆，把「通道差异」压平成「都选第一名」，等于自己造出一个假阴性
-    if (hit) return hit;
-    this.counters.fallback = (this.counters.fallback ?? 0) + 1;
-    return softmaxPick(this.rng, scored, temp).picked;
+    const settle = (r) => {
+      const hit = scored.find((s) => s.id === r?.id || s.kind === r?.kind);
+      // 模型不可用（超预算/端点抖动/返回清单外动作）时退回替身抽样，而不是 argmax：
+      // argmax 会让 A/B 两个世界一起变呆，把「通道差异」压平成「都选第一名」，等于自己造出一个假阴性
+      if (hit) return hit;
+      this.counters.fallback = (this.counters.fallback ?? 0) + 1;
+      return softmaxPick(this.rng, scored, temp).picked;
+    };
+    const r = this.deliberator({ world, agent: this, paths, scored, temp, ch, rejected, trigger: reason, summary: this.bank.summary(), memories: this.lastMemories ?? [], daySummary: this.daySummary(world.t) });
+    return isThenable(r) ? r.then(settle) : settle(r);
   }
 
   // S2：收到一条意图消息。后果只有三件——关系（调用方已按规则表改）、情景记忆、计数。

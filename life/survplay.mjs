@@ -483,6 +483,15 @@ function startResidentThink(w, sp, a, atMin, ctx) {
     noteThinkError(w, sp, error);
     return;
   }
+  // 本地替身是同步结算的：立刻收尾，别让决策欠微任务——分钟循环一次只还一个微任务，
+  // 批量推进时会把 10 分 think 节拍拖成 ~38 分（1.1 正式钟灭绝的直接原因）。
+  if (!promise || typeof promise.then !== 'function') {
+    try { afterResidentThink(w, sp, a, traceStart, ctx); }
+    catch (error) { noteThinkError(w, sp, error); }
+    think.inFlight = Math.max(0, think.inFlight - 1);
+    drainThinkQueue(w, sp);
+    return;
+  }
   a.simThinkPromise = Promise.resolve(promise)
     .then(() => afterResidentThink(w, sp, a, traceStart, ctx))
     .catch((error) => noteThinkError(w, sp, error))

@@ -196,7 +196,14 @@ export async function runExperiment() {
   return { runs };
 }
 
-if (process.argv[1]?.endsWith('long-run.mjs')) {
+// 只在直接执行本文件时跑实验；被其他 harness import 时不得触发
+// （旧判断用 endsWith('long-run.mjs')，任何 *-long-run.mjs 的探针都会被误触发）。
+const invokedDirectly = (() => {
+  const arg = process.argv[1];
+  if (!arg) return false;
+  return arg.replace(/\\/g, '/').split('/').pop() === 'long-run.mjs';
+})();
+if (invokedDirectly) {
   const out = await runExperiment();
   writeFileSync(process.argv[2] ?? 'docs/long-run-v4.json', JSON.stringify(out, null, 2));
   for (const r of out.runs) {

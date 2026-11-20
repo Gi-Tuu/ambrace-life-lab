@@ -439,6 +439,12 @@ const crowdForVisit=(world,loc)=>(world.occupancy[loc]??[])
 export function affordancesFor(world, agentId) {
   const me = world.agents[agentId];
   const here = world.loc[agentId];
+  // 1.1 P1b：移动是**一次要占几个小时**的承诺（正式世界平均单程 ~4 刻），决策节拍若跟着 10 分 think
+  // 放大 6 倍，同一个需求缺口会在一小时内被重复兑现 6 次，居民把一半时间花在路上，换粮/收菜被挤掉
+  // （实测正式钟 100 日饥饿灭绝；见 docs/回报-1.1-正式钟生存-2026-11-20.md）。
+  // 因此移动候选按旧刻（60 游戏分）发放；饥饿/天气等局部动作仍是分钟级。研究态/旧路径无此门。
+  const movePlanDue = !world.simClock || !world.gameRules ||
+    !(Number(me?.nextMovePlanMin ?? -Infinity) > world.simClock.nowMinutes());
   const present = othersAt(world, agentId);
   const away = Object.keys(world.agents).filter((x) => x !== agentId && world.loc[x] !== here && (world.stash[x] ?? 0) > 0);
   const rel = (id) => (me?.relations ? me.relations.get(id) : { trust: 50, familiarity: 0 });
@@ -458,7 +464,7 @@ export function affordancesFor(world, agentId) {
         if (n) counts[loc] = n;
       }
       const pick = Object.entries(counts).sort((a, b2) => b2[1] - a[1])[0];
-      if (pick && !world.survival?.districtTravel?.[agentId]) {
+      if (pick && !world.survival?.districtTravel?.[agentId] && movePlanDue) {
         out.push({ id: `move_to:${pick[0]}`, kind: 'move_to', to: pick[0], label: '去人多的地方', cost: 0.06, impulse: 0.24, serves: { social: 1 } });
       }
     }
@@ -467,7 +473,7 @@ export function affordancesFor(world, agentId) {
   {
     const court = world.gameRules ? world.survival?.households?.courtship?.[agentId] : null;
     const to = court ? world.loc[court] : null;
-    if (to && to !== here && !world.survival?.districtTravel?.[agentId]) {
+    if (to && to !== here && !world.survival?.districtTravel?.[agentId] && movePlanDue) {
       out.push({ id: `move_to:${to}`, kind: 'move_to', to, label: `去找${world.agents[court]?.name ?? '对方'}`, cost: 0.06, impulse: 0.3, serves: { social: 1 } });
     }
   }
@@ -498,13 +504,14 @@ export function affordancesFor(world, agentId) {
   }
 
   // 路径二：走到某处——目的地有谁，满足的需求就不同（这是原来 wander 完全没有的分岔）
+  // 移动候选的发放节拍见上面的 movePlanDue（正式世界按旧刻，研究态/旧路径无门）。
   const feats = world.features ?? {};
   const ownHome=world.housing?.[agentId];
   const privateRooms=world.survival?.households ? Object.keys(world.survival.households.deeds) :
     world.housing ? Object.values(world.housing) : [];
   const houseGoal=world.survival?.households ? householdPlans(world,agentId) : null;
   const homeAtNight=ownHome && survivalPhaseOf(world.t)==='夜';
-  for (const loc of Object.keys(world.locs ?? LOCS)) {
+  if (movePlanDue) for (const loc of Object.keys(world.locs ?? LOCS)) {
     if (loc===here) continue;
     if (privateRooms.includes(loc)) {
       if (world.survival.settlementLife ? !homeEntry(world,agentId,loc).ok ||
@@ -566,7 +573,7 @@ export function affordancesFor(world, agentId) {
     // §15.5 M1：饥饿驱动去菜园、有料驱动去空位奠基（移动候选挂紧迫度，开关供网格）
     // §16 E4b：storeHunger 开时直接用能量 deficit 门控移动候选（饿就去菜园，不等公仓阈值）
     const hungry = s0.storeHunger === true && (world.agents[agentId]?.drives?.v?.energy ?? 1) < (s0.hungerGate ?? 0.4); // §17 L2 门控宽度
-    if ((urg > 0 && (s0.moveUrgency === true || isFarmer)) || hungry) {
+    if (((urg > 0 && (s0.moveUrgency === true || isFarmer)) || hungry) && movePlanDue) {
       if (here !== 'garden') out.push({ id: 'move_to:garden', kind: 'move_to', to: 'garden', label: '去菜园', cost: 0.05, impulse: 0.2, serves: { energy: urg } });
       const bagM = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
       const affordable = Object.entries(buildingsFor(world)).find(([, d]) => bagM.wood + s0.inv.wood >= d.cost.wood && bagM.stone + s0.inv.stone >= d.cost.stone);
@@ -793,6 +800,9 @@ function actuateInner(world, agentId, action, actionLoc) {
       if (!access.ok) return {...access,action};
       const travel = startMove(world, agentId, action.to);
       if (travel && !travel.ok) return {...travel,action};
+      // 1.1 P1b：一次移动承诺的最低重新规划间隔 = 旧刻 60 游戏分。移动本身要占几刻，
+      // 不能让 10 分 think 把它当成"随手可做"的 5 分钟动作反复重选（见 affordancesFor 的 movePlanDue）。
+      if (world.simClock && world.gameRules) world.agents[agentId].nextMovePlanMin = world.simClock.nowMinutes() + 60;
       if (world.survival?.districtTravel?.[agentId])
         return { action, ok:true, code:'OK', observation:'出发前往'+world.locs[action.to], novel:true };
       const crowd = othersAt(world, agentId);
