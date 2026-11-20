@@ -184,6 +184,7 @@ test('P1c-05 world.t 是派生 getter：读=floor(minutes/60)，写=重锚，JSO
   assert.equal(w.t, 10);
   w.t = 12;
   assert.equal(Math.round(clock.nowMinutes()), 720, '写 t 只允许重锚时钟');
+    clock.pause(); // 固定时钟，避免真实毫秒在 dump/load 期间推进导致精确断言抖动
   const raw = dumpSurv(sp);
   assert.equal(raw.t, 12);
   assert.equal(raw.clock.gameMinutes, 720);

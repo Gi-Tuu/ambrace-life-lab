@@ -63,7 +63,7 @@ function commitPlayerPos(w, from) {
   placeActor(w, 'p1', { x: from[0], z: from[1], space }, { mirror: true });
 }
 export function playerReach(w, from, kind = '') {
-  if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
+    if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
   const last = s.playerPos;
   const first = !last || !Number.isFinite(last.x) || !Number.isFinite(last.z);
@@ -88,7 +88,7 @@ export function playerReach(w, from, kind = '') {
   const allowanceBase = sameTick ? base : base * Math.max(1, ticks);
   const used = sameTick ? st.sub : 0;
   if (dist > allowanceBase - used + 1e-6) return { ok: false, code: 'TELEPORT' };
-  if (!geometryAllows(w, from)) return { ok: false, code: 'OUT_OF_REACH' };
+    if (!geometryAllows(w, from)) return { ok: false, code: w.campPlayerRoom || dist <= 2 + 1e-6 ? 'OUT_OF_REACH' : 'TELEPORT' };
   commitPlayerPos(w, from);
   s.playerReachState = { t: w.t, allowance: allowanceBase, sub: used + dist };
   return { ok: true };
