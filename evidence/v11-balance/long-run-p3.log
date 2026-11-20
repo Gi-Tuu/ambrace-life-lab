@@ -1,0 +1,51 @@
+{"mode":"p3","seed":7,"population":{"30":5,"100":0,"200":0},"births100":2,"ended200":true,"causes":{"衰竭":1,"衰老":5},"errors":0}
+{"mode":"p3","seed":13,"population":{"30":6,"100":3,"200":0},"births100":6,"ended200":true,"causes":{"衰竭":1,"衰老":9},"errors":0}
+{"mode":"p3","seed":29,"population":{"30":5,"100":3,"200":0},"births100":4,"ended200":true,"causes":{"衰竭":1,"衰老":7},"errors":0}
+{"mode":"p3","seed":41,"population":{"30":5,"100":2,"200":0},"births100":3,"ended200":true,"causes":{"衰竭":1,"衰老":6},"errors":0}
+{"mode":"p3","seed":53,"population":{"30":5,"100":5,"200":0},"births100":8,"ended200":true,"causes":{"衰竭":1,"衰老":13},"errors":0}
+{
+  "summary": {
+    "mode": "p3",
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "days": 200,
+    "population30": [
+      5,
+      6,
+      5,
+      5,
+      5
+    ],
+    "population100": [
+      0,
+      3,
+      3,
+      2,
+      5
+    ],
+    "population200": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "avg30": 5.2,
+    "avg100": 2.6,
+    "avg200": 0,
+    "births100": 23,
+    "deaths100": 30,
+    "extinct100": "1/5",
+    "extinct200": "5/5",
+    "deathCauses200": {
+      "衰竭": 5,
+      "衰老": 40
+    },
+    "agentErrors": 0
+  }
+}

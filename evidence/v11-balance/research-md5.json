@@ -1,0 +1,47 @@
+{
+  "algorithm": "md5",
+  "note": "P3 台账按 CRLF 字节；本轮 log 由 PowerShell 重定向写成 LF，故同时列 raw 与归一后 md5。",
+  "faces": {
+    "report": {
+      "rawMd5": "19a2803182a5a63ae944120dd0a528bc",
+      "rawBytes": 1875,
+      "crlfMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "crlfBytes": 1886,
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "match": true
+    },
+    "sweep": {
+      "rawMd5": "22f76c48897713ddcee9bae8f767e31b",
+      "rawBytes": 2838,
+      "crlfMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "crlfBytes": 2850,
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "match": true
+    },
+    "viab": {
+      "rawMd5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+      "rawBytes": 4504,
+      "crlfMd5": "b923787830eb26c3853ecf959987cf9d",
+      "crlfBytes": 4526,
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "match": true
+    },
+    "recover": {
+      "rawMd5": "feac239b364b8a771042d3996529181e",
+      "rawBytes": 12107,
+      "crlfMd5": "fe198109386d048356f2fa69312e5183",
+      "crlfBytes": 12150,
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "match": true
+    },
+    "metab": {
+      "rawMd5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+      "rawBytes": 13324,
+      "crlfMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "crlfBytes": 13357,
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "match": true
+    }
+  },
+  "allMatch": true
+}

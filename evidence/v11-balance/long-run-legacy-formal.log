@@ -1,0 +1,50 @@
+{"mode":"legacy-formal","seed":7,"population":{"30":6,"100":10,"200":5},"births100":7,"ended200":false,"causes":{"衰老":9},"errors":0}
+{"mode":"legacy-formal","seed":13,"population":{"30":3,"100":7,"200":1},"births100":4,"ended200":false,"causes":{"衰老":7},"errors":0}
+{"mode":"legacy-formal","seed":29,"population":{"30":5,"100":7,"200":0},"births100":4,"ended200":true,"causes":{"衰老":8},"errors":0}
+{"mode":"legacy-formal","seed":41,"population":{"30":4,"100":9,"200":3},"births100":6,"ended200":false,"causes":{"衰老":8},"errors":0}
+{"mode":"legacy-formal","seed":53,"population":{"30":4,"100":7,"200":1},"births100":4,"ended200":false,"causes":{"衰老":8},"errors":0}
+{
+  "summary": {
+    "mode": "legacy-formal",
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "days": 200,
+    "population30": [
+      6,
+      3,
+      5,
+      4,
+      4
+    ],
+    "population100": [
+      10,
+      7,
+      7,
+      9,
+      7
+    ],
+    "population200": [
+      5,
+      1,
+      0,
+      3,
+      1
+    ],
+    "avg30": 4.4,
+    "avg100": 8,
+    "avg200": 2,
+    "births100": 25,
+    "deaths100": 0,
+    "extinct100": "0/5",
+    "extinct200": "1/5",
+    "deathCauses200": {
+      "衰老": 40
+    },
+    "agentErrors": 0
+  }
+}

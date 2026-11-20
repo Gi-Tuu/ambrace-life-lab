@@ -1,0 +1,61 @@
+{"seed":7,"version":1,"population":[5,6,1],"births":6,"deaths":{"衰竭":1,"衰老":8},"status":"boundary","errors":0}
+{"seed":13,"version":1,"population":[4,2,0],"births":2,"deaths":{"衰竭":1,"衰老":5},"status":"extinct","errors":0}
+{"seed":29,"version":1,"population":[5,6,4],"births":14,"deaths":{"衰竭":1,"衰老":13},"status":"alive","errors":0}
+{"seed":41,"version":1,"population":[5,6,7],"births":13,"deaths":{"衰竭":1,"衰老":9},"status":"alive","errors":0}
+{"seed":53,"version":1,"population":[5,6,1],"births":8,"deaths":{"衰竭":1,"衰老":10},"status":"boundary","errors":0}
+{"seed":7,"version":2,"population":[5,0,0],"births":2,"deaths":{"衰竭":1,"衰老":5},"status":"extinct","errors":0}
+{"seed":13,"version":2,"population":[6,3,0],"births":6,"deaths":{"衰竭":1,"衰老":9},"status":"extinct","errors":0}
+{"seed":29,"version":2,"population":[5,3,0],"births":4,"deaths":{"衰竭":1,"衰老":7},"status":"extinct","errors":0}
+{"seed":41,"version":2,"population":[5,2,0],"births":3,"deaths":{"衰竭":1,"衰老":6},"status":"extinct","errors":0}
+{"seed":53,"version":2,"population":[5,5,0],"births":10,"deaths":{"衰竭":1,"衰老":13},"status":"extinct","errors":0}
+{"mode":"on","seed":7,"population":{"30":3,"100":7,"200":1},"births100":4,"ended200":false,"causes":{"衰老":7},"errors":0}
+{"mode":"on","seed":13,"population":{"30":5,"100":9,"200":9},"births100":6,"ended200":false,"causes":{"衰老":9},"errors":0}
+{"mode":"on","seed":29,"population":{"30":6,"100":10,"200":1},"births100":7,"ended200":false,"causes":{"饥饿":10},"errors":0}
+{"mode":"on","seed":41,"population":{"30":6,"100":9,"200":0},"births100":6,"ended200":true,"causes":{"衰老":10},"errors":0}
+{"mode":"on","seed":53,"population":{"30":6,"100":9,"200":7},"births100":6,"ended200":false,"causes":{"衰老":9},"errors":0}
+{
+  "summary": {
+    "mode": "on",
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "days": 200,
+    "population30": [
+      3,
+      5,
+      6,
+      6,
+      6
+    ],
+    "population100": [
+      7,
+      9,
+      10,
+      9,
+      9
+    ],
+    "population200": [
+      1,
+      9,
+      1,
+      0,
+      7
+    ],
+    "avg30": 5.2,
+    "avg100": 8.8,
+    "avg200": 3.6,
+    "births100": 29,
+    "deaths100": 0,
+    "extinct100": "0/5",
+    "extinct200": "1/5",
+    "deathCauses200": {
+      "衰老": 35,
+      "饥饿": 10
+    },
+    "agentErrors": 0
+  }
+}
