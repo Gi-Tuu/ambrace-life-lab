@@ -8,6 +8,7 @@ import { extname, join, sep, resolve } from 'node:path';
 import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, modelRelease, pickProviderKey, modelChargeLane, isFreeProvider } from './life/host.mjs';
 import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson, DESTRUCTIVE_CTL } from './life/request-guard.mjs';
 import { createHash, randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { normalizeName } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
@@ -27,6 +28,8 @@ const MODEL = process.env.MODEL_NAME ?? '';
 const MODELS = (process.env.MODEL_NAMES ?? '').split(',').map((s) => s.trim());
 const UP_TIMEOUT_MS = Number(process.env.UP_TIMEOUT_MS ?? 25000);
 const MAX_BODY = 64 * 1024;
+// 静态文本按内容 ETag 缓存 gzip 结果：app.js 265KB / camp-scene 87KB 只压一次，后续请求直接复用。
+const gzipCache = new Map();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -54,8 +57,19 @@ const SECURITY_HEADERS = Object.freeze({
   'referrer-policy': 'same-origin',
 });
 const send = (res, code, body, type = 'application/json; charset=utf-8') => {
-  res.writeHead(code, { ...SECURITY_HEADERS, 'content-type': type });
-  res.end(body);
+  const headers = { ...SECURITY_HEADERS, 'content-type': type };
+  let payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+  // 传输压缩（债务-性能）：JSON 响应（首屏 /world 146KB×2+/saves）与静态文本都压。
+  // 客户端 fetch/浏览器自动解压；woff2/png/ogg 本身已压缩，不做二次压缩。
+  if (payload.length >= 1024 && /\bgzip\b/.test(String(res._req?.headers['accept-encoding'] ?? ''))
+      && /^(?:text\/|application\/(?:json|javascript)|image\/svg)/.test(type)) {
+    payload = gzipSync(payload, { level: 6 });
+    headers['content-encoding'] = 'gzip';
+    headers['vary'] = 'accept-encoding';
+  }
+  headers['content-length'] = payload.length;
+  res.writeHead(code, headers);
+  res.end(payload);
 };
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj));
 
@@ -109,8 +123,20 @@ async function serveStatic(req, res, urlPath, search = '') {
       res.end();
       return;
     }
-    res.writeHead(200, { ...headers, 'content-type': MIME[extname(real)] ?? 'application/octet-stream', 'content-length': buf.length });
-    res.end(buf);
+    const type = MIME[extname(real)] ?? 'application/octet-stream';
+    let payload = buf;
+    if (buf.length >= 1024 && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))
+        && /^(?:text\/|application\/(?:json|javascript)|image\/svg)/.test(type)) {
+      payload = gzipCache.get(etag) ?? gzipSync(buf, { level: 6 });
+      if (!gzipCache.has(etag)) {
+        gzipCache.set(etag, payload);
+        while (gzipCache.size > 128) gzipCache.delete(gzipCache.keys().next().value);
+      }
+      headers['content-encoding'] = 'gzip';
+      headers['vary'] = 'accept-encoding';
+    }
+    res.writeHead(200, { ...headers, 'content-type': type, 'content-length': payload.length });
+    res.end(payload);
   } catch {
     json(res, 404, { error: 'NOT_FOUND' });
   }
@@ -605,6 +631,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
 
 const server = createServer((req, res) => {
   // H-01：handler 全程兜住。之前 new URL 在 try 外，畸形请求会把进程打死。
+  res._req = req; // 传输压缩要读 Accept-Encoding（send() 只拿到 res）
   handle(req, res).catch((e) => {
     try {
       if (!res.headersSent) {

@@ -12,6 +12,16 @@ export async function postJson(path, body) {
     url = path + (path.includes('?') ? '&' : '?') + 'camp=' + encodeURIComponent(camp);
   }
   const nonce = typeof document === 'undefined' ? '' : (document.cookie.split(';').map((x) => x.trim()).find((x) => x.startsWith('ctl_nonce=')) ?? '').slice(10);
+  // 首屏 /world 已由 web/boot-prefetch.js 在 <head> 里提前发起（模块图还没下完就开始传）。
+  // 只消费一次；内容/URL 不一致或失败时照常回退到下面的 fetch，行为不变。
+  if (!body && typeof window !== 'undefined') {
+    const pre = window.__lifeWorldPrefetch;
+    if (pre && !pre.used && pre.path === url) {
+      pre.used = true;
+      const early = await pre.promise;
+      if (early) return early;
+    }
+  }
   const res = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json', ...(nonce ? { 'x-ctl-nonce': nonce } : {}) }, body: JSON.stringify(body) } : undefined);
   if (res.ok) return res.json();
   const bodyError=await res.json().catch(()=>null);

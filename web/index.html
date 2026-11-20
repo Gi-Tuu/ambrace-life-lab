@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" href="data:," />
 <title>拥爱生命实验室 · 仿生物 AI 生命世界</title>
+<!-- 首屏关键资源：/world 预取 + 模块图/字体提前拉取（与静态 ETag 缓存并存，不改变资源数量口径内的请求）。 -->
+<script src="/web/boot-prefetch.js"></script>
+<link rel="modulepreload" href="/web/app.js" />
+<link rel="modulepreload" href="/web/camp-3d-render.mjs" />
+<link rel="modulepreload" href="/shared/camp-scene.mjs" />
+<link rel="modulepreload" href="/shared/camp-scene-content.mjs" />
+<link rel="modulepreload" href="/life/space.mjs" />
+<link rel="preload" as="font" type="font/woff2" href="/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2" crossorigin />
 <link rel="stylesheet" href="/web/app.css" />
 </head>
 <body class="menu-mode">
