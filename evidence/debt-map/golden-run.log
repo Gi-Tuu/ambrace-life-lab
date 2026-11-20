@@ -1,0 +1,151 @@
+✔ p4-final 金样已写入 evidence/redo-p0/p4-final.json
+{
+  "survival": {
+    "first3d": 1357.9000000022352,
+    "longtasks": [
+      [
+        452,
+        150
+      ],
+      [
+        667,
+        693
+      ],
+      [
+        1427,
+        591
+      ]
+    ],
+    "resources": {
+      "count": 69,
+      "transferBytes": 2228538,
+      "encodedBytes": 2207838,
+      "assetCount": 23,
+      "pngCount": 20,
+      "slowest": [
+        [
+          "/web/assets/terrain_stone3.png",
+          57
+        ],
+        [
+          "/web/assets/terrain_stone2.png",
+          56
+        ],
+        [
+          "/web/assets/terrain_water0.png",
+          55
+        ],
+        [
+          "/web/assets/terrain_water2.png",
+          54
+        ],
+        [
+          "/web/assets/terrain_water3.png",
+          54
+        ],
+        [
+          "/web/assets/terrain_water1.png",
+          53
+        ],
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          50
+        ],
+        [
+          "/web/assets/terrain_grass2.png",
+          45
+        ]
+      ]
+    }
+  },
+  "compare": {
+    "rendererA": "3d",
+    "rendererB": "3d"
+  },
+  "title": {
+    "first3d": 764.5,
+    "resources": {
+      "count": 69,
+      "transferBytes": 604290,
+      "encodedBytes": 2207838,
+      "assetCount": 23,
+      "pngCount": 20,
+      "slowest": [
+        [
+          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+          47
+        ],
+        [
+          "/web/assets/manifest.json",
+          35
+        ],
+        [
+          "/world",
+          35
+        ],
+        [
+          "/saves",
+          34
+        ],
+        [
+          "/life/space.mjs",
+          31
+        ],
+        [
+          "/shared/camp-physics.mjs",
+          30
+        ],
+        [
+          "/shared/room-layout.mjs",
+          30
+        ],
+        [
+          "/web/camp-3d-render.mjs",
+          30
+        ]
+      ]
+    }
+  },
+  "cache": {
+    "/web/app.js": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"a6a906da8ff81e9ec22fc5387b27bb3e\"",
+      "contentEncoding": null,
+      "bytes": 262480,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/manifest.json": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"9f82a3ad583ad23058b93934062e7956\"",
+      "contentEncoding": null,
+      "bytes": 1143,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/terrain_grass0.png": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+      "contentEncoding": null,
+      "bytes": 286,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/shared/camp-layout.mjs": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+      "contentEncoding": null,
+      "bytes": 5925,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "immutableProbe": {
+      "status": 200,
+      "cacheControl": "public, max-age=31536000, immutable"
+    }
+  }
+}
