@@ -1,0 +1,1215 @@
+{
+  "_说明": "研究五面 md5 台账更正对照（旧值→真实 log 字节值）。原 log 未改；原台账已按本表直接更正。重复运行 --write 会保留本表 old。",
+  "generatedAt": "2026-11-20T10:27:59.377Z",
+  "algorithm": "md5 (raw file bytes)",
+  "ledgers": [
+    {
+      "stage": "P0",
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p0/baseline-report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "bytes": 1875,
+            "refMd5": {
+              "expected": "19a2803182a5a63ae944120dd0a528bc"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "expected": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p0/baseline-sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "bytes": 2838,
+            "refMd5": {
+              "expected": "22f76c48897713ddcee9bae8f767e31b"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "expected": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p0/baseline-viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "bytes": 4504,
+            "refMd5": {
+              "expected": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "expected": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p0/baseline-recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "bytes": 12107,
+            "refMd5": {
+              "expected": "feac239b364b8a771042d3996529181e"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "expected": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p0/baseline-metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "bytes": 13324,
+            "refMd5": {
+              "expected": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "expected": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P0",
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "before",
+          "log": "evidence/redo-p0/main-baseline-report.log",
+          "changed": false,
+          "old": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "same": true
+          }
+        },
+        {
+          "face": "report",
+          "label": "after",
+          "log": "evidence/redo-p0/main-after-report.log",
+          "changed": false,
+          "old": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "before",
+          "log": "evidence/redo-p0/main-baseline-sweep.log",
+          "changed": false,
+          "old": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "after",
+          "log": "evidence/redo-p0/main-after-sweep.log",
+          "changed": false,
+          "old": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "before",
+          "log": "evidence/redo-p0/main-baseline-viab.log",
+          "changed": false,
+          "old": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "after",
+          "log": "evidence/redo-p0/main-after-viab.log",
+          "changed": false,
+          "old": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "before",
+          "log": "evidence/redo-p0/main-baseline-recover.log",
+          "changed": false,
+          "old": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "after",
+          "log": "evidence/redo-p0/main-after-recover.log",
+          "changed": false,
+          "old": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "before",
+          "log": "evidence/redo-p0/main-baseline-metab.log",
+          "changed": false,
+          "old": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "after",
+          "log": "evidence/redo-p0/main-after-metab.log",
+          "changed": false,
+          "old": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P1",
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "entries": [
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p1/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "bytes": 13324
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p1/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "bytes": 12107
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          }
+        },
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p1/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "bytes": 1875
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p1/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "bytes": 2838
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p1/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "bytes": 4504
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P1b",
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "entries": [
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p1b/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "bytes": 13324
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p1b/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "bytes": 12107
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          }
+        },
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p1b/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "bytes": 1875
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p1b/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "bytes": 2838
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p1b/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "bytes": 4504
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P2",
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p2/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "refMd5": {
+              "baseline": "19a2803182a5a63ae944120dd0a528bc"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "baseline": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p2/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "refMd5": {
+              "baseline": "22f76c48897713ddcee9bae8f767e31b"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "baseline": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p2/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "refMd5": {
+              "baseline": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "baseline": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p2/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "refMd5": {
+              "baseline": "feac239b364b8a771042d3996529181e"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "baseline": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p2/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "refMd5": {
+              "baseline": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "baseline": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P2b",
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p2b/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc"
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p2b/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b"
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p2b/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p2b/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e"
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p2b/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P2c",
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p2c/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "refMd5": {
+              "p2b": "19a2803182a5a63ae944120dd0a528bc"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "p2b": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p2c/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "refMd5": {
+              "p2b": "22f76c48897713ddcee9bae8f767e31b"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "p2b": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p2c/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "refMd5": {
+              "p2b": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "p2b": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p2c/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "refMd5": {
+              "p2b": "feac239b364b8a771042d3996529181e"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "p2b": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p2c/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "refMd5": {
+              "p2b": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "p2b": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "P3",
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/redo-p3/research/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc",
+            "refMd5": {
+              "p2c": "19a2803182a5a63ae944120dd0a528bc"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "p2c": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/redo-p3/research/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b",
+            "refMd5": {
+              "p2c": "22f76c48897713ddcee9bae8f767e31b"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "p2c": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/redo-p3/research/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+            "refMd5": {
+              "p2c": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "p2c": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/redo-p3/research/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e",
+            "refMd5": {
+              "p2c": "feac239b364b8a771042d3996529181e"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "p2c": "fe198109386d048356f2fa69312e5183",
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/redo-p3/research/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+            "refMd5": {
+              "p2c": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "p2c": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "arch-gates",
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/arch-gates/research/report.log",
+          "changed": false,
+          "old": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "refMd5": {
+              "p3_log": "de764430c8bc88cd8dbbc24512621e4f"
+            }
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "p3_log": "de764430c8bc88cd8dbbc24512621e4f"
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/arch-gates/research/sweep.log",
+          "changed": false,
+          "old": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "refMd5": {
+              "p3_log": "aadd4895e84ae657d5a1e22c132228b1"
+            }
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "p3_log": "aadd4895e84ae657d5a1e22c132228b1"
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/arch-gates/research/viab.log",
+          "changed": false,
+          "old": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "refMd5": {
+              "p3_log": "b923787830eb26c3853ecf959987cf9d"
+            }
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "p3_log": "b923787830eb26c3853ecf959987cf9d"
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/arch-gates/research/recover.log",
+          "changed": false,
+          "old": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "refMd5": {
+              "p3_log": "fe198109386d048356f2fa69312e5183"
+            }
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "p3_log": "fe198109386d048356f2fa69312e5183"
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/arch-gates/research/metab.log",
+          "changed": false,
+          "old": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "refMd5": {
+              "p3_log": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            }
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "p3_log": "5ea0ae6473c4f0ff46f47b7a2463b409"
+          }
+        }
+      ]
+    },
+    {
+      "stage": "debt-time",
+      "ledger": "evidence/debt-time/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/debt-time/research/report.log",
+          "changed": false,
+          "old": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "refMd5": {
+              "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "refBytes": {
+              "expectedBytes": 1886
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+            "expectedBytes": 1886,
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/debt-time/research/sweep.log",
+          "changed": false,
+          "old": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "refMd5": {
+              "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "refBytes": {
+              "expectedBytes": 2850
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+            "expectedBytes": 2850,
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/debt-time/research/viab.log",
+          "changed": false,
+          "old": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "refMd5": {
+              "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "refBytes": {
+              "expectedBytes": 4526
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+            "expectedBytes": 4526,
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/debt-time/research/recover.log",
+          "changed": false,
+          "old": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "refMd5": {
+              "expectedMd5": "fe198109386d048356f2fa69312e5183"
+            },
+            "refBytes": {
+              "expectedBytes": 12150
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "expectedMd5": "fe198109386d048356f2fa69312e5183",
+            "expectedBytes": 12150,
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/debt-time/research/metab.log",
+          "changed": false,
+          "old": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "refMd5": {
+              "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "refBytes": {
+              "expectedBytes": 13357
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "expectedBytes": 13357,
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "debt-map",
+      "ledger": "evidence/debt-map/research-md5.json",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/debt-map/research/report.log",
+          "changed": false,
+          "old": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "refMd5": {
+              "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "refBytes": {
+              "expectedBytes": 1886
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+            "expectedBytes": 1886,
+            "same": true
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/debt-map/research/sweep.log",
+          "changed": false,
+          "old": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "refMd5": {
+              "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "refBytes": {
+              "expectedBytes": 2850
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+            "expectedBytes": 2850,
+            "same": true
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/debt-map/research/viab.log",
+          "changed": false,
+          "old": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "refMd5": {
+              "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "refBytes": {
+              "expectedBytes": 4526
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+            "expectedBytes": 4526,
+            "same": true
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/debt-map/research/recover.log",
+          "changed": false,
+          "old": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "refMd5": {
+              "expectedMd5": "fe198109386d048356f2fa69312e5183"
+            },
+            "refBytes": {
+              "expectedBytes": 12150
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "expectedMd5": "fe198109386d048356f2fa69312e5183",
+            "expectedBytes": 12150,
+            "same": true
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/debt-map/research/metab.log",
+          "changed": false,
+          "old": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "refMd5": {
+              "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "refBytes": {
+              "expectedBytes": 13357
+            },
+            "same": true
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "expectedBytes": 13357,
+            "same": true
+          }
+        }
+      ]
+    },
+    {
+      "stage": "score",
+      "ledger": "evidence/score/research-md5.txt",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/report.log",
+          "changed": true,
+          "old": {
+            "md5": "19a2803182a5a63ae944120dd0a528bc"
+          },
+          "new": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          }
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/sweep.log",
+          "changed": true,
+          "old": {
+            "md5": "22f76c48897713ddcee9bae8f767e31b"
+          },
+          "new": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          }
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/viab.log",
+          "changed": true,
+          "old": {
+            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
+          },
+          "new": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          }
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/recover.log",
+          "changed": true,
+          "old": {
+            "md5": "feac239b364b8a771042d3996529181e"
+          },
+          "new": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          }
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/metab.log",
+          "changed": true,
+          "old": {
+            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+          },
+          "new": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "artifactCount": 12,
+    "entryCount": 65,
+    "changedEntryCount": 40,
+    "mismatchEntryCountBeforeCorrection": 40
+  }
+}

@@ -1,241 +1,339 @@
 {
-  "_说明": "研究五面 md5：既有台账记录值 vs evidence 下实际 log 重算值。只读旧台账，不改历史日志。",
-  "generatedAt": "2026-11-20T07:07:56.105Z",
-  "algorithm": "md5",
-  "faces": [
-    "report",
-    "sweep",
-    "viab",
-    "recover",
-    "metab"
-  ],
-  "ledgers": [
+  "ok": true,
+  "reports": [
     {
       "stage": "P0",
       "ledger": "evidence/redo-p0/baseline-md5.json",
+      "format": "array-name",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p0/baseline-report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc",
-            "bytes": 1875
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "refMd5": {
+              "expected": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/baseline-report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p0/baseline-sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b",
-            "bytes": 2838
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "refMd5": {
+              "expected": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/baseline-sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p0/baseline-viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
-            "bytes": 4504
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "refMd5": {
+              "expected": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/baseline-viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p0/baseline-recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e",
-            "bytes": 12107
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "refMd5": {
+              "expected": "fe198109386d048356f2fa69312e5183"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/baseline-recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p0/baseline-metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
-            "bytes": 13324
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "refMd5": {
+              "expected": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/baseline-metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P0",
       "ledger": "evidence/redo-p0/main-research-md5.json",
+      "format": "p0-main",
       "entries": [
         {
           "face": "report",
           "label": "before",
+          "log": "evidence/redo-p0/main-baseline-report.log",
           "recorded": {
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-baseline-report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "report",
           "label": "after",
+          "log": "evidence/redo-p0/main-after-report.log",
           "recorded": {
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-after-report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "before",
+          "log": "evidence/redo-p0/main-baseline-sweep.log",
           "recorded": {
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-baseline-sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "after",
+          "log": "evidence/redo-p0/main-after-sweep.log",
           "recorded": {
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-after-sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "before",
+          "log": "evidence/redo-p0/main-baseline-viab.log",
           "recorded": {
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-baseline-viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "after",
+          "log": "evidence/redo-p0/main-after-viab.log",
           "recorded": {
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-after-viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "before",
+          "log": "evidence/redo-p0/main-baseline-recover.log",
           "recorded": {
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-baseline-recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "after",
+          "log": "evidence/redo-p0/main-after-recover.log",
           "recorded": {
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-after-recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "before",
+          "log": "evidence/redo-p0/main-baseline-metab.log",
           "recorded": {
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-baseline-metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "after",
+          "log": "evidence/redo-p0/main-after-metab.log",
           "recorded": {
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p0/main-after-metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         }
       ],
       "mismatches": 0,
@@ -244,554 +342,1203 @@
     {
       "stage": "P1",
       "ledger": "evidence/redo-p1/research-md5.json",
+      "format": "array-name",
       "entries": [
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p1/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
-            "bytes": 13324
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
           "actual": {
-            "log": "evidence/redo-p1/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p1/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e",
-            "bytes": 12107
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
           "actual": {
-            "log": "evidence/redo-p1/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p1/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc",
-            "bytes": 1875
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
           "actual": {
-            "log": "evidence/redo-p1/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p1/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b",
-            "bytes": 2838
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
           "actual": {
-            "log": "evidence/redo-p1/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p1/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
-            "bytes": 4504
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
           "actual": {
-            "log": "evidence/redo-p1/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P1b",
       "ledger": "evidence/redo-p1b/research-md5.json",
+      "format": "array-name",
       "entries": [
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p1b/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
-            "bytes": 13324
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
           "actual": {
-            "log": "evidence/redo-p1b/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p1b/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e",
-            "bytes": 12107
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
           "actual": {
-            "log": "evidence/redo-p1b/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p1b/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc",
-            "bytes": 1875
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
           "actual": {
-            "log": "evidence/redo-p1b/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p1b/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b",
-            "bytes": 2838
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
           "actual": {
-            "log": "evidence/redo-p1b/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p1b/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736",
-            "bytes": 4504
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
           "actual": {
-            "log": "evidence/redo-p1b/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": false
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P2",
       "ledger": "evidence/redo-p2/research-md5.json",
+      "format": "object-md5",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p2/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "refMd5": {
+              "baseline": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p2/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "refMd5": {
+              "baseline": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p2/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "refMd5": {
+              "baseline": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p2/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "refMd5": {
+              "baseline": "fe198109386d048356f2fa69312e5183"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p2/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "refMd5": {
+              "baseline": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P2b",
       "ledger": "evidence/redo-p2b/research-md5.json",
+      "format": "object-string",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p2b/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc"
-          },
-          "actual": {
-            "log": "evidence/redo-p2b/research/report.log",
-            "bytes": 1886,
             "md5": "de764430c8bc88cd8dbbc24512621e4f"
           },
-          "match": false,
-          "bytesMatch": true
+          "actual": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p2b/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b"
-          },
-          "actual": {
-            "log": "evidence/redo-p2b/research/sweep.log",
-            "bytes": 2850,
             "md5": "aadd4895e84ae657d5a1e22c132228b1"
           },
-          "match": false,
-          "bytesMatch": true
+          "actual": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p2b/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
-          },
-          "actual": {
-            "log": "evidence/redo-p2b/research/viab.log",
-            "bytes": 4526,
             "md5": "b923787830eb26c3853ecf959987cf9d"
           },
-          "match": false,
-          "bytesMatch": true
+          "actual": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p2b/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e"
-          },
-          "actual": {
-            "log": "evidence/redo-p2b/research/recover.log",
-            "bytes": 12150,
             "md5": "fe198109386d048356f2fa69312e5183"
           },
-          "match": false,
-          "bytesMatch": true
+          "actual": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p2b/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
-          },
-          "actual": {
-            "log": "evidence/redo-p2b/research/metab.log",
-            "bytes": 13357,
             "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
           },
-          "match": false,
-          "bytesMatch": true
+          "actual": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P2c",
       "ledger": "evidence/redo-p2c/research-md5.json",
+      "format": "object-md5",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p2c/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "refMd5": {
+              "p2b": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2c/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p2c/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "refMd5": {
+              "p2b": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2c/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p2c/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "refMd5": {
+              "p2b": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2c/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p2c/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "refMd5": {
+              "p2b": "fe198109386d048356f2fa69312e5183"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2c/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p2c/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "refMd5": {
+              "p2b": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p2c/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "P3",
       "ledger": "evidence/redo-p3/research-md5.json",
+      "format": "object-md5",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/redo-p3/research/report.log",
           "recorded": {
-            "md5": "19a2803182a5a63ae944120dd0a528bc"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "refMd5": {
+              "p2c": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p3/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/redo-p3/research/sweep.log",
           "recorded": {
-            "md5": "22f76c48897713ddcee9bae8f767e31b"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "refMd5": {
+              "p2c": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p3/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/redo-p3/research/viab.log",
           "recorded": {
-            "md5": "86da5c0a4a0e26b082fbfb54fd6c1736"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "refMd5": {
+              "p2c": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p3/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/redo-p3/research/recover.log",
           "recorded": {
-            "md5": "feac239b364b8a771042d3996529181e"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "refMd5": {
+              "p2c": "fe198109386d048356f2fa69312e5183"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p3/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/redo-p3/research/metab.log",
           "recorded": {
-            "md5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "refMd5": {
+              "p2c": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "same": true
           },
           "actual": {
-            "log": "evidence/redo-p3/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
-          "match": false,
-          "bytesMatch": true
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
         }
       ],
-      "mismatches": 5,
+      "mismatches": 0,
       "missingLogs": 0
     },
     {
       "stage": "arch-gates",
       "ledger": "evidence/arch-gates/research-md5.json",
+      "format": "object-md5",
       "entries": [
         {
           "face": "report",
           "label": "current",
+          "log": "evidence/arch-gates/research/report.log",
           "recorded": {
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "refMd5": {
+              "p3_log": "de764430c8bc88cd8dbbc24512621e4f"
+            }
           },
           "actual": {
-            "log": "evidence/arch-gates/research/report.log",
-            "bytes": 1886,
-            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "sweep",
           "label": "current",
+          "log": "evidence/arch-gates/research/sweep.log",
           "recorded": {
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "refMd5": {
+              "p3_log": "aadd4895e84ae657d5a1e22c132228b1"
+            }
           },
           "actual": {
-            "log": "evidence/arch-gates/research/sweep.log",
-            "bytes": 2850,
-            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "viab",
           "label": "current",
+          "log": "evidence/arch-gates/research/viab.log",
           "recorded": {
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "refMd5": {
+              "p3_log": "b923787830eb26c3853ecf959987cf9d"
+            }
           },
           "actual": {
-            "log": "evidence/arch-gates/research/viab.log",
-            "bytes": 4526,
-            "md5": "b923787830eb26c3853ecf959987cf9d"
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "recover",
           "label": "current",
+          "log": "evidence/arch-gates/research/recover.log",
           "recorded": {
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "refMd5": {
+              "p3_log": "fe198109386d048356f2fa69312e5183"
+            }
           },
           "actual": {
-            "log": "evidence/arch-gates/research/recover.log",
-            "bytes": 12150,
-            "md5": "fe198109386d048356f2fa69312e5183"
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         },
         {
           "face": "metab",
           "label": "current",
+          "log": "evidence/arch-gates/research/metab.log",
+          "recorded": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "refMd5": {
+              "p3_log": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            }
+          },
+          "actual": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        }
+      ],
+      "mismatches": 0,
+      "missingLogs": 0
+    },
+    {
+      "stage": "debt-time",
+      "ledger": "evidence/debt-time/research-md5.json",
+      "format": "debt-faces",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/debt-time/research/report.log",
+          "recorded": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "refMd5": {
+              "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "refBytes": {
+              "expectedBytes": 1886
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/debt-time/research/sweep.log",
+          "recorded": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "refMd5": {
+              "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "refBytes": {
+              "expectedBytes": 2850
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/debt-time/research/viab.log",
+          "recorded": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "refMd5": {
+              "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "refBytes": {
+              "expectedBytes": 4526
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/debt-time/research/recover.log",
+          "recorded": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "refMd5": {
+              "expectedMd5": "fe198109386d048356f2fa69312e5183"
+            },
+            "refBytes": {
+              "expectedBytes": 12150
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/debt-time/research/metab.log",
+          "recorded": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "refMd5": {
+              "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "refBytes": {
+              "expectedBytes": 13357
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        }
+      ],
+      "mismatches": 0,
+      "missingLogs": 0
+    },
+    {
+      "stage": "debt-map",
+      "ledger": "evidence/debt-map/research-md5.json",
+      "format": "debt-faces",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/debt-map/research/report.log",
+          "recorded": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886,
+            "refMd5": {
+              "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+            },
+            "refBytes": {
+              "expectedBytes": 1886
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/debt-map/research/sweep.log",
+          "recorded": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850,
+            "refMd5": {
+              "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+            },
+            "refBytes": {
+              "expectedBytes": 2850
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/debt-map/research/viab.log",
+          "recorded": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526,
+            "refMd5": {
+              "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+            },
+            "refBytes": {
+              "expectedBytes": 4526
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/debt-map/research/recover.log",
+          "recorded": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150,
+            "refMd5": {
+              "expectedMd5": "fe198109386d048356f2fa69312e5183"
+            },
+            "refBytes": {
+              "expectedBytes": 12150
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/debt-map/research/metab.log",
+          "recorded": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357,
+            "refMd5": {
+              "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            },
+            "refBytes": {
+              "expectedBytes": 13357
+            },
+            "same": true
+          },
+          "actual": {
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        }
+      ],
+      "mismatches": 0,
+      "missingLogs": 0
+    },
+    {
+      "stage": "score",
+      "ledger": "evidence/score/research-md5.txt",
+      "format": "score-txt",
+      "entries": [
+        {
+          "face": "report",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/report.log",
+          "recorded": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f"
+          },
+          "actual": {
+            "md5": "de764430c8bc88cd8dbbc24512621e4f",
+            "bytes": 1886
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "sweep",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/sweep.log",
+          "recorded": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1"
+          },
+          "actual": {
+            "md5": "aadd4895e84ae657d5a1e22c132228b1",
+            "bytes": 2850
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "viab",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/viab.log",
+          "recorded": {
+            "md5": "b923787830eb26c3853ecf959987cf9d"
+          },
+          "actual": {
+            "md5": "b923787830eb26c3853ecf959987cf9d",
+            "bytes": 4526
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "recover",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/recover.log",
+          "recorded": {
+            "md5": "fe198109386d048356f2fa69312e5183"
+          },
+          "actual": {
+            "md5": "fe198109386d048356f2fa69312e5183",
+            "bytes": 12150
+          },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
+          "match": true,
+          "mismatchedRefs": []
+        },
+        {
+          "face": "metab",
+          "label": "current",
+          "log": "evidence/score/baseline-surfaces/metab.log",
           "recorded": {
             "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
           },
           "actual": {
-            "log": "evidence/arch-gates/research/metab.log",
-            "bytes": 13357,
-            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+            "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+            "bytes": 13357
           },
+          "md5Match": true,
+          "bytesMatch": true,
+          "refMd5Match": true,
+          "refBytesMatch": true,
+          "sameMatch": true,
           "match": true,
-          "bytesMatch": true
+          "mismatchedRefs": []
         }
       ],
       "mismatches": 0,
@@ -799,135 +1546,1595 @@
     }
   ],
   "summary": {
-    "ledgerCount": 9,
-    "entryCount": 50,
-    "mismatchEntryCount": 35,
-    "ledgersAllMatch": [
-      "evidence/redo-p0/main-research-md5.json",
-      "evidence/arch-gates/research-md5.json"
-    ],
-    "ledgersWithMismatch": [
-      "evidence/redo-p0/baseline-md5.json",
-      "evidence/redo-p1/research-md5.json",
-      "evidence/redo-p1b/research-md5.json",
-      "evidence/redo-p2/research-md5.json",
-      "evidence/redo-p2b/research-md5.json",
-      "evidence/redo-p2c/research-md5.json",
-      "evidence/redo-p3/research-md5.json"
-    ],
-    "stagesWithMismatch": [
-      "P0",
-      "P1",
-      "P1b",
-      "P2",
-      "P2b",
-      "P2c",
-      "P3"
-    ],
-    "actualAcrossStagesIdentical": true,
-    "actualHashesByFace": {
+    "artifactCount": 12,
+    "entryCount": 65,
+    "mismatchEntryCount": 0,
+    "missingLogCount": 0,
+    "actualAcrossArtifactsIdentical": true,
+    "hashesByFace": {
       "report": [
-        {
-          "md5": "de764430c8bc88cd8dbbc24512621e4f",
-          "logs": [
-            "P0/evidence/redo-p0/baseline-report.log",
-            "P0/evidence/redo-p0/main-baseline-report.log",
-            "P0/evidence/redo-p0/main-after-report.log",
-            "P1/evidence/redo-p1/research/report.log",
-            "P1b/evidence/redo-p1b/research/report.log",
-            "P2/evidence/redo-p2/research/report.log",
-            "P2b/evidence/redo-p2b/research/report.log",
-            "P2c/evidence/redo-p2c/research/report.log",
-            "P3/evidence/redo-p3/research/report.log",
-            "arch-gates/evidence/arch-gates/research/report.log"
-          ]
-        }
+        "de764430c8bc88cd8dbbc24512621e4f"
       ],
       "sweep": [
-        {
-          "md5": "aadd4895e84ae657d5a1e22c132228b1",
-          "logs": [
-            "P0/evidence/redo-p0/baseline-sweep.log",
-            "P0/evidence/redo-p0/main-baseline-sweep.log",
-            "P0/evidence/redo-p0/main-after-sweep.log",
-            "P1/evidence/redo-p1/research/sweep.log",
-            "P1b/evidence/redo-p1b/research/sweep.log",
-            "P2/evidence/redo-p2/research/sweep.log",
-            "P2b/evidence/redo-p2b/research/sweep.log",
-            "P2c/evidence/redo-p2c/research/sweep.log",
-            "P3/evidence/redo-p3/research/sweep.log",
-            "arch-gates/evidence/arch-gates/research/sweep.log"
-          ]
-        }
+        "aadd4895e84ae657d5a1e22c132228b1"
       ],
       "viab": [
-        {
-          "md5": "b923787830eb26c3853ecf959987cf9d",
-          "logs": [
-            "P0/evidence/redo-p0/baseline-viab.log",
-            "P0/evidence/redo-p0/main-baseline-viab.log",
-            "P0/evidence/redo-p0/main-after-viab.log",
-            "P1/evidence/redo-p1/research/viab.log",
-            "P1b/evidence/redo-p1b/research/viab.log",
-            "P2/evidence/redo-p2/research/viab.log",
-            "P2b/evidence/redo-p2b/research/viab.log",
-            "P2c/evidence/redo-p2c/research/viab.log",
-            "P3/evidence/redo-p3/research/viab.log",
-            "arch-gates/evidence/arch-gates/research/viab.log"
-          ]
-        }
+        "b923787830eb26c3853ecf959987cf9d"
       ],
       "recover": [
-        {
-          "md5": "fe198109386d048356f2fa69312e5183",
-          "logs": [
-            "P0/evidence/redo-p0/baseline-recover.log",
-            "P0/evidence/redo-p0/main-baseline-recover.log",
-            "P0/evidence/redo-p0/main-after-recover.log",
-            "P1/evidence/redo-p1/research/recover.log",
-            "P1b/evidence/redo-p1b/research/recover.log",
-            "P2/evidence/redo-p2/research/recover.log",
-            "P2b/evidence/redo-p2b/research/recover.log",
-            "P2c/evidence/redo-p2c/research/recover.log",
-            "P3/evidence/redo-p3/research/recover.log",
-            "arch-gates/evidence/arch-gates/research/recover.log"
-          ]
-        }
+        "fe198109386d048356f2fa69312e5183"
       ],
       "metab": [
-        {
-          "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
-          "logs": [
-            "P0/evidence/redo-p0/baseline-metab.log",
-            "P0/evidence/redo-p0/main-baseline-metab.log",
-            "P0/evidence/redo-p0/main-after-metab.log",
-            "P1/evidence/redo-p1/research/metab.log",
-            "P1b/evidence/redo-p1b/research/metab.log",
-            "P2/evidence/redo-p2/research/metab.log",
-            "P2b/evidence/redo-p2b/research/metab.log",
-            "P2c/evidence/redo-p2c/research/metab.log",
-            "P3/evidence/redo-p3/research/metab.log",
-            "arch-gates/evidence/arch-gates/research/metab.log"
-          ]
-        }
+        "5ea0ae6473c4f0ff46f47b7a2463b409"
       ]
     },
-    "staleHashes": [
-      "19a2803182a5a63ae944120dd0a528bc",
-      "22f76c48897713ddcee9bae8f767e31b",
-      "86da5c0a4a0e26b082fbfb54fd6c1736",
-      "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
-      "feac239b364b8a771042d3996529181e"
-    ],
-    "staleHashesAttestedByAnyCheckedInLog": [],
-    "checkedLogCount": 149
+    "changedEntryCount": 0
   },
-  "findings": [
-    "P3 原 research-md5.json 的 5 个 md5 与同目录 research/*.log 全部不符；同目录真实值是 de7644…/aadd48…/b92378…/fe1981…/5ea0ae…。",
-    "P1、P1b、P2、P2b、P2c、P3 的 research-md5.json 记录的是同一组旧值，与各自 research/*.log 全部不符；共 6 个台账、30 条记录不一致。",
-    "P0 有两份：baseline-md5.json 记旧值、与 baseline-*.log 不符；main-research-md5.json 记 de7644… 等真实值、与 main-baseline/main-after log 相符。",
-    "所有 checked-in 研究 log（P0 的 baseline/main、P1…P3、arch-gates）在当前磁盘上五面逐位相同；“没有漂移”的结论仍成立，错的只是台账抄的数值。",
-    "旧值在仓库内没有任何一份 .log 能佐证；它们只出现在台账/baseline-md5.json 自身，属于被复制转抄的历史数字。",
-    "不批量改历史台账；只新增 P3 更正台账 evidence/redo-p3/research-md5.corrected.json，并在 docs/回报-P3-2026-11-20.md 追加“更正”段。"
+  "rows": [
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p0/baseline-report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886,
+        "refMd5": {
+          "expected": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p0/baseline-sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850,
+        "refMd5": {
+          "expected": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p0/baseline-viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526,
+        "refMd5": {
+          "expected": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p0/baseline-recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150,
+        "refMd5": {
+          "expected": "fe198109386d048356f2fa69312e5183"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p0/baseline-metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357,
+        "refMd5": {
+          "expected": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/baseline-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "report",
+      "label": "before",
+      "log": "evidence/redo-p0/main-baseline-report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "report",
+      "label": "after",
+      "log": "evidence/redo-p0/main-after-report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "sweep",
+      "label": "before",
+      "log": "evidence/redo-p0/main-baseline-sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "sweep",
+      "label": "after",
+      "log": "evidence/redo-p0/main-after-sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "viab",
+      "label": "before",
+      "log": "evidence/redo-p0/main-baseline-viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "viab",
+      "label": "after",
+      "log": "evidence/redo-p0/main-after-viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "recover",
+      "label": "before",
+      "log": "evidence/redo-p0/main-baseline-recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "recover",
+      "label": "after",
+      "log": "evidence/redo-p0/main-after-recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "metab",
+      "label": "before",
+      "log": "evidence/redo-p0/main-baseline-metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "metab",
+      "label": "after",
+      "log": "evidence/redo-p0/main-after-metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p0/main-research-md5.json",
+      "stage": "P0"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p1/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "stage": "P1"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p1/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "stage": "P1"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p1/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "stage": "P1"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p1/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "stage": "P1"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p1/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1/research-md5.json",
+      "stage": "P1"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p1b/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "stage": "P1b"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p1b/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "stage": "P1b"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p1b/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "stage": "P1b"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p1b/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "stage": "P1b"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p1b/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p1b/research-md5.json",
+      "stage": "P1b"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p2/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "refMd5": {
+          "baseline": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "stage": "P2"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p2/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "refMd5": {
+          "baseline": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "stage": "P2"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p2/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "refMd5": {
+          "baseline": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "stage": "P2"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p2/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "refMd5": {
+          "baseline": "fe198109386d048356f2fa69312e5183"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "stage": "P2"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p2/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "refMd5": {
+          "baseline": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2/research-md5.json",
+      "stage": "P2"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p2b/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f"
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "stage": "P2b"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p2b/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1"
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "stage": "P2b"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p2b/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d"
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "stage": "P2b"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p2b/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183"
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "stage": "P2b"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p2b/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2b/research-md5.json",
+      "stage": "P2b"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p2c/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "refMd5": {
+          "p2b": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "stage": "P2c"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p2c/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "refMd5": {
+          "p2b": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "stage": "P2c"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p2c/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "refMd5": {
+          "p2b": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "stage": "P2c"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p2c/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "refMd5": {
+          "p2b": "fe198109386d048356f2fa69312e5183"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "stage": "P2c"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p2c/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "refMd5": {
+          "p2b": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p2c/research-md5.json",
+      "stage": "P2c"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/redo-p3/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "refMd5": {
+          "p2c": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "stage": "P3"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/redo-p3/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "refMd5": {
+          "p2c": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "stage": "P3"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/redo-p3/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "refMd5": {
+          "p2c": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "stage": "P3"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/redo-p3/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "refMd5": {
+          "p2c": "fe198109386d048356f2fa69312e5183"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "stage": "P3"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/redo-p3/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "refMd5": {
+          "p2c": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/redo-p3/research-md5.json",
+      "stage": "P3"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/arch-gates/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "refMd5": {
+          "p3_log": "de764430c8bc88cd8dbbc24512621e4f"
+        }
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "stage": "arch-gates"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/arch-gates/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "refMd5": {
+          "p3_log": "aadd4895e84ae657d5a1e22c132228b1"
+        }
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "stage": "arch-gates"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/arch-gates/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "refMd5": {
+          "p3_log": "b923787830eb26c3853ecf959987cf9d"
+        }
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "stage": "arch-gates"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/arch-gates/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "refMd5": {
+          "p3_log": "fe198109386d048356f2fa69312e5183"
+        }
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "stage": "arch-gates"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/arch-gates/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "refMd5": {
+          "p3_log": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        }
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/arch-gates/research-md5.json",
+      "stage": "arch-gates"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/debt-time/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886,
+        "refMd5": {
+          "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "refBytes": {
+          "expectedBytes": 1886
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-time/research-md5.json",
+      "stage": "debt-time"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/debt-time/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850,
+        "refMd5": {
+          "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "refBytes": {
+          "expectedBytes": 2850
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-time/research-md5.json",
+      "stage": "debt-time"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/debt-time/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526,
+        "refMd5": {
+          "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "refBytes": {
+          "expectedBytes": 4526
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-time/research-md5.json",
+      "stage": "debt-time"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/debt-time/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150,
+        "refMd5": {
+          "expectedMd5": "fe198109386d048356f2fa69312e5183"
+        },
+        "refBytes": {
+          "expectedBytes": 12150
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-time/research-md5.json",
+      "stage": "debt-time"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/debt-time/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357,
+        "refMd5": {
+          "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "refBytes": {
+          "expectedBytes": 13357
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-time/research-md5.json",
+      "stage": "debt-time"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/debt-map/research/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886,
+        "refMd5": {
+          "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f"
+        },
+        "refBytes": {
+          "expectedBytes": 1886
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-map/research-md5.json",
+      "stage": "debt-map"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/debt-map/research/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850,
+        "refMd5": {
+          "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1"
+        },
+        "refBytes": {
+          "expectedBytes": 2850
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-map/research-md5.json",
+      "stage": "debt-map"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/debt-map/research/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526,
+        "refMd5": {
+          "expectedMd5": "b923787830eb26c3853ecf959987cf9d"
+        },
+        "refBytes": {
+          "expectedBytes": 4526
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-map/research-md5.json",
+      "stage": "debt-map"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/debt-map/research/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150,
+        "refMd5": {
+          "expectedMd5": "fe198109386d048356f2fa69312e5183"
+        },
+        "refBytes": {
+          "expectedBytes": 12150
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-map/research-md5.json",
+      "stage": "debt-map"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/debt-map/research/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357,
+        "refMd5": {
+          "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+        },
+        "refBytes": {
+          "expectedBytes": 13357
+        },
+        "same": true
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/debt-map/research-md5.json",
+      "stage": "debt-map"
+    },
+    {
+      "face": "report",
+      "label": "current",
+      "log": "evidence/score/baseline-surfaces/report.log",
+      "recorded": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f"
+      },
+      "actual": {
+        "md5": "de764430c8bc88cd8dbbc24512621e4f",
+        "bytes": 1886
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/score/research-md5.txt",
+      "stage": "score"
+    },
+    {
+      "face": "sweep",
+      "label": "current",
+      "log": "evidence/score/baseline-surfaces/sweep.log",
+      "recorded": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1"
+      },
+      "actual": {
+        "md5": "aadd4895e84ae657d5a1e22c132228b1",
+        "bytes": 2850
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/score/research-md5.txt",
+      "stage": "score"
+    },
+    {
+      "face": "viab",
+      "label": "current",
+      "log": "evidence/score/baseline-surfaces/viab.log",
+      "recorded": {
+        "md5": "b923787830eb26c3853ecf959987cf9d"
+      },
+      "actual": {
+        "md5": "b923787830eb26c3853ecf959987cf9d",
+        "bytes": 4526
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/score/research-md5.txt",
+      "stage": "score"
+    },
+    {
+      "face": "recover",
+      "label": "current",
+      "log": "evidence/score/baseline-surfaces/recover.log",
+      "recorded": {
+        "md5": "fe198109386d048356f2fa69312e5183"
+      },
+      "actual": {
+        "md5": "fe198109386d048356f2fa69312e5183",
+        "bytes": 12150
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/score/research-md5.txt",
+      "stage": "score"
+    },
+    {
+      "face": "metab",
+      "label": "current",
+      "log": "evidence/score/baseline-surfaces/metab.log",
+      "recorded": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409"
+      },
+      "actual": {
+        "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+        "bytes": 13357
+      },
+      "md5Match": true,
+      "bytesMatch": true,
+      "refMd5Match": true,
+      "refBytesMatch": true,
+      "sameMatch": true,
+      "match": true,
+      "mismatchedRefs": [],
+      "ledger": "evidence/score/research-md5.txt",
+      "stage": "score"
+    }
   ]
 }

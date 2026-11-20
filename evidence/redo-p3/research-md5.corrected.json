@@ -1,6 +1,6 @@
 {
-  "_说明": "P3 研究五面 md5 更正台账：用 evidence/redo-p3/research/*.log 实际字节重算。原 research-md5.json 保留不改，作为“当时记错”的证据。",
-  "supersedes": "evidence/redo-p3/research-md5.json（只更正数值与 same 的依据，不删原文件）",
+  "_说明": "P3 研究五面 md5 更正台账（历史留档）：用 evidence/redo-p3/research/*.log 实际字节重算。原 research-md5.json 在 2026-11-20 债务收口中已按本表直接更正；recordedInOriginal 保留更正前旧值。",
+  "supersedes": "evidence/redo-p3/research-md5.json（原文件已直接更正；旧值→新值对照见 evidence/debt-evidence/research-md5-ledger-corrections.json）",
   "generatedAt": "2026-11-20T07:07:56.105Z",
   "algorithm": "md5",
   "logDir": "evidence/redo-p3/research",
@@ -52,5 +52,5 @@
     }
   },
   "allFiveCorrected": true,
-  "note": "原台账 md5 是旧 P0/P2b 值（19a280…/22f76c…/86da5c…/feac23…/e0a23d…），且 same:true 是旧值之间自比；真实值见 faces.*.md5。"
+  "note": "原台账 md5 是旧 P0/P2b 值（19a280…/22f76c…/86da5c…/feac23…/e0a23d…），且 same:true 是旧值之间自比；真实值见 faces.*.md5。2026-11-20 起原 research-md5.json 已直接更正为真实值，本文件的 recordedInOriginal 仅作历史对照。"
 }
