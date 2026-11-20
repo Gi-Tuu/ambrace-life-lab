@@ -1,6 +1,6 @@
 {
   "_说明": "1.1 正式钟生存闸门：on/off/legacy-formal/p3 同脚本；不改阈值。",
-  "at": "2026-11-20T16:19:03.476Z",
+  "at": "2026-11-20T17:29:46.119Z",
   "mode": "on",
   "options": {
     "residentialDecisions": true,
@@ -22,58 +22,50 @@
       "population": {
         "30": 3,
         "100": 7,
-        "200": 1
+        "200": null
       },
       "births": {
         "30": 0,
         "100": 4,
-        "200": 4
+        "200": null
       },
       "deaths": {
         "30": 0,
         "100": 0,
-        "200": 7
+        "200": null
       },
-      "deathCauses": {
-        "衰老": 7
-      },
+      "deathCauses": {},
       "ended": {
         "100": false,
-        "200": false
+        "200": null
       },
       "energy": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": 1,
-          "min": 1
-        }
+        "200": null
       },
       "viability": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": 1,
-          "min": 1
-        }
+        "200": null
       },
       "laborMinutes100": 19730,
       "store": {
         "100": 3,
-        "200": 16
+        "200": null
       },
       "runtime": {
-        "avgTickMs": 2.007,
-        "maxTickMs": 13,
-        "saveBytes": 957059,
-        "heapDeltaBytes": 132151136,
+        "avgTickMs": 1.53,
+        "maxTickMs": 14,
+        "saveBytes": 922016,
+        "heapDeltaBytes": 113163712,
         "goalStagnation": 4,
         "skipped": 0,
-        "rejected": 574
+        "rejected": 345
       },
       "agentErrors": 0,
       "curve": [
@@ -126,56 +118,6 @@
           100,
           7,
           9
-        ],
-        [
-          110,
-          7,
-          9
-        ],
-        [
-          120,
-          5,
-          12
-        ],
-        [
-          130,
-          4,
-          22
-        ],
-        [
-          140,
-          4,
-          13
-        ],
-        [
-          150,
-          4,
-          18
-        ],
-        [
-          160,
-          4,
-          14
-        ],
-        [
-          170,
-          2,
-          29
-        ],
-        [
-          180,
-          2,
-          17
-        ],
-        [
-          190,
-          2,
-          19
-        ],
-        [
-          200,
-          1,
-          16
         ]
       ]
     },
@@ -184,58 +126,50 @@
       "population": {
         "30": 5,
         "100": 9,
-        "200": 9
+        "200": null
       },
       "births": {
         "30": 2,
         "100": 6,
-        "200": 14
+        "200": null
       },
       "deaths": {
         "30": 0,
         "100": 0,
-        "200": 9
+        "200": null
       },
-      "deathCauses": {
-        "衰老": 9
-      },
+      "deathCauses": {},
       "ended": {
         "100": false,
-        "200": false
+        "200": null
       },
       "energy": {
         "100": {
           "avg": 0.9978,
           "min": 0.99
         },
-        "200": {
-          "avg": 0.9989,
-          "min": 0.99
-        }
+        "200": null
       },
       "viability": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": 1,
-          "min": 1
-        }
+        "200": null
       },
       "laborMinutes100": 26575,
       "store": {
         "100": 1,
-        "200": 10
+        "200": null
       },
       "runtime": {
-        "avgTickMs": 6.327,
-        "maxTickMs": 28,
-        "saveBytes": 2072011,
-        "heapDeltaBytes": -5302496,
+        "avgTickMs": 3.542,
+        "maxTickMs": 15,
+        "saveBytes": 1129504,
+        "heapDeltaBytes": 35303512,
         "goalStagnation": 2,
         "skipped": 0,
-        "rejected": 3407
+        "rejected": 1509
       },
       "agentErrors": 0,
       "curve": [
@@ -288,56 +222,6 @@
           100,
           9,
           7
-        ],
-        [
-          110,
-          9,
-          10
-        ],
-        [
-          120,
-          7,
-          10
-        ],
-        [
-          130,
-          7,
-          11
-        ],
-        [
-          140,
-          8,
-          9
-        ],
-        [
-          150,
-          7,
-          20
-        ],
-        [
-          160,
-          8,
-          10
-        ],
-        [
-          170,
-          8,
-          9
-        ],
-        [
-          180,
-          8,
-          9
-        ],
-        [
-          190,
-          8,
-          17
-        ],
-        [
-          200,
-          9,
-          8
         ]
       ]
     },
@@ -346,58 +230,50 @@
       "population": {
         "30": 6,
         "100": 10,
-        "200": 1
+        "200": null
       },
       "births": {
         "30": 3,
         "100": 7,
-        "200": 7
+        "200": null
       },
       "deaths": {
         "30": 0,
         "100": 0,
-        "200": 10
+        "200": null
       },
-      "deathCauses": {
-        "饥饿": 10
-      },
+      "deathCauses": {},
       "ended": {
         "100": false,
-        "200": false
+        "200": null
       },
       "energy": {
         "100": {
           "avg": 0.7582,
           "min": 0.4024
         },
-        "200": {
-          "avg": 0.972,
-          "min": 0.972
-        }
+        "200": null
       },
       "viability": {
         "100": {
           "avg": 0.0394,
           "min": 0.0304
         },
-        "200": {
-          "avg": 1,
-          "min": 1
-        }
+        "200": null
       },
       "laborMinutes100": 22980,
       "store": {
         "100": 0,
-        "200": 16
+        "200": null
       },
       "runtime": {
-        "avgTickMs": 2.093,
-        "maxTickMs": 21,
-        "saveBytes": 1299079,
-        "heapDeltaBytes": 179366160,
-        "goalStagnation": 94,
+        "avgTickMs": 2.084,
+        "maxTickMs": 10,
+        "saveBytes": 1249112,
+        "heapDeltaBytes": 131811368,
+        "goalStagnation": 3,
         "skipped": 0,
-        "rejected": 592
+        "rejected": 521
       },
       "agentErrors": 0,
       "curve": [
@@ -450,56 +326,6 @@
           100,
           10,
           0
-        ],
-        [
-          110,
-          1,
-          4
-        ],
-        [
-          120,
-          1,
-          7
-        ],
-        [
-          130,
-          1,
-          24
-        ],
-        [
-          140,
-          1,
-          18
-        ],
-        [
-          150,
-          1,
-          18
-        ],
-        [
-          160,
-          1,
-          27
-        ],
-        [
-          170,
-          1,
-          21
-        ],
-        [
-          180,
-          1,
-          17
-        ],
-        [
-          190,
-          1,
-          24
-        ],
-        [
-          200,
-          1,
-          16
         ]
       ]
     },
@@ -508,58 +334,50 @@
       "population": {
         "30": 6,
         "100": 9,
-        "200": 0
+        "200": null
       },
       "births": {
         "30": 3,
         "100": 6,
-        "200": 6
+        "200": null
       },
       "deaths": {
         "30": 0,
         "100": 0,
-        "200": 10
+        "200": null
       },
-      "deathCauses": {
-        "衰老": 10
-      },
+      "deathCauses": {},
       "ended": {
         "100": false,
-        "200": true
+        "200": null
       },
       "energy": {
         "100": {
           "avg": 0.9931,
           "min": 0.97
         },
-        "200": {
-          "avg": null,
-          "min": null
-        }
+        "200": null
       },
       "viability": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": null,
-          "min": null
-        }
+        "200": null
       },
       "laborMinutes100": 30180,
       "store": {
         "100": 2,
-        "200": 33
+        "200": null
       },
       "runtime": {
-        "avgTickMs": 5.571,
-        "maxTickMs": 29,
-        "saveBytes": 1177900,
-        "heapDeltaBytes": -385747920,
+        "avgTickMs": 4.571,
+        "maxTickMs": 17,
+        "saveBytes": 1136769,
+        "heapDeltaBytes": -43173448,
         "goalStagnation": 1,
         "skipped": 0,
-        "rejected": 3086
+        "rejected": 1950
       },
       "agentErrors": 0,
       "curve": [
@@ -612,56 +430,6 @@
           100,
           9,
           7
-        ],
-        [
-          110,
-          9,
-          8
-        ],
-        [
-          120,
-          7,
-          10
-        ],
-        [
-          130,
-          7,
-          14
-        ],
-        [
-          140,
-          6,
-          11
-        ],
-        [
-          150,
-          4,
-          20
-        ],
-        [
-          160,
-          3,
-          20
-        ],
-        [
-          170,
-          2,
-          34
-        ],
-        [
-          180,
-          2,
-          34
-        ],
-        [
-          190,
-          1,
-          34
-        ],
-        [
-          200,
-          0,
-          33
         ]
       ]
     },
@@ -670,58 +438,50 @@
       "population": {
         "30": 6,
         "100": 9,
-        "200": 7
+        "200": null
       },
       "births": {
         "30": 3,
         "100": 6,
-        "200": 12
+        "200": null
       },
       "deaths": {
         "30": 0,
         "100": 0,
-        "200": 9
+        "200": null
       },
-      "deathCauses": {
-        "衰老": 9
-      },
+      "deathCauses": {},
       "ended": {
         "100": false,
-        "200": false
+        "200": null
       },
       "energy": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": 0.9986,
-          "min": 0.99
-        }
+        "200": null
       },
       "viability": {
         "100": {
           "avg": 1,
           "min": 1
         },
-        "200": {
-          "avg": 1,
-          "min": 1
-        }
+        "200": null
       },
       "laborMinutes100": 23690,
       "store": {
         "100": 1,
-        "200": 14
+        "200": null
       },
       "runtime": {
-        "avgTickMs": 3.269,
-        "maxTickMs": 24,
-        "saveBytes": 1799094,
-        "heapDeltaBytes": 266282448,
+        "avgTickMs": 2.151,
+        "maxTickMs": 11,
+        "saveBytes": 1157804,
+        "heapDeltaBytes": -188743184,
         "goalStagnation": 1,
         "skipped": 0,
-        "rejected": 1127
+        "rejected": 655
       },
       "agentErrors": 0,
       "curve": [
@@ -774,56 +534,6 @@
           100,
           9,
           7
-        ],
-        [
-          110,
-          10,
-          6
-        ],
-        [
-          120,
-          8,
-          18
-        ],
-        [
-          130,
-          8,
-          9
-        ],
-        [
-          140,
-          8,
-          17
-        ],
-        [
-          150,
-          8,
-          9
-        ],
-        [
-          160,
-          8,
-          9
-        ],
-        [
-          170,
-          7,
-          15
-        ],
-        [
-          180,
-          7,
-          12
-        ],
-        [
-          190,
-          7,
-          10
-        ],
-        [
-          200,
-          7,
-          14
         ]
       ]
     }
@@ -837,7 +547,7 @@
       41,
       53
     ],
-    "days": 200,
+    "days": 100,
     "population30": [
       3,
       5,
@@ -853,23 +563,20 @@
       9
     ],
     "population200": [
-      1,
-      9,
-      1,
-      0,
-      7
+      null,
+      null,
+      null,
+      null,
+      null
     ],
     "avg30": 5.2,
     "avg100": 8.8,
-    "avg200": 3.6,
+    "avg200": 0,
     "births100": 29,
     "deaths100": 0,
     "extinct100": "0/5",
-    "extinct200": "1/5",
-    "deathCauses200": {
-      "衰老": 35,
-      "饥饿": 10
-    },
+    "extinct200": "0/5",
+    "deathCauses200": {},
     "agentErrors": 0
   }
 }
