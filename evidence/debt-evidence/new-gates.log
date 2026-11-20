@@ -1,0 +1,13 @@
+✔ RESEARCH-MD5 全部台账与 checked-in log 一致，五面跨 artifact 逐位相同 (17.647ms)
+✔ 旧值→新值 sidecar 完整：40 条转抄错误全部留痕，旧值不再被当新值 (0.5099ms)
+✔ score md5 清单也在闸门内（不再是被漏掉的第 10 份台账） (13.9201ms)
+✔ V73 深链房间键 = ROOM_INTERIORS ∪ HOUSING_PLOTS，且不再引用已删的 INTERIORS (0.9767ms)
+✔ V73 浏览器测试等待真实世界状态（S.view）并收集 pageerror，不再用 __lifeDebug 假绿 (0.1112ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92.3183

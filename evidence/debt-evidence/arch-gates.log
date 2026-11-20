@@ -1,0 +1,13 @@
+  · 白名单 life/actor-pos.mjs:212: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/actor-pos.mjs:216: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/actor-pos.mjs:251: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/build-efficiency.mjs:14: [ARCH-POS-01] 离线消融夹具：直接构造 occupancy
+  · 白名单 life/camp-instances.mjs:399: [ARCH-POS-01] forkCamp 的 survival 夹具：离线构造玩家位置
+  · 白名单 life/camp-instances.mjs:400: [ARCH-POS-01] forkCamp 的 survival 夹具：离线构造玩家位置
+  · 白名单 life/host-world.mjs:728: [ARCH-POS-01] 研究/城镇快照恢复：不是 survival 存档，也没有 w.pos
+  · 白名单 life/host-world.mjs:754: [ARCH-POS-01] 研究/城镇快照恢复：不是 survival 存档，也没有 w.pos
+  · 白名单 life/m3-planner.mjs:35: [ARCH-POS-01] s 是 planner 的 ActionState（动作目标地点），不是世界/居民位置
+  · 白名单 life/m3-planner.mjs:38: [ARCH-POS-01] s 是 planner 的 ActionState（动作目标地点），不是世界/居民位置
+  · 白名单 life/research-time.mjs:12: [ARCH-2D-01] 研究态旧时间模型（!world.simClock）的唯一隔离点；正式路径必须为 0
+  · 白名单 life/survplay-save.mjs:108: [ARCH-POS-01] 旧档迁移：没有 pos 的历史存档按 loc/playerPos 补齐
+✔ 架构闸门通过：扫描 332 个运行路径文件 · 5 条规则 · 白名单 12 处

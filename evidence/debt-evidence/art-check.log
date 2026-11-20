@@ -1,0 +1,5 @@
+
+> ambrace-life-lab@0.1.6 art:check
+> node scripts/art-hashes.mjs --check
+
+✔ 美术指纹一致：20 张素材未变（基线 node v24.18.0）

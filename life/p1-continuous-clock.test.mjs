@@ -108,7 +108,12 @@ test('P1-04 读档连续：t/时钟/busy 重锚；旧 busy 字段自动补成绝
   assert.equal(survAct(sp, { kind: 'build' }).code, 'BUSY_START');
   const raw = structuredClone(dumpSurv(sp));
   assert.ok(raw.clock && raw.clock.gameMinutes >= 600, '连续时钟状态应入档');
-  const back = loadSurv(raw, 7, { ...GAME, simTime: true });
+  // 读档必须落在同一分钟：给回载一个手动时钟（now 固定），否则默认时钟会在
+  // “setGameMinutes 重锚 → 断言”之间按真实毫秒继续走，1e-6 分钟容差必然偶发失败。
+  const back = loadSurv(raw, 7, {
+    ...GAME, simTime: true,
+    simClock: createSimClock({ now: () => 0, tickMs: 7500, manual: true }),
+  });
   assert.equal(back.world.t, w.t, '读档后世界刻连续');
   assert.ok(back.world.simClock, '读档后仍走连续时钟');
   assert.ok(back.world.survival.actClock.p1.busy, 'busy 随档恢复');

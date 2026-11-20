@@ -39,21 +39,24 @@ test('P1b-H01 真实 125ms 调度：30 分动作 ~3.75s 完成，不等 7.5s 整
   const started = Date.now();
   let doneMs = null;
   let sawBusy = false;
-  let minRemain = Infinity;
+  const remains = [];
   while (Date.now() - started < 8000) {
     await sleep(80);
     const view = await host.readWorld('survival');
     const busy = view?.survival?.player?.busy ?? null;
     if (busy) {
       sawBusy = true;
-      minRemain = Math.min(minRemain, Number(busy.remainMin));
+      remains.push(Number(busy.remainMin));
     } else {
       doneMs = Date.now() - started;
       break;
     }
   }
   assert.ok(sawBusy, '30 分动作必须至少被观察为 busy，不能 125ms 内一步走完');
-  assert.ok(minRemain > 0, `完成前必须有剩余分钟，实测 ${minRemain}`);
+  // remainMin 在视图里 toFixed(1)；完成前最后一次采样可能正好舍入到 0，
+  // 所以“完成前有剩余分钟”应看整个采样序列，而不是取最小值。
+  assert.ok(remains.some((min) => min > 0), `完成前必须有剩余分钟，实测 ${JSON.stringify(remains)}`);
+  assert.ok(new Set(remains).size > 1, `剩余分钟从未推进：${JSON.stringify(remains)}`);
   assert.ok(doneMs !== null, '30 分动作在 8s 内没有完成');
   assert.ok(doneMs >= 2500, `完成过快，说明没有按 30 游戏分钟推进：${doneMs}ms`);
   assert.ok(doneMs < 6800, `30 分动作不应等到 7.5s 整拍：${doneMs}ms`);

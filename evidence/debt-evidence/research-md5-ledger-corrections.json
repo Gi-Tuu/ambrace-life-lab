@@ -1,6 +1,6 @@
 {
   "_说明": "研究五面 md5 台账更正对照（旧值→真实 log 字节值）。原 log 未改；原台账已按本表直接更正。重复运行 --write 会保留本表 old。",
-  "generatedAt": "2026-11-20T10:27:59.377Z",
+  "generatedAt": "2026-11-20T10:35:48.485Z",
   "algorithm": "md5 (raw file bytes)",
   "ledgers": [
     {

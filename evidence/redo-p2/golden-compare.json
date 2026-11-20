@@ -1,14 +1,7 @@
 [
   {
-    "against": "evidence/redo-p0/main-after.json",
-    "label": "p2",
-    "same": 45,
-    "total": 45,
-    "diffs": []
-  },
-  {
-    "against": "evidence/redo-p0/main-after.json",
-    "label": "p2b",
+    "against": "evidence/redo-p0/p3-final.json",
+    "label": "debt-ledger",
     "same": 45,
     "total": 45,
     "diffs": []

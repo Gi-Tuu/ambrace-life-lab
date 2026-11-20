@@ -35,4 +35,4 @@
   recover: fe198109386d048356f2fa69312e5183
   metab: 5ea0ae6473c4f0ff46f47b7a2463b409
 已写：evidence/debt-evidence/research-md5-ledger-corrections.json / evidence/debt-evidence/research-md5-ledger-report.json
-更正完成：0 条旧值→真实值；原 log 未改动。
+更正完成：40 条旧值→真实值（sidecar 保留）；原 log 未改动。

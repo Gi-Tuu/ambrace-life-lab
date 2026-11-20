@@ -440,7 +440,8 @@ function main() {
     console.error('更正后仍不一致，拒绝声明成功。');
     process.exit(1);
   }
-  console.log(`更正完成：${before.summary.changedEntryCount} 条旧值→真实值；原 log 未改动。`);
+  const corrected = JSON.parse(readFileSync(abs(CORRECTIONS), 'utf8'));
+  console.log(`更正完成：${corrected.summary.changedEntryCount} 条旧值→真实值（sidecar 保留）；原 log 未改动。`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();
