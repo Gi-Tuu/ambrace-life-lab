@@ -34,7 +34,8 @@ try {
   note('server.started', { port: h.port, dataDir: h.dataDir, gameMode: 'game', gameRules: 1 });
   h.startChrome();
   const sid = await h.openPage({ url: `${h.origin}/` });
-  assert(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug', sid))), '页面未就绪');
+  // 与 v73/v731 同口径：__lifeDebug 在模块前段就存在，等 S 才能发现模块求值中断的假绿。
+  assert(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug?.S', sid))), '页面未就绪');
   await h.wait(1000);
 
   const menu = await h.evaluate(`(()=>({survival:document.querySelector('#startSurvival')?.textContent,newGame:document.querySelector('#startNew')?.textContent,camp:document.querySelector('#campEnter')?.textContent,compare:document.querySelector('#startCompare')?.textContent}))()`, sid);
@@ -106,12 +107,17 @@ try {
   assert(death?.ok && death.dead, `死亡夹具没有生效：${JSON.stringify(death)}`);
   await ctl({ action: 'step' });
   await ctl({ action: 'step' });
-  await h.wait(1200);
   const tAfterDeath = (await ctl({ action: 'v73_state' })).t;
-  const banner = await h.evaluate(`document.querySelector('.survbanner.bad')?.textContent ?? ''`, sid);
-  note('death.after', { beforeDeathT, tAfterDeath, banner });
+  // 轮询是 900ms 一次；固定等 1200ms 在并行负载下会偶发“服务端已死、页面还没刷新”。
+  // 这里等真实 DOM 条件，最多 10s，仍然要求横幅真的出现，不放宽产品语义。
+  let banner = '';
+  const bannerShown = await h.waitFor(async () => {
+    banner = await h.evaluate(`document.querySelector('.survbanner.bad')?.textContent ?? ''`, sid);
+    return /你倒下了/.test(banner);
+  }, 10000, sid);
+  note('death.after', { beforeDeathT, tAfterDeath, banner, bannerShown });
   assert(tAfterDeath > beforeDeathT, `玩家死亡后世界没有继续：${beforeDeathT} → ${tAfterDeath}`);
-  assert(/你倒下了/.test(banner), `死亡后页面没有出现“你倒下了”横幅：${banner}`);
+  assert(bannerShown, `死亡后页面没有出现“你倒下了”横幅：${banner}`);
 
   const summary = {
     ok: true,

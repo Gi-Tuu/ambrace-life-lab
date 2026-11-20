@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "syncs": [
+    true,
+    true,
+    true
+  ],
+  "gathers": [
+    true,
+    true,
+    true
+  ],
+  "hud": "体力0.61存续1今日时间1405/1440⏳ 动作build 剩 30 分取消",
+  "cancel1": {
+    "usedMin": 35,
+    "cancelled": {
+      "build": 1
+    }
+  },
+  "restarted": true,
+  "residentsChanged": true
+}

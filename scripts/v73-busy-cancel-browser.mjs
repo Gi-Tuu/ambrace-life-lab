@@ -29,8 +29,17 @@ const post = (path, body) => h.post(path, body);
 try {
   await h.startServer();
   h.startChrome();
-  const sid = await h.openPage({ url: `${h.origin}/?room=hall` });
-  if (!(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug', sid))))) throw new Error('页面未就绪');
+  // 页面级异常探针：就绪条件必须等真正的世界状态，不能只看 __lifeDebug（它在模块前段就存在，
+  // 历史上 INTERIORS 未定义导致模块在 4525 行中断时，旧的 !!__lifeDebug 会假绿）。
+  const probe = `window.__pageErrors=[];
+    addEventListener('error', e => window.__pageErrors.push({kind:'error',m:e.message,f:e.filename,l:e.lineno,c:e.colno,s:String(e.error&&e.error.stack||'')}));
+    addEventListener('unhandledrejection', e => window.__pageErrors.push({kind:'rejection',m:String(e.reason&&e.reason.message||e.reason),s:String(e.reason&&e.reason.stack||'')}));`;
+  const sid = await h.openPage({ url: `${h.origin}/?room=hall`, probe });
+  const ready = await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug?.S?.view', sid)), 20000, sid);
+  if (!ready) {
+    const diag = await h.evaluate(`JSON.stringify({href:location.href,hasDebug:!!window.__lifeDebug,hasS:!!window.__lifeDebug?.S,errs:window.__pageErrors,body:document.body.className,worldHidden:document.getElementById('worldMain')?.hidden})`, sid);
+    throw new Error('页面未就绪（未走到 __lifeDebug.S.view）：' + diag);
+  }
   await wait(1200);
   note('ready', { port: h.port, href: await h.evaluate('location.href', sid) });
 
@@ -39,7 +48,8 @@ try {
   note('fixture', fixture);
   if (!fixture.body?.ok) throw new Error('夹具注入失败');
 
-  // 真实动作消耗 35 分钟，再发起 30 分钟施工 ⇒ busy（剩 5 分钟）
+  // 真实动作消耗 35 分钟，再发起 30 分钟施工 ⇒ busy。P1 连续时间模型里长动作在开始时
+  // 不预扣分钟（remainMin=总时长 30，完成/推进时才按分钟记账），“本刻只剩 5 分”的旧口径已退役。
   const setup = await h.evaluate(`(async()=>{
     const rooms=['yard','hall','yard','hall','yard','hall','yard'];
     const moves=[];
@@ -49,6 +59,8 @@ try {
   })()`, sid);
   note('setup', JSON.parse(setup));
   if (JSON.parse(setup).build.code !== 'BUSY_START') throw new Error('未进入 busy：' + setup);
+  const preBusy = await post('/ctl', { action: 'v73_state', confirm: true });
+  note('preBusy', preBusy.body);
 
   // 等页面刷新出 busy HUD（TICK_MS 很大，服务端状态稳定）
   await wait(1200);
@@ -56,9 +68,13 @@ try {
   note('hud', JSON.parse(hud));
   const hudState = JSON.parse(hud);
   if (!hudState.busy || !hudState.btn) throw new Error('HUD 未出现忙态/取消按钮：' + hud);
-  if (!hudState.hud.includes('⏳ 动作') || !hudState.hud.includes('剩 5 分')) throw new Error('HUD 文案不对：' + hudState.hud);
+  if (hudState.busy.remainMin !== 30) throw new Error('busy 起始剩余分钟不是完整 30：' + JSON.stringify(hudState.busy));
+  if (!hudState.hud.includes('⏳ 动作') || !hudState.hud.includes('剩 30 分')) throw new Error('HUD 文案不对：' + hudState.hud);
 
-  // 点击取消按钮
+  // 点击取消按钮前再取一次：连续时钟在 busy 期间本来就会按真实时间推进，
+  // 取消的语义是“不结算未完成分钟、不退款”，不是“把时钟冻在起手那一刻”。
+  const preCancel = await post('/ctl', { action: 'v73_state', confirm: true });
+  note('preCancel', preCancel.body);
   await h.evaluate(`document.getElementById('btnBusyCancel').click()`, sid);
   await wait(800);
   const after = await post('/ctl', { action: 'v73_state', confirm: true });
@@ -66,7 +82,10 @@ try {
   const st = after.body;
   const cancelledEvents = (st.events ?? []).filter((e) => e.status === 'cancelled');
   if (st.busy) throw new Error('取消后仍 busy');
-  if (st.usedMin !== 60) throw new Error('取消后本刻分钟被改动：' + st.usedMin);
+  // 取消只结束 busy：usedMin 不得回退，也不得出现一次“补结算”的跳变（允许点击期间 <1 分钟的
+  // 连续时钟推进）。旧断言 usedMin===60 属于“本刻池预扣”语义，已随连续时间模型退役。
+  const drift = st.usedMin - preCancel.body.usedMin;
+  if (drift < -1e-9 || drift >= 1) throw new Error(`取消改动了已用分钟：${preCancel.body.usedMin} -> ${st.usedMin}`);
   if ((st.cancelled?.build ?? 0) !== 1) throw new Error('账本未写 cancelled');
   if (cancelledEvents.length !== 1) throw new Error('cancelled 事件数量不对：' + cancelledEvents.length);
   if (st.progress !== 0) throw new Error('取消后成果被结算：progress=' + st.progress);

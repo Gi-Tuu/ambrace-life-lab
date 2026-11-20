@@ -1,0 +1,160 @@
+{
+  "ok": true,
+  "hud": "体力0.7存续1今日时间1405/1440⏳ 动作build 剩 30 分取消",
+  "after": {
+    "ok": true,
+    "usedMin": 35.00738000000274,
+    "busy": null,
+    "cancelled": {
+      "build": 1
+    },
+    "events": [
+      {
+        "id": 1,
+        "t": 960,
+        "kind": "player_action",
+        "actor": "p1",
+        "action": "build",
+        "status": "cancelled",
+        "code": "USER_CANCEL",
+        "minutesDone": 0.007380000002740417,
+        "actionId": "p1:build:960:8"
+      }
+    ],
+    "progress": 0,
+    "energy": 0.7,
+    "t": 960,
+    "store": 11,
+    "mealsEaten": 0,
+    "hallSite": null,
+    "anchor": [
+      20,
+      34
+    ],
+    "playerPos": null,
+    "bag": {
+      "wood": 5,
+      "stone": 5,
+      "crop": 0
+    },
+    "resStockYard": 500,
+    "residents": [
+      {
+        "id": "a1",
+        "loc": "hall",
+        "action": null,
+        "ok": null
+      },
+      {
+        "id": "a2",
+        "loc": "workshop",
+        "action": null,
+        "ok": null
+      },
+      {
+        "id": "a3",
+        "loc": "yard",
+        "action": null,
+        "ok": null
+      },
+      {
+        "id": "c1",
+        "loc": "watch",
+        "action": null,
+        "ok": null
+      },
+      {
+        "id": "c2",
+        "loc": "hall",
+        "action": null,
+        "ok": null
+      },
+      {
+        "id": "c3",
+        "loc": "watch",
+        "action": null,
+        "ok": null
+      }
+    ]
+  },
+  "again": {
+    "ok": false,
+    "code": "NO_BUSY"
+  },
+  "final": {
+    "ok": true,
+    "usedMin": 0,
+    "busy": null,
+    "cancelled": {
+      "build": 1
+    },
+    "events": [
+      {
+        "id": 1,
+        "t": 960,
+        "kind": "player_action",
+        "actor": "p1",
+        "action": "build",
+        "status": "cancelled",
+        "code": "USER_CANCEL",
+        "minutesDone": 0.007380000002740417,
+        "actionId": "p1:build:960:8"
+      }
+    ],
+    "progress": 0,
+    "energy": 0.688,
+    "t": 961,
+    "store": 17,
+    "mealsEaten": 0,
+    "hallSite": null,
+    "anchor": [
+      20,
+      34
+    ],
+    "playerPos": null,
+    "bag": {
+      "wood": 5,
+      "stone": 5,
+      "crop": 0
+    },
+    "resStockYard": 498,
+    "residents": [
+      {
+        "id": "a1",
+        "loc": "well",
+        "action": "forage",
+        "ok": true
+      },
+      {
+        "id": "a2",
+        "loc": "workshop",
+        "action": "exchange",
+        "ok": true
+      },
+      {
+        "id": "a3",
+        "loc": "workshop",
+        "action": "move_to",
+        "ok": true
+      },
+      {
+        "id": "c1",
+        "loc": "store",
+        "action": "move_to",
+        "ok": true
+      },
+      {
+        "id": "c2",
+        "loc": "home",
+        "action": "move_to",
+        "ok": true
+      },
+      {
+        "id": "c3",
+        "loc": "store",
+        "action": "move_to",
+        "ok": true
+      }
+    ]
+  }
+}

@@ -44,9 +44,11 @@ test('P1-06 慢模型在途时 step/act/world 快速返回，最终 tick 结算�
     assert.ok(view?.survival, '读必须返回生存快照');
     assert.equal(acted.ok, true, JSON.stringify(acted));
     // 阈值留足 CI/并发磁盘抖动；判据是"远小于 3×450ms 串行模型等待"。
+    // act 会 await 一次真实落盘（persistAfterAction），Windows 并发磁盘下实测出现过 252ms；
+    // 400ms 仍低于一次 450ms 模型等待，模型串行化会立刻超过它，不放过原始回归。
     assert.ok(stepMs < 400, `step 被模型等待串行化：step=${stepMs}ms`);
     assert.ok(readMs < 250, `读被阻塞：${readMs}ms`);
-    assert.ok(actMs < 250, `普通 act 被阻塞：${actMs}ms`);
+    assert.ok(actMs < 400, `普通 act 被阻塞：${actMs}ms（一次模型等待 450ms）`);
     await new Promise((resolve) => setTimeout(resolve, 1100)); // 等慢 think 落地
     const after = await host.readWorld('survival');
     assert.equal(after.survival.t, beforeT + 1, '一次 step 仍只推进 60 游戏分钟/1 刻');

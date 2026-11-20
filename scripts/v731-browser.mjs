@@ -19,6 +19,10 @@ const h = createCdpHarness({
   serverEnv: {
     GAME_MODE: 'game', GAME_RULES: '1', BRAIN: 'local', TICK_MS: '2000',
     MODEL_UNATTENDED: '0', V73_TEST: '1',
+    // 原文“step 保存后重启”依赖默认 SAVE_EVERY=10，而 step 只从 t=962 走到 963，不会落盘；
+    // 测试实际读到的是更早的存档。这里把存档粒度钉成每刻（支持的 env 旋钮），让重启断言测的是
+    // 它声称的那一拍，而不是靠“允许回退一刻”蒙混。
+    SAVE_EVERY: '1',
   },
   readyAttempts: 100,
   readyErrorChars: 200,
@@ -32,8 +36,16 @@ const state = () => post('/ctl', { action: 'v73_state', confirm: true });
 try {
   await h.startServer();
   h.startChrome();
-  const sid = await h.openPage({ url: `${h.origin}/?room=hall` });
-  if (!(await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug', sid))))) throw new Error('页面未就绪');
+  // 同 v73：只等 __lifeDebug 会假绿；必须等 S.view（首次 /world 轮询落地）并保留页面异常。
+  const probe = `window.__pageErrors=[];
+    addEventListener('error', e => window.__pageErrors.push({kind:'error',m:e.message,f:e.filename,l:e.lineno,c:e.colno,s:String(e.error&&e.error.stack||'')}));
+    addEventListener('unhandledrejection', e => window.__pageErrors.push({kind:'rejection',m:String(e.reason&&e.reason.message||e.reason),s:String(e.reason&&e.reason.stack||'')}));`;
+  const sid = await h.openPage({ url: `${h.origin}/?room=hall`, probe });
+  const ready = await h.waitFor(async () => Boolean(await h.evaluate('!!window.__lifeDebug?.S?.view', sid)), 20000, sid);
+  if (!ready) {
+    const diag = await h.evaluate(`JSON.stringify({href:location.href,hasDebug:!!window.__lifeDebug,hasS:!!window.__lifeDebug?.S,errs:window.__pageErrors,body:document.body.className,worldHidden:document.getElementById('worldMain')?.hidden})`, sid);
+    throw new Error('页面未就绪（未走到 __lifeDebug.S.view）：' + diag);
+  }
   await wait(800);
   note('ready', { port: h.port });
   const fix = await post('/ctl', { action: 'v73_fixture', confirm: true });
@@ -71,12 +83,20 @@ try {
   note('hud', { ...JSON.parse(hud), state: await state() });
   const hudState = JSON.parse(hud);
   if (!hudState.btn || !hudState.text.includes('⏳ 动作')) throw new Error('HUD 未显示忙态/取消: ' + hud);
-  // 4) 主动取消
+  // 4) 主动取消。P1 连续时间模型：长动作开始时 remainMin=总时长、未预扣分钟；
+  //    取消只结束 busy，不结算未完成分钟，所以 usedMin 必须与取消前一致（当前夹具 35）。
+  //    旧断言 usedMin===60 属于“本刻池预扣到 60”的旧语义，已随连续时间模型退役。
+  const preCancel1 = await state();
+  note('preCancel1', { usedMin: preCancel1.usedMin, busy: preCancel1.busy });
   await h.evaluate(`document.getElementById('btnBusyCancel').click()`, sid);
   await wait(600);
   st = await state();
+  const cancel1State = st;
   note('cancel1', st);
-  if (st.busy || st.cancelled.build !== 1 || st.progress !== 0 || st.usedMin !== 60) throw new Error('取消1异常: ' + JSON.stringify(st));
+  // 连续时钟在 busy 期间本就按真实时间推进；取消只禁止“退款/补结算”的跳变，允许点击期间 <1 分钟推进。
+  const drift1 = st.usedMin - preCancel1.usedMin;
+  if (st.busy || st.cancelled.build !== 1 || st.progress !== 0 || drift1 < -1e-9 || drift1 >= 1)
+    throw new Error(`取消1异常: ${JSON.stringify(st)}（取消前 usedMin=${preCancel1.usedMin}）`);
   // 5) 取消后重开：恢复一拍重置分钟，再暂停，耗 40 分 + build ⇒ busy，再次取消
   await post('/ctl', { action: 'resume' }); await wait(2200); await post('/ctl', { action: 'pause' });
   for (let i = 0; i < 4; i += 1) await act(sid, { kind: 'gather' });
@@ -116,7 +136,12 @@ try {
   const afterRestart = await state();
   note('restart', { before: pre, after: afterRestart });
   if (!afterRestart?.ok) throw new Error('重启后状态不可读');
-  if (afterRestart.t < pre.t - 1) throw new Error('重启回退世界刻 ' + afterRestart.t + ' < ' + pre.t);
+  // SAVE_EVERY=1 下 step 的存档已经落盘：重启必须读到同一刻，而不是靠“差一刻也接受”的旧宽容。
+  if (afterRestart.t !== pre.t) throw new Error(`重启刻不符 ${afterRestart.t} != ${pre.t}（存档未落盘或回退）`);
+  if (afterRestart.busy) throw new Error('重启后本应已完成的施工仍 busy：' + JSON.stringify(afterRestart.busy));
+  const completedAfter = (afterRestart.events ?? []).filter((e) => e.status === 'completed' && e.action === 'build');
+  if (completedAfter.length !== 1) throw new Error('重启后完成事件不是恰好一次：' + JSON.stringify(completedAfter));
+  if (afterRestart.progress !== pre.progress) throw new Error(`重启后进度不一致 ${afterRestart.progress} != ${pre.progress}`);
   if (afterRestart.bag.wood < pre.bag.wood - 2) throw new Error('重启丢失背包木料');
   // 7) 居民继续生活：恢复世界，抓两拍居民位置/动作差异
   await post('/ctl', { action: 'resume' });
@@ -131,8 +156,8 @@ try {
   note('finalHud', { text: finalHud });
   writeFileSync(join(OUT, 'v731-browser.log'), log.map((x) => JSON.stringify(x)).join('\n') + '\n');
   console.log(JSON.stringify({ ok: true, syncs: syncs.map((r) => r?.ok), gathers: gathers.map((r) => r?.ok),
-    hud: hudState.text, cancel1: { usedMin: 60, cancelled: st.cancelled }, restarted: afterRestart.t >= pre.t,
-    residentsChanged: changed }, null, 2));
+    hud: hudState.text, cancel1: { usedMin: cancel1State.usedMin, cancelled: cancel1State.cancelled },
+    restarted: afterRestart.t >= pre.t, residentsChanged: changed }, null, 2));
 } catch (error) {
   note('error', { message: String(error?.message ?? error) });
   writeFileSync(join(OUT, 'v731-browser.log'), log.map((x) => JSON.stringify(x)).join('\n') + '\n');

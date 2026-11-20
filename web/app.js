@@ -36,7 +36,7 @@ import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { bodyGrid, CAMP_BODY_RADIUS, separates } from '../shared/camp-physics.mjs';
-import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD } from '../shared/room-layout.mjs';
+import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD, ROOM_INTERIORS } from '../shared/room-layout.mjs';
 import { campSurface, createSpace, roomSurface, unitsForRealMs, wildSurface } from '../life/space.mjs';
 
 // P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——
@@ -4522,7 +4522,11 @@ async function poll() {
 // P0：首屏不再等素材串行加载完。轮询、标题场景与动画时钟立即启动，菜单可交互；
 // 16 张地形 tile / 4 张头像在后台 6 并发补齐（缺图时图集用程序化兜底色，头像位留空）。
 const bootRoom = new URLSearchParams(location.search).get('room');   // 深链进某室内（便于直达与验收）
-if (bootRoom && Object.hasOwn(INTERIORS,bootRoom)) { ui.interior = bootRoom; ui.room = bootRoom; ui.camRoom = bootRoom; }
+// P2c 之后固定房间家具在 ROOM_INTERIORS，住宅在 HOUSING_PLOTS；旧 INTERIORS 已随 2D 路径删除。
+// 深链合法键必须与旧表等价：固定内景 ∪ 住宅内景，否则模块求值期会抛 ReferenceError 并让整页停在菜单。
+if (bootRoom && (Object.hasOwn(ROOM_INTERIORS, bootRoom) || Object.hasOwn(HOUSING_PLOTS, bootRoom))) {
+  ui.interior = bootRoom; ui.room = bootRoom; ui.camRoom = bootRoom;
+}
 poll();
 if (new URLSearchParams(location.search).get('full') === '1') setFull(true);   // 深链直达全屏全景（便于分享与验收）
 setInterval(poll, 900);
