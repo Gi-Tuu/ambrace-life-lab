@@ -66,3 +66,19 @@ export function floorContains(f, x, z) {
   return u>=0 && u<=1 && v>=0 && v<=1 &&
     (f.triangle===1 ? u>=v : f.triangle===2 ? u<=v : true);
 }
+
+// 脚底高度唯一实现：life/space 与 shared/camp-scene 都只调用这里。
+// 逐字保留原循环顺序与 Math.max 累积，避免浮点/覆盖顺序变化。
+export function floorHeight(floors, x, z) {
+  let y = 0;
+  for (const f of floors) {
+    if (!floorContains(f, x, z)) continue;
+    if (f.triangle) {
+      y = Math.max(y, f.y + f.ax * (x - f.x) + f.az * (z - f.z));
+      continue;
+    }
+    const t = f.axis === 'x' ? (x - f.x) / f.w : f.axis === 'z' ? (z - f.z) / f.d : 0;
+    y = Math.max(y, f.y + (f.end - f.y) * t);
+  }
+  return y;
+}

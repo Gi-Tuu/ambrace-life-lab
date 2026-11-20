@@ -1,0 +1,58 @@
+{
+  "_说明": "B 提交后重跑五份研究，用新 log 字节 md5 对照 P3 真实 log 与更正台账；历史 log 未覆盖。",
+  "generatedAt": "2026-11-20T07:16:59.511Z",
+  "algorithm": "md5",
+  "faces": {
+    "report": {
+      "freshLog": "evidence/arch-finish2/research/report.log",
+      "freshBytes": 1886,
+      "freshMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "p3Log": "evidence/redo-p3/research/report.log",
+      "p3Md5": "de764430c8bc88cd8dbbc24512621e4f",
+      "correctedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "matchP3": true,
+      "matchCorrected": true
+    },
+    "sweep": {
+      "freshLog": "evidence/arch-finish2/research/sweep.log",
+      "freshBytes": 2850,
+      "freshMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "p3Log": "evidence/redo-p3/research/sweep.log",
+      "p3Md5": "aadd4895e84ae657d5a1e22c132228b1",
+      "correctedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "matchP3": true,
+      "matchCorrected": true
+    },
+    "viab": {
+      "freshLog": "evidence/arch-finish2/research/viab.log",
+      "freshBytes": 4526,
+      "freshMd5": "b923787830eb26c3853ecf959987cf9d",
+      "p3Log": "evidence/redo-p3/research/viab.log",
+      "p3Md5": "b923787830eb26c3853ecf959987cf9d",
+      "correctedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "matchP3": true,
+      "matchCorrected": true
+    },
+    "recover": {
+      "freshLog": "evidence/arch-finish2/research/recover.log",
+      "freshBytes": 12150,
+      "freshMd5": "fe198109386d048356f2fa69312e5183",
+      "p3Log": "evidence/redo-p3/research/recover.log",
+      "p3Md5": "fe198109386d048356f2fa69312e5183",
+      "correctedMd5": "fe198109386d048356f2fa69312e5183",
+      "matchP3": true,
+      "matchCorrected": true
+    },
+    "metab": {
+      "freshLog": "evidence/arch-finish2/research/metab.log",
+      "freshBytes": 13357,
+      "freshMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "p3Log": "evidence/redo-p3/research/metab.log",
+      "p3Md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "correctedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "matchP3": true,
+      "matchCorrected": true
+    }
+  },
+  "allMatch": true
+}

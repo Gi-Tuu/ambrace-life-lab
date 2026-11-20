@@ -1,5 +1,5 @@
 import { beam, cyl, modelBounds } from './camp-geometry.mjs';
-import { reliefFaces, floorContains, campHash, hash2 } from './camp-terrain.mjs';
+import { reliefFaces, floorHeight, campHash, hash2 } from './camp-terrain.mjs';
 import { homeLot as layoutHomeLot, constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
 import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
@@ -52,19 +52,7 @@ function stage(width, depth) {
     cyl(...args) { return addModel(boxes,cyl(...args),occluder);
     },
     floor(x, z, w, d, y, color, axis, end = y) { floors.push({ x,z,w,d,y,color,axis,end }); },
-    heightAt(x, z) {
-      let y = 0;
-      for (const f of floors) {
-        if (!floorContains(f,x,z)) continue;
-        if (f.triangle) {
-          y = Math.max(y, f.y + f.ax*(x-f.x) + f.az*(z-f.z));
-          continue;
-        }
-        const t = f.axis === 'x' ? (x - f.x) / f.w : f.axis === 'z' ? (z - f.z) / f.d : 0;
-        y = Math.max(y, f.y + (f.end - f.y) * t);
-      }
-      return y;
-    },
+    heightAt(x, z) { return floorHeight(floors, x, z); },
   };
 }
 

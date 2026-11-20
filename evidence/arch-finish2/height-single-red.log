@@ -1,0 +1,31 @@
+✔ HEIGHT-01 floorHeight 只有一份：space/camp-scene 都已删除本地循环 (1.0047ms)
+✖ HEIGHT-02 共享 floorHeight 与退役实现逐位相同（含三角面/坡道/重叠/边界） (24.4518ms)
+✔ HEIGHT-03 真实 stage.heightAt 与 campSurface.heightAt 逐位相同（桥面 + 山丘三角面） (411.2864ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 992.7084
+
+✖ failing tests:
+
+test at life\height-single.test.mjs:47:1
+✖ HEIGHT-02 共享 floorHeight 与退役实现逐位相同（含三角面/坡道/重叠/边界） (24.4518ms)
+  AssertionError [ERR_ASSERTION]: (6.38378239159465e-16,6.38378239159465e-16) 共享 0.40000000100000005 ≠ 退役 0.4
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/.agents/worktrees/arch-finish2/life/height-single.test.mjs:70:33)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }

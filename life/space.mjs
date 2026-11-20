@@ -10,7 +10,7 @@
 //
 // 服务端 construction-access 与客户端玩家移动都走这里；旧实现保留为 fallback 开关：
 //   · 服务端 env SPACE_V1=0；客户端 ?space=legacy 或 globalThis.__SPACE_LEGACY__=true。
-import { campTerrain, floorContains, hash2 } from '../shared/camp-terrain.mjs';
+import { campTerrain, floorHeight, hash2 } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { modelBounds } from '../shared/camp-geometry.mjs';
 import { inCamp } from '../shared/wild-landscape.mjs';
@@ -168,20 +168,6 @@ function nearColliders(index, colliders, x, z, radius = 0) {
   }
   out.sort((a, b) => a.x - b.x || a.z - b.z || String(a.kind).localeCompare(String(b.kind)));
   return out;
-}
-
-function floorHeight(floors, x, z) {
-  let y = 0;
-  for (const f of floors) {
-    if (!floorContains(f, x, z)) continue;
-    if (f.triangle) {
-      y = Math.max(y, f.y + f.ax * (x - f.x) + f.az * (z - f.z));
-      continue;
-    }
-    const t = f.axis === 'x' ? (x - f.x) / f.w : f.axis === 'z' ? (z - f.z) / f.d : 0;
-    y = Math.max(y, f.y + (f.end - f.y) * t);
-  }
-  return y;
 }
 
 /**

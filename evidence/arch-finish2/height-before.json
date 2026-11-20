@@ -1,0 +1,39 @@
+{
+  "label": "before",
+  "commit": "7031c8a",
+  "algorithm": "sha256 of per-point \"x,z,spaceH,stageH,campH\" lines",
+  "pointsPerWorld": 11000,
+  "totalPoints": 22000,
+  "worlds": [
+    {
+      "label": "host",
+      "seed": 0,
+      "version": 0,
+      "layout": false,
+      "points": 11000,
+      "nonzeroHeights": 88,
+      "notSame": 0,
+      "spaceVsCampDiff": 0,
+      "stageVsCampDiff": 0,
+      "maxDiff": 0,
+      "firstDiffs": [],
+      "hash": "75af0a5c83df64d0513330ef25c66f6d7376a45bf14ec379351ac5a04494f68a"
+    },
+    {
+      "label": "seed13v2",
+      "seed": 13,
+      "version": 2,
+      "layout": true,
+      "points": 11000,
+      "nonzeroHeights": 1141,
+      "notSame": 0,
+      "spaceVsCampDiff": 0,
+      "stageVsCampDiff": 0,
+      "maxDiff": 0,
+      "firstDiffs": [],
+      "hash": "a952924f305eb82e53b10059669033c3c8268a89e59bb69f83f8737fd0ad374f"
+    }
+  ],
+  "combinedHash": "db74032c5e08eca74761ed2eddebbd73b69ac93b574fc47a29c878866d8c536c",
+  "allSame": true
+}
