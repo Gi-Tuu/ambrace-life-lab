@@ -82,6 +82,19 @@ const S = { comparison: null, compareView: null, compareSaveError: null, compare
   lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null,
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
+// /healthz 的只读时钟投影：与 /world 读同一个 world.simClock，不建第二套时间。
+// 只给排查 UI 时间所需的四个量；不暴露 anchor/pausedAtMs、数据目录或供应商配置。
+function statusClock() {
+  const clock = (S.mainSurv ?? S.surv)?.world?.simClock;
+  if (!clock) return null;
+  return {
+    gameMinutes: Number(clock.nowMinutes().toFixed(3)),
+    msPerGameMinute: clock.msPerGameMinute,
+    rate: clock.rate,
+    paused: clock.paused,
+  };
+}
+
 let model, replay;
 const world = createHostWorld({ S, CFG, C, getModel: () => model, getReplay: () => replay, observerActive });
 model = createModelDomain({ S, CFG, C, observerActive });
@@ -169,7 +182,7 @@ export const host = {
   },
   async tickOnce() { await manualTick(); return this.snapshot(); },
   stop() { return stop(); },
-  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, rate: (S.mainSurv ?? S.surv)?.world?.simClock?.rate ?? S.rate ?? 1, campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
+  status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, rate: (S.mainSurv ?? S.surv)?.world?.simClock?.rate ?? S.rate ?? 1, clock: statusClock(), campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
   listCamps,
   campOwnerHash,
   claimCamp,

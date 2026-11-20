@@ -25,6 +25,9 @@ import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignatur
 import { astar, isWalkable, stepWalker, walkDirection } from './walk.mjs';
 import { TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker } from './player-move.mjs';
 import { postJson, persistNotices, setCampProvider } from './net.mjs';
+// 1.1：世界分钟只读显示投影（纯函数）。时间来源仍是 /world 的 gameMinutes/serverNow/clock，
+// 这里只在两次轮询之间外推显示，不回写世界、不发请求、不消费 RNG。
+import { clockReadout, formatGameClock, gameMinutesLeftToday, busyRemainMinutes } from './time-view.mjs';
 
 
 import {
@@ -2920,24 +2923,131 @@ function renderHousing(s) {
   const el = $('housingBody'); if (!el || !s) return;
   el.innerHTML = familyPanel(s);
 }
+// ── 世界分钟显示（1.1 第 4 项） ────────────────────────────────────────────
+// 唯一时钟是服务端 world.simClock；/world 的 gameMinutes/serverNow/clock 是它的只读投影。
+// 两次轮询之间用 rAF 外推显示；下一次 /world 到达即重锚。这里不写世界、不请求、不消费 RNG。
+let hudClockAnchor = null;
+let hudLastClockSample = null;
+let hudWeatherLabel = '—';
+let hudClockNodes = null;
+let hudClockHiddenAt = null;
+
+function viewGameMinutes(view) {
+  const minutes = Number(view?.gameMinutes);
+  if (view?.timeMode === 'continuous' && Number.isFinite(minutes)) return minutes;
+  const t = Number(view?.t);
+  return Number.isFinite(t) ? Math.max(0, t) * 60 : 0;
+}
+
+// 每次轮询重锚：服务端读数永远覆盖本地的外推，避免显示越过权威状态。
+// 插值速率优先用「相邻两次 /world 的 gameMinutes/serverNow 差」估计实际世界速度：
+// 服务端 tick 会按分钟 setGameMinutes，满拍处理期间有效速度可能略低于配置 rate；
+// 直接用配置换算会在每次重锚时产生向后跳变。估计值只用于两次轮询之间的显示，不写世界。
+function setClockAnchor(view) {
+  hudClockNodes = null;
+  const minutes = Number(view?.gameMinutes);
+  if (view?.timeMode !== 'continuous' || !Number.isFinite(minutes)) {
+    hudClockAnchor = null;
+    hudLastClockSample = null;
+    return;
+  }
+  const clock = view.clock ?? {};
+  const nominalMs = Number(clock.msPerGameMinute);
+  const rate = Number(clock.rate);
+  const safeRate = Number.isFinite(rate) ? rate : 1;
+  const nominal = Number.isFinite(nominalMs) && nominalMs > 0 ? nominalMs : 125;
+  const paused = clock.paused === true;
+  const serverNow = Number(view.serverNow);
+  let msPerGameMinute = nominal;
+  const prev = hudLastClockSample;
+  if (prev && !paused && !prev.paused && prev.rate === safeRate && Number.isFinite(serverNow)) {
+    const deltaMinutes = minutes - prev.gameMinutes;
+    const deltaMs = serverNow - prev.serverNow;
+    // 只在"同一档、都在跑、间隔合理"的相邻两拍上估速；换挡/暂停边界直接回标称值。
+    if (deltaMinutes > 0.05 && deltaMs >= 200 && deltaMs <= 15000) {
+      const observed = deltaMs / deltaMinutes;
+      const smooth = prev.msPerGameMinute * 0.7 + observed * 0.3;
+      // 单拍估计只允许在标称值附近修正，防止一次慢拍把显示速度带偏。
+      msPerGameMinute = Math.min(nominal * 1.6, Math.max(nominal * 0.55, smooth));
+    }
+  }
+  hudLastClockSample = { gameMinutes: minutes, serverNow, rate: safeRate, paused, msPerGameMinute };
+  hudClockAnchor = {
+    gameMinutes: minutes,
+    at: performance.now(),
+    rate: safeRate,
+    msPerGameMinute,
+    paused,
+  };
+}
+
+function hudClockReadout(now = performance.now()) {
+  if (!hudClockAnchor) return null;
+  return clockReadout(hudClockAnchor, Math.max(0, now - hudClockAnchor.at));
+}
+
+function hudDisplayMinutes(view, now = performance.now()) {
+  const read = hudClockReadout(now);
+  return read ? read.minutes : viewGameMinutes(view);
+}
+
+// 每帧只做三件事：算显示分钟、写时刻/今日剩余、写 busy 进度。节点在每次轮询重建后重取。
+function paintClockHud(now) {
+  if (document.hidden || !hudClockAnchor) return;
+  const view = S.view;
+  if (!view) return;
+  const nodes = hudClockNodes ?? (hudClockNodes = {
+    weather: $('seasonWeather'),
+    dayleft: document.querySelector('#playerHud [data-hud="dayleft"]'),
+    busy: [...document.querySelectorAll('[data-hud="busy"]')],
+  });
+  const read = hudClockReadout(now);
+  if (!read) return;
+  const weather = `${read.clock} ${hudWeatherLabel}`;
+  if (nodes.weather && nodes.weather.textContent !== weather) nodes.weather.textContent = weather;
+  const left = `${read.leftToday} 分`;
+  if (nodes.dayleft && nodes.dayleft.textContent !== left) nodes.dayleft.textContent = left;
+  const busy = view.player?.busy;
+  if (!busy || !nodes.busy.length) return;
+  const remain = busyRemainMinutes(busy, read.minutes, hudClockAnchor.gameMinutes);
+  if (!Number.isFinite(remain)) return;
+  const text = `${remain.toFixed(1)} 分`;
+  for (const el of nodes.busy) if (el.textContent !== text) el.textContent = text;
+}
+
+// 页面隐藏：rAF 停绘，同时记下隐藏时刻；恢复可见时把锚点平移到同一显示位置，
+// 不把后台那段真实时间补进 HUD（下一次轮询会直接重锚到服务端权威值）。
+function resumeHudClock() {
+  if (hudClockHiddenAt != null && hudClockAnchor) hudClockAnchor.at += performance.now() - hudClockHiddenAt;
+  hudClockHiddenAt = null;
+}
+
 function renderSeasonHud(view, location, outdoor) {
-  const dayTicks=view.dayTicks??24;
-  const minute=Math.floor((view.t%dayTicks)*1440/dayTicks);
-  const clock=[Math.floor(minute/60),minute%60].map(n=>String(n).padStart(2,'0')).join(':');
+  const now = performance.now();
+  const minutes = hudDisplayMinutes(view, now);
+  const clock = formatGameClock(minutes);
   const climate=campClimate(view);
   const weather=climate.storm?'风暴':view.disasterToday==='coldsnap'?'寒潮':climate.snow?'下雪':
     climate.rain?'下雨':view.weather==='cold'?'寒冷':climate.drought?'干旱':view.weather==='clear'?'晴朗':'天气待更新';
+  hudWeatherLabel = weather;
+  hudClockNodes = null;
   $('seasonDate').textContent=(view.season??'—')+'季 第'+(view.dayInSeason??'?')+'天';
   $('seasonWeather').textContent=clock+' '+weather;
   const ph = $('playerHud');
   if (ph) {
-    ph.innerHTML = [
+    const busy = view.player?.busy;
+    const busyLeft = busy ? busyRemainMinutes(busy, minutes, hudClockAnchor?.gameMinutes ?? viewGameMinutes(view)) : null;
+    const busyText = busy ? `${esc(busy.kind)} 剩 <span data-hud="busy">${Number.isFinite(busyLeft) ? busyLeft.toFixed(1) : (busy.remainMin ?? 0)} 分</span>` : '';
+    const stats = [
       [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
       [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
-      [`${STAT_ICON.action}`, view.player?.timeMax === 1440 ? '今日剩余' : '本刻剩余', `${view.player?.timeLeft ?? 0} 分`],
-      ...(view.player?.busy ? [[`${STAT_ICON.action}`, '⏳ 动作', `${esc(view.player.busy.kind)} 剩 ${view.player.busy.remainMin} 分`]] : []),
-    ].map(([i,k,v])=>`<span class="stat">${i}<span>${k}</span><b>${v}</b></span>`).join('');
-    if (view.player?.busy && !ph.querySelector('#btnBusyCancel')) {
+      // 今日剩余 = 距离今天的游戏日结束还有多少游戏分钟（平滑递减，非行动配额）。
+      [`${STAT_ICON.action}`, '今日剩余', `${gameMinutesLeftToday(minutes)} 分`, 'dayleft', '今日剩余游戏分钟（世界时钟插值；不是行动配额）'],
+      ...(busy ? [[`${STAT_ICON.action}`, '⏳ 动作', busyText, null, '进行中的动作（显示按世界分钟插值，完成仍以 /world 为准）']] : []),
+    ];
+    ph.innerHTML = stats.map(([i,k,v,hud,title])=>
+      `<span class="stat"${title?` title="${title}"`:''}>${i}<span>${k}</span><b${hud?` data-hud="${hud}"`:''}>${v}</b></span>`).join('');
+    if (busy && !ph.querySelector('#btnBusyCancel')) {
       const btn = document.createElement('button');
       btn.id = 'btnBusyCancel';
       btn.type = 'button';
@@ -3018,12 +3128,12 @@ function renderSurv(s) {
       <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
       <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
       ${outside ? '<span class="bad" title="村外按世界时间限速；玩家与居民共用移动预算">村外·限速</span>' : ''}
-      ${s.player?.timeLeft != null ? `<span class="stat" title="${s.player?.timeMax === 1440 ? '今日剩余可用分钟' : '本刻剩余可用分钟'}">${STAT_ICON.action}<b>${s.player.timeLeft} 分</b></span>` : ''}
+      ${s.player?.timeLeft != null ? `<span class="stat" title="日统计：今天已用于动作的分钟，不限制行动">${STAT_ICON.action}<b>${s.player?.timeMax === 1440 ? '今日动作已用' : '本刻动作已用'} ${Math.max(0, (s.player?.timeMax ?? 0) - s.player.timeLeft)} 分</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}
       ${flash}
-      ${s.player?.busy ? `<span class="stat busy-on" title="进行中的动作">⏳ ${esc(s.player.busy.kind)} 剩 ${s.player.busy.remainMin} 分</span><button id="btnBusyCancel" title="取消当前动作（已用分钟与体质不退还）">取消动作</button>` : ''}
+      ${s.player?.busy ? `<span class="stat busy-on" title="进行中的动作（显示按世界分钟插值，完成仍以 /world 为准）">⏳ ${esc(s.player.busy.kind)} 剩 <span data-hud="busy">${s.player.busy.remainMin} 分</span></span><button id="btnBusyCancel" title="取消当前动作（已用分钟与体质不退还）">取消动作</button>` : ''}
       ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
     </div>
     <details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
@@ -3378,6 +3488,8 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    // 1.1：每次 /world 到达重锚世界分钟；插值只影响 HUD 显示，不影响服务端结算。
+    setClockAnchor(viewA);
     if (ui.talk) updateTalkPortrait();
     if ($('villageDlg').open) renderVillageDlg(viewA);
     if ($('journalDlg').open) renderJournal();
@@ -4530,7 +4642,12 @@ if (bootRoom && (Object.hasOwn(ROOM_INTERIORS, bootRoom) || Object.hasOwn(HOUSIN
 poll();
 if (new URLSearchParams(location.search).get('full') === '1') setFull(true);   // 深链直达全屏全景（便于分享与验收）
 setInterval(poll, 900);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hudClockHiddenAt = performance.now(); return; }
+  // 隐藏期间 rAF 停绘：恢复时把锚点平移掉隐藏时长，显示从停下的位置续走，不补后台时间。
+  resumeHudClock();
+  poll();
+});
 loadAssets();
   // 独立动画时钟：只推进帧号并重绘两个画布，与 900ms 的数据轮询完全解耦。
   // 不读 w.t、不发请求、不消费 rng、不写世界状态；A/B 共用同一帧号；
@@ -4547,6 +4664,8 @@ loadAssets();
     }
     if (titleFrame!==-Infinity) titleFrame=-Infinity;
     if (document.hidden || $('worldMain').hidden || !S.view) { lastPaint = null; return; }
+    // 1.1：两帧之间只更新 HUD 时钟文本；世界状态仍只由 900ms 的 /world 轮询推进。
+    paintClockHud(now);
     if (S.replay!=null) { lastPaint=null; return; }
     const dt = lastPaint === null ? 0 : Math.min(0.05, (now - lastPaint) / 1000); lastPaint = now; elapsed += dt; ACT.seconds=elapsed;
     ACT.frame = reduced.matches ? 0 : Math.floor(elapsed * ACT.fps) % 4;
@@ -4685,6 +4804,20 @@ Object.assign(window.__lifeDebug, {
   hallWalkable: (x,y) => roomSpaceFor('hall').walkable(x/TILE,y/TILE,CAMP_BODY_RADIUS),
   replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
     actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },
+  // 1.1 验收口：只读 HUD 时钟投影，供真实浏览器采集"两帧之间确实在走"的数值证据。
+  clockHud: () => {
+    const read = hudClockReadout();
+    return {
+      anchor: hudClockAnchor ? { gameMinutes: hudClockAnchor.gameMinutes, rate: hudClockAnchor.rate,
+        msPerGameMinute: hudClockAnchor.msPerGameMinute, paused: hudClockAnchor.paused } : null,
+      minutes: read?.minutes ?? null,
+      clock: read?.clock ?? null,
+      leftToday: read?.leftToday ?? null,
+      weather: $('seasonWeather')?.textContent ?? null,
+      player: $('playerHud')?.textContent ?? null,
+      hidden: document.hidden,
+    };
+  },
 });
 
 if (perfSeg()) perfSeg().push({ k:'moduleEvalEnd', at:Number(performance.now().toFixed(1)) });
