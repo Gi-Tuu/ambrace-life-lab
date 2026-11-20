@@ -1,0 +1,466 @@
+{
+  "at": "2026-11-20T11:19:15.011Z",
+  "mode": "local-simulation-only",
+  "note": "本地模拟：Chrome --host-resolver-rules 把平台域名指到本机 443 自签 TLS 反向代理；不能替代 ms.show 线上实测。",
+  "app": "http://127.0.0.1:7861",
+  "tlsProxy": "https://127.0.0.1:443",
+  "proxyHits": [
+    "app.ms.show/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+    "app.ms.show/world?mode=menu",
+    "app.ms.show/web/camp-work-motion.mjs",
+    "app.ms.show/web/camp-animal-motion.mjs",
+    "app.ms.show/shared/camp-orchard-look.mjs",
+    "app.ms.show/web/resident-portrait.mjs",
+    "app.ms.show/web/resident-look.mjs",
+    "app.ms.show/web/camp-guidance.mjs",
+    "app.ms.show/web/camp-weather.mjs",
+    "app.ms.show/web/camp-sight.mjs",
+    "app.ms.show/shared/camp-districts.mjs",
+    "app.ms.show/web/camp-lighting.mjs",
+    "app.ms.show/web/camp-sun.mjs",
+    "app.ms.show/shared/camp-outskirts.mjs",
+    "app.ms.show/shared/wild-landscape.mjs",
+    "app.ms.show/shared/camp-facility.mjs",
+    "app.ms.show/shared/camp-interaction.mjs",
+    "app.ms.show/shared/camp-terrain.mjs",
+    "app.ms.show/web/camp-items.mjs",
+    "app.ms.show/shared/camp-layout.mjs",
+    "app.ms.show/shared/camp-construction-access.mjs",
+    "app.ms.show/web/audio.mjs",
+    "app.ms.show/web/audio-events.mjs",
+    "app.ms.show/web/walk.mjs",
+    "app.ms.show/web/player-move.mjs",
+    "app.ms.show/web/net.mjs",
+    "app.ms.show/web/collision.mjs",
+    "app.ms.show/shared/asset-collision.mjs",
+    "app.ms.show/shared/camp-physics.mjs",
+    "app.ms.show/shared/room-layout.mjs",
+    "app.ms.show/shared/camp-geometry.mjs",
+    "app.ms.show/shared/camp-items.mjs",
+    "app.ms.show/shared/camp-ao.mjs",
+    "app.ms.show/shared/camp-region-entities.mjs",
+    "app.ms.show/web/audio-data.mjs",
+    "app.ms.show/web/music-tracks.mjs",
+    "app.ms.show/web/audio-synth.mjs",
+    "app.ms.show/web/assets/manifest.json",
+    "app.ms.show/saves",
+    "app.ms.show/world"
+  ],
+  "cases": [
+    {
+      "name": "same-origin-self",
+      "parentUrl": "http://127.0.0.1:7861/",
+      "iframeSrc": "http://127.0.0.1:7861/",
+      "expect": "allowed",
+      "loaded": true,
+      "context": {
+        "origin": "http://127.0.0.1:7861",
+        "frameId": "8AF4DB48EBFE4CDEB21216CE80477629",
+        "sessionId": "00640A11DBF3FA2EFCCC838E75EF0576"
+      },
+      "frameUrls": [
+        "http://127.0.0.1:7861/",
+        "http://127.0.0.1:7861/"
+      ],
+      "parentDiag": {
+        "title": "拥爱生命实验室 · 仿生物 AI 生命世界",
+        "iframes": 1,
+        "hasCvA": true,
+        "href": "http://127.0.0.1:7861/",
+        "body": "拥爱生命实验室\n\n和居民一起采集、耕作、修建住所，看聚落走过四季。\n\n生存模式\n继续生存\n新开一局\n名字（存档钥匙）\n进入 / 开新营地\n已有营地\n这一段他们之间发生了什么\n\n名字就是钥匙：别人输一样的名字就能进同一个营地。\n\n你当前在主营"
+      },
+      "netReqs": [],
+      "netFails": [],
+      "violations": [],
+      "auditIssues": [
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        }
+      ],
+      "logs": [],
+      "verdict": "loaded"
+    },
+    {
+      "name": "cross-origin-port",
+      "parentUrl": "http://127.0.0.1:7862/parent-http.html",
+      "iframeSrc": "http://127.0.0.1:7861/",
+      "expect": "blocked",
+      "loaded": false,
+      "context": null,
+      "frameUrls": [
+        "http://127.0.0.1:7862/parent-http.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-plain-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "http://127.0.0.1:7862/parent-http.html",
+        "body": ""
+      },
+      "netReqs": [],
+      "netFails": [
+        {
+          "id": "FB6A8BED7768475EB296367FF8C53656",
+          "error": "net::ERR_BLOCKED_BY_RESPONSE",
+          "blocked": "other",
+          "cors": null
+        }
+      ],
+      "violations": [
+        "Framing 'http://127.0.0.1:7861/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n"
+      ],
+      "auditIssues": [
+        {
+          "code": "ContentSecurityPolicyIssue",
+          "directive": "frame-ancestors",
+          "frameAncestorsViolation": null,
+          "blockedURL": "http://127.0.0.1:7861/"
+        }
+      ],
+      "logs": [
+        "Framing 'http://127.0.0.1:7861/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n",
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "blocked-csp"
+    },
+    {
+      "name": "https-platform.ms.show",
+      "parentUrl": "https://platform.ms.show/parent.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "allowed(whitelist)",
+      "loaded": true,
+      "context": {
+        "origin": "https://app.ms.show",
+        "frameId": null,
+        "oopif": true,
+        "url": "https://app.ms.show/"
+      },
+      "frameUrls": [
+        "https://platform.ms.show/parent.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "https://platform.ms.show/parent.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/"
+      ],
+      "netFails": [],
+      "violations": [],
+      "auditIssues": [],
+      "logs": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "loaded"
+    },
+    {
+      "name": "https-app.ms.show",
+      "parentUrl": "https://app.ms.show/parent.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "allowed(self)",
+      "loaded": true,
+      "context": {
+        "origin": "https://app.ms.show",
+        "frameId": "5BF92D7F61C3F6484B24399026564CFD",
+        "sessionId": "9958C0A0F79E57B3136AE2EB142C67B0"
+      },
+      "frameUrls": [
+        "https://app.ms.show/parent.html",
+        "https://app.ms.show/"
+      ],
+      "parentDiag": {
+        "title": "smoke-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "https://app.ms.show/parent.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/parent.html",
+        "https://app.ms.show/",
+        "https://app.ms.show/web/boot-prefetch.js",
+        "https://app.ms.show/web/app.js",
+        "https://app.ms.show/web/camp-3d-render.mjs"
+      ],
+      "netFails": [],
+      "violations": [],
+      "auditIssues": [
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        },
+        {
+          "code": "PerformanceIssue",
+          "directive": null,
+          "frameAncestorsViolation": null,
+          "blockedURL": null
+        }
+      ],
+      "logs": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "loaded"
+    },
+    {
+      "name": "https-modelscope.cn",
+      "parentUrl": "https://modelscope.cn/parent.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "allowed(whitelist)",
+      "loaded": true,
+      "context": {
+        "origin": "https://app.ms.show",
+        "frameId": null,
+        "oopif": true,
+        "url": "https://app.ms.show/"
+      },
+      "frameUrls": [
+        "https://modelscope.cn/parent.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "https://modelscope.cn/parent.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/"
+      ],
+      "netFails": [],
+      "violations": [],
+      "auditIssues": [],
+      "logs": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "loaded"
+    },
+    {
+      "name": "https-www.modelscope.cn",
+      "parentUrl": "https://www.modelscope.cn/parent.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "allowed(whitelist)",
+      "loaded": true,
+      "context": {
+        "origin": "https://app.ms.show",
+        "frameId": null,
+        "oopif": true,
+        "url": "https://app.ms.show/"
+      },
+      "frameUrls": [
+        "https://www.modelscope.cn/parent.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "https://www.modelscope.cn/parent.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/"
+      ],
+      "netFails": [],
+      "violations": [],
+      "auditIssues": [],
+      "logs": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "loaded"
+    },
+    {
+      "name": "https-evil.example",
+      "parentUrl": "https://evil.example/parent.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "blocked",
+      "loaded": false,
+      "context": null,
+      "frameUrls": [
+        "https://evil.example/parent.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "https://evil.example/parent.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/"
+      ],
+      "netFails": [
+        {
+          "id": "8FCE1E4BB5270856874D27A969D6D3F2",
+          "error": "net::ERR_BLOCKED_BY_RESPONSE",
+          "blocked": "other",
+          "cors": null
+        }
+      ],
+      "violations": [
+        "Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n"
+      ],
+      "auditIssues": [
+        {
+          "code": "ContentSecurityPolicyIssue",
+          "directive": "frame-ancestors",
+          "frameAncestorsViolation": null,
+          "blockedURL": "https://app.ms.show/"
+        }
+      ],
+      "logs": [
+        "Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n",
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "verdict": "blocked-csp"
+    },
+    {
+      "name": "https-frame-in-http-parent",
+      "parentUrl": "http://127.0.0.1:7862/parent-https.html",
+      "iframeSrc": "https://app.ms.show/",
+      "expect": "blocked",
+      "loaded": false,
+      "context": null,
+      "frameUrls": [
+        "http://127.0.0.1:7862/parent-https.html"
+      ],
+      "parentDiag": {
+        "title": "smoke-plain-parent",
+        "iframes": 1,
+        "hasCvA": false,
+        "href": "http://127.0.0.1:7862/parent-https.html",
+        "body": ""
+      },
+      "netReqs": [
+        "https://app.ms.show/"
+      ],
+      "netFails": [
+        {
+          "id": "DB873B083F7000E0768CB5E5591FE41C",
+          "error": "net::ERR_BLOCKED_BY_RESPONSE",
+          "blocked": "other",
+          "cors": null
+        }
+      ],
+      "violations": [
+        "Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n"
+      ],
+      "auditIssues": [
+        {
+          "code": "ContentSecurityPolicyIssue",
+          "directive": "frame-ancestors",
+          "frameAncestorsViolation": null,
+          "blockedURL": "https://app.ms.show/"
+        }
+      ],
+      "logs": [
+        "Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn\". The request has been blocked.\n"
+      ],
+      "verdict": "blocked-csp"
+    }
+  ],
+  "checks": [
+    {
+      "name": "iframe 模拟：应用服务就绪",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "iframe same-origin-self 期望 allowed",
+      "ok": true,
+      "detail": "loaded=true 顶层直开=true ctx=http://127.0.0.1:7861 frameUrls=[\"http://127.0.0.1:7861/\",\"http://127.0.0.1:7861/\"] csp=无 audit=[{\"code\":\"PerformanceIssue\",\"directive\":null,\"frameAncestorsViolation\":null,\"blockedURL\":null}]"
+    },
+    {
+      "name": "iframe cross-origin-port 期望 blocked",
+      "ok": true,
+      "detail": "loaded=false 顶层直开=true ctx=无 frameUrls=[\"http://127.0.0.1:7862/parent-http.html\"] csp=Framing 'http://127.0.0.1:7861/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https audit=[{\"code\":\"ContentSecurityPolicyIssue\",\"directive\":\"frame-ancestors\",\"frameAncestorsViolation\":null,\"blockedURL\":\"http://127.0.0.1:7861/\"}]"
+    },
+    {
+      "name": "iframe https-platform.ms.show 期望 allowed(whitelist)",
+      "ok": true,
+      "detail": "loaded=true 顶层直开=true ctx=https://app.ms.show frameUrls=[\"https://platform.ms.show/parent.html\"] csp=无 audit=[]"
+    },
+    {
+      "name": "iframe https-app.ms.show 期望 allowed(self)",
+      "ok": true,
+      "detail": "loaded=true 顶层直开=true ctx=https://app.ms.show frameUrls=[\"https://app.ms.show/parent.html\",\"https://app.ms.show/\"] csp=无 audit=[{\"code\":\"PerformanceIssue\",\"directive\":null,\"frameAncestorsViolation\":null,\"blockedURL\":null}]"
+    },
+    {
+      "name": "iframe https-modelscope.cn 期望 allowed(whitelist)",
+      "ok": true,
+      "detail": "loaded=true 顶层直开=true ctx=https://app.ms.show frameUrls=[\"https://modelscope.cn/parent.html\"] csp=无 audit=[]"
+    },
+    {
+      "name": "iframe https-www.modelscope.cn 期望 allowed(whitelist)",
+      "ok": true,
+      "detail": "loaded=true 顶层直开=true ctx=https://app.ms.show frameUrls=[\"https://www.modelscope.cn/parent.html\"] csp=无 audit=[]"
+    },
+    {
+      "name": "iframe https-evil.example 期望 blocked",
+      "ok": true,
+      "detail": "loaded=false 顶层直开=true ctx=无 frameUrls=[\"https://evil.example/parent.html\"] csp=Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https:/ audit=[{\"code\":\"ContentSecurityPolicyIssue\",\"directive\":\"frame-ancestors\",\"frameAncestorsViolation\":null,\"blockedURL\":\"https://app.ms.show/\"}]"
+    },
+    {
+      "name": "iframe https-frame-in-http-parent 期望 blocked",
+      "ok": true,
+      "detail": "loaded=false 顶层直开=true ctx=无 frameUrls=[\"http://127.0.0.1:7862/parent-https.html\"] csp=Framing 'https://app.ms.show/' violates the following Content Security Policy directive: \"frame-ancestors 'self' https:/ audit=[{\"code\":\"ContentSecurityPolicyIssue\",\"directive\":\"frame-ancestors\",\"frameAncestorsViolation\":null,\"blockedURL\":\"https://app.ms.show/\"}]"
+    },
+    {
+      "name": "iframe 白名单：同源 + *.ms.show + modelscope.cn + www.modelscope.cn 全部实际放行",
+      "ok": true,
+      "detail": "same-origin-self=true, https-platform.ms.show=true, https-app.ms.show=true, https-modelscope.cn=true, https-www.modelscope.cn=true"
+    },
+    {
+      "name": "iframe 白名单外（跨端口 / evil.example / http 父页）全部被 CSP 拦，且目标 URL 顶层直开可渲染",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "iframe 对照：iframe 目标 URL 顶层直开可渲染",
+      "ok": true,
+      "detail": "{\"http://127.0.0.1:7861/\":true,\"https://app.ms.show/\":true}"
+    }
+  ]
+}

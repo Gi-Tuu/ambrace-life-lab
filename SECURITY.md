@@ -18,8 +18,9 @@
 
 其它已内置的防护：静态面白名单 + realpath（**只放 `/web/` 与 `/shared/`**；`shared/` 只允许纯数据/几何，
 不得放服务端逻辑或秘密）、`/healthz` 不回显密钥/端点/数据目录、请求体上限 64 KB、畸形 URL 与未捕获异常不会杀进程、
-`world.json` 原子写 + `.bak` 轮转、`CSP default-src 'self'; frame-ancestors 'none'` + `X-Content-Type-Options: nosniff`
-+ `X-Frame-Options: DENY`、存档错误只回错误码（不回显绝对路径）、HTTPS 部署时 cookie 带 `Secure`
+`world.json` 原子写 + `.bak` 轮转、CSP `default-src 'self'` + `frame-ancestors 'self' https://*.ms.show
+https://modelscope.cn https://www.modelscope.cn`（平台要嵌 iframe，所以**不设** `X-Frame-Options`）+ `X-Content-Type-Options: nosniff`
+、存档错误只回错误码（不回显绝对路径）、HTTPS 部署时 cookie 带 `Secure`
 （可用 `COOKIE_SECURE=1` 强制）。
 
 **营地归属（SEC5-02 / DATA5-05）**：创建营地时下发 `camp_owner`（HttpOnly cookie），索引里只存它的 sha256（`ownerHash`），
