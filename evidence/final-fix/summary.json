@@ -1,0 +1,85 @@
+{
+  "task": "final-review P1 fixes (P1-1/P1-2 code, P1-3 disclosure, P1-4 deploy smoke rerun)",
+  "at": "2026-11-21T02:20:00+08:00",
+  "repo": {
+    "branch": "main",
+    "baseHead": "caad92b",
+    "head": "3643f14",
+    "master": "4f2577b (untouched, v1.0.0)",
+    "pushed": false,
+    "deployed": false,
+    "versionBumped": false,
+    "tagged": false
+  },
+  "gates": {
+    "fullTest": { "pass": 1165, "fail": 0, "target": "1163+", "durationMs": 59148.2 },
+    "staticCheck": { "syntaxFiles": 489, "json": 9, "engineModules": 23, "testFiles": 207, "runtimeFiles": 341, "whitelist": 12, "ok": true },
+    "golden": { "same": 45, "total": 45, "diffs": 0 },
+    "parity22k": { "cases": 2, "samplesPerCase": 11000, "terrainDiff": 0, "walkDiff": 0, "heightDiff": 0, "portalDiff": 0, "kindDiff": 0 },
+    "researchMd5": { "match": 5, "total": 5, "allMatch": true, "method": "rerun life/run.mjs --<face>, CRLF-normalized md5" },
+    "researchLedgers": { "artifacts": 12, "records": 65, "mismatches": 0 },
+    "quickstartBrowser": { "pass": true, "result": "起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续" },
+    "longRun100d": { "seeds": [7, 13, 29, 41, 53], "population": [7, 9, 10, 9, 9], "avg": 8.8, "extinct": "0/5" },
+    "longRun200d": { "seeds": [7, 13, 29, 41, 53], "population": [1, 9, 1, 0, 7], "avg": 3.6, "extinct": "1/5", "deathCauses": { "衰老": 35, "饥饿": 10 }, "agentErrors": 0 },
+    "deploySmoke": { "buildChecks": { "pass": 17, "total": 17 }, "httpChecks": { "pass": 203, "total": 203 }, "browserIframe": { "pass": 12, "total": 12 }, "browserPerf": { "pass": 16, "total": 16 } }
+  },
+  "p1_1": {
+    "fixed": true,
+    "rootCause": "survplay.mjs worldTick unconditionally ticked p1 once per game hour in addition to 60 minute steps; line 699 elder decay already had !minuteBody gate",
+    "fix": "gate p1 worldTick tick with !minuteBody",
+    "probeBefore": { "onPerHourEnergy": -0.024, "offPerHourEnergy": -0.012 },
+    "probeAfter": { "onPerHourEnergy": -0.012, "offPerHourEnergy": -0.012, "p1MetabPerHour": 60 },
+    "gates": ["V11-METAB-01 includes p1", "V11-METAB-02 includes p1", "V11-METAB-10 p1 == resident per hour"],
+    "populationImpact": "100/200-day resident populations and causes identical to pre-fix review baseline"
+  },
+  "p1_2": {
+    "fixed": true,
+    "rootCause": "start() resets S.missed before load; simClock archives skipped catchUp and then called catchUpSurvival(0), so downtime was never applied",
+    "fix": "keep offline real minutes in S.missed; simClock archive applies catchUpSurvival(minutes) with same clock.rate/msPerGameMinute, cap 120 ticks = 7200 game minutes; non-simClock keeps legacy A/B catchUp; archive without survival block is not advanced",
+    "probeBefore": { "advancedTicks": 0, "advancedGameMinutes": 0.002, "missedMinutes": 0, "verdict": "catchup-NOT-applied" },
+    "probeAfter": { "advancedTicks": 3, "advancedGameMinutes": 216.001, "missedMinutes": 60, "appliedMinutes": 216, "capMinutes": 7200, "capped": false, "verdict": "catchup-applied" },
+    "gate": "V11-OFFLINE-01: 60 real minutes at rate=2 -> 432 game minutes, +7 ticks, no double apply; no-survival archive stays at t=0"
+  },
+  "p1_3": {
+    "codeChanged": false,
+    "adjudication": "200-day double peak is a balance/carrying-capacity result, not a release-blocking code bug for the <=100-day demo horizon; disclosed in report with seed 7/29/41 chains. No thresholds changed.",
+    "seed7": {
+      "population": { "30": 3, "100": 7, "200": 1 },
+      "births": { "total": 4, "days": [31, 41, 59, 88], "after100": 0 },
+      "deaths": 7,
+      "deathRows": ["113 蓑 衰老", "115 你(p1) 衰老", "119 绛 衰老", "122 岑 衰老", "163 芽 衰老", "169 苗 衰老", "200 穗 衰老"],
+      "after100BirthReasons": { "food": 17, "noPair": 84 },
+      "survivor": "c4 实（女性，成年，独居）",
+      "chain": "store < pop*2 stopped births after day 88; founders died of aging 113-122; remaining four children share parents a1/a2, cannot marry each other, so no eligible pair remains; female c4 survives alone"
+    },
+    "seed29": {
+      "population": { "100": 10, "200": 1 },
+      "deaths": 10,
+      "cause": "饥饿",
+      "day": 101,
+      "note": "store at day 100 = 0; all 10 die on day 101 (winter/food crash); survivor alone"
+    },
+    "seed41": {
+      "population": { "100": 9, "200": 0 },
+      "deaths": 10,
+      "cause": "衰老",
+      "days": [117, 117, 120, 131, 142, 149, 157, 161, 184, 199],
+      "note": "aging tail, extinct at day 200"
+    },
+    "stableSeeds": { "13": { "population200": 9, "births200": 14 }, "53": { "population200": 7, "births200": 12 } }
+  },
+  "p1_4": {
+    "verified": true,
+    "deploySmokeBuild": "17/17 pass: Dockerfile COPY set/no ADD/node:22-alpine/ENV/EXPOSE/HEALTHCHECK/no secrets/.dockerignore; materialized tree 487 files / 19.00 MiB, no .env/keys/data/docs/logs",
+    "deploySmokeHttp": "203/203 pass: /healthz, headers/CSP, gzip/ETag/304/immutable, /world, /saves, /diag, static whitelist, 26 path traversal cases, no secret/path echo",
+    "browserIframe": "12/12 pass: same-origin allowed; cross-port/evil/http-parent blocked; *.ms.show + modelscope.cn + www.modelscope.cn allowed",
+    "browserPerf": "16/16 pass: prod-like median cold survival 651.2ms (<800), warm title 491.8ms (<600), requests 46/46/52 (<=60), app.js 273301->101645 gzip, /world encoded 20005B",
+    "notVerified": ["docker build / image size / layers / container runtime (no Docker daemon)", "online ms.show iframe/TLS/nested platform page", "actual Qoder CN deployment"]
+  },
+  "limitations": [
+    "Report lives in docs/ (gitignored by repository policy), evidence in evidence/final-fix/ (tracked).",
+    "200-day run is 5 seeds, single run per seed; seed 7/29/41 are the required key seeds.",
+    "Perf is 3 reps in one browser session, production-like local; not a multi-machine median.",
+    "Deploy smoke is file-level materialization, not docker build; see build-audit.txt boundaries."
+  ]
+}

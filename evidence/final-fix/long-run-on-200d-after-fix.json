@@ -1,0 +1,882 @@
+{
+  "_说明": "审查修复后正式钟 200 日；mode=on（minuteMetab=true）",
+  "at": "2026-11-20T18:16:17.964Z",
+  "rows": [
+    {
+      "seed": 7,
+      "population": {
+        "30": 3,
+        "100": 7,
+        "200": 1
+      },
+      "births": {
+        "100": 4,
+        "200": 4
+      },
+      "birthDays": [
+        31,
+        41,
+        59,
+        88
+      ],
+      "birthReasonsBefore100": {
+        "noPair": 44,
+        "born": 4,
+        "cooldown": 36,
+        "food": 15
+      },
+      "birthReasonsAfter100": {
+        "food": 17,
+        "noPair": 84
+      },
+      "deaths": {
+        "100": 0,
+        "200": 7
+      },
+      "deathCauses200": {
+        "衰老": 7
+      },
+      "deathRows": [
+        {
+          "day": 113,
+          "id": "a3",
+          "name": "蓑",
+          "cause": "衰老"
+        },
+        {
+          "day": 115,
+          "id": "p1",
+          "name": "你",
+          "cause": "衰老"
+        },
+        {
+          "day": 119,
+          "id": "a2",
+          "name": "绛",
+          "cause": "衰老"
+        },
+        {
+          "day": 122,
+          "id": "a1",
+          "name": "岑",
+          "cause": "衰老"
+        },
+        {
+          "day": 163,
+          "id": "c1",
+          "name": "芽",
+          "cause": "衰老"
+        },
+        {
+          "day": 169,
+          "id": "c2",
+          "name": "苗",
+          "cause": "衰老"
+        },
+        {
+          "day": 200,
+          "id": "c3",
+          "name": "穗",
+          "cause": "衰老"
+        }
+      ],
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "store200": 16,
+      "birthsAfter100": 0,
+      "deathsAfter100": 7,
+      "curve": [
+        [
+          20,
+          3,
+          14
+        ],
+        [
+          40,
+          4,
+          16
+        ],
+        [
+          60,
+          6,
+          14
+        ],
+        [
+          80,
+          6,
+          18
+        ],
+        [
+          100,
+          7,
+          9
+        ],
+        [
+          120,
+          5,
+          12
+        ],
+        [
+          140,
+          4,
+          13
+        ],
+        [
+          160,
+          4,
+          14
+        ],
+        [
+          180,
+          2,
+          17
+        ],
+        [
+          200,
+          1,
+          16
+        ]
+      ],
+      "runtime": {
+        "avgTickMs": 1.518,
+        "maxTickMs": 18,
+        "saveBytes": 957092,
+        "heapDeltaBytes": 215222400,
+        "goalStagnation": 4,
+        "skipped": 0,
+        "rejected": 574
+      },
+      "agentErrors": 0
+    },
+    {
+      "seed": 13,
+      "population": {
+        "30": 5,
+        "100": 9,
+        "200": 9
+      },
+      "births": {
+        "100": 6,
+        "200": 14
+      },
+      "birthDays": [
+        11,
+        21,
+        31,
+        43,
+        57,
+        96,
+        119,
+        134,
+        144,
+        155,
+        165,
+        175,
+        185,
+        197
+      ],
+      "birthReasonsBefore100": {
+        "food": 34,
+        "noPair": 11,
+        "born": 6,
+        "cooldown": 48
+      },
+      "birthReasonsAfter100": {
+        "cooldown": 72,
+        "noPair": 3,
+        "food": 18,
+        "born": 8
+      },
+      "deaths": {
+        "100": 0,
+        "200": 9
+      },
+      "deathCauses200": {
+        "衰老": 9
+      },
+      "deathRows": [
+        {
+          "day": 115,
+          "id": "a1",
+          "name": "岑",
+          "cause": "衰老"
+        },
+        {
+          "day": 115,
+          "id": "p1",
+          "name": "你",
+          "cause": "衰老"
+        },
+        {
+          "day": 116,
+          "id": "a2",
+          "name": "绛",
+          "cause": "衰老"
+        },
+        {
+          "day": 119,
+          "id": "a3",
+          "name": "蓑",
+          "cause": "衰老"
+        },
+        {
+          "day": 145,
+          "id": "c2",
+          "name": "苗",
+          "cause": "衰老"
+        },
+        {
+          "day": 147,
+          "id": "c1",
+          "name": "芽",
+          "cause": "衰老"
+        },
+        {
+          "day": 169,
+          "id": "c4",
+          "name": "实",
+          "cause": "衰老"
+        },
+        {
+          "day": 171,
+          "id": "c3",
+          "name": "穗",
+          "cause": "衰老"
+        },
+        {
+          "day": 182,
+          "id": "c5",
+          "name": "蘖",
+          "cause": "衰老"
+        }
+      ],
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "store200": 10,
+      "birthsAfter100": 8,
+      "deathsAfter100": 9,
+      "curve": [
+        [
+          20,
+          4,
+          28
+        ],
+        [
+          40,
+          6,
+          10
+        ],
+        [
+          60,
+          8,
+          8
+        ],
+        [
+          80,
+          8,
+          9
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          7,
+          10
+        ],
+        [
+          140,
+          8,
+          9
+        ],
+        [
+          160,
+          8,
+          10
+        ],
+        [
+          180,
+          8,
+          9
+        ],
+        [
+          200,
+          9,
+          8
+        ]
+      ],
+      "runtime": {
+        "avgTickMs": 4.555,
+        "maxTickMs": 19,
+        "saveBytes": 2072043,
+        "heapDeltaBytes": 66815352,
+        "goalStagnation": 2,
+        "skipped": 0,
+        "rejected": 3407
+      },
+      "agentErrors": 0
+    },
+    {
+      "seed": 29,
+      "population": {
+        "30": 6,
+        "100": 10,
+        "200": 1
+      },
+      "births": {
+        "100": 7,
+        "200": 7
+      },
+      "birthDays": [
+        8,
+        18,
+        28,
+        39,
+        49,
+        64,
+        89
+      ],
+      "birthReasonsBefore100": {
+        "food": 22,
+        "noPair": 6,
+        "born": 7,
+        "cooldown": 63,
+        "population": 1
+      },
+      "birthReasonsAfter100": {
+        "population": 1,
+        "food": 2,
+        "noPair": 98
+      },
+      "deaths": {
+        "100": 0,
+        "200": 10
+      },
+      "deathCauses200": {
+        "饥饿": 10
+      },
+      "deathRows": [
+        {
+          "day": 101,
+          "id": "a1",
+          "name": "岑",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "a2",
+          "name": "绛",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "a3",
+          "name": "蓑",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "p1",
+          "name": "你",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c1",
+          "name": "芽",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c2",
+          "name": "苗",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c3",
+          "name": "穗",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c4",
+          "name": "实",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c5",
+          "name": "蘖",
+          "cause": "饥饿"
+        },
+        {
+          "day": 101,
+          "id": "c6",
+          "name": "籽",
+          "cause": "饥饿"
+        }
+      ],
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "store200": 16,
+      "birthsAfter100": 0,
+      "deathsAfter100": 10,
+      "curve": [
+        [
+          20,
+          5,
+          12
+        ],
+        [
+          40,
+          7,
+          10
+        ],
+        [
+          60,
+          8,
+          9
+        ],
+        [
+          80,
+          9,
+          7
+        ],
+        [
+          100,
+          10,
+          0
+        ],
+        [
+          120,
+          1,
+          7
+        ],
+        [
+          140,
+          1,
+          18
+        ],
+        [
+          160,
+          1,
+          27
+        ],
+        [
+          180,
+          1,
+          17
+        ],
+        [
+          200,
+          1,
+          16
+        ]
+      ],
+      "runtime": {
+        "avgTickMs": 1.293,
+        "maxTickMs": 14,
+        "saveBytes": 1299277,
+        "heapDeltaBytes": 183309504,
+        "goalStagnation": 94,
+        "skipped": 0,
+        "rejected": 592
+      },
+      "agentErrors": 0
+    },
+    {
+      "seed": 41,
+      "population": {
+        "30": 6,
+        "100": 9,
+        "200": 0
+      },
+      "births": {
+        "100": 6,
+        "200": 6
+      },
+      "birthDays": [
+        6,
+        16,
+        26,
+        40,
+        50,
+        71
+      ],
+      "birthReasonsBefore100": {
+        "food": 35,
+        "noPair": 4,
+        "born": 6,
+        "cooldown": 54
+      },
+      "birthReasonsAfter100": {
+        "food": 30,
+        "noPair": 70,
+        "ended": 1
+      },
+      "deaths": {
+        "100": 0,
+        "200": 10
+      },
+      "deathCauses200": {
+        "衰老": 10
+      },
+      "deathRows": [
+        {
+          "day": 117,
+          "id": "a1",
+          "name": "岑",
+          "cause": "衰老"
+        },
+        {
+          "day": 117,
+          "id": "a2",
+          "name": "绛",
+          "cause": "衰老"
+        },
+        {
+          "day": 120,
+          "id": "p1",
+          "name": "你",
+          "cause": "衰老"
+        },
+        {
+          "day": 131,
+          "id": "a3",
+          "name": "蓑",
+          "cause": "衰老"
+        },
+        {
+          "day": 142,
+          "id": "c1",
+          "name": "芽",
+          "cause": "衰老"
+        },
+        {
+          "day": 149,
+          "id": "c2",
+          "name": "苗",
+          "cause": "衰老"
+        },
+        {
+          "day": 157,
+          "id": "c3",
+          "name": "穗",
+          "cause": "衰老"
+        },
+        {
+          "day": 161,
+          "id": "c4",
+          "name": "实",
+          "cause": "衰老"
+        },
+        {
+          "day": 184,
+          "id": "c5",
+          "name": "蘖",
+          "cause": "衰老"
+        },
+        {
+          "day": 199,
+          "id": "c6",
+          "name": "籽",
+          "cause": "衰老"
+        }
+      ],
+      "ended200": true,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "store200": 33,
+      "birthsAfter100": 0,
+      "deathsAfter100": 10,
+      "curve": [
+        [
+          20,
+          5,
+          11
+        ],
+        [
+          40,
+          7,
+          20
+        ],
+        [
+          60,
+          8,
+          12
+        ],
+        [
+          80,
+          9,
+          8
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          7,
+          10
+        ],
+        [
+          140,
+          6,
+          11
+        ],
+        [
+          160,
+          3,
+          20
+        ],
+        [
+          180,
+          2,
+          34
+        ],
+        [
+          200,
+          0,
+          33
+        ]
+      ],
+      "runtime": {
+        "avgTickMs": 3.741,
+        "maxTickMs": 18,
+        "saveBytes": 1177929,
+        "heapDeltaBytes": -317699360,
+        "goalStagnation": 1,
+        "skipped": 0,
+        "rejected": 3086
+      },
+      "agentErrors": 0
+    },
+    {
+      "seed": 53,
+      "population": {
+        "30": 6,
+        "100": 9,
+        "200": 7
+      },
+      "births": {
+        "100": 6,
+        "200": 12
+      },
+      "birthDays": [
+        9,
+        19,
+        29,
+        40,
+        54,
+        85,
+        106,
+        120,
+        140,
+        169,
+        179,
+        194
+      ],
+      "birthReasonsBefore100": {
+        "noPair": 8,
+        "born": 6,
+        "cooldown": 54,
+        "food": 31
+      },
+      "birthReasonsAfter100": {
+        "food": 39,
+        "born": 6,
+        "cooldown": 51,
+        "noPair": 5
+      },
+      "deaths": {
+        "100": 0,
+        "200": 9
+      },
+      "deathCauses200": {
+        "衰老": 9
+      },
+      "deathRows": [
+        {
+          "day": 111,
+          "id": "a3",
+          "name": "蓑",
+          "cause": "衰老"
+        },
+        {
+          "day": 115,
+          "id": "a1",
+          "name": "岑",
+          "cause": "衰老"
+        },
+        {
+          "day": 115,
+          "id": "a2",
+          "name": "绛",
+          "cause": "衰老"
+        },
+        {
+          "day": 117,
+          "id": "p1",
+          "name": "你",
+          "cause": "衰老"
+        },
+        {
+          "day": 139,
+          "id": "c1",
+          "name": "芽",
+          "cause": "衰老"
+        },
+        {
+          "day": 162,
+          "id": "c3",
+          "name": "穗",
+          "cause": "衰老"
+        },
+        {
+          "day": 169,
+          "id": "c2",
+          "name": "苗",
+          "cause": "衰老"
+        },
+        {
+          "day": 172,
+          "id": "c4",
+          "name": "实",
+          "cause": "衰老"
+        },
+        {
+          "day": 193,
+          "id": "c5",
+          "name": "蘖",
+          "cause": "衰老"
+        }
+      ],
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "store200": 14,
+      "birthsAfter100": 6,
+      "deathsAfter100": 9,
+      "curve": [
+        [
+          20,
+          5,
+          12
+        ],
+        [
+          40,
+          7,
+          14
+        ],
+        [
+          60,
+          8,
+          8
+        ],
+        [
+          80,
+          8,
+          8
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          8,
+          18
+        ],
+        [
+          140,
+          8,
+          17
+        ],
+        [
+          160,
+          8,
+          9
+        ],
+        [
+          180,
+          7,
+          12
+        ],
+        [
+          200,
+          7,
+          14
+        ]
+      ],
+      "runtime": {
+        "avgTickMs": 2.197,
+        "maxTickMs": 10,
+        "saveBytes": 1799124,
+        "heapDeltaBytes": 307496920,
+        "goalStagnation": 1,
+        "skipped": 0,
+        "rejected": 1127
+      },
+      "agentErrors": 0
+    }
+  ],
+  "summary": {
+    "mode": "on",
+    "days": 200,
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      3,
+      5,
+      6,
+      6,
+      6
+    ],
+    "population100": [
+      7,
+      9,
+      10,
+      9,
+      9
+    ],
+    "population200": [
+      1,
+      9,
+      1,
+      0,
+      7
+    ],
+    "avg30": 5.2,
+    "avg100": 8.8,
+    "avg200": 3.6,
+    "births100": 29,
+    "deaths100": 0,
+    "extinct100": "0/5",
+    "extinct200": "1/5",
+    "deathCauses200": {
+      "衰老": 35,
+      "饥饿": 10
+    },
+    "playerAlive200": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "agentErrors": 0
+  }
+}

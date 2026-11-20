@@ -1,0 +1,60 @@
+# 构建/物化审计（Docker daemon 不可用，等价文件级检查）
+时间: 2026-11-20T18:15:28.179Z
+仓库:  @ 3643f148cbad315ddbd58b0226a18f967301e105
+工作区改动: M evidence/redo-p2/golden-compare.json;  M evidence/score/quickstart-browser.log; ?? evidence/deploy-smoke/image-root/; ?? evidence/final-fix/; ?? evidence/redo-p0/final-fix-compare.png; ?? evidence/redo-p0/final-fix-survival.png; ?? evidence/redo-p0/final-fix-title.png; ?? evidence/redo-p0/final-fix.json
+模式: no-docker-equivalent-materialization
+物化树: C:\Users\sheng\AppData\Local\Temp\ambrace-finalfix-head\evidence\deploy-smoke\image-root
+顶层: life, seed, serve.mjs, shared, web
+文件数/体积: 487 / 19927451 B (19.00 MiB)
+
+## COPY 集合（Dockerfile）
+- serve.mjs
+- life/
+- web/
+- shared/
+- seed/
+
+## 物化树分层体积（仅作参考，不是镜像层实测）
+- serve.mjs: 41687 B (0.04 MiB)
+- life/: 2676680 B (2.55 MiB)
+- web/: 15994904 B (15.25 MiB)
+- shared/: 174677 B (0.17 MiB)
+- seed/: 1039503 B (0.99 MiB)
+
+## 构建上下文（按 .dockerignore 估算，Docker 会整包发送）
+- 901 文件 / 42.19 MiB
+- evidence: 21.61 MiB
+- web: 15.25 MiB
+- life: 2.55 MiB
+- seed: 0.99 MiB
+- tools: 0.95 MiB
+- scripts: 0.44 MiB
+- (root): 0.21 MiB
+- shared: 0.17 MiB
+- test-support: 0.00 MiB
+- packs: 0.00 MiB
+- .github: 0.00 MiB
+
+## 审计检查
+PASS Dockerfile 只 COPY 五个入口（serve/life/web/shared/seed） — COPY 源=["serve.mjs","life/","web/","shared/","seed/"]
+PASS Dockerfile 无 ADD
+PASS Dockerfile 基础镜像 node:22-alpine
+PASS Dockerfile ENV 含 PORT=7860 / HOST=0.0.0.0 / GAME_MODE=game / GAME_RULES=1 / DATA_DIR=/data
+PASS Dockerfile EXPOSE 7860
+PASS Dockerfile 有 HEALTHCHECK 打 /healthz
+PASS Dockerfile 没有把密钥写进 ENV/ARG
+PASS Dockerfile 没有 --env-file / COPY . .
+PASS .dockerignore 排除 .env
+PASS .dockerignore 排除 .env.*
+PASS .dockerignore 排除 data/
+PASS .dockerignore 排除 docs/
+PASS .dockerignore 排除 .git/
+PASS .dockerignore 排除 *.log
+PASS 物化树顶层恰好是 serve.mjs/life/web/shared/seed（无 Dockerfile/package.json/docs/data） — ["life","seed","serve.mjs","shared","web"]
+PASS 物化树无 .env / 私钥 / 旧数据 / .git / docs / 日志 — 0 命中
+PASS 物化树文本无密钥赋值 / 私钥块 — 0 命中
+
+## 边界
+- 未运行 docker build：镜像大小/层数未实测；上表只是物化树体积。
+- 未验证容器隔离、VOLUME、HEALTHCHECK 在容器运行时行为。
+- 唯一排除的真实构建风险：Dockerfile 语法/COPY 源缺失只能由 build 发现，本检查无法代替。

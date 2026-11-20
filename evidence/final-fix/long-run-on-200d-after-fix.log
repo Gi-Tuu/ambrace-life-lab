@@ -1,0 +1,58 @@
+{"seed":7,"population":{"30":3,"100":7,"200":1},"births":{"100":4,"200":4},"birthDays":[31,41,59,88],"causes":{"衰老":7},"playerAlive200":false,"birthsAfter100":0,"birthReasonsAfter100":{"food":17,"noPair":84},"errors":0}
+{"seed":13,"population":{"30":5,"100":9,"200":9},"births":{"100":6,"200":14},"birthDays":[11,21,31,43,57,96,119,134,144,155,165,175,185,197],"causes":{"衰老":9},"playerAlive200":false,"birthsAfter100":8,"birthReasonsAfter100":{"cooldown":72,"noPair":3,"food":18,"born":8},"errors":0}
+{"seed":29,"population":{"30":6,"100":10,"200":1},"births":{"100":7,"200":7},"birthDays":[8,18,28,39,49,64,89],"causes":{"饥饿":10},"playerAlive200":false,"birthsAfter100":0,"birthReasonsAfter100":{"population":1,"food":2,"noPair":98},"errors":0}
+{"seed":41,"population":{"30":6,"100":9,"200":0},"births":{"100":6,"200":6},"birthDays":[6,16,26,40,50,71],"causes":{"衰老":10},"playerAlive200":false,"birthsAfter100":0,"birthReasonsAfter100":{"food":30,"noPair":70,"ended":1},"errors":0}
+{"seed":53,"population":{"30":6,"100":9,"200":7},"births":{"100":6,"200":12},"birthDays":[9,19,29,40,54,85,106,120,140,169,179,194],"causes":{"衰老":9},"playerAlive200":false,"birthsAfter100":6,"birthReasonsAfter100":{"food":39,"born":6,"cooldown":51,"noPair":5},"errors":0}
+{
+  "summary": {
+    "mode": "on",
+    "days": 200,
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      3,
+      5,
+      6,
+      6,
+      6
+    ],
+    "population100": [
+      7,
+      9,
+      10,
+      9,
+      9
+    ],
+    "population200": [
+      1,
+      9,
+      1,
+      0,
+      7
+    ],
+    "avg30": 5.2,
+    "avg100": 8.8,
+    "avg200": 3.6,
+    "births100": 29,
+    "deaths100": 0,
+    "extinct100": "0/5",
+    "extinct200": "1/5",
+    "deathCauses200": {
+      "衰老": 35,
+      "饥饿": 10
+    },
+    "playerAlive200": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "agentErrors": 0
+  }
+}

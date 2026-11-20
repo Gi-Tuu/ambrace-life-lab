@@ -1,0 +1,110 @@
+PASS  Dockerfile 只 COPY 五个入口（serve/life/web/shared/seed） — COPY 源=["serve.mjs","life/","web/","shared/","seed/"]
+PASS  Dockerfile 无 ADD
+PASS  Dockerfile 基础镜像 node:22-alpine
+PASS  Dockerfile ENV 含 PORT=7860 / HOST=0.0.0.0 / GAME_MODE=game / GAME_RULES=1 / DATA_DIR=/data
+PASS  Dockerfile EXPOSE 7860
+PASS  Dockerfile 有 HEALTHCHECK 打 /healthz
+PASS  Dockerfile 没有把密钥写进 ENV/ARG
+PASS  Dockerfile 没有 --env-file / COPY . .
+PASS  .dockerignore 排除 .env
+PASS  .dockerignore 排除 .env.*
+PASS  .dockerignore 排除 data/
+PASS  .dockerignore 排除 docs/
+PASS  .dockerignore 排除 .git/
+PASS  .dockerignore 排除 *.log
+PASS  物化树顶层恰好是 serve.mjs/life/web/shared/seed（无 Dockerfile/package.json/docs/data） — ["life","seed","serve.mjs","shared","web"]
+PASS  物化树无 .env / 私钥 / 旧数据 / .git / docs / 日志 — 0 命中
+PASS  物化树文本无密钥赋值 / 私钥块 — 0 命中
+[deploy-smoke] 物化树 487 文件 / 19.00 MiB → C:\Users\sheng\AppData\Local\Temp\ambrace-finalfix-head\evidence\deploy-smoke\image-root
+[deploy-smoke] 构建上下文（估算） 901 文件 42.19 MiB
+PASS  production-like 服务就绪（物化树 + 假 key 注入）
+PASS  /healthz 200 — HTTP 200
+PASS  /healthz 是合法 JSON 且 ok:true — true
+PASS  /healthz 报 BRAIN=model 且供应商已配置 — model=smoke/fake-model configured=true
+PASS  /healthz 不回显密钥/端点/数据目录
+PASS  /healthz 走 gzip（>1KB 时） — encoding=identity bytes=739
+PASS  HEAD /healthz 200 且无 body — HTTP 200 body=0
+PASS  / 200 — HTTP 200
+PASS  / 含 3D 画布 cvA 与 app.js 入口
+PASS  / gzip 生效 — encoding=gzip
+PASS  / gzip 解压与 identity 字节一致 — gzip=6711 identity=18627
+PASS  /web/app.js 200 + gzip + ETag — HTTP 200 encoding=gzip etag="231031316ff42769c4f6ff2354521c57"
+PASS  /web/app.js 解压后与源文件逐字节一致（sha256） — decoded=273301 src=273301
+PASS  /web/app.js gzip 体积 < 原始（压缩生效） — 273301 → 101645 B（debt-perf 记录 265,891 → 98,896）
+PASS  /web/app.js 条件请求 304 且空 body — HTTP 304 body=0
+PASS  304 保留 ETag — "231031316ff42769c4f6ff2354521c57"
+PASS  ?v= 指纹请求返回 immutable 长缓存 — public, max-age=31536000, immutable
+PASS  /web/app.css 200 + gzip — HTTP 200 encoding=gzip bytes=12705
+PASS  woff2 200 且不做二次 gzip — HTTP 200 encoding=identity
+PASS  /world 200 + gzip — HTTP 200 encoding=gzip bytes=20006
+PASS  /world 是合法 JSON，含 survival 与 B — survival.t=960 mode=game brain=model
+PASS  /world 报 BRAIN=model 且 watching=true — brain=model watching=true
+PASS  /world 无 saveError/tickError — saveError=null tickError=null
+PASS  /world gzip 体积 与 debt-perf 19,851 B 同量级/一致（内容随世界推进变化） — 20006 B（debt-perf 146,473 → 19,851）
+PASS  /diag 200 且不回显地址/令牌 — HTTP 200
+PASS  /saves 200 只读 — HTTP 200
+PASS  /life/space.mjs 200（唯一放行的 life 文件） — HTTP 200 type=text/javascript; charset=utf-8
+PASS  /shared/wild-landscape.mjs 200 — HTTP 200
+PASS  /life/host.mjs 404（服务端宿主不得暴露） — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  /life/agent.mjs 404 — HTTP 404
+PASS  路径越界/未放行 /life/../.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /life/../.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /web/../.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /web/../.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /web/../../.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /web/../../.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /life/../../.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /life/../../.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /.env.example → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /.env.example 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /%2e%2e%2f.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /%2e%2e%2f.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /..%2f.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /..%2f.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /web/%2e%2e/%2e%2e/.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /web/%2e%2e/%2e%2e/.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /life/%2e%2e%2f%2e%2e%2f.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /life/%2e%2e%2f%2e%2e%2f.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /..%5c.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /..%5c.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /web/..\..\.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /web/..\..\.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /package.json → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /package.json 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /Dockerfile → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /Dockerfile 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /.dockerignore → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /.dockerignore 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /docs/ → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /docs/ 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /.git/HEAD → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /.git/HEAD 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /seed/world.json → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /seed/world.json 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /data/world.json → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /data/world.json 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /scripts/smoke-online.mjs → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /scripts/smoke-online.mjs 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /serve.mjs → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /serve.mjs 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /life/space.mjs/../host.mjs → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /life/space.mjs/../host.mjs 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  路径越界/未放行 /%zz → 400 — HTTP 400 body={"error":"BAD_PATH"}
+PASS  路径越界 /%zz 不回显仓库绝对路径 — {"error":"BAD_PATH"}
+PASS  路径越界/未放行 /%00 → 404 — HTTP 404 body={"error":"NOT_FOUND"}
+PASS  路径越界 /%00 不回显仓库绝对路径 — {"error":"NOT_FOUND"}
+PASS  POST /act 坏 JSON → 400 且不回显密钥/路径 — HTTP 400 body={"error":"BAD_JSON"}
+PASS  POST /act 非 JSON content-type 不 500（拒绝或 415/400） — HTTP 403
+PASS  所有响应体不含假密钥
+PASS  所有响应体不含模型端点 URL
+PASS  所有响应体不含仓库/数据目录绝对路径
+PASS  服务启动日志不含假密钥
+PASS  服务启动日志不含模型端点 URL
+PASS  服务日志无 uncaught/unhandled 崩溃 — 0 条
+[deploy-smoke] checks: 203/203 pass

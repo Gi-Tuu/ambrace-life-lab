@@ -1,0 +1,39 @@
+{
+  "before": {
+    "t": 2,
+    "gameMinutes": 120,
+    "clock": {
+      "rate": 1,
+      "msPerGameMinute": 16666.666666666668,
+      "gameMinutes": 120.0003,
+      "t": 2,
+      "paused": false
+    }
+  },
+  "savedAtBackdatedMin": 60,
+  "after": {
+    "t": 5,
+    "gameMinutes": 336.001,
+    "clock": {
+      "gameMinutes": 336.002,
+      "msPerGameMinute": 16666.666666666668,
+      "rate": 1,
+      "paused": false
+    }
+  },
+  "statusMissed": {
+    "minutes": 60,
+    "applied": 0,
+    "capped": false,
+    "survival": {
+      "applied": 3,
+      "appliedMinutes": 216,
+      "requestedMinutes": 216,
+      "capped": false,
+      "capMinutes": 7200
+    }
+  },
+  "advancedMinutes": 216.001,
+  "advancedTicks": 3,
+  "verdict": "catchup-applied"
+}

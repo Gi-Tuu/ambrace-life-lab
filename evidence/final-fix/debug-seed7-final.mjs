@@ -1,0 +1,14 @@
+import { createSurvPlay, tickSurvPlay } from '../../life/survplay.mjs';
+import { FORMAL_OPTIONS } from '../../life/balance-probe.mjs';
+import { createSimClock } from '../../life/sim-clock.mjs';
+import { isAlive, livingResidents } from '../../life/body.mjs';
+import { residentStage } from '../../life/households.mjs';
+const clock = createSimClock({ now: () => 0, tickMs: 3600000, manual: true });
+const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: 2, simTime: true, simClock: clock, minuteMetab: true });
+const w = sp.world;
+for (let i=0;i<200*24;i++) await tickSurvPlay(sp, { minutes: 60 });
+const res = livingResidents(w);
+console.log('pop', res.length);
+for (const a of res) console.log(a.id, a.name, 'sex', w.sex?.[a.id], 'stage', residentStage(w,a.id), 'loc', w.loc[a.id], 'born', w.survival.households.residents[a.id]?.born, 'parents', JSON.stringify(w.survival.households.residents[a.id]?.parents));
+console.log('spouses', JSON.stringify(w.survival.households.spouses));
+for (const id of Object.keys(w.agents)) console.log('agent', id, 'alive', isAlive(w.agents[id]), 'dead', w.agents[id].dead, 'death', JSON.stringify(w.agents[id].death));

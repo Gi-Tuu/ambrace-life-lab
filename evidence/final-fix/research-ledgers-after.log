@@ -1,0 +1,19 @@
+台账复验：12 份 artifact / 65 条记录；不一致 0 条；真实 log 跨 artifact 逐位相同 true
+[P0] evidence/redo-p0/baseline-md5.json  match 5/5  mismatches 0
+[P0] evidence/redo-p0/main-research-md5.json  match 10/10  mismatches 0
+[P1] evidence/redo-p1/research-md5.json  match 5/5  mismatches 0
+[P1b] evidence/redo-p1b/research-md5.json  match 5/5  mismatches 0
+[P2] evidence/redo-p2/research-md5.json  match 5/5  mismatches 0
+[P2b] evidence/redo-p2b/research-md5.json  match 5/5  mismatches 0
+[P2c] evidence/redo-p2c/research-md5.json  match 5/5  mismatches 0
+[P3] evidence/redo-p3/research-md5.json  match 5/5  mismatches 0
+[arch-gates] evidence/arch-gates/research-md5.json  match 5/5  mismatches 0
+[debt-time] evidence/debt-time/research-md5.json  match 5/5  mismatches 0
+[debt-map] evidence/debt-map/research-md5.json  match 5/5  mismatches 0
+[score] evidence/score/research-md5.txt  match 5/5  mismatches 0
+  report: de764430c8bc88cd8dbbc24512621e4f
+  sweep: aadd4895e84ae657d5a1e22c132228b1
+  viab: b923787830eb26c3853ecf959987cf9d
+  recover: fe198109386d048356f2fa69312e5183
+  metab: 5ea0ae6473c4f0ff46f47b7a2463b409
+台账 --check 全绿：所有记录与 checked-in log 一致，原 log 未改动。

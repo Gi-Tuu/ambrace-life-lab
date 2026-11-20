@@ -1,0 +1,1738 @@
+{
+  "at": "2026-11-20T18:15:28.752Z",
+  "base": "http://127.0.0.1:7860",
+  "env": {
+    "NODE_ENV": "production",
+    "HOST": "0.0.0.0",
+    "PORT": 7860,
+    "DATA_DIR": "C:\\Users\\sheng\\AppData\\Local\\Temp\\ambrace-finalfix-head\\evidence\\deploy-smoke\\runtime-data",
+    "GAME_MODE": "game",
+    "GAME_RULES": "1",
+    "BRAIN": "model",
+    "MODEL_PROVIDERS": "https://model-endpoint.invalid/v1",
+    "MODEL_KEYS": "<redacted-fake>",
+    "MODEL_NAME": "smoke/fake-model",
+    "PRESENCE_MS": 60000,
+    "TICK_MS": 1200,
+    "seed": "seed/world.json"
+  },
+  "results": [
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "status": 200,
+      "ms": 11,
+      "note": "healthz",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "739"
+      },
+      "bodyBytes": 739,
+      "bodySha256": "1fb0e4cb905128b33f926561ac1aba7d844850e936e724c4b972e967613d10bf"
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "ms": 3,
+      "note": "index gzip",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"4f38dfdd430672a91ff4aefe33be74d2\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-encoding": "gzip",
+        "vary": "accept-encoding",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "6711"
+      },
+      "bodyBytes": 6711,
+      "bodySha256": "11cd1d7b87015586718dfcae63199e5aec88532fca9681f67ac333500eb5e585"
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "ms": 8,
+      "note": "/ identity",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"4f38dfdd430672a91ff4aefe33be74d2\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "18627"
+      },
+      "bodyBytes": 18627,
+      "bodySha256": "4f38dfdd430672a91ff4aefe33be74d2c4dcd26b8bc6f71bf2d362d9a7cd1a76"
+    },
+    {
+      "method": "GET",
+      "path": "/web/app.js",
+      "status": 200,
+      "ms": 7,
+      "note": "app.js gzip",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"231031316ff42769c4f6ff2354521c57\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-encoding": "gzip",
+        "vary": "accept-encoding",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "101645"
+      },
+      "bodyBytes": 101645,
+      "bodySha256": "107810de63643940616b61a035bdffabcfc4495e3c3efe0c5fcc92157bf238f4"
+    },
+    {
+      "method": "GET",
+      "path": "/web/app.js",
+      "status": 200,
+      "ms": 2,
+      "note": "app.js identity",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"231031316ff42769c4f6ff2354521c57\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "273301"
+      },
+      "bodyBytes": 273301,
+      "bodySha256": "231031316ff42769c4f6ff2354521c5759542b53b83e1a5ebfa31641512e7ee0"
+    },
+    {
+      "method": "GET",
+      "path": "/web/app.js",
+      "status": 304,
+      "ms": 8,
+      "note": "app.js 304",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"231031316ff42769c4f6ff2354521c57\"",
+        "cache-control": "no-cache, must-revalidate"
+      },
+      "bodyBytes": 0,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/web/app.js?v=abc123456",
+      "status": 200,
+      "ms": 2,
+      "note": "app.js immutable",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"231031316ff42769c4f6ff2354521c57\"",
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-encoding": "gzip",
+        "vary": "accept-encoding",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "101645"
+      },
+      "bodyBytes": 101645,
+      "bodySha256": "107810de63643940616b61a035bdffabcfc4495e3c3efe0c5fcc92157bf238f4"
+    },
+    {
+      "method": "GET",
+      "path": "/web/app.css",
+      "status": 200,
+      "ms": 3,
+      "note": "app.css",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"f5d0bc280dfd0c15e603fa4a1d07b636\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-encoding": "gzip",
+        "vary": "accept-encoding",
+        "content-type": "text/css; charset=utf-8",
+        "content-length": "12705"
+      },
+      "bodyBytes": 12705,
+      "bodySha256": "0cb4716fc52f801cfc24e3e47c4d199030c255deaf97e1e9f362dc0d6ff729cf"
+    },
+    {
+      "method": "GET",
+      "path": "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+      "status": 200,
+      "ms": 3,
+      "note": "woff2",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"f6e698d93c8ef991335670233a9bb80e\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-type": "font/woff2",
+        "content-length": "953220"
+      },
+      "bodyBytes": 953220,
+      "bodySha256": "f6e698d93c8ef991335670233a9bb80ece7aa7767759a08b3ed5311931fe922a"
+    },
+    {
+      "method": "GET",
+      "path": "/world",
+      "status": 200,
+      "ms": 7,
+      "note": "world gzip",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-encoding": "gzip",
+        "vary": "accept-encoding",
+        "content-length": "20006"
+      },
+      "bodyBytes": 20006,
+      "bodySha256": "67073fc8d6326555075f0291345a48623229e93d41f5eaccd3f6ceee932a77fd"
+    },
+    {
+      "method": "GET",
+      "path": "/diag",
+      "status": 200,
+      "ms": 3,
+      "note": "/diag",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "207"
+      },
+      "bodyBytes": 207,
+      "bodySha256": "14e281fb06ed0ddba44e5c9a7b4af926feed499d6314a4d8aeab0e4dd5d1c4da"
+    },
+    {
+      "method": "GET",
+      "path": "/saves",
+      "status": 200,
+      "ms": 2,
+      "note": "/saves",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "14"
+      },
+      "bodyBytes": 14,
+      "bodySha256": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658"
+    },
+    {
+      "method": "GET",
+      "path": "/life/space.mjs",
+      "status": 200,
+      "ms": 2,
+      "note": "life/space.mjs",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"4e27fb887a873fd1fbf48505815deefc\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "18794"
+      },
+      "bodyBytes": 18794,
+      "bodySha256": "4e27fb887a873fd1fbf48505815deefce33b60965f860f4cbd9834df7c8e0a58"
+    },
+    {
+      "method": "GET",
+      "path": "/shared/wild-landscape.mjs",
+      "status": 200,
+      "ms": 1,
+      "note": "shared",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "etag": "\"1de54dc0c5d8d24eb6b278e1f121095b\"",
+        "cache-control": "no-cache, must-revalidate",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "17402"
+      },
+      "bodyBytes": 17402,
+      "bodySha256": "1de54dc0c5d8d24eb6b278e1f121095b5c279c8dd40eb71af2d8d8aa3f956bf5"
+    },
+    {
+      "method": "GET",
+      "path": "/life/host.mjs",
+      "status": 404,
+      "ms": 1,
+      "note": "life/host.mjs",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/life/agent.mjs",
+      "status": 404,
+      "ms": 1,
+      "note": "life/agent.mjs",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/life/../.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/web/../.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/web/../../.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/life/../../.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/.env.example",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/%2e%2e%2f.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/..%2f.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/web/%2e%2e/%2e%2e/.env",
+      "status": 404,
+      "ms": 10,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/life/%2e%2e%2f%2e%2e%2f.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/..%5c.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/web/..\\..\\.env",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/package.json",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/Dockerfile",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/.dockerignore",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/.git/HEAD",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/seed/world.json",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/data/world.json",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/scripts/smoke-online.mjs",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/serve.mjs",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/life/space.mjs/../host.mjs",
+      "status": 404,
+      "ms": 0,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "GET",
+      "path": "/%zz",
+      "status": 400,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "20"
+      },
+      "bodyBytes": 20,
+      "bodySha256": "28e1f6f2d6b55cfb76d376a484b789b3ca875ca494607d366e621bcb9176d4f8"
+    },
+    {
+      "method": "GET",
+      "path": "/%00",
+      "status": 404,
+      "ms": 1,
+      "note": "negative",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "540028bbd229cc8ce0f531f84e11296870f9b54faa231abb6f5da8557ae3df31"
+    },
+    {
+      "method": "POST",
+      "path": "/act",
+      "status": 400,
+      "ms": 1,
+      "note": "bad act",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "20"
+      },
+      "bodyBytes": 20,
+      "bodySha256": "ee362667bb2074413051f2599ec2b6ece749343d58f8b3c119f2dc332f77817f"
+    },
+    {
+      "method": "POST",
+      "path": "/act",
+      "status": 403,
+      "ms": 1,
+      "note": "act content-type",
+      "headers": {
+        "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "b9292854a83dd686b5215b7144fef63917fbd0ddc81288a031050d31a09c9ab5"
+    }
+  ],
+  "checks": [
+    {
+      "name": "Dockerfile 只 COPY 五个入口（serve/life/web/shared/seed）",
+      "ok": true,
+      "detail": "COPY 源=[\"serve.mjs\",\"life/\",\"web/\",\"shared/\",\"seed/\"]"
+    },
+    {
+      "name": "Dockerfile 无 ADD",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 基础镜像 node:22-alpine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile ENV 含 PORT=7860 / HOST=0.0.0.0 / GAME_MODE=game / GAME_RULES=1 / DATA_DIR=/data",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile EXPOSE 7860",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 有 HEALTHCHECK 打 /healthz",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 没有把密钥写进 ENV/ARG",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 没有 --env-file / COPY . .",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .env",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .env.*",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 data/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 docs/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .git/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 *.log",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "物化树顶层恰好是 serve.mjs/life/web/shared/seed（无 Dockerfile/package.json/docs/data）",
+      "ok": true,
+      "detail": "[\"life\",\"seed\",\"serve.mjs\",\"shared\",\"web\"]"
+    },
+    {
+      "name": "物化树无 .env / 私钥 / 旧数据 / .git / docs / 日志",
+      "ok": true,
+      "detail": "0 命中"
+    },
+    {
+      "name": "物化树文本无密钥赋值 / 私钥块",
+      "ok": true,
+      "detail": "0 命中"
+    },
+    {
+      "name": "production-like 服务就绪（物化树 + 假 key 注入）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/healthz 200",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "/healthz 是合法 JSON 且 ok:true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "/healthz 报 BRAIN=model 且供应商已配置",
+      "ok": true,
+      "detail": "model=smoke/fake-model configured=true"
+    },
+    {
+      "name": "/healthz 不回显密钥/端点/数据目录",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/healthz 走 gzip（>1KB 时）",
+      "ok": true,
+      "detail": "encoding=identity bytes=739"
+    },
+    {
+      "name": "/healthz: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/healthz: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/healthz: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "HEAD /healthz 200 且无 body",
+      "ok": true,
+      "detail": "HTTP 200 body=0"
+    },
+    {
+      "name": "/ 200",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "/ 含 3D 画布 cvA 与 app.js 入口",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/ gzip 生效",
+      "ok": true,
+      "detail": "encoding=gzip"
+    },
+    {
+      "name": "/: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "/ gzip 解压与 identity 字节一致",
+      "ok": true,
+      "detail": "gzip=6711 identity=18627"
+    },
+    {
+      "name": "/web/app.js 200 + gzip + ETag",
+      "ok": true,
+      "detail": "HTTP 200 encoding=gzip etag=\"231031316ff42769c4f6ff2354521c57\""
+    },
+    {
+      "name": "/web/app.js: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/app.js: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/app.js: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "/web/app.js 解压后与源文件逐字节一致（sha256）",
+      "ok": true,
+      "detail": "decoded=273301 src=273301"
+    },
+    {
+      "name": "/web/app.js gzip 体积 < 原始（压缩生效）",
+      "ok": true,
+      "detail": "273301 → 101645 B（debt-perf 记录 265,891 → 98,896）"
+    },
+    {
+      "name": "/web/app.js 条件请求 304 且空 body",
+      "ok": true,
+      "detail": "HTTP 304 body=0"
+    },
+    {
+      "name": "304 保留 ETag",
+      "ok": true,
+      "detail": "\"231031316ff42769c4f6ff2354521c57\""
+    },
+    {
+      "name": "/web/app.js 304: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/app.js 304: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/app.js 304: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "?v= 指纹请求返回 immutable 长缓存",
+      "ok": true,
+      "detail": "public, max-age=31536000, immutable"
+    },
+    {
+      "name": "/web/app.css 200 + gzip",
+      "ok": true,
+      "detail": "HTTP 200 encoding=gzip bytes=12705"
+    },
+    {
+      "name": "woff2 200 且不做二次 gzip",
+      "ok": true,
+      "detail": "HTTP 200 encoding=identity"
+    },
+    {
+      "name": "/world 200 + gzip",
+      "ok": true,
+      "detail": "HTTP 200 encoding=gzip bytes=20006"
+    },
+    {
+      "name": "/world 是合法 JSON，含 survival 与 B",
+      "ok": true,
+      "detail": "survival.t=960 mode=game brain=model"
+    },
+    {
+      "name": "/world 报 BRAIN=model 且 watching=true",
+      "ok": true,
+      "detail": "brain=model watching=true"
+    },
+    {
+      "name": "/world 无 saveError/tickError",
+      "ok": true,
+      "detail": "saveError=null tickError=null"
+    },
+    {
+      "name": "/world gzip 体积 与 debt-perf 19,851 B 同量级/一致（内容随世界推进变化）",
+      "ok": true,
+      "detail": "20006 B（debt-perf 146,473 → 19,851）"
+    },
+    {
+      "name": "/diag 200 且不回显地址/令牌",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "/saves 200 只读",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "/life/space.mjs 200（唯一放行的 life 文件）",
+      "ok": true,
+      "detail": "HTTP 200 type=text/javascript; charset=utf-8"
+    },
+    {
+      "name": "/life/space.mjs: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/space.mjs: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/space.mjs: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "/shared/wild-landscape.mjs 200",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "/life/host.mjs 404（服务端宿主不得暴露）",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/life/host.mjs 404: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/host.mjs 404: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/host.mjs 404: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "/life/agent.mjs 404",
+      "ok": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "路径越界/未放行 /life/../.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /life/../.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/life/../.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/../.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/../.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /web/../.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /web/../.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/web/../.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/../.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/../.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /web/../../.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /web/../../.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/web/../../.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/../../.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/../../.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /life/../../.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /life/../../.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/life/../../.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/../../.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/../../.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /.env.example → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /.env.example 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/.env.example: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/.env.example: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/.env.example: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /%2e%2e%2f.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /%2e%2e%2f.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/%2e%2e%2f.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/%2e%2e%2f.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/%2e%2e%2f.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /..%2f.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /..%2f.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/..%2f.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/..%2f.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/..%2f.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /web/%2e%2e/%2e%2e/.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /web/%2e%2e/%2e%2e/.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/web/%2e%2e/%2e%2e/.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/%2e%2e/%2e%2e/.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/%2e%2e/%2e%2e/.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /life/%2e%2e%2f%2e%2e%2f.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /life/%2e%2e%2f%2e%2e%2f.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/life/%2e%2e%2f%2e%2e%2f.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/%2e%2e%2f%2e%2e%2f.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/%2e%2e%2f%2e%2e%2f.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /..%5c.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /..%5c.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/..%5c.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/..%5c.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/..%5c.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /web/..\\..\\.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /web/..\\..\\.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/web/..\\..\\.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/web/..\\..\\.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/web/..\\..\\.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/.env: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /package.json → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /package.json 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/package.json: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/package.json: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/package.json: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /Dockerfile → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /Dockerfile 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/Dockerfile: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/Dockerfile: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/Dockerfile: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /.dockerignore → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /.dockerignore 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/.dockerignore: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/.dockerignore: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/.dockerignore: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /docs/ → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /docs/ 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/docs/: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/docs/: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/docs/: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/docs/%E5%9B%9E%E6%8A%A5-%E5%80%BA%E5%8A%A1-%E6%80%A7%E8%83%BD-2026-11-20.md: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /.git/HEAD → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /.git/HEAD 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/.git/HEAD: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/.git/HEAD: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/.git/HEAD: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /seed/world.json → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /seed/world.json 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/seed/world.json: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/seed/world.json: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/seed/world.json: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /data/world.json → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /data/world.json 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/data/world.json: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/data/world.json: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/data/world.json: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /scripts/smoke-online.mjs → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /scripts/smoke-online.mjs 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/scripts/smoke-online.mjs: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/scripts/smoke-online.mjs: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/scripts/smoke-online.mjs: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /serve.mjs → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /serve.mjs 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/serve.mjs: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/serve.mjs: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/serve.mjs: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /life/space.mjs/../host.mjs → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /life/space.mjs/../host.mjs 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/life/space.mjs/../host.mjs: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/life/space.mjs/../host.mjs: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/life/space.mjs/../host.mjs: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /%zz → 400",
+      "ok": true,
+      "detail": "HTTP 400 body={\"error\":\"BAD_PATH\"}"
+    },
+    {
+      "name": "路径越界 /%zz 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"BAD_PATH\"}"
+    },
+    {
+      "name": "/%zz: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/%zz: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/%zz: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "路径越界/未放行 /%00 → 404",
+      "ok": true,
+      "detail": "HTTP 404 body={\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "路径越界 /%00 不回显仓库绝对路径",
+      "ok": true,
+      "detail": "{\"error\":\"NOT_FOUND\"}"
+    },
+    {
+      "name": "/%00: CSP frame-ancestors 精确匹配",
+      "ok": true,
+      "detail": "'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn"
+    },
+    {
+      "name": "/%00: 无 X-Frame-Options",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "/%00: X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "name": "POST /act 坏 JSON → 400 且不回显密钥/路径",
+      "ok": true,
+      "detail": "HTTP 400 body={\"error\":\"BAD_JSON\"}"
+    },
+    {
+      "name": "POST /act 非 JSON content-type 不 500（拒绝或 415/400）",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "所有响应体不含假密钥",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "所有响应体不含模型端点 URL",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "所有响应体不含仓库/数据目录绝对路径",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "服务启动日志不含假密钥",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "服务启动日志不含模型端点 URL",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "服务日志无 uncaught/unhandled 崩溃",
+      "ok": true,
+      "detail": "0 条"
+    }
+  ]
+}

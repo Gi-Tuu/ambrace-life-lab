@@ -1,0 +1,18 @@
+✔ V11-METAB-01 60 个 1 分钟步 == 旧 1 次/小时（身体量 ≤1e-9），含 6 次 think (37.6084ms)
+✔ V11-METAB-02 50 分 5 think 与 50 分 0 think 积分逐位一致；身体步不消费 RNG (16.4569ms)
+✔ V11-METAB-10 玩家 p1 与居民每小时同量：能量 -0.012、存续同幅，p1 只走 60 个分钟步 (9.2544ms)
+✔ V11-METAB-03 暂停/倍速只改变真实时间换算，身体只随游戏分钟积分；0 分钟不动 (15.0668ms)
+✔ V11-METAB-04 迟到 think 只读快照：不补结算身体、不动 metabCount (6.3615ms)
+✔ V11-METAB-05 旧档（无 minuteMetab 字段）可读，读后按分钟积分 (15.0113ms)
+✔ V11-METAB-06 研究态（无 simClock）无 minuteMetab，仍按 tick 结算 (3.3162ms)
+✔ V11-METAB-07 bank 仍按旧小时点 step(1)：同 think 日程下 bank 与 RNG 逐位相同 (13.2166ms)
+✔ V11-METAB-08 开关默认：正式开、研究关；M5_MINUTE_METAB=0 精确回退 (19.2919ms)
+✔ V11-METAB-09 M5 快慢仓同样按旧小时 step(1)：on/off 的 dumpM5 与 RNG 逐位相同 (13.3104ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 270.9522

@@ -1,0 +1,115 @@
+=== GET /（accept-encoding: gzip）===
+HTTP/1.1 200 OK
+set-cookie: ctl_sid=e98a05aba022abc0f2a5a7cd40de919e; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=30d70be372a7245dde33e23aab669d70; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+etag: "4f38dfdd430672a91ff4aefe33be74d2"
+cache-control: no-cache, must-revalidate
+content-encoding: gzip
+vary: accept-encoding
+content-type: text/html; charset=utf-8
+content-length: 6711
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 6711 B sha256=11cd1d7b87015586]
+
+=== GET /web/app.js（accept-encoding: gzip）===
+HTTP/1.1 200 OK
+set-cookie: ctl_sid=87a8cb598dfe883d030a800564e1e90c; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=650b108ce269ddd0d03df52cacd64194; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+etag: "231031316ff42769c4f6ff2354521c57"
+cache-control: no-cache, must-revalidate
+content-encoding: gzip
+vary: accept-encoding
+content-type: text/javascript; charset=utf-8
+content-length: 101645
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 101645 B sha256=107810de63643940]
+
+=== GET /world（accept-encoding: gzip）===
+HTTP/1.1 200 OK
+set-cookie: ctl_sid=22c3429119d00302985ded29b55f731b; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=67fc05c4c9f3663d8fb3663354662f90; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+content-type: application/json; charset=utf-8
+content-encoding: gzip
+vary: accept-encoding
+content-length: 20006
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 20006 B sha256=67073fc8d6326555]
+
+=== GET /healthz（accept-encoding: gzip）===
+HTTP/1.1 200 OK
+set-cookie: ctl_sid=e3f9877b4c46001b7b6d3808f1d0e2f5; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=f43dc14ea90bc986f9be80932ab16b68; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+content-type: application/json; charset=utf-8
+content-length: 739
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 739 B sha256=1fb0e4cb905128b3]
+
+=== GET /life/space.mjs（accept-encoding: gzip）===
+HTTP/1.1 200 OK
+set-cookie: ctl_sid=c7edb7025b07978fcf6d6686024e82c4; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=ef400fbeb8d74a8112328fa7d012a246; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+etag: "4e27fb887a873fd1fbf48505815deefc"
+cache-control: no-cache, must-revalidate
+content-type: text/javascript; charset=utf-8
+content-length: 18794
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 18794 B sha256=4e27fb887a873fd1]
+
+=== GET /life/host.mjs（accept-encoding: gzip）===
+HTTP/1.1 404 Not Found
+set-cookie: ctl_sid=d20b391f5a05ae0e02faccfbf4ada146; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=2f71965a838964c05eee40d5780b77f5; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+content-type: application/json; charset=utf-8
+content-length: 21
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 21 B sha256=540028bbd229cc8c]
+
+=== GET /life/../.env（accept-encoding: gzip）===
+HTTP/1.1 404 Not Found
+set-cookie: ctl_sid=bf1745e0bba4947c9204eee9213cdff3; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=f1cd74a3fcc54bd595adce6fb21dcf34; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+content-type: application/json; charset=utf-8
+content-length: 21
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 21 B sha256=540028bbd229cc8c]
+
+=== GET /.env（accept-encoding: gzip）===
+HTTP/1.1 404 Not Found
+set-cookie: ctl_sid=adf126f3469bc4c9320887d872bee466; Path=/; HttpOnly; SameSite=Strict
+set-cookie: ctl_nonce=c5543b146a58f3c1b5a7bc7683bf4485; Path=/; SameSite=Strict
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn
+x-content-type-options: nosniff
+referrer-policy: same-origin
+content-type: application/json; charset=utf-8
+content-length: 21
+Date: Fri, 20 Nov 2026 18:15:28 GMT
+Connection: close
+[body 21 B sha256=540028bbd229cc8c]

@@ -1,0 +1,4 @@
+[main 3643f14] fix: 修正 p1 重复结算与重启离线补时（P1-1/P1-2）
+ Date: Sat Nov 21 02:09:53 2026 +0800
+ 5 files changed, 141 insertions(+), 11 deletions(-)
+ create mode 100644 life/v11-offline-restart.test.mjs

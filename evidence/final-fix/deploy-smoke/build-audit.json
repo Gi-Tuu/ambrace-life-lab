@@ -1,0 +1,260 @@
+{
+  "at": "2026-11-20T18:15:28.179Z",
+  "mode": "no-docker-equivalent-materialization",
+  "repo": {
+    "head": "3643f148cbad315ddbd58b0226a18f967301e105",
+    "branch": "",
+    "status": [
+      "M evidence/redo-p2/golden-compare.json",
+      " M evidence/score/quickstart-browser.log",
+      "?? evidence/deploy-smoke/image-root/",
+      "?? evidence/final-fix/",
+      "?? evidence/redo-p0/final-fix-compare.png",
+      "?? evidence/redo-p0/final-fix-survival.png",
+      "?? evidence/redo-p0/final-fix-title.png",
+      "?? evidence/redo-p0/final-fix.json"
+    ]
+  },
+  "hashes": {
+    "Dockerfile": "8cc16eaf69432dc9a54d3cd3cf8f6c117c5744fb0375d6902c8e501749275b2c",
+    "dockerignore": "262e9b4a32344abda151b35ed63311bb4220048554ca732dd830ae1c59a212ab",
+    "serve.mjs": "f9eaadfb310adac9ac569773e1106babd174eafd60050160d353884b86781244",
+    "web/app.js": "231031316ff42769c4f6ff2354521c5759542b53b83e1a5ebfa31641512e7ee0",
+    "seed/world.json": "9e49f80b87721df2aeaa9f039fcfaa010ddd27f7c9e3775f70b9a821b1aeec6f"
+  },
+  "dockerfile": {
+    "copySources": [
+      "serve.mjs",
+      "life/",
+      "web/",
+      "shared/",
+      "seed/"
+    ],
+    "ignoreLines": [
+      ".env",
+      ".env.*",
+      "data/",
+      "*.log",
+      "/*.png",
+      "node_modules/",
+      "life-test.log",
+      "docs/",
+      ".git/"
+    ]
+  },
+  "imageTree": {
+    "path": "C:\\Users\\sheng\\AppData\\Local\\Temp\\ambrace-finalfix-head\\evidence\\deploy-smoke\\image-root",
+    "topLevel": [
+      "life",
+      "seed",
+      "serve.mjs",
+      "shared",
+      "web"
+    ],
+    "files": 487,
+    "bytes": 19927451,
+    "layerBytes": {
+      "serve.mjs": 41687,
+      "life/": 2676680,
+      "web/": 15994904,
+      "shared/": 174677,
+      "seed/": 1039503
+    },
+    "testFiles": 207,
+    "largest": [
+      {
+        "rel": "web/music/spring.ogg",
+        "bytes": 2151287
+      },
+      {
+        "rel": "web/music/menu.ogg",
+        "bytes": 2106832
+      },
+      {
+        "rel": "web/music/summer.ogg",
+        "bytes": 2105767
+      },
+      {
+        "rel": "web/music/winter.ogg",
+        "bytes": 2105130
+      },
+      {
+        "rel": "web/music/autumn.ogg",
+        "bytes": 2053180
+      },
+      {
+        "rel": "web/music/recovering.ogg",
+        "bytes": 2033279
+      },
+      {
+        "rel": "web/music/crisis.ogg",
+        "bytes": 1934753
+      },
+      {
+        "rel": "seed/world.json",
+        "bytes": 1039503
+      },
+      {
+        "rel": "web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+        "bytes": 953220
+      },
+      {
+        "rel": "web/app.js",
+        "bytes": 273301
+      }
+    ]
+  },
+  "buildContext": {
+    "files": 901,
+    "bytes": 44236866,
+    "byTop": [
+      {
+        "name": "evidence",
+        "files": 319,
+        "bytes": 22663384
+      },
+      {
+        "name": "web",
+        "files": 61,
+        "bytes": 15994904
+      },
+      {
+        "name": "life",
+        "files": 405,
+        "bytes": 2676680
+      },
+      {
+        "name": "seed",
+        "files": 1,
+        "bytes": 1039503
+      },
+      {
+        "name": "tools",
+        "files": 5,
+        "bytes": 992272
+      },
+      {
+        "name": "scripts",
+        "files": 63,
+        "bytes": 461653
+      },
+      {
+        "name": "(root)",
+        "files": 24,
+        "bytes": 224436
+      },
+      {
+        "name": "shared",
+        "files": 19,
+        "bytes": 174677
+      },
+      {
+        "name": "test-support",
+        "files": 1,
+        "bytes": 5006
+      },
+      {
+        "name": "packs",
+        "files": 1,
+        "bytes": 2306
+      },
+      {
+        "name": ".github",
+        "files": 2,
+        "bytes": 2045
+      }
+    ]
+  },
+  "findings": {
+    "testFilesInImage": 207,
+    "testBytesInImage": 1227163,
+    "note": "Dockerfile 的 COPY life/ 会把 399 个文件（其中 201 个测试/探针，~1.10 MiB）一起带进镜像；不含密钥与旧数据，仅体积与暴露面。"
+  },
+  "checks": [
+    {
+      "name": "Dockerfile 只 COPY 五个入口（serve/life/web/shared/seed）",
+      "ok": true,
+      "detail": "COPY 源=[\"serve.mjs\",\"life/\",\"web/\",\"shared/\",\"seed/\"]"
+    },
+    {
+      "name": "Dockerfile 无 ADD",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 基础镜像 node:22-alpine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile ENV 含 PORT=7860 / HOST=0.0.0.0 / GAME_MODE=game / GAME_RULES=1 / DATA_DIR=/data",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile EXPOSE 7860",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 有 HEALTHCHECK 打 /healthz",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 没有把密钥写进 ENV/ARG",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Dockerfile 没有 --env-file / COPY . .",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .env",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .env.*",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 data/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 docs/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 .git/",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": ".dockerignore 排除 *.log",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "物化树顶层恰好是 serve.mjs/life/web/shared/seed（无 Dockerfile/package.json/docs/data）",
+      "ok": true,
+      "detail": "[\"life\",\"seed\",\"serve.mjs\",\"shared\",\"web\"]"
+    },
+    {
+      "name": "物化树无 .env / 私钥 / 旧数据 / .git / docs / 日志",
+      "ok": true,
+      "detail": "0 命中"
+    },
+    {
+      "name": "物化树文本无密钥赋值 / 私钥块",
+      "ok": true,
+      "detail": "0 命中"
+    }
+  ]
+}
