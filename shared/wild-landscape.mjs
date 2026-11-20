@@ -94,11 +94,24 @@ export function wildLandscape(seed,version,{joined=false, flats=[], hills=[], ro
     return mix(grade,waterHeight(z)-.35,Math.max(riverCut,sideCut));
 
   }
+  // 高度是纯函数：height() 只对 4 个整数角点做双线性。室外每帧要问几十次地面高度
+  // （居民/动物贴地、接触阴影重建、视野射线），缓存整数格 rawHeight 后噪声只付一次。
+  // 用惰性 Float32Array：NaN = 未算；越界坐标不缓存（直接算）。
+  const HS_X0=Math.floor(west)-4, HS_Z0=Math.floor(north)-4;
+  const HS_W=Math.ceil(east)+4-HS_X0+1, HS_H=Math.ceil(south)+4-HS_Z0+1;
+  const rawGrid=new Float32Array(HS_W*HS_H).fill(NaN);
+  function rawAt(ix,iz) {
+    if (ix<HS_X0 || iz<HS_Z0 || ix>=HS_X0+HS_W || iz>=HS_Z0+HS_H) return rawHeight(ix,iz);
+    const i=(iz-HS_Z0)*HS_W+(ix-HS_X0);
+    const value=rawGrid[i];
+    if (Number.isNaN(value)) { const computed=rawHeight(ix,iz); rawGrid[i]=computed; return computed; }
+    return value;
+  }
   function height(x,z) {
     const ix=Math.floor(x), iz=Math.floor(z), u=x-ix, v=z-iz;
-    const a=rawHeight(ix,iz), c=rawHeight(ix+1,iz+1);
-    return u>=v?a+(rawHeight(ix+1,iz)-a)*(u-v)+(c-a)*v
-      :a+(rawHeight(ix,iz+1)-a)*(v-u)+(c-a)*u;
+    const a=rawAt(ix,iz), c=rawAt(ix+1,iz+1);
+    return u>=v?a+(rawAt(ix+1,iz)-a)*(u-v)+(c-a)*v
+      :a+(rawAt(ix,iz+1)-a)*(v-u)+(c-a)*u;
   }
   function groundAllows(x,z,crossing) {
     if (x<west+2 || x>=east-2 || z<north+2 || z>=south-2 || land(x,z)<1.5 || rim(x,z)<1.8) return false;

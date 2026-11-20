@@ -121,7 +121,11 @@ const QUAD_UV=[[0,0],[0,0],[0,0],[0,0]];
 const noFx=()=>[0,0,0];
 function quad(data,a,b,c,d,color,uv=QUAD_UV,material=noFx,normal=faceNormal(a,c,b),surface=.5) {
   const points=[a,b,c,d];
-  for (const i of [0,1,2,0,2,3]) data.push(...points[i],...color,...uv[i],...material(points[i]),...normal,surface);
+  // 显式 15 参 push（避免每个顶点展开 3 个数组的 iterator 开销；首帧网格有 ~18 万顶点）。
+  for (const i of [0,1,2,0,2,3]) {
+    const p=points[i], m=material(p), q=uv[i];
+    data.push(p[0],p[1],p[2],color[0],color[1],color[2],q[0],q[1],m[0],m[1],m[2],normal[0],normal[1],normal[2],surface);
+  }
 }
 
 export function modelMesh(data,b) {
@@ -133,8 +137,8 @@ export function modelMesh(data,b) {
       const a=add(b.from,ring[i]), c=add(b.to,ring[i]), d=add(b.to,ring[next]), e=add(b.from,ring[next]);
       const normal=norm(ring[i].map((n,j)=>n+ring[next][j]));
       quad(data,a,e,d,c,color,QUAD_UV,noFx,normal,finish+(.76+.18*Math.cos(i*2*Math.PI/ring.length))*.5);
-      for (const point of [b.from,e,a]) data.push(...point,...color,0,0,0,0,0,...lower,finish+.34);
-      for (const point of [b.to,c,d]) data.push(...point,...color,0,0,0,0,0,...b.unit,finish+.5);
+      for (const point of [b.from,e,a]) data.push(point[0],point[1],point[2],color[0],color[1],color[2],0,0,0,0,0,lower[0],lower[1],lower[2],finish+.34);
+      for (const point of [b.to,c,d]) data.push(point[0],point[1],point[2],color[0],color[1],color[2],0,0,0,0,0,b.unit[0],b.unit[1],b.unit[2],finish+.5);
     }
     return;
   }
@@ -169,7 +173,7 @@ function stageMesh(stage) {
       const shade=Math.min(1.08,Math.max(.91,1-ax*.16+az*.12));
       if (f.triangle===2) [points[1],points[2]]=[points[2],points[1]];
       const normal=faceNormal(points[0],points[2],points[1]);
-      for (const point of points) out.push(...point,shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0,...normal,.5);
+      for (const point of points) out.push(point[0],point[1],point[2],shade,shade,shade,point[0]/stage.width,point[2]/stage.depth,0,0,0,normal[0],normal[1],normal[2],.5);
       terrainCount+=3;
       continue;
     }
@@ -659,15 +663,24 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
 `;
 
 function terrainWithNormals(mesh) {
+  // 热路径（首帧 99ms 里的大头）：逐三角形摊平到 MODEL_STRIDE，法线用标量叉积直接写进目标数组。
+  // 原实现每个顶点 3 次 subarray + 每个三角形 new 一个法线数组，GC/分配在 10MB 级网格上很贵。
   const data=new Float32Array(mesh.length/11*MODEL_STRIDE);
   for (let i=0,j=0;i<mesh.length;i+=33,j+=MODEL_STRIDE*3) {
-    const normal=faceNormal(mesh.subarray(i,i+3),mesh.subarray(i+11,i+14),mesh.subarray(i+22,i+25));
-    if (mesh[i+10]>=-1.5 && normal[1]<0) for(let k=0;k<3;k++) normal[k]*=-1;
+    const ax=mesh[i],ay=mesh[i+1],az=mesh[i+2];
+    const bx=mesh[i+11],by=mesh[i+12],bz=mesh[i+13];
+    const cx=mesh[i+22],cy=mesh[i+23],cz=mesh[i+24];
+    const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const len=Math.hypot(nx,ny,nz)||1; nx/=len;ny/=len;nz/=len;
+    if (mesh[i+10]>=-1.5 && ny<0) { nx=-nx;ny=-ny;nz=-nz; }
     for(let k=0;k<3;k++){
       const target=j+k*MODEL_STRIDE, source=i+k*11;
-      data.set(mesh.subarray(source,source+11),target);
-      data.set(normal,target+11);
-      data[target+14]=.5;
+      data[target]=mesh[source];data[target+1]=mesh[source+1];data[target+2]=mesh[source+2];
+      data[target+3]=mesh[source+3];data[target+4]=mesh[source+4];data[target+5]=mesh[source+5];
+      data[target+6]=mesh[source+6];data[target+7]=mesh[source+7];data[target+8]=mesh[source+8];
+      data[target+9]=mesh[source+9];data[target+10]=mesh[source+10];
+      data[target+11]=nx;data[target+12]=ny;data[target+13]=nz;data[target+14]=.5;
     }
   }
   return data;
@@ -685,102 +698,24 @@ export function regionOnScreen(bounds,camera,width,height) {
 }
 
 
-const POST_VERTEX=`
-attribute vec2 aPosition;
-varying vec2 vUV;
-void main(){ vUV=aPosition*.5+.5; gl_Position=vec4(aPosition,0.,1.); }
-`;
-const POST_FRAGMENT=`
-precision highp float;
-varying vec2 vUV;
-uniform sampler2D uScene;
-uniform vec2 uResolution;
-float postHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
-void main(){
-  vec3 c=texture2D(uScene,vUV).rgb;
-  vec3 bloom=vec3(0.);
-  float r=4.0/uResolution.y;
-  for(int i=0;i<8;i++){
-    float a=float(i)*0.785398;
-    vec2 o=vec2(cos(a),sin(a))*r*(1.0+float(i)*0.55);
-    bloom+=max(texture2D(uScene,vUV+o).rgb-vec3(0.58),0.0);
-  }
-  bloom/=8.0;
-  c+=bloom*vec3(0.62,0.48,0.30)*0.55;
-  c*=1.12;
-  c=aces(c);
-  float l=dot(c,vec3(.2126,.7152,.0722));
-  c=mix(c*vec3(.90,1.0,1.08),c*vec3(1.07,1.0,.91),smoothstep(.32,.78,l));
-  vec2 q=vUV-.5;
-  float vig=1.0-smoothstep(.42,.86,length(q))*0.34;
-  c*=vig;
-  c+=(postHash(gl_FragCoord.xy)-.5)*.016;
-  gl_FragColor=vec4(clamp(c,0.,1.),1.);
-}
-`;
-
+// 首帧降分辨率用：把 GL 后台画布按比例画小，再一次性放大到目标画布。
+// 可见画布（target）尺寸/相机投影不变 ⇒ 下一帧全分辨率重画时几何逐像素一致。
 export function createCampRenderer() {
   const canvas=document.createElement('canvas');
   const gl=canvas.getContext('webgl',{alpha:false,antialias:false,depth:true});
   if (!gl) return null;
+  // 着色器编译/链接是冷启动最大的一块（SwiftShader/软件光栅实测 ~130ms）。这里只提交编译、
+  // 不立刻读 COMPILE_STATUS / LINK_STATUS —— 读状态会同步等编译完成。把状态检查与 uniform/
+  // 纹理装配推迟到首帧 render() 前：首帧之前页面还要跑 buildWorld（200–300ms），编译正好被挡住。
   function shader(type,src) {
     const s=gl.createShader(type);
     gl.shaderSource(s,src); gl.compileShader(s);
-    if (!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(s));
     return s;
   }
   const p=gl.createProgram(), vs=shader(gl.VERTEX_SHADER,VERTEX), fs=shader(gl.FRAGMENT_SHADER,FRAGMENT);
   gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);
-  gl.deleteShader(vs);gl.deleteShader(fs);
-  if (!gl.getProgramParameter(p,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
-  const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
-  const aNormal=gl.getAttribLocation(p,'aNormal');
-  const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','RegionAtlas','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
-  
-    const postProgram=gl.createProgram();
-    {
-      const pv=shader(gl.VERTEX_SHADER,POST_VERTEX), pf=shader(gl.FRAGMENT_SHADER,POST_FRAGMENT);
-      gl.attachShader(postProgram,pv);gl.attachShader(postProgram,pf);gl.linkProgram(postProgram);
-      gl.deleteShader(pv);gl.deleteShader(pf);
-      if(!gl.getProgramParameter(postProgram,gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(postProgram));
-    }
-    const postPos=gl.getAttribLocation(postProgram,'aPosition');
-    const postScene=gl.getUniformLocation(postProgram,'uScene');
-    const postRes=gl.getUniformLocation(postProgram,'uResolution');
-    const postBuffer=gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,postBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
-    let sceneFbo=null,sceneTex=null,sceneDepth=null,fboSize='';
-    function ensureSceneTarget(width,height){
-      const size=width+'x'+height;
-      if(sceneFbo && fboSize===size) return true;
-      if(sceneFbo) gl.deleteFramebuffer(sceneFbo);
-      if(sceneTex) gl.deleteTexture(sceneTex);
-      if(sceneDepth) gl.deleteRenderbuffer(sceneDepth);
-      sceneFbo=gl.createFramebuffer();sceneTex=gl.createTexture();sceneDepth=gl.createRenderbuffer();
-      gl.bindTexture(gl.TEXTURE_2D,sceneTex);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,width,height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-      gl.bindRenderbuffer(gl.RENDERBUFFER,sceneDepth);
-      gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,width,height);
-      gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,sceneTex,0);
-      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,sceneDepth);
-      const ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
-      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-      if(!ok){ gl.deleteFramebuffer(sceneFbo);gl.deleteTexture(sceneTex);gl.deleteRenderbuffer(sceneDepth);sceneFbo=sceneTex=sceneDepth=null;fboSize='';return false; }
-      fboSize=size;
-      return true;
-    }
-
-    gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
-  for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
-  const stages=new WeakMap(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
+  let aPos=-1,aColor=-1,aUV=-1,aMaterial=-1,aNormal=-1,uniform=null;
+  let setupDone=false, setupReady=false;
   const createTexture=(unit)=>{
     const t=gl.createTexture();
     gl.activeTexture(unit);gl.bindTexture(gl.TEXTURE_2D,t);
@@ -788,22 +723,43 @@ export function createCampRenderer() {
       [gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,key,value);
     return t;
   };
-  const blank=createTexture(gl.TEXTURE0), fog=createTexture(gl.TEXTURE1);
-  gl.activeTexture(gl.TEXTURE1);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-  createTexture(gl.TEXTURE3);
-  const grain=materialGrain();
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,64,64,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,grain);
-  gl.uniform1i(uniform.Grain,3);
-  gl.uniform1i(uniform.Fog,1);
-  // 两个采样器始终绑定完整纹理，室内和全景也能正常绘制。
-  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,blank);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
-  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+  let blank=null, fog=null, groundContactBuffer=null;
+  function ensureSetup() {
+    if (setupDone) return setupReady;
+    setupDone=true;
+    const setupT0=window.__perfSeg?performance.now():0;
+    if (!gl.getProgramParameter(p,gl.LINK_STATUS)) {
+      console.error('3D 着色器编译/链接失败：', gl.getProgramInfoLog(p), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs));
+      gl.deleteShader(vs);gl.deleteShader(fs);
+      return setupReady=false;
+    }
+    gl.deleteShader(vs);gl.deleteShader(fs);
+    aPos=gl.getAttribLocation(p,'aPosition');aColor=gl.getAttribLocation(p,'aColor');aUV=gl.getAttribLocation(p,'aUV');
+    aNormal=gl.getAttribLocation(p,'aNormal');aMaterial=gl.getAttribLocation(p,'aMaterial');
+    uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','RegionAtlas','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+    gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
+    for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
+    blank=createTexture(gl.TEXTURE0); fog=createTexture(gl.TEXTURE1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    createTexture(gl.TEXTURE3);
+    const grain=materialGrain();
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,64,64,0,gl.LUMINANCE,gl.UNSIGNED_BYTE,grain);
+    gl.uniform1i(uniform.Grain,3);
+    gl.uniform1i(uniform.Fog,1);
+    // 两个采样器始终绑定完整纹理，室内和全景也能正常绘制。
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,blank);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fog);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+    groundContactBuffer=gl.createBuffer();
+    setupReady=true;
+    if (setupT0) window.__perfSeg.push({ k:'glSetup', ms:Number((performance.now()-setupT0).toFixed(2)) });
+    return true;
+  }
+  const stages=new WeakMap(), movingBuffer=gl.createBuffer(), shadowBuffer=gl.createBuffer();
   const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  const groundContactBuffer=gl.createBuffer();
   let atlasTexture=null, atlasSource=null, visibilityImage=null, shadowData=null, contactData=null;
   // regionAtlas 是 3D 地面唯一的活纹理（16 张地形 tile 拼的 128×128 图集）。
   function atlasUpload(source) {
@@ -837,16 +793,28 @@ export function createCampRenderer() {
   }
   // 仅保留当前几种场景的缓冲，地图/对照切换时释放长期不用的资源。
   const lru=[], workMeshes=new WeakMap();
-  function stageBuffer(stage, limit) {
+  // 每帧 moving/translucent 顶点数据复用同一块 Float32Array：bufferData 会立即拷贝，
+  // 不必每帧 new 一个几百 KB 的数组（4s 移动帧率采样里 GC 占了 ~40ms，长帧的嫌疑之一）。
+  let frameScratch=new Float32Array(0);
+  function upload(data, length) {
+    if (frameScratch.length!==length) frameScratch=new Float32Array(length);
+    frameScratch.set(data);
+    gl.bufferData(gl.ARRAY_BUFFER,frameScratch,gl.DYNAMIC_DRAW);
+  }
+  let perfBuffers=0, perfBufFloats=0, perfBufCalls=0, perfBufList=[];
+  function stageBuffer(stage, limit, label='') {
     if (stages.has(stage)) {
       const index=lru.indexOf(stage);
       lru.splice(index,1);
       lru.push(stage);
       return stages.get(stage);
     }
+    const bufT0=window.__perfSeg?performance.now():0;
     const b=gl.createBuffer();
     const {mesh,ranges,terrainCount}=stage.mesh ? {mesh:terrainWithNormals(stage.mesh),ranges:[],terrainCount:0} : stageMesh(stage);
+    const convertMs=bufT0?performance.now()-bufT0:0;
     bind(b);gl.bufferData(gl.ARRAY_BUFFER,mesh,gl.STATIC_DRAW);
+    if (bufT0) { const total=performance.now()-bufT0; perfBuffers+=total; perfBufFloats+=mesh.length; perfBufCalls+=1; perfBufList.push([label,mesh.length,Number(total.toFixed(2)),Number(convertMs.toFixed(2))]); }
     const item={ b,count:mesh.length/MODEL_STRIDE,ranges,terrainCount };
     stages.set(stage,item);
     lru.push(stage);
@@ -894,11 +862,18 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null }) {
+    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null, resolutionScale=1 }) {
       if (lost || gl.isContextLost()) return false;
+      if (!ensureSetup()) return false;
+      // 归因探针（仅 ?perfseg=1 时由页面侧建立 window.__perfSeg；正常路径只多一次 undefined 判断）。
+      const perf=window.__perfSeg, perfT0=perf?performance.now():0;
       const width=target.width,height=target.height;
-      if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
-      gl.viewport(0,0,width,height);
+      // 首帧策略：GL 内部画布按比例降采样（SwiftShader/低端 GPU 的填充率是首帧大头），
+      // 画完再放大到 target；target 尺寸与相机投影不变，所以下一帧全分辨率重画时几何/构图一致。
+      const scale=Math.max(.35,Math.min(1,resolutionScale));
+      const rw=Math.max(1,Math.round(width*scale)), rh=Math.max(1,Math.round(height*scale));
+      if(canvas.width!==rw || canvas.height!==rh) {canvas.width=rw;canvas.height=rh;}
+      gl.viewport(0,0,rw,rh);
       gl.clearColor(.10*light[0],.145*light[1],.119*light[2],1);
       gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.uniformMatrix4fv(uniform.View,false,camera.view);
@@ -940,6 +915,8 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         visibilityImage=visibility;
       }
       const faded=[];
+      if (perf) { perfBuffers=0; perfBufFloats=0; perfBufCalls=0; perfBufList=[]; }
+      const phaseT=[perf?performance.now():0];
       const cacheLimit=regions?.length ? 48 : 12;
       if (regions?.length) {
         if (regionAtlas) {
@@ -949,13 +926,14 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         for (const region of regions) {
           if (!regionOnScreen(region.viewBounds,camera,width,height)) continue;
           gl.uniform1i(uniform.RegionTexture,Number(Boolean(regionAtlas && region.mesh)));
-          paintStage(stageBuffer(region,cacheLimit),covered,faded);
+          paintStage(stageBuffer(region,cacheLimit,'region'),covered,faded);
         }
         gl.uniform1i(uniform.RegionTexture,0);
       }
-      paintStage(stageBuffer(stage,cacheLimit),covered,faded,cutout);
-      if (life) paintStage(stageBuffer(life,cacheLimit),covered,faded,cutout);
-      if (homes) paintStage(stageBuffer(homes,cacheLimit),covered,faded,cutout);
+      paintStage(stageBuffer(stage,cacheLimit,'stage'),covered,faded,cutout);
+      if (life) paintStage(stageBuffer(life,cacheLimit,'life'),covered,faded,cutout);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit,'homes'),covered,faded,cutout);
+      if (perf) phaseT.push(performance.now());
       if (physical && shadows) {
         const base=groundContactMesh(shadows);
         const cast=sun?.direct ? contactShadowMesh(shadows,sun,{soft:true}) : null;
@@ -977,6 +955,7 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         }
         gl.uniform1i(uniform.Shadow,0);gl.depthMask(true);gl.disable(gl.BLEND);
       }
+      if (perf) phaseT.push(performance.now());
       const moving=[];
       const translucent=[];
       for (const box of work) {
@@ -998,17 +977,31 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
       animalMesh(moving,animals,weather[0]);
       for(const person of people)actor(moving,person,frame);
       for (const box of impacts) prism(moving,box);
-      bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(moving),gl.DYNAMIC_DRAW);
+      bind(movingBuffer);upload(moving,moving.length);
       paint(movingBuffer,moving.length/MODEL_STRIDE);
+      if (perf) phaseT.push(performance.now());
       if (translucent.length) {
-        bind(movingBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(translucent),gl.DYNAMIC_DRAW);
+        bind(movingBuffer);upload(translucent,translucent.length);
         faded.push({b:movingBuffer,from:0,count:translucent.length/MODEL_STRIDE});
       }
       paintFaded(faded);
       const ctx=target.getContext('2d');
       ctx.setTransform(1,0,0,1,0,0);
-      ctx.imageSmoothingEnabled=false;
-      ctx.drawImage(canvas,0,0);
+      // 1:1 时保持像素硬边（现状）；首帧降采样时开平滑，放大后不出现块状锯齿。
+      ctx.imageSmoothingEnabled=scale<1;
+      const prepMs=perf?performance.now()-perfT0:0;
+      const blitStart=perf?performance.now():0;
+      ctx.drawImage(canvas,0,0,width,height);
+      const blitMs=perf?performance.now()-blitStart:0;
+      if (perf) {
+        // gl.finish 把 SwiftShader 的异步光栅化等回来；只在探针开启时做（正常帧不付这个同步代价）。
+        const gpuStart=performance.now();
+        gl.finish();
+        const gpuMs=performance.now()-gpuStart;
+        perf.push?.({ k:'render', scale, size:[rw,rh], target:[width,height], prep:Number(prepMs.toFixed(2)), gpu:Number(gpuMs.toFixed(2)), blit:Number(blitMs.toFixed(2)),
+          phases: perf?phaseT.slice(1).map((t,i)=>Number((t-phaseT[i]).toFixed(2))):null,
+          buffers: perf?{ ms:Number(perfBuffers.toFixed(2)), floats:perfBufFloats, calls:perfBufCalls, list:perfBufList.slice() }:null });
+      }
       return true;
     },
     regionStats:()=>({buffers:lru.length,bytes:lru.reduce((sum,stage)=>sum+stages.get(stage).count*MODEL_STRIDE*4,0)}),

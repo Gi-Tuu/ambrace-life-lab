@@ -97,7 +97,9 @@ export function campSceneContent({
   const trees = [];
 
   // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
-  const roads = [], bins = new Map(), binSize = 64;
+  // binSize 只影响"一个查询要扫多少段"：段按 bbox+40px 落桶，任何 ≤40px 的段必然落在查询点所在桶里，
+  // 所以 32 与 64 在 0–40px 范围内的距离值逐位相同（使用方的阈值都 ≤23px/1.3 格）。
+  const roads = [], bins = new Map(), binSize = 32;
   const addSegment = (a, b, hidden) => {
     const r = [...a, ...b, hidden]; roads.push(r);
     for (let y = Math.floor((Math.min(a[1], b[1]) - 40) / binSize); y <= Math.floor((Math.max(a[1], b[1]) + 40) / binSize); y++)
@@ -153,8 +155,24 @@ export function campSceneContent({
       }
     }
   }
-  const roadDist = (px, py, paint = false) => (bins.get(tileKey(Math.floor(px / binSize), Math.floor(py / binSize))) ?? [])
-    .reduce((d, r) => paint && r[4] ? d : Math.min(d, distSeg(px, py, r[0], r[1], r[2], r[3])), 80);
+  // 热路径：terrainKinds 每次 buildWorld 要在 2px 网格上问 ~60 万次道路距离。
+  // 关键优化：逐段只用平方距离比较（单调等价），最后对胜出的那一段做一次 Math.hypot。
+  // 胜出段与算术顺序都和原 distSeg+Math.min 一致 ⇒ 返回值逐位不变（>80 仍按原口径夹到 80）。
+  const roadDist = (px, py, paint = false) => {
+    const list = bins.get(tileKey(Math.floor(px / binSize), Math.floor(py / binSize)));
+    if (!list) return 80;
+    let best2 = Infinity, bx = 0, by = 0;
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      if (paint && r[4]) continue;
+      const dx = r[2] - r[0], dy = r[3] - r[1];
+      const t = Math.max(0, Math.min(1, ((px - r[0]) * dx + (py - r[1]) * dy) / (dx * dx + dy * dy || 1)));
+      const ex = px - (r[0] + t * dx), ey = py - (r[1] + t * dy);
+      const d2 = ex * ex + ey * ey;
+      if (d2 < best2) { best2 = d2; bx = ex; by = ey; }
+    }
+    return best2 === Infinity || best2 > 6400 ? 80 : Math.hypot(bx, by);
+  };
   const onRoad = (tx, ty) => roadDist(tx * TILE + 8, ty * TILE + 8) < 23;
   const nearSite = (tx, ty, pad = 2) => Object.values(sites).some(([sx, sy]) => Math.abs(tx - sx) < pad && Math.abs(ty - sy) < pad);
   const onRiver = (tx, ty) => Math.abs(tx * TILE + 8 - streamCenter(ty * TILE + 8)) < 34;

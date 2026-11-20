@@ -107,10 +107,18 @@ const GOALS = { recover: '补给', connect: '联结', explore: '外探', maintai
 const INTERRUPTS = { committed_goal_unavailable: '目标这刻没动作', goal_has_no_visible_action: '看不到能干的事', only_coupling_actions: '此刻只剩耦合动作', no_eligible_action: '没有合格动作' };
 const COUPLING_VARS = ['input', 'available', 'refuse'];
 const $ = (id) => document.getElementById(id);
+// 归因探针（仅 ?perfseg=1）：记录首帧各段耗时，正常路径只多一次 undefined 判断。
+const perfMark = (k, t0) => { const seg = typeof window === 'undefined' ? null : window.__perfSeg; if (seg) seg.push({ k, ms: Number((performance.now() - t0).toFixed(2)), at: Number(t0.toFixed(1)) }); };
+const perfSeg = () => (typeof window === 'undefined' ? null : window.__perfSeg);
+if (perfSeg()) perfSeg().push({ k: 'moduleEvalStart', at: Number(performance.now().toFixed(1)) });
 // 唯一渲染路径：WebGL 3D。创建失败就是硬失败，没有第二套 2D 画面可退。
 let campRenderer = null;
-try { campRenderer = createCampRenderer(); }
-catch (error) { console.warn('3D 初始化失败：此设备无法进入世界', error); }
+{
+  const campT0 = performance.now();
+  try { campRenderer = createCampRenderer(); }
+  catch (error) { console.warn('3D 初始化失败：此设备无法进入世界', error); }
+  perfMark('createCampRenderer', campT0);
+}
 
 // 动作时钟与 HUD 头像：帧号由独立动画循环递增，A/B 严格共用同一个值；
 // 不读 w.t、不消费 rng、不写世界状态 ⇒ 不污染研究读数。
@@ -841,6 +849,9 @@ const campFog=new WeakMap();
 const previewFlags=new URLSearchParams(location.search);
 const physicalLighting=!previewFlags.has('bakedLight');
 const animateParts=!previewFlags.has('staticParts');
+// 首帧内部渲染比例（GL 填充率在 SwiftShader/低端 GPU 上是首帧大头）。
+// `?firstScale=1` 可关掉降采样做 A/B；默认 0.5 只影响第一帧，下一帧即恢复全分辨率。
+const FIRST_FRAME_SCALE=Math.max(.35,Math.min(1,Number(previewFlags.get('firstScale')??.5)||.5));
 const campShadowSources=new WeakMap();
 function campShadows(world,regions) {
   const layers=[world.scene3d.boxes,world.work3d,world.homes3d?.boxes,
@@ -868,13 +879,17 @@ function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   if (!views) { views=new Map(); campFog.set(world,views); }
   const previous=views.get(cvId);
   const sameScene=previous?.lists.length===lists.length && lists.every((boxes,i)=>boxes===previous.lists[i]);
-  x=Math.round(x*4)/4;z=Math.round(z*4)/4;
+  // 室外连续移动时若每帧重算：sightScene 重建 + ~900 格射线 + 地形高度采样，实测占移动帧 JS 的一半。
+  // 量化到 0.5 世界单位、并限每 160ms 最多重算一次；雾视野是表现层遮罩，不写世界状态。
+  x=Math.round(x*2)/2;z=Math.round(z*2)/2;
   const key=x+','+z+'|'+radius;
   if (sameScene && previous.key===key) return previous.mask;
+  const now=performance.now();
+  if (sameScene && previous.mask && now-(previous.at??0)<160) return previous.mask;
   const height=(px,pz)=>groundHeightOf(world,px,pz);
   const scene=sameScene?previous.scene:sightScene(height,lists);
   const mask=campSight(scene,x,z,radius);
-  views.set(cvId,{lists,key,scene,mask});
+  views.set(cvId,{lists,key,scene,mask,at:now});
   return mask;
 }
 
@@ -1085,7 +1100,7 @@ const titleWindows=['home','store','workshop'].flatMap(room=>{
     color:'#EDC787',glow:true,
   }));
 });
-let titleWorld, titleFrame=-Infinity, titleTime=0;
+let titleWorld, titleFrame=-Infinity, titleTime=0, titleFirstPaint=true;
 // 素材并发加载完成后由 loadAssets() 调用：补一帧，并把标题场景的"已画过"标记清掉。
 function repaintAfterAssets() { forceRepaint = true; titleFrame = -Infinity; }
 function drawTitleScene(now,reduced) {
@@ -1100,7 +1115,9 @@ function drawTitleScene(now,reduced) {
   if (resized) { canvas.width=width; canvas.height=height; }
   // 没有 WebGL 就不该先付一次 buildWorld：硬失败提示在构建之前。
   if (!campRenderer) { showGfxUnavailable(true); return; }
+  const titleWorldT0=performance.now();
   titleWorld??=buildWorld(titleVillage);
+  perfMark('titleBuildWorld', titleWorldT0);
   const g=canvas.getContext('2d'), time=reduced?0:titleTime;
   if (titleWorld.scene3d) {
     const landscape=titleWorld.landscape, x=29,z=28, span=height/width<.62?47:50;
@@ -1108,12 +1125,16 @@ function drawTitleScene(now,reduced) {
     const regions=landscape.regions(x,z);
     const weather=[time,.65,0,Math.max(.57,titleSun.glow)];
     const frame=Math.floor(time*5)%4;
-    if (campRenderer.render({target:canvas,stage:titleWorld.scene3d,regions,regionAtlas:outskirtsAtlas(),
+    const titleRenderT0=performance.now();
+    if (campRenderer.render({target:canvas,stage:titleWorld.scene3d,regions:titleFirstPaint?undefined:regions,regionAtlas:titleFirstPaint?null:outskirtsAtlas(),
       life:titleWorld.life3d,work:titleWindows,camera,people:[],frame,
-      sun:titleSun,light:titleSun.light,weather,season:0,physical:physicalLighting})) {
+      sun:titleSun,light:titleSun.light,weather,season:0,physical:physicalLighting,
+      resolutionScale:titleFirstPaint?FIRST_FRAME_SCALE:1,shadows:undefined})) {
+      perfMark('titleRenderCall', titleRenderT0);
       campSmoke(g,camera,titleWorld.scene3d.chimneys,.75,frame,titleSun.light);
       campAmbient(g,camera,span,x,z,.75,frame);
       canvas.dataset.renderer='3d';
+      if (titleFirstPaint) { titleFirstPaint=false; titleFrame=-Infinity; } // 下一 rAF 立刻全分辨率补一帧
       return;
     }
   }
@@ -1306,6 +1327,9 @@ const workPlayers={cvA:workPlayback(),cvB:workPlayback()};
 const noWorkMotions=[];
 function drawCamp(cv,w,historical=false) {
   const right=cv.id==='cvB';
+  // 首帧策略（本次性能债）：第一张 3D 帧只画"几何 + 光照"这些必须的东西，
+  // 雾视野/接触阴影/屋顶遮罩都推迟到下一帧；下一帧由 forceRepaint 立刻补齐。
+  const firstFrame3d=!historical && !cv._painted3d;
   const site=historical?w.campPlayerRoom:right?(ui.surveyRoom?null:w.campPlayerRoom):ui.interior;
   const time=historical?(w.t%240)/6:ACT.motionTime??0;
   const frame=historical?w.t%4:ACT.frame;
@@ -1360,7 +1384,9 @@ function drawCamp(cv,w,historical=false) {
       return false;
     }
     showTerrainLoading(false);
+    const worldT0=performance.now();
     const world=buildWorld(w);
+    perfMark('buildWorld', worldT0);
     exterior=world;
     if (!historical) campWorlds.set(playerId,world);
     stage=world.scene3d;life=world.life3d;homes=world.homes3d;
@@ -1397,7 +1423,7 @@ function drawCamp(cv,w,historical=false) {
       ? [...(world.life3d?.animals??[]),...(exterior.regional?.animals??[])].map(a=>({...a,phase:0}))
       : drawHerd(world,playerId,time,slots,w,exterior.regional?.animals);
     if (extended) for (const animal of animals) animal.groundY=extended.height(animal.x,animal.z);
-    if (!historical && !overview && pTile) {
+    if (!historical && !overview && pTile && !firstFrame3d) {
       visibility=campVisibility(world,playerId,playerX,playerZ,w.phase,extended,exterior.regional,regions??[]);
       animals=animals.filter(a=>visibility.sees(a.x,a.z,(a.groundY??stage.heightAt(a.x,a.z))+(a.kind==='bird'?3.4:.65)));
     }
@@ -1482,7 +1508,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     residentHint=residentInReach(w,[player.x,player.z],people,room?ui.interior:null);
   }
   const surfaceHeight=(px,pz)=>exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz);
-  const shadows=!overview ? {source:room?roomContactSource(stage):campShadows(exterior,regions??[]),x,z,height:surfaceHeight}:undefined;
+  const shadows=firstFrame3d||overview ? undefined : {source:room?roomContactSource(stage):campShadows(exterior,regions??[]),x,z,height:surfaceHeight};
   const daylight=room?Math.max(0,Math.min(1,daylightDirect/.5)):0;
   const wetness=open&&climate.rain?(climate.storm?.95:.65):0;
   const workshopRoofs=(exterior?.workProjects??[]).filter(p=>p.phase==='complete' && p.record.type==='workshop')
@@ -1490,7 +1516,13 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const shelters=[...stage.shelters,...workshopRoofs].sort(
     (a,b)=>Math.hypot(x-a[0]-a[2]/2,z-a[1]-a[3]/2)-Math.hypot(x-b[0]-b[2]/2,z-b[1]-b[3]/2));
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
-  const covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails);
+  // 屋顶遮罩是纯视觉：首帧不算；之后按 0.5 世界单位量化，玩家/镜头没跨格就复用上一帧的集合。
+  // （覆盖判定每帧要对上百个 occluder 做射线，室外移动时是可持续的 CPU 开销。）
+  const coverKey=`${Math.round((player?.x??0)*2)},${Math.round((player?.z??0)*2)},${Math.round(x*2)},${Math.round(z*2)},${stage.boxes.length},${life?.boxes?.length??0},${regions?.length??0},${work.length}`;
+  let covered;
+  if (firstFrame3d) covered=new Set();
+  else if (cv._cover?.key===coverKey) covered=cv._cover.set;
+  else { covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails); cv._cover={key:coverKey,set:covered}; }
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site,covered,
     exterior,extended,people,animals,work,visibility,sight,regionDetails};
   const hover=!historical && campHover?.cv===cv.id?campHover:null;
@@ -1499,12 +1531,17 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     ? sceneGuidance(cv._cam,w,player,hoverHit,right) : [];
   const guideHeight=surfaceHeight;
   if (hints.length) impacts.push(...guideGeometry(hints,guideHeight));
-  if(!campRenderer.render({target:cv,stage,regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
+  // 首帧策略：第一张 3D 帧不出接触阴影、GL 内部半分辨率，先把 #cvA[data-renderer] 打出来；
+  // 同一 rAF 链的下一帧立刻按全分辨率+阴影重画（forceRepaint），所以停留画面与金样逐像素一致。
+  const renderT0=performance.now();
+  if(!campRenderer.render({target:cv,stage,regions:firstFrame3d?undefined:regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight,
       interior: Boolean(room),frame,light,sun,visibility,sight,season:open?climate.season:-1,weather,shadows,
-    physical:physicalLighting,animateParts}))return false;
+    physical:physicalLighting,animateParts,resolutionScale:firstFrame3d?FIRST_FRAME_SCALE:1}))return false;
+  perfMark('renderCall', renderT0);
+  const overlayT0=performance.now();
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   if (!historical && exterior && playerId==='cvA' && S.playing) advanceOutdoorIntent(cv._cam,w,player);
   if (open && !overview) paintWeather(g,climate,time,ratio);
@@ -1538,7 +1575,10 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
     }
   }
   cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null};
+  perfMark('overlay', overlayT0);
   cv.dataset.renderer='3d';
+  if(firstFrame3d){ cv._painted3d=true; forceRepaint=true; } // 下一帧全分辨率重画
+  if (perfSeg()) perfSeg().push({ k:'firstFrameAt', at:Number(performance.now().toFixed(1)) });
   return true;
 }
 
@@ -4642,6 +4682,8 @@ Object.assign(window.__lifeDebug, {
   replay: { range: loadReplayRange, at: showReplayAt, exit: exitReplay, active: () => S.replay, panel: () => S.replayRange,
     actProbe: (body = { kind: 'rest' }) => api('/act', { mode: 'compare', revision: S.compareRevision, ...body }) },
 });
+
+if (perfSeg()) perfSeg().push({ k:'moduleEvalEnd', at:Number(performance.now().toFixed(1)) });
 
 
 
