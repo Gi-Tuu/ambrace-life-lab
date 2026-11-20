@@ -12,7 +12,7 @@ test('ARCH-GATE-00 当前仓库三条闸门全绿（基线不假红）', () => {
   assert.deepEqual(report.problems, []);
   assert.ok(report.scanned > 100, `扫描文件数太少：${report.scanned}`);
   assert.ok(report.allowed.length > 0, '白名单一条都没命中，说明规则口径可能已漂移');
-  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-POS-01', 'ARCH-CLOCK-01']);
+  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-SPACE-01', 'ARCH-POS-01', 'ARCH-CLOCK-01']);
 });
 
 test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
@@ -76,31 +76,41 @@ test('ARCH-2D-01 测试/文档/证据/实验目录不计入运行路径', () => 
   assert.equal(scanned, 1, '只有 web/app.js 算运行路径');
 });
 
-test('ARCH-STEP-01 peripheralStepCap 只允许 app.js 的 legacy fallback', () => {
-  const outside = run([file('scripts/probe.mjs', 'const step = peripheralStepCap(snapshot, dt);\n')]);
-  assert.equal(outside.problems.length, 1);
-  assert.match(outside.problems[0], /\[ARCH-STEP-01\]/);
+test('ARCH-STEP-01 peripheralStepCap 已退役：任何运行路径出现即红', () => {
+  for (const path of ['scripts/probe.mjs', 'web/app.js', 'web/player-move.mjs']) {
+    const report = run([file(path, 'const step = peripheralStepCap(snapshot, dt);\n')]);
+    assert.equal(report.problems.length, 1, `${path} 应红：${JSON.stringify(report.problems)}`);
+    assert.match(report.problems[0], /\[ARCH-STEP-01\]/);
+  }
+  assert.deepEqual(run([file('web/app.js', 'const step = Math.min(step, playerStepCap(snapshot, dt));\n')]).problems, []);
+});
 
-  const formal = run([file('web/app.js', 'if (spaceMove) step = Math.min(step, peripheralStepCap(snapshot, dt));\n')]);
-  assert.equal(formal.problems.length, 1, '同一行含 spaceMove 必须红');
-
-  const formal2 = run([file('web/app.js', 'step = playerGameStep(snapshot, dt) || peripheralStepCap(snapshot, dt);\n')]);
-  assert.equal(formal2.problems.length, 1, '同一行含 playerGameStep 必须红');
-
-  const legacy = [
-    '    if (spaceMove) step=Math.min(step, playerStepCap(snapshot,dt));',
-    '    else if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));',
-    '',
-  ].join('\n');
-  assert.deepEqual(run([file('web/app.js', legacy)]).problems, []);
-
-  const noGuard = [
-    '    if (!inCamp(walker.x+.5,walker.y+.5)) step=Math.min(step, peripheralStepCap(snapshot,dt));',
-    '',
-  ].join('\n');
-  assert.equal(run([file('web/app.js', noGuard)]).problems.length, 1, '缺 if (spaceMove) 前置守卫必须红');
-
-  assert.deepEqual(run([file('web/app.js', 'function peripheralStepCap(snapshot, dt) {\n')]).problems, []);
+test('ARCH-SPACE-01 旧空间开关/包装/房间像素行走逐条能变红，测试与 docs 不误报', () => {
+  const cases = [
+    ["export const spaceQueriesEnabled = () => true;\n", /spaceQueriesEnabled/],
+    ["const q = process.env['SPACE_V1'];\n", /SPACE_V1/],
+    ['if (globalThis.__SPACE_LEGACY__ === true) return null;\n', /__SPACE_LEGACY__/],
+    ["const legacy = location.search.includes('space=legacy');\n", /space=legacy/],
+    ['const map = campBodyWorld(world, true);\n', /campBodyWorld/],
+    ['const pixels = roomPixelWalk(site);\n', /roomPixelWalk/],
+    ['if (!roomBodyFits(site, cells, pixels, bounds, x, y)) return;\n', /roomBodyFits/],
+    ['const [x,z] = moveRoomFeet(cells, x, y, dx, dz, pixels, fits, bounds);\n', /moveRoomFeet/],
+    ['if (!roomAllows(cells, px, py, pixels, bounds)) return false;\n', /roomAllows/],
+  ];
+  for (const [text, re] of cases) {
+    const report = run([file('web/app.js', text)]);
+    assert.equal(report.problems.length, 1, `${text.trim()} 应红：${JSON.stringify(report.problems)}`);
+    assert.match(report.problems[0], /\[ARCH-SPACE-01\]/);
+    assert.ok(re.test(report.problems[0]), report.problems[0]);
+  }
+  // 研究夹具用 legacy* 命名，不得被 \b 误伤；测试/文档/证据目录不参与。
+  assert.deepEqual(run([file('life/research-space.mjs',
+    'export function legacyCampBodyWorld(world) { return world; }\nexport function legacyMoveRoomFeet() {}\n')]).problems, []);
+  assert.deepEqual(run([
+    file('life/space.test.mjs', 'campBodyWorld; roomPixelWalk; SPACE_V1;\n'),
+    file('docs/old.md', "space=legacy SPACE_V1 campBodyWorld\n"),
+    file('evidence/x.log', 'roomPixelWalk\n'),
+  ]).problems, []);
 });
 
 test('ARCH-POS-01 位置字段只允许白名单整字段写入', () => {

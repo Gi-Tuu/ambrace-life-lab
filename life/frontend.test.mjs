@@ -160,7 +160,9 @@ test('F10 树生成必须排除田块（田里长树是可见的常识错误）'
   // 闸门改为钉共享实现 + app.js 必须委托它，防止有人把树循环抄回 app.js 时丢掉田块排除。
   const CONTENT = readFileSync('shared/camp-scene-content.mjs', 'utf8');
   assert.match(CONTENT, /onFarm\(tx \+ \.5, ty \+ \.5, 2\)/, '树循环缺少田块排除（树会长进田里）');
-  assert.match(APP, /campSceneContent\(\{/, 'app.js 必须使用共享场景内容生成器');
+  // P4：content 与 stage 一起由 campSceneBundle 生成（同一输入、同一结果），app.js 必须委托它。
+  assert.match(APP, /campSceneBundle\(\{/, 'app.js 必须使用共享场景入口 campSceneBundle');
+  assert.match(CONTENT, /export function campSceneBundle\(/, '缺少共享场景入口');
 });
 
 test('F11 首次进入三步引导：只出现一次、可跳过、动作能推进', () => {

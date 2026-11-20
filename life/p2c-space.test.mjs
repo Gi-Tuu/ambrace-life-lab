@@ -107,12 +107,14 @@ test('P2c-03 静态闸门：旧位置字段只在 actor-pos/迁移/研究快照�
     }
   }
   assert.deepEqual(bad, [], `旧位置字段被独立写入：\n${bad.join('\n')}`);
-  // 房间像素路径只能在 legacy 分支里出现；正式路径必须走 roomSurface。
+  // P4：室内只有 roomSurface（16×12 世界空间）；旧像素行走/体半径判定必须彻底消失。
   const app = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
   assert.match(app, /roomSpaceFor\(/);
   assert.match(app, /roomSurface\(/);
   assert.match(app, /portalAt\(/);
-  assert.match(app, /SPACE_LEGACY\?null:roomSpaceFor\(site\)/);
+  assert.match(app, /moveRoomSurface\(/);
+  assert.equal(/roomPixelWalk|moveRoomFeet|roomBodyFits|roomAllows|SPACE_LEGACY/.test(app), false,
+    '正式室内路径仍含旧像素实现');
 });
 
 test('P2c-04 房间是显式 16×12 世界空间：门 portal、墙/家具/越界拒绝', () => {

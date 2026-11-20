@@ -1,11 +1,13 @@
 // P2 第一刀：服务端接入闸门（空间一致 / 速度预算 / 旧档连续 / 研究态不变 / fallback 开关）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createSurvPlay, survView, dumpSurv, loadSurv } from './survplay.mjs';
 import { startMove, RESIDENT_UNITS_PER_TICK, PLAYER_UNITS_PER_TICK } from './body.mjs';
 import { GAME_RESIDENT_UNITS_PER_TICK } from './body.mjs';
 import { playerReach } from './survplay-camp.mjs';
-import { constructionSpace, spaceQueriesEnabled } from './construction-access.mjs';
+import { constructionSpace } from './construction-access.mjs';
+import { legacyGroundQuery } from './research-space.mjs';
 import { campSite, campEntrance } from '../shared/camp-interaction.mjs';
 import { campBridgeBounds } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
@@ -137,16 +139,21 @@ test('P2-07 服务端 construction space：岸带收紧、桥可走、桥面高�
   assert.equal(portal?.room, 'hall');
 });
 
-test('P2-08 fallback 开关：SPACE_V1=0 时 groundQuery 回退旧实现', () => {
-  const old = process.env.SPACE_V1;
-  try {
-    delete process.env.SPACE_V1;
-    assert.equal(spaceQueriesEnabled(), true);
-    process.env.SPACE_V1 = '0';
-    assert.equal(spaceQueriesEnabled(), false);
-  } finally {
-    if (old === undefined) delete process.env.SPACE_V1; else process.env.SPACE_V1 = old;
+test('P2-08/P4 fallback 开关已退役：正式模块没有开关，旧谓词只在研究夹具里', () => {
+  // 正式模块里不许再有开关函数/环境变量分支；退役谓词只保留在 life/research-space.mjs。
+  const formal = ['../life/construction-access.mjs', '../life/camp-play.mjs', '../web/app.js'];
+  for (const rel of formal) {
+    const text = readFileSync(new URL(rel, import.meta.url), 'utf8');
+    assert.equal(/SPACE_V1|spaceQueriesEnabled|__SPACE_LEGACY__|space=legacy/.test(text), false, `${rel} 仍有旧空间开关`);
   }
+  // 研究夹具保留旧谓词：它必须在“岸带”上与正式 space 给出不同答案（证明被替换的是真的旧实现）。
+  const sp = start(), w = sp.world;
+  const legacy = legacyGroundQuery({ mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, districts: w.districts });
+  const { riverCenter, riverHalfWidth } = campTerrain(w.mapSeed, true, w.layoutVersion);
+  const z = 10;
+  const bankX = (riverCenter(z * 16) + riverHalfWidth(z * 16) + 1.5) / 16;
+  assert.equal(legacy(bankX, z), true, '旧谓词只看河面，岸带放行');
+  assert.equal(constructionSpace(w).walkable(bankX, z, 0), false, '正式 space 岸带不可走');
 });
 
 test('P2-09 客户端速度换算与服务端预算同一函数：冲刺恰好卡在 cap 上', () => {

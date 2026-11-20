@@ -7,8 +7,8 @@ import { playerReach } from './survplay-camp.mjs';
 import { constructionSpace, sceneSpace, roomSpaceOf } from './construction-access.mjs';
 import { startMove, RESIDENT_UNITS_PER_TICK, GAME_RESIDENT_UNITS_PER_TICK } from './body.mjs';
 import { worldSite } from './geometry.mjs';
-import { campSurface, createSpace, travelTicks, unitsPerTick, GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';import { campSceneContent, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
-import { outdoorStage } from '../shared/camp-scene.mjs';
+import { campSurface, createSpace, travelTicks, unitsPerTick, wildSurface, GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
+import { campSceneBundle, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { astar } from '../web/walk.mjs';
 import { pixelPath } from '../shared/asset-collision.mjs';
@@ -21,24 +21,21 @@ const start = (seed = 13, extra = {}) => createSurvPlay(seed, { ...FORMAL, mapSe
 const lcg = (seed) => { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; };
 
 // 客户端 buildWorld 的 stage/space 语义（Node 侧复刻）：同一份 content，不得单独写第二套。
+// P4：与 web/app.js 的 buildWorld 用同一个 campSceneBundle + 同一条 content.landscape 高度链。
 function clientSpaceFromView(v) {
   const live = campSitesOf({ rooms: v.rooms, districts: v.districts, layout: v.layout, peripheralHomes: v.peripheralHomes });
   const sites = staticCampSites(live, v.districts, v.peripheralHomes);
-  const content = campSceneContent({
+  const { content, stage } = campSceneBundle({
     mapSeed: v.mapSeed, layoutVersion: v.layoutVersion ?? 0, layout: v.layout ?? null,
     camp: v.camp, timber: Boolean(v.camp?.timber), sites,
     districts: v.districts, peripheralHomes: v.peripheralHomes,
     households: v.households, homeRoads: v.homeRoads, ecoSources: v.ecoSources,
   });
-  const stage = outdoorStage({
-    tw: 120, th: 80, sites, trees: content.trees, grass: [],
-    hills: content.landscape ? [] : content.hills,
-    height: content.landscape?.height, layoutSeed: v.layout ? v.mapSeed : null,
-  }, content.bridges, content.rocks);
   const crossing = v.layout?.crossZ ?? 24;
   const space = createSpace({
-    camp: campSurface({ mapSeed: v.mapSeed, layoutVersion: v.layoutVersion ?? 0, layout: v.layout ?? null, stage, raised: Boolean(v.camp) }),
-    wild: { walkable: (x, z) => Boolean(content.landscape?.walkable(x, z, crossing)), height: (x, z) => content.landscape?.height(x, z) ?? 0 },
+    camp: campSurface({ mapSeed: v.mapSeed, layoutVersion: v.layoutVersion ?? 0, layout: v.layout ?? null, stage, terrain: content.landscape }),
+    wild: wildSurface(content.landscape, { crossing }),
+    terrain: content.landscape,
   });
   return { space, content, stage };
 }

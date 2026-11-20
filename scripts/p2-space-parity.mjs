@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromeGate } from '../life/chrome-gate.mjs';
-import { createSurvPlay } from '../life/survplay.mjs';
+import { createSurvPlay, survView } from '../life/survplay.mjs';
 import { constructionSpace, sceneSpace } from '../life/construction-access.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, generateCampLayout } from '../shared/camp-layout.mjs';
@@ -117,10 +117,13 @@ function samplesFor(mapSeed, layoutVersion) {
   return points;
 }
 
-const CLIENT_FN = `async (points, seed, version, layout) => {
+const CLIENT_FN = `async (points, seed, version, layout, view) => {
   const S = window.__lifeDebug.S;
   const base = S.view;
-  const w = { ...base, mapSeed: seed, layoutVersion: version, ...(layout ? { layout } : {}) };
+  // P4：heightAt 现在包含同一条地形链，客户端必须拿到**与该世界完全相同的输入**
+  // （districts/peripheralHomes/households/homeRoads/ecoSources…），否则比较的是两套输入。
+  // 生产路径本来就是服务端 survView 同一份快照；强制 seed 例由 Node 侧 survView 提供。
+  const w = view ? { ...base, ...view } : { ...base, mapSeed: seed, layoutVersion: version, ...(layout ? { layout } : {}) };
   const world = window.__lifeDebug.buildWorld(w);
   if (!world.space) return { space: false };
   const space = world.space;
@@ -222,8 +225,8 @@ try {
   const meta = await evaluate(cdp, '(() => { const s=window.__lifeDebug.S.view; return {mapSeed:s?.mapSeed??13,layoutVersion:s?.layoutVersion??2}; })()', sid);
   log('host meta ' + JSON.stringify(meta));
 
-  const runClient = async (points, seed, version, layout) => {
-    const client = await evaluate(cdp, `(${CLIENT_FN})(...${JSON.stringify([points, seed, version, layout ?? null])})`, sid);
+  const runClient = async (points, seed, version, layout, view = null) => {
+    const client = await evaluate(cdp, `(${CLIENT_FN})(...${JSON.stringify([points, seed, version, layout ?? null, view])})`, sid);
     if (!client.space) throw new Error('客户端 buildWorld().space 未建立');
     if (client.rows.length !== points.length) throw new Error('客户端返回行数不符');
     return client;
@@ -253,12 +256,20 @@ try {
     if (!(walk.moved > 0.05)) process.exitCode = 6;
   }
   // 例 2：强制 seed 13 / v2，覆盖桥面与门 portal。
+  // 客户端必须用这个世界的 survView（与生产中 provider 下发的快照同一份输入），
+  // 不能拿宿主 view 改 seed/layout —— 那会把 districts/households 留在宿主世界，比较失去意义。
   {
     const seed = 13, version = 2;
+    const opts = {
+      gameRules: true, mapSeed: seed, layoutVersion: version, settlementLife: true,
+      regionalWork: true, independentWorld: true, residentialDecisions: true, unifiedCooperation: true, actTimeModel: true,
+    };
+    const sp = createSurvPlay(seed, opts);
+    const view = survView(sp);
     const layout = generateCampLayout(seed, version);
     const points = samplesFor(seed, version);
-    const client = await runClient(points, seed, version, layout);
-    const server = serverSpace(seed, version);
+    const client = await runClient(points, seed, version, layout, view);
+    const server = constructionSpace(sp.world) ?? sceneSpace(sp.world);
     cases.push(compare('seed13v2', seed, version, client, server, points));
   }
 

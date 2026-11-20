@@ -1,7 +1,7 @@
 // 架构闸门（零依赖）：把审计结论固化成静态规则，而不是只留在回报里。
 //   ARCH-2D-01   退役的 2D 烘焙/渲染符号不得回流（P0 删烘焙、P3 清 2D 符号）；
-//   ARCH-STEP-01 peripheralStepCap 只能留在 web/app.js 的 legacy fallback 分支，
-//                正式 spaceMove 路径必须用 playerGameStep/playerStepCap（P2）；
+//   ARCH-STEP-01 peripheralStepCap 已退役：正式路径村内/村外同一 speedBudget（P4 删回退分支）；
+//   ARCH-SPACE-01 正式路径只走 life/space.mjs：旧空间开关/体半径包装/像素行走不得回流（P4）；
 //   ARCH-POS-01  位置字段只允许由白名单模块整字段写入（P2c：actor.pos 是唯一事实）。
 // 用法：
 //   node scripts/arch-gates.mjs                 单独跑，失败退出码 1
@@ -15,7 +15,8 @@ export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const RULES = [
   { id: 'ARCH-2D-01', title: '退役的 2D 烘焙/渲染符号不得回流' },
-  { id: 'ARCH-STEP-01', title: 'peripheralStepCap 只能留在 legacy fallback 分支' },
+  { id: 'ARCH-STEP-01', title: 'peripheralStepCap 已退役：村内/村外只走同一 speedBudget' },
+  { id: 'ARCH-SPACE-01', title: '正式路径只走 life/space.mjs：旧空间开关/包装/像素行走不得回流' },
   { id: 'ARCH-POS-01', title: '位置字段只能由白名单模块整字段写入' },
   { id: 'ARCH-CLOCK-01', title: '正式模块不得把 world.t 当可写事实（派生时钟唯一）' },
 ];
@@ -93,10 +94,21 @@ const TIME_WAIT_LEGACY = [
   },
 ];
 
-const STEP_DEF = /function\s+peripheralStepCap\s*\(/;
-const STEP_FORMAL_CONTEXT = /\bspaceMove\b|\bplayerGameStep\b/;
-const STEP_LEGACY_GUARD = /\bif\s*\(\s*spaceMove\s*\)/;
-const STEP_LEGACY_CALL = /!inCamp\(/;
+// ── ARCH-SPACE-01 ────────────────────────────────────────────────────────────
+// 正式游戏只有一个空间权威：life/space.mjs。下面这些是 P2/P2b/P2c 期间的运行时开关与旧包装；
+// P4 之后正式文件里出现任何一处都判红。退役实现以 legacy* 命名留在 life/research-space.mjs
+// （研究夹具，名称不匹配这些 \b 边界），正式模块不得 import 它。
+const SPACE_LEGACY = [
+  { re: /\bSPACE_V1\b/, why: '服务端旧地面回退开关已删除；地面谓词只有 constructionSpace().walkable' },
+  { re: /\bspaceQueriesEnabled\b/, why: '空间开关函数已删除；正式路径没有“走 space / 走旧谓词”的分叉' },
+  { re: /\b__SPACE_LEGACY__\b/, why: '宿主注入的客户端回退开关已删除' },
+  { re: /space=legacy/, why: '客户端 URL 回退开关已删除；退役实现只在研究夹具里' },
+  { re: /\bcampBodyWorld\b/, why: '每帧复制 world 再膨胀像素栅格的包装已删除；寻路索引 world.pathGrid 在构建期算一次' },
+  { re: /\broomPixelWalk\b/, why: '房间像素行走已删除；室内移动只走 roomSurface（16×12 世界空间）' },
+  { re: /\broomBodyFits\b/, why: '室内体半径像素判定已删除；只问 roomSurface.walkable(x,z,CAMP_BODY_RADIUS)' },
+  { re: /\bmoveRoomFeet\b/, why: '房间像素级推进已删除；室内推进只走 moveRoomSurface' },
+  { re: /\broomAllows\b/, why: '房间像素谓词已删除；室内可走性只由 roomSurface 回答' },
+];
 
 // ── ARCH-CLOCK-01 ────────────────────────────────────────────────────────────
 // 正式世界（world.simClock 存在）的 `t` 是 floor(nowMinutes/60) 的派生读法。
@@ -169,20 +181,13 @@ export function archGateReport({ root = ROOT, files } = {}) {
       }
 
       if (/\bperipheralStepCap\b/.test(line)) {
-        if (path !== 'web/app.js') {
-          problems.push(problem('ARCH-STEP-01', path, lineNo, line, 'peripheralStepCap 只允许留在 web/app.js 的 legacy fallback'));
-        } else if (STEP_DEF.test(line)) {
-          allowed.push({ rule: 'ARCH-STEP-01', path, line: lineNo, why: 'legacy fallback 的唯一实现，正式路径用 playerGameStep/playerStepCap' });
-        } else {
-          const guard = STEP_LEGACY_GUARD.test(lines[i - 1] ?? '') || STEP_LEGACY_GUARD.test(lines[i - 2] ?? '');
-          if (STEP_FORMAL_CONTEXT.test(line)) {
-            problems.push(problem('ARCH-STEP-01', path, lineNo, line, '正式 spaceMove/playerGameStep 路径不得使用 legacy peripheralStepCap'));
-          } else if (!STEP_LEGACY_CALL.test(line) || !guard) {
-            problems.push(problem('ARCH-STEP-01', path, lineNo, line, '不在 legacy fallback 分支（缺 !inCamp 调用或 if (spaceMove) 前置守卫）'));
-          } else {
-            allowed.push({ rule: 'ARCH-STEP-01', path, line: lineNo, why: 'legacy fallback：if (spaceMove) 之前的 else 分支，村外旧快照才走' });
-          }
-        }
+        problems.push(problem('ARCH-STEP-01', path, lineNo, line,
+          'peripheralStepCap 已退役：正式路径村内/村外同一 speedBudget（playerGameStep/playerStepCap）'));
+      }
+
+      for (const rule of SPACE_LEGACY) {
+        if (!rule.re.test(line)) continue;
+        problems.push(problem('ARCH-SPACE-01', path, lineNo, line, rule.why));
       }
 
       if (POS_WRITE.test(line)) {

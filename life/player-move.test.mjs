@@ -3,9 +3,11 @@
 // 变红法写在每条 test 名里：把对应的实现改坏，必须红。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-  TILE, rectGap, campBodyWorld, exteriorAllows, detourAroundBodies, routeForWalker,
+  TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker,
 } from '../web/player-move.mjs';
+import { legacyCampBodyWorld } from './research-space.mjs';
 import { postJson, persistNotices } from '../web/net.mjs';
 
 const makeGrid = (tw, th, fill = 1) => ({ tw, th, walk: new Uint8Array(tw * th).fill(fill) });
@@ -21,16 +23,18 @@ test('P3-02 TILE 由行走几何模块拥有，且仍是 16 【变红法：把 1
   assert.equal(TILE, 16);
 });
 
-test('P3-03 campBodyWorld：返回新栅格、不改写输入、openEdge 真的改变结果 【变红法：返回 world 本身】', () => {
+test('P3-03/P4 体半径栅格包装只在研究夹具里：返回新栅格、不改写输入、openEdge 真的改变结果', () => {
   const world = { tw: 24, th: 24, collisionGrid: makeGrid(24, 24) };
-  const closed = campBodyWorld(world);
+  const closed = legacyCampBodyWorld(world);
   assert.notEqual(closed.collisionGrid, world.collisionGrid, '必须给出新栅格对象');
   assert.equal(world.collisionGrid.walk[0], 1, '输入栅格不得被改写');
   assert.equal(closed.tw, world.tw, '其它字段要沿用 world');
-  const open = campBodyWorld(world, true);
+  const open = legacyCampBodyWorld(world, true);
   assert.equal(open.collisionGrid.walk[0], 1, 'openEdge 下边缘格也可走');
   assert.equal(closed.collisionGrid.walk[0], 0, '非 openEdge 下贴边格要按身体半径挖掉');
   assert.notDeepEqual(open.collisionGrid.walk, closed.collisionGrid.walk, 'openEdge 必须真的不同');
+  // 正式模块不得再提供这个包装（正式路径统一到 space collider + 构建期 pathGrid）。
+  assert.equal(/campBodyWorld/.test(readFileSync(new URL('../web/player-move.mjs', import.meta.url), 'utf8')), false);
 });
 
 test('P3-04 exteriorAllows：没有地形就是 false；有地形时按身体半径躲开外围实体 【变红法：删掉 outsideSolids 检查】', () => {
@@ -45,26 +49,26 @@ test('P3-04 exteriorAllows：没有地形就是 false；有地形时按身体半
   assert.equal(exteriorAllows(wall, 4, 2), false, '地形自己说不可走就不行');
 });
 
-test('P3-05 routeForWalker：通路给出路径、封死给 null，且不改写世界的碰撞栅格 【变红法：把 return null 改成 return [] 】', () => {
-  const open = { tw: 24, th: 24, collisionGrid: makeGrid(24, 24) };
+test('P3-05 routeForWalker：通路给出路径、封死给 null，且不改写世界的寻路栅格 【变红法：把 return null 改成 return [] 】', () => {
+  const open = { tw: 24, th: 24, pathGrid: makeGrid(24, 24) };
   const path = routeForWalker(open, { x: 2, y: 2 }, [10, 10]);
   assert.ok(Array.isArray(path) && path.length > 0, '空旷地图应当能找到路');
   const last = path.at(-1);
   assert.ok(Math.hypot(last[0] - 10, last[1] - 10) < 1.5, `路径终点应落在目标附近，实际 ${JSON.stringify(last)}`);
 
-  const walled = { tw: 24, th: 24, collisionGrid: makeGrid(24, 24) };
-  for (let y = 0; y < 24; y += 1) walled.collisionGrid.walk[y * 24 + 12] = 0;
+  const walled = { tw: 24, th: 24, pathGrid: makeGrid(24, 24) };
+  for (let y = 0; y < 24; y += 1) walled.pathGrid.walk[y * 24 + 12] = 0;
   assert.equal(routeForWalker(walled, { x: 2, y: 2 }, [20, 2]), null, '中间整列封死时必须给 null');
-  assert.equal(walled.collisionGrid.walk[0], 1, '寻路过程不得改写世界的碰撞栅格');
+  assert.equal(walled.pathGrid.walk[0], 1, '寻路过程不得改写世界的寻路栅格');
 });
 
 test('P3-06 detourAroundBodies：附近没人返回 null；有人时只读栅格副本 【变红法：把 grid.walk.slice() 改成 grid.walk】', () => {
-  const world = { tw: 24, th: 24, collisionGrid: makeGrid(24, 24) };
+  const world = { tw: 24, th: 24, pathGrid: makeGrid(24, 24) };
   const walker = { x: 4, y: 4, path: [[10, 10]] };
   assert.equal(detourAroundBodies(world, walker, []), null, '附近没有人时不该绕');
-  const before = Array.from(world.collisionGrid.walk);
+  const before = Array.from(world.pathGrid.walk);
   detourAroundBodies(world, walker, [{ x: 5.5, z: 5.5, r: 0.4 }]);
-  assert.deepEqual(Array.from(world.collisionGrid.walk), before, '绕人不能把障碍写回世界栅格');
+  assert.deepEqual(Array.from(world.pathGrid.walk), before, '绕人不能把障碍写回世界栅格');
 });
 
 test('P4-01 persistNotices：存档失败/成功的判定与抽离前逐字一致 【变红法：把 persisted===false 的分支删掉】', () => {

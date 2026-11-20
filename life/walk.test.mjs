@@ -76,7 +76,8 @@ test('K5 stepWalker：沿路径匀速推进、置 moving、按横向翻面、到
 test('八方向使用实际位移；斜走等速且受原碰撞约束', () => {
   const offsets=[[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1]];
   const names=['down','down-left','left','up-left','up','up-right','right','down-right'];
-  const w=open(10,10);
+  // P4：可走性只问 world.space；这个夹具给一个恒放行的空间桩。
+  const w={...open(10,10),space:{walkable:()=>true}};
   for (const [i,[dx,dz]] of offsets.entries()) {
     const unit=Math.hypot(dx,dz);
     const [x,z]=moveMapFeet(w,4,4,dx/unit*.2,dz/unit*.2);
