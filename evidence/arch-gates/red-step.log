@@ -1,0 +1,2 @@
+✖ 静态检查失败：1 项
+  - life/zz-arch-gate-probe.mjs:1: [ARCH-STEP-01] peripheralStepCap 只允许留在 web/app.js 的 legacy fallback（命中 `export const probe = () => peripheralStepCap(null, 0);`）

@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
+import { archGateReport } from './arch-gates.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const rel = (p) => p.split(sep).join('/');
@@ -169,10 +170,15 @@ try {
   else if (!(e instanceof ReferenceError)) fail('web/app.js 真 import() 抛出非预期错误：' + String(e?.message ?? e).slice(0, 160));
 }
 
+// 7) 架构闸门：把 P0/P1/P2/P2c 的审计结论钉成静态规则（scripts/arch-gates.mjs）。
+//    规则表、白名单与逐条理由都在那个文件里；这里只负责汇总成 check 的失败项。
+const arch = archGateReport();
+for (const p of arch.problems) fail(p);
+
 // 汇总
 if (problems.length) {
   console.error(`✖ 静态检查失败：${problems.length} 项`);
   for (const p of problems) console.error(`  - ${p}`);
   process.exit(1);
 }
-console.log(`✔ 静态检查通过：语法 ${checked} 个文件 · import 图已解析 · JSON ${jsons.length} 份 · 引擎纪律 ${ENGINE.length} 个模块 · 测试文件 ${testFiles.length} 个`);
+console.log(`✔ 静态检查通过：语法 ${checked} 个文件 · import 图已解析 · JSON ${jsons.length} 份 · 引擎纪律 ${ENGINE.length} 个模块 · 测试文件 ${testFiles.length} 个 · 架构闸门 ${arch.scanned} 文件/${arch.allowed.length} 白名单`);

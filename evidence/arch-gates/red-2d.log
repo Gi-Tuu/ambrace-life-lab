@@ -1,0 +1,9 @@
+✖ 静态检查失败：8 项
+  - life/zz-arch-gate-probe.mjs:1: [ARCH-2D-01] P0 已删 2D 地形烘焙；地表分类只能走 terrainKinds()（命中 `export const a = 'paintTerrain';`）
+  - life/zz-arch-gate-probe.mjs:2: [ARCH-2D-01] P0 已删整张世界像素缓冲；地面只能来自 regionAtlas（命中 `export const b = 'groundPixels';`）
+  - life/zz-arch-gate-probe.mjs:3: [ARCH-2D-01] P3 已把地面 sampler 改名为 uRegionAtlas；uGround 是退役的 2D 底图（命中 `export const c = 'uGround';`）
+  - life/zz-arch-gate-probe.mjs:4: [ARCH-2D-01] P3 已删水掩码分支（river/basin 由 region 数据判定）（命中 `export const d = 'uWater';`）
+  - life/zz-arch-gate-probe.mjs:5: [ARCH-2D-01] P0 已删 ?view=2d 单入口，运行时只允许 3D（命中 `export const e = "view === '2d'";`）
+  - life/zz-arch-gate-probe.mjs:6: [ARCH-2D-01] P0 已删 ?view=2d 单入口，运行时只允许 3D（命中 `export const f = "view==='2d'";`）
+  - life/zz-arch-gate-probe.mjs:7: [ARCH-2D-01] P0 已删 ?view=2d 单入口，运行时只允许 3D（命中 `export const g = '/?view=2d';`）
+  - life/zz-arch-gate-probe.mjs:8: [ARCH-2D-01] P1 正式连续时钟路径不设 TIME_WAIT 拒绝（命中 `export const h = 'TIME_WAIT';`）

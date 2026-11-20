@@ -1,0 +1,18 @@
+  · 白名单 life/actor-pos.mjs:212: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/actor-pos.mjs:216: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/actor-pos.mjs:251: [ARCH-POS-01] 唯一位置写入口：pos 与派生索引在同一事务里同步
+  · 白名单 life/agent.mjs:566: [ARCH-2D-01] trace 文案映射：budget.code 只可能由上面 resident-time 的 legacy 分支产生
+  · 白名单 life/build-efficiency.mjs:14: [ARCH-POS-01] 离线消融夹具：直接构造 occupancy
+  · 白名单 life/camp-instances.mjs:399: [ARCH-POS-01] forkCamp 的 survival 夹具：离线构造玩家位置
+  · 白名单 life/camp-instances.mjs:400: [ARCH-POS-01] forkCamp 的 survival 夹具：离线构造玩家位置
+  · 白名单 life/host-world.mjs:730: [ARCH-POS-01] 研究/城镇快照恢复：不是 survival 存档，也没有 w.pos
+  · 白名单 life/host-world.mjs:756: [ARCH-POS-01] 研究/城镇快照恢复：不是 survival 存档，也没有 w.pos
+  · 白名单 life/m3-planner.mjs:35: [ARCH-POS-01] s 是 planner 的 ActionState（动作目标地点），不是世界/居民位置
+  · 白名单 life/m3-planner.mjs:38: [ARCH-POS-01] s 是 planner 的 ActionState（动作目标地点），不是世界/居民位置
+  · 白名单 life/resident-time.mjs:169: [ARCH-2D-01] legacy 60 分钟刻/日池：world.simClock 关闭时（研究态/旧时间模型）才走这里
+  · 白名单 life/survplay-actions.mjs:120: [ARCH-2D-01] legacy !w.simClock 分支：正式连续路径在 if (w.simClock) 内不设拒绝
+  · 白名单 life/survplay-save.mjs:104: [ARCH-POS-01] 旧档迁移：没有 pos 的历史存档按 loc/playerPos 补齐
+  · 白名单 web/app.js:656: [ARCH-STEP-01] legacy fallback 的唯一实现，正式路径用 playerGameStep/playerStepCap
+  · 白名单 web/app.js:4662: [ARCH-STEP-01] legacy fallback：if (spaceMove) 之前的 else 分支，村外旧快照才走
+  · 白名单 web/app.js:4672: [ARCH-STEP-01] legacy fallback：if (spaceMove) 之前的 else 分支，村外旧快照才走
+✔ 架构闸门通过：扫描 320 个运行路径文件 · 3 条规则 · 白名单 17 处

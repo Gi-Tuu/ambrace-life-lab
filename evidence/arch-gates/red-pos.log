@@ -1,0 +1,2 @@
+✖ 静态检查失败：1 项
+  - life/zz-arch-gate-probe.mjs:1: [ARCH-POS-01] 位置字段只能由 actor-pos.mjs 等白名单模块整字段写入（w.pos 是唯一事实）（命中 `export const probe = (w) => { w.playerPos = {}; };`）
