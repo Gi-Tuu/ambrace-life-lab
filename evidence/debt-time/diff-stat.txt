@@ -1,0 +1,15 @@
+ life/agent.mjs            | 81 +++++++++++++++++++++++++++++++++++++----------
+ life/arch-gates.test.mjs  | 35 ++++++++++++++------
+ life/body.mjs             | 11 +++++++
+ life/dialogue.mjs         | 59 +++++++++++++++++++++++++++++-----
+ life/host-model.mjs       | 16 +++++++---
+ life/host-replay.mjs      |  4 ++-
+ life/host-world.mjs       | 24 +++++++-------
+ life/host.mjs             | 71 ++++++++++++++++++++++++++++++++++++-----
+ life/resident-time.mjs    |  5 ++-
+ life/sim-clock.mjs        | 33 +++++++++++++++++++
+ life/survplay-actions.mjs | 25 +++++----------
+ life/survplay-save.mjs    | 16 ++++++----
+ life/survplay.mjs         | 43 +++++++++++++------------
+ scripts/arch-gates.mjs    | 39 +++++++++++++----------
+ 14 files changed, 339 insertions(+), 123 deletions(-)

@@ -1,0 +1,49 @@
+{
+  "_说明": "时间债务收口复跑五份研究面，用 log 字节 md5 对照 P3 更正台账（evidence/redo-p3/research-md5.corrected.json）。",
+  "generatedAt": "2026-11-20T08:16:38.960Z",
+  "algorithm": "md5",
+  "logDir": "evidence/debt-time/research",
+  "faces": {
+    "report": {
+      "log": "evidence/debt-time/research/report.log",
+      "md5": "de764430c8bc88cd8dbbc24512621e4f",
+      "bytes": 1886,
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedBytes": 1886,
+      "match": true
+    },
+    "sweep": {
+      "log": "evidence/debt-time/research/sweep.log",
+      "md5": "aadd4895e84ae657d5a1e22c132228b1",
+      "bytes": 2850,
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedBytes": 2850,
+      "match": true
+    },
+    "viab": {
+      "log": "evidence/debt-time/research/viab.log",
+      "md5": "b923787830eb26c3853ecf959987cf9d",
+      "bytes": 4526,
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedBytes": 4526,
+      "match": true
+    },
+    "recover": {
+      "log": "evidence/debt-time/research/recover.log",
+      "md5": "fe198109386d048356f2fa69312e5183",
+      "bytes": 12150,
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "expectedBytes": 12150,
+      "match": true
+    },
+    "metab": {
+      "log": "evidence/debt-time/research/metab.log",
+      "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "bytes": 13357,
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedBytes": 13357,
+      "match": true
+    }
+  },
+  "allMatch": true
+}
