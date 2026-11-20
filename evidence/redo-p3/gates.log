@@ -1,0 +1,44 @@
+✔ SEC5-01 纯函数：自选 nonce（无服务端校验器）永远不能授权 reset (0.6957ms)
+✔ SEC5-01 纯函数：只有服务端校验器认可的一次性 nonce 才放行 (0.2226ms)
+✔ SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 默认不授权；仅 allowNonce 的 MAIN reset 例外 (0.1444ms)
+✔ SEC5-01 HTTP：伪造头 + 自选 nonce 的一条 POST 重置必须 403 (1002.0024ms)
+✔ SEC5-01 HTTP：服务端签发 nonce + 会话 cookie 的浏览器路径可重置 (1018.1629ms)
+✔ SEC5-01 HTTP：CTL_TOKEN 姿态下无令牌/伪造头一律 403，Bearer 可用 (1296.0187ms)
+✔ SEC5-05 HTTP：令牌姿态下 MAIN survival_reset 走服务端 nonce（浏览器可用，脚本无凭据 403，3 次/分钟限速 + 审计） (1374.3408ms)
+✔ SEC5-05 HTTP：MAIN reset nonce 短 TTL，过期后必须重新取 (2165.3048ms)
+✔ DATA5-05 索引删除后重开仍归原 owner；重启从侧车重建索引 (5552.638ms)
+✔ SEC5-02 HTTP：/world?camp= 无 cookie 403、owner 200、他人 403 (1170.2662ms)
+✔ SEC5-05 重开已归属营地：不换 owner、不发新 cookie、明确 403 CAMP_OWNED (1089.6112ms)
+✔ SEC5-05 MAIN survival_reset：未设令牌时服务端 nonce 可重开一局（浏览器路径） (1001.2988ms)
+✔ SEC5-06 安全头/ cookie 标志：CSP、nosniff、frame-ancestors 白名单、Secure (973.4825ms)
+✔ SEC5-06 saveError 不回显绝对路径 (886.1309ms)
+✔ SEC5-03 MAIN catchup 统一冷却（连点第二次被拒） (980.8015ms)
+✔ SEC5-04 匿名配额：同一会话最多 5 个营地；NaN env 回落而不是 0 (1603.7169ms)
+✔ P3-01 web/ 不再有 re-export 壳：所有相对导出直接指向 shared/ (44.5854ms)
+✔ P3-02 2D 生成器退役：gen-pixel-assets/pack-assets/assets 脚本不再存在 (0.2181ms)
+✔ P3-03 死 2D 符号不得回流到运行路径 (0.5384ms)
+✔ P3-04 素材只剩 20 张活 PNG（16 地形 + 4 头像），清单不指向死文件 (0.5908ms)
+✔ P3-05 CSP 只放魔搭两域（含 *.ms.show），无裸 *、无 X-Frame-Options (0.3059ms)
+✔ P3-06 life/ 不整目录暴露、.env 不进镜像、Docker 只 COPY 运行必需目录 (0.3392ms)
+✔ R1 2D 烘焙整条链路已删：没有 canvas/ImageData/groundPixels/地形纹理 (1.1292ms)
+✔ R2 单一 3D 入口：?view=2d 与 2D 兜底绘制已删，硬失败提示保留 (0.4999ms)
+✔ R3 渲染器只保留 regionAtlas：uGround 2D 底图 / uWater 水掩码分支已删 (0.2154ms)
+✔ R4 资产只剩活清单：20 张 PNG（16 地形 + 4 头像），清单不指向不存在/死素材 (2.51ms)
+✔ R5 首屏加载并发 + 静态可复验缓存 (0.2605ms)
+✔ same-seed storm records the forecast, verified damage and every actual repair (3967.2269ms)
+✔ failed repair spends nothing and an actual withdrawal records its reason (102.1579ms)
+✔ journal retains a bounded tail and continues sequence after old and new saves (149.0169ms)
+✔ host exposes independent journal records in survival, A and B (653.2992ms)
+✔ B-01 正式游戏 5 种子 100 日：平均人口 ∈[4,10]、出生 ∈[10,32]、玩家全活 (22018.1298ms)
+✔ B-02 正式游戏 5 种子 200 日：灭绝 ∈[1,3]/5（目标 2–3，实测 1，未达标已标注） (34433.5145ms)
+✔ B-03 旧档缺 lifecycle：两次载入 stage 不跳变（继承当前默认） (118.2435ms)
+✔ B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显不繁荣 (21401.4696ms)
+✔ B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁荣 (34091.9895ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59500.2251

@@ -42,10 +42,12 @@ const MIME = {
 };
 
 // SEC5-06：统一安全头。CSP 只放同源脚本/样式/图片；防点击劫持靠 frame-ancestors 白名单。
-// 白名单是必须的而不是可选项：创空间永远以 iframe 嵌 *.ms.show 呈现，'none' 会让平台那一格
-// 被浏览器拦成空白页（2026-11-19 线上白屏的真因）。x-frame-options 表达不了"允许某个源"，
-// 留着 DENY 只会比 CSP 更严，所以这里去掉它，由 CSP 的白名单单独把关。
-const FRAME_ANCESTORS = "frame-ancestors 'self' https://modelscope.cn https://www.modelscope.cn";
+// 白名单是必须的而不是可选项：创空间页面本体在 https://<空间>.ms.show，再被 modelscope.cn 嵌一层，
+// 'none'（或漏掉 *.ms.show）会让平台那一格被浏览器拦成空白页（2026-11-19 线上白屏的真因）。
+// x-frame-options 表达不了"允许某个源"，留着 DENY 只会比 CSP 更严，所以这里不设它，由 CSP 白名单单独把关。
+// 只放开魔搭自己的两个域：https://*.ms.show（创空间实例）与 modelscope.cn（平台外层）；
+// 不允许裸 `*`，也不允许任意第三方源——那是放弃防点击劫持。
+const FRAME_ANCESTORS = "frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn";
 const SECURITY_HEADERS = Object.freeze({
   'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; " + FRAME_ANCESTORS,
   'x-content-type-options': 'nosniff',

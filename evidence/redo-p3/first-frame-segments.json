@@ -1,0 +1,28 @@
+{
+  "note": "首帧分段（临时 performance.mark/measure，量完已用 git checkout 还原；仅用于归因，不进运行路径）。环境：headless=new + --disable-gpu（ANGLE Microsoft Basic Render Driver），与 perf.json 同口径。c1 删除 shim 后、uRegionAtlas 改名前的测量；改名只动 uniform 名，不改耗时。",
+  "at": "2026-11-20T04:44:00Z",
+  "coldSurvival": {
+    "first3d": 837.5,
+    "appEval": { "start": 67, "duration": 137.7 },
+    "createCampRenderer": { "start": 67.3, "duration": 132.5 },
+    "buildWorld": { "start": 239.9, "duration": 254.7 },
+    "longtasks": [[66, 140], [228, 611]]
+  },
+  "coldTitle": {
+    "first3d": 704.6,
+    "appEval": { "start": 68, "duration": 135.9 },
+    "createCampRenderer": { "start": 68.1, "duration": 131.1 },
+    "titleDraw": { "start": 209.3, "duration": 495.3 },
+    "buildWorld": { "start": 209.6, "duration": 213.5 },
+    "longtasks": [[67, 138], [209, 497]]
+  },
+  "warmTitle": {
+    "first3d": 614.8,
+    "appEval": { "start": 77.7, "duration": 20.3 },
+    "createCampRenderer": { "start": 78, "duration": 14.1 },
+    "titleDraw": { "start": 103.2, "duration": 511.5 },
+    "buildWorld": { "start": 103.5, "duration": 226.9 },
+    "longtasks": [[103, 513]]
+  },
+  "conclusion": "标题首帧 = 模块求值(冷 136ms/热 20ms) + buildWorld(213–227ms) + 第一次 WebGL 绘制(约 280ms，驱动 shader 编译/纹理与 VBO 上传，JS profile 只记到 render self 19–22ms) + 少量脚手架。P2c 的 actor.pos/roomSpace/居民路径都不在首帧关键路径上：同 harness 下 P0 606.7ms、P2c 606.5ms、P3 602.9ms（warm title），差异 <5ms。"
+}

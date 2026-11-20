@@ -1,0 +1,4 @@
+✔ 静态检查通过：语法 455 个文件 · import 图已解析 · JSON 9 份 · 引擎纪律 23 个模块 · 测试文件 195 个
+(node:18204) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ 美术指纹一致：20 张素材未变（基线 node v24.18.0）

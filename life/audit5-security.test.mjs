@@ -234,11 +234,16 @@ test('SEC5-06 安全头/ cookie 标志：CSP、nosniff、frame-ancestors 白名�
     const res = await jsonGet(h.base, '/');
     const csp = res.headers.get('content-security-policy') ?? '';
     assert.match(csp, /default-src 'self'/);
-    // 所有者口径（2026-11-19 线上白屏复盘）：创空间永远用 iframe 嵌 *.ms.show 呈现，
-    // frame-ancestors 'none' 会让平台那一格被浏览器拦成空白页——白屏真因就是这个。
-    // 所以按源放行只放魔搭，绝不放开成 *。
-    assert.match(csp, /frame-ancestors 'self' https:\/\/modelscope\.cn https:\/\/www\.modelscope\.cn/);
-    assert.equal(/frame-ancestors[^;]*\*/.test(csp), false, 'frame-ancestors 不许出现 *：那等于放弃防点击劫持');
+    // 所有者口径（2026-11-19 线上白屏复盘）：创空间实例在 https://<空间>.ms.show，外层再被
+    // modelscope.cn 嵌一层。frame-ancestors 'none' 或漏掉 *.ms.show 都会让平台那一格被浏览器
+    // 拦成空白页——白屏真因就是这个。所以按源放行只放魔搭两域，绝不放开成裸 *。
+    const directive = (csp.match(/frame-ancestors([^;]*)/) ?? [])[1] ?? '';
+    const sources = directive.trim().split(/\s+/).filter(Boolean);
+    assert.ok(sources.includes("'self'"), `frame-ancestors 缺 self：${directive}`);
+    assert.ok(sources.includes('https://*.ms.show'), `frame-ancestors 缺创空间实例域 https://*.ms.show：${directive}`);
+    assert.ok(sources.includes('https://modelscope.cn'), `frame-ancestors 缺 modelscope.cn：${directive}`);
+    assert.ok(sources.includes('https://www.modelscope.cn'), `frame-ancestors 缺 www.modelscope.cn：${directive}`);
+    assert.equal(sources.includes('*'), false, 'frame-ancestors 不许出现裸 *：那等于放弃防点击劫持');
     assert.equal(/frame-ancestors 'none'/.test(csp), false, "'none' 会把创空间自己也挡掉，线上就是白屏");
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(res.headers.get('x-frame-options'), null, 'XFO 表达不了"按源放行"，留着 DENY 会比 CSP 更严、再次挡掉 iframe');

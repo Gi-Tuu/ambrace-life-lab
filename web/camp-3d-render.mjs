@@ -467,7 +467,7 @@ void main(){
 `;
 const FRAGMENT = `
   precision mediump float;
-  uniform sampler2D uGround, uFog, uGrain;
+  uniform sampler2D uRegionAtlas, uFog, uGrain;
   uniform vec4 uFogBounds;
   uniform bool uVisibility;
   uniform vec3 uSight;
@@ -529,13 +529,13 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
       vec2 pixel=floor(vWorld*32.);
       float fleck=fract(sin(dot(mod(pixel,257.),vec2(.93,1.71)))*105.7);
       vec2 texel=(vUV*32.+floor(fract(vWorld)*32.)+.5)/vec2(128.,128.);
-      color=texture2D(uGround,texel).rgb*vColor;
+      color=texture2D(uRegionAtlas,texel).rgb*vColor;
       if (vUV.y<1.5) {
         vec2 dirt=vec2(texel.x,texel.y+(1.-vUV.y)*.25);
         vec2 grass=vec2(texel.x,texel.y-vUV.y*.25);
-        color=texture2D(uGround,grass).rgb*vColor;
+        color=texture2D(uRegionAtlas,grass).rgb*vColor;
         if (vRoad>1.52+fleck*.23) {
-          color=mix(texture2D(uGround,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
+          color=mix(texture2D(uRegionAtlas,dirt).rgb,vec3(.85,.67,.40),.35)*vColor;
         }
         float shore=.30+fleck*.20;
         if (vBank<shore) {
@@ -553,7 +553,7 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
     if (river) {
       vec2 pixel=floor(vWorld*32.);
       vec2 sampleAt=(mod(pixel+vec2(0.,-floor(uWeather.x*5.)),32.)+.5)/128.;
-      vec3 deep=texture2D(uGround,sampleAt+vec2(0.,.75)).rgb;
+      vec3 deep=texture2D(uRegionAtlas,sampleAt+vec2(0.,.75)).rgb;
       float shore=1.-smoothstep(.03,.41,vBank);
       float fleck=fract(sin(dot(mod(pixel,257.),vec2(1.7,2.9)))*87.3);
       vec3 shallow=mix(vec3(.27,.54,.59),vec3(.52,.70,.70),step(.79,fleck));
@@ -737,7 +737,7 @@ export function createCampRenderer() {
   const aPos=gl.getAttribLocation(p,'aPosition'),aColor=gl.getAttribLocation(p,'aColor'),aUV=gl.getAttribLocation(p,'aUV');
   const aNormal=gl.getAttribLocation(p,'aNormal');
   const aMaterial=gl.getAttribLocation(p,'aMaterial');
-  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','Ground','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+  const uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','RegionAtlas','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
   
     const postProgram=gl.createProgram();
     {
