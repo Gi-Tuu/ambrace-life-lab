@@ -709,8 +709,10 @@ async function worldTick(sp, { now, onResidentAction, think }) {
   }
   // P0-3：玩家只跑"需求/存续"这两条，不跑决策环。基础代谢与居民同参数；
   // 存续归零 ⇒ 玩家死亡，终局（与"聚落饿垮"分开显示）。动作消耗由 actuate 统一扣。
+  // 1.1 P1-1：分钟身体路径已经给 p1 跑了 60 个 stepBodyMinute（每个 1/60 刻）；
+  // 这里再 tick(1) 就是第 61 次结算（实测 -0.024/游戏小时，居民 -0.012）。与 699 行老年衰减同门。
   const pl = w.agents.p1;
-  if (pl?.drives && isAlive(pl) && (w.independentWorld || !w.survival.ended && !w.survival.failed)) {
+  if (!minuteBody && pl?.drives && isAlive(pl) && (w.independentWorld || !w.survival.ended && !w.survival.failed)) {
     pl.drives.tick(1, false);
     pl.viab.tick(1);
   }

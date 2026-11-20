@@ -872,8 +872,23 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
       S.startRaw = structuredClone(loaded.raw);
       S.model = loaded.raw.model ?? S.model;
       S.saveError = loaded.warning ?? S.saveError;
-      if (minutes > 1 && !S.surv?.world?.simClock) catchUp(minutes);
-      await catchUpSurvival(S.missed.minutes);
+      // 1.1 P1-2：停机时长必须先落进 S.missed（start() 开场会把它归零），否则正式连续世界
+      // 在下面走到 catchUpSurvival(0) 就什么也不补。正式世界（simClock）不跑 A/B 的 catchUp——
+      // 那是研究态"1 真实分 = 1 刻"的旧口径；统一交给 catchUpSurvival，内部按同一
+      // simClock.rate / msPerGameMinute 换算，cap 仍是 SURV_CATCHUP_CAP*60（默认 120 刻=7200 游戏分）。
+      // 两条分支都只补一次：正式世界只走 survival 补时，非连续世界才额外补 A/B。
+      if (minutes > 1) {
+        const archivedSurvival = loaded.raw.survival != null;
+        if (S.surv?.world?.simClock && archivedSurvival) {
+          S.missed = { minutes: Math.round(minutes * 10) / 10, applied: 0, capped: false };
+          await catchUpSurvival(minutes);
+        } else if (!S.surv?.world?.simClock) {
+          catchUp(minutes);
+          await catchUpSurvival(S.missed.minutes);
+        }
+        // 只带 A/B、没有 survival 块的旧档：readArchive 会新建一份生存世界，但它并不存在于
+        // 停机期间，不能把这段离线时间算到它头上（上面两个分支都不走）。
+      }
       note = `载入${label}：第 ${S.packs.A.world.t} 刻${loaded.warning ? '；已禁用 M5 降级恢复' : ''}`;
       break;
     }

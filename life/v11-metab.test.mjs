@@ -42,10 +42,13 @@ function quiet(sp, { thinks = false, store = 9 } = {}) {
   for (const room of Object.keys(w.occupancy)) w.occupancy[room] = [];
   for (const id of Object.keys(w.agents)) (w.occupancy[w.loc[id]] ??= []).push(id);
   for (const a of Object.values(w.agents)) {
-    if (a.isPlayer) continue;
-    a.decideOn = () => null;
-    a.execute = () => null; // 反射/习惯也不得改身体（本闸门只测身体积分）
-    a.nextThinkMin = thinks ? 0 : 1e9;
+    if (!a.isPlayer) {
+      a.decideOn = () => null;
+      a.execute = () => null; // 反射/习惯也不得改身体（本闸门只测身体积分）
+      a.nextThinkMin = thinks ? 0 : 1e9;
+    }
+    // P1-1：p1 也纳入守恒读数。玩家不跑决策环，但身体初值必须与居民同口径，
+    // 否则 on/off 或 p1/居民只能比"各自的变化量"，比不了绝对值。
     a.drives.v.energy = 0.9;
     a.drives.v.social = 0.5;
     a.drives.v.stimulation = 0.5;
@@ -96,19 +99,24 @@ test('V11-METAB-01 60 个 1 分钟步 == 旧 1 次/小时（身体量 ≤1e-9）
   // 先走到 100 分：让旧路径的首刻补结算/日界配给都过去，取同一窗口内的增量做守恒。
   await advance(oldSp, 100);
   await advance(newSp, 100);
-  const old0 = Object.fromEntries(['a1', 'a2', 'a3'].map((id) => [id, bodyOf(oldSp.world.agents[id])]));
-  const new0 = Object.fromEntries(['a1', 'a2', 'a3'].map((id) => [id, bodyOf(newSp.world.agents[id])]));
+  const BODY_IDS = ['a1', 'a2', 'a3', 'p1']; // P1-1：p1 也必须在守恒闸门里
+  const old0 = Object.fromEntries(BODY_IDS.map((id) => [id, bodyOf(oldSp.world.agents[id])]));
+  const new0 = Object.fromEntries(BODY_IDS.map((id) => [id, bodyOf(newSp.world.agents[id])]));
   const oldThinks = oldSp.world.agents.a1.thinks;
   const newThinks = newSp.world.agents.a1.thinks;
   await advance(oldSp, 60);
   await advance(newSp, 60);
-  for (const id of ['a1', 'a2', 'a3']) {
+  for (const id of BODY_IDS) {
     const oldDelta = Object.fromEntries(Object.entries(bodyOf(oldSp.world.agents[id])).map(([k, v]) => [k, v - old0[id][k]]));
     const newDelta = Object.fromEntries(Object.entries(bodyOf(newSp.world.agents[id])).map(([k, v]) => [k, v - new0[id][k]]));
     closeBody(newDelta, oldDelta, `V11-METAB-01 ${id} 60 分钟增量`);
+  }
+  for (const id of ['a1', 'a2', 'a3']) {
     assert.equal(oldSp.world.agents[id].metabCount, 3, '旧路径 160 分内按派生刻结算 3 次（窗口内 1 次）');
     assert.equal(newSp.world.agents[id].metabCount, 160, '新路径 160 个分钟步');
   }
+  assert.equal(newSp.world.agents.p1.metabCount, 160, 'P1-1：p1 只走 160 个分钟步（worldTick 不再第 61 次）');
+  assert.equal(oldSp.world.agents.p1.metabCount, undefined, '旧路径 p1 不进分钟步计数');
   assert.equal(oldSp.world.agents.a1.thinks - oldThinks, 6, '旧路径 60 分窗口 6 次 think');
   assert.equal(newSp.world.agents.a1.thinks - newThinks, 6, '新路径 think 次数不变');
 });
@@ -123,15 +131,41 @@ test('V11-METAB-02 50 分 5 think 与 50 分 0 think 积分逐位一致；身体
   await advance(withThink, 50);
   await advance(noThink, 50);
   closeBody(bodyOf(withThink.world.agents.a1), bodyOf(noThink.world.agents.a1), 'V11-METAB-02 a1', { skip: ['stimulation'] });
+  closeBody(bodyOf(withThink.world.agents.p1), bodyOf(noThink.world.agents.p1), 'V11-METAB-02 p1');
   assert.equal(withThink.world.agents.a1.thinks, 5, '50 分内 5 次 think');
   assert.equal(withThink.world.agents.a1.metabCount, 50);
   assert.equal(noThink.world.agents.a1.metabCount, 50);
+  assert.equal(withThink.world.agents.p1.metabCount, 50, 'P1-1：p1 50 分 = 50 个分钟步（不是 50×2）');
+  assert.equal(noThink.world.agents.p1.metabCount, 50);
   assert.equal(noThink.world.agents.a1.rng.state(), rng0, '分钟身体步不得消费世界 RNG');
   // 不是 1 倍（0.012 一整小时），也不是 6 倍；是 50/60 小时。
   const expected = NEED_META.energy.decay * (50 / 60);
   assert.ok(Math.abs((0.9 - withThink.world.agents.a1.drives.v.energy) - expected) <= 1e-12,
     `能量积分 ${0.9 - withThink.world.agents.a1.drives.v.energy} != ${expected}`);
   assert.ok(Math.abs((withThink.world.agents.a1.viab.age - 0) - 50 / 60) <= 1e-12, 'viab.age 应为 50/60 刻');
+  // P1-1：p1 与居民同一口径 —— 能量/存续只随 50 个分钟步变化。
+  assert.ok(Math.abs((0.9 - withThink.world.agents.p1.drives.v.energy) - expected) <= 1e-12,
+    `p1 能量积分 ${0.9 - withThink.world.agents.p1.drives.v.energy} != ${expected}`);
+  assert.ok(Math.abs((withThink.world.agents.p1.viab.age - 0) - 50 / 60) <= 1e-12, 'p1 viab.age 应为 50/60 刻');
+});
+
+test('V11-METAB-10 玩家 p1 与居民每小时同量：能量 -0.012、存续同幅，p1 只走 60 个分钟步', async () => {
+  const { sp } = formal(7, { minuteMetab: true });
+  // store 拉高，隔离 storeHunger 的居民额外消耗：本闸门只比"身体基础积分"。
+  quiet(sp, { thinks: false, store: 100 });
+  sp.world.survival.lastDay = 0; // 跳过首个世界刻的日界配给（+0.5 能量会把本闸门读数盖掉）
+  const p1 = sp.world.agents.p1;
+  const a1 = sp.world.agents.a1;
+  const e0 = p1.drives.v.energy; const ea0 = a1.drives.v.energy;
+  const v0 = p1.viab.v; const va0 = a1.viab.v;
+  await advance(sp, 60);
+  assert.equal(p1.metabCount, 60, 'p1 每游戏小时 60 个分钟步（没有 worldTick 第 61 次）');
+  assert.equal(a1.metabCount, 60, '居民同口径 60 个分钟步');
+  const p1Energy = e0 - p1.drives.v.energy;
+  const a1Energy = ea0 - a1.drives.v.energy;
+  assert.ok(Math.abs(p1Energy - a1Energy) <= 1e-12, `p1 能量衰减 ${p1Energy} != 居民 ${a1Energy}`);
+  assert.ok(Math.abs((v0 - p1.viab.v) - (va0 - a1.viab.v)) <= 1e-12, `p1 存续衰减 ${v0 - p1.viab.v} != 居民 ${va0 - a1.viab.v}`);
+  assert.ok(Math.abs(p1Energy - NEED_META.energy.decay) <= 1e-12, `p1 每小时能量衰减 ${p1Energy} != ${NEED_META.energy.decay}（-0.024 是重复结算）`);
 });
 
 test('V11-METAB-03 暂停/倍速只改变真实时间换算，身体只随游戏分钟积分；0 分钟不动', async () => {
