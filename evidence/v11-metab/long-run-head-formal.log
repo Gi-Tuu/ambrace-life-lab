@@ -1,0 +1,6 @@
+{"seed":7,"population":{"30":5,"100":0,"200":0},"births100":2,"ended200":true,"deathCauses":{"饥饿":6},"errors":0}
+{"seed":13,"population":{"30":5,"100":0,"200":0},"births100":2,"ended200":true,"deathCauses":{"饥饿":6},"errors":0}
+{"seed":29,"population":{"30":0,"100":0,"200":0},"births100":2,"ended200":true,"deathCauses":{"饥饿":6},"errors":0}
+{"seed":41,"population":{"30":5,"100":0,"200":0},"births100":2,"ended200":true,"deathCauses":{"饥饿":6},"errors":0}
+{"seed":53,"population":{"30":3,"100":0,"200":0},"births100":3,"ended200":true,"deathCauses":{"饥饿":7},"errors":0}
+{"summary":[[7,{"30":5,"100":0,"200":0}],[13,{"30":5,"100":0,"200":0}],[29,{"30":0,"100":0,"200":0}],[41,{"30":5,"100":0,"200":0}],[53,{"30":3,"100":0,"200":0}]]}

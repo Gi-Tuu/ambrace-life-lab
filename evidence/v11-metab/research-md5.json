@@ -1,0 +1,38 @@
+{
+  "_说明": "1.1 分钟生理复跑五份研究面；log 调成 P3 的 CRLF 字节口径后取 md5。",
+  "algorithm": "md5",
+  "logDir": "evidence/v11-metab/research",
+  "faces": {
+    "report": {
+      "md5": "de764430c8bc88cd8dbbc24512621e4f",
+      "bytes": 1886,
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "match": true
+    },
+    "sweep": {
+      "md5": "aadd4895e84ae657d5a1e22c132228b1",
+      "bytes": 2850,
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "match": true
+    },
+    "viab": {
+      "md5": "b923787830eb26c3853ecf959987cf9d",
+      "bytes": 4526,
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "match": true
+    },
+    "recover": {
+      "md5": "fe198109386d048356f2fa69312e5183",
+      "bytes": 12150,
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "match": true
+    },
+    "metab": {
+      "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "bytes": 13357,
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "match": true
+    }
+  },
+  "allMatch": true
+}

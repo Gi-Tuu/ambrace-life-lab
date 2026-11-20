@@ -1,0 +1,369 @@
+{
+  "_说明": "1.1 第 2 项分钟生理长程对照；on/off 只差 M5_MINUTE_METAB 身体结算方式，阈值未改。",
+  "at": "2026-11-20T15:42:16.318Z",
+  "mode": "on",
+  "options": {
+    "residentialDecisions": true,
+    "ecosystem": true,
+    "unifiedCooperation": true,
+    "independentWorld": true,
+    "wildFood": true,
+    "autonomousGoals": true,
+    "farmLife": true,
+    "settlementLife": true,
+    "regionalWork": true,
+    "playerRation": true,
+    "gameRules": true,
+    "discussions": true,
+    "simTime": true
+  },
+  "rows": [
+    {
+      "seed": 7,
+      "population": {
+        "30": 4,
+        "100": 0,
+        "200": 0
+      },
+      "births": {
+        "30": 1,
+        "100": 3,
+        "200": 3
+      },
+      "deaths": {
+        "30": 0,
+        "100": 7,
+        "200": 7
+      },
+      "deathCauses": {
+        "饥饿": 7
+      },
+      "ended200": true,
+      "energy": {
+        "30": {
+          "avg": 0.925,
+          "min": 0.7
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "viability": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "laborMinutes100": 8230,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.428,
+        "maxTickMs": 11,
+        "saveBytes": 633177,
+        "heapDeltaBytes": 62072968,
+        "goalStagnation": 76,
+        "skipped": 0,
+        "rejected": 27
+      }
+    },
+    {
+      "seed": 13,
+      "population": {
+        "30": 3,
+        "100": 0,
+        "200": 0
+      },
+      "births": {
+        "30": 0,
+        "100": 2,
+        "200": 2
+      },
+      "deaths": {
+        "30": 0,
+        "100": 6,
+        "200": 6
+      },
+      "deathCauses": {
+        "饥饿": 6
+      },
+      "ended200": true,
+      "energy": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "viability": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "laborMinutes100": 9080,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.478,
+        "maxTickMs": 9,
+        "saveBytes": 596123,
+        "heapDeltaBytes": 93662944,
+        "goalStagnation": 103,
+        "skipped": 0,
+        "rejected": 30
+      }
+    },
+    {
+      "seed": 29,
+      "population": {
+        "30": 3,
+        "100": 0,
+        "200": 0
+      },
+      "births": {
+        "30": 0,
+        "100": 1,
+        "200": 1
+      },
+      "deaths": {
+        "30": 0,
+        "100": 5,
+        "200": 5
+      },
+      "deathCauses": {
+        "饥饿": 5
+      },
+      "ended200": true,
+      "energy": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "viability": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "laborMinutes100": 12495,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.569,
+        "maxTickMs": 8,
+        "saveBytes": 516975,
+        "heapDeltaBytes": 16696144,
+        "goalStagnation": 116,
+        "skipped": 0,
+        "rejected": 36
+      }
+    },
+    {
+      "seed": 41,
+      "population": {
+        "30": 5,
+        "100": 0,
+        "200": 0
+      },
+      "births": {
+        "30": 2,
+        "100": 2,
+        "200": 2
+      },
+      "deaths": {
+        "30": 0,
+        "100": 6,
+        "200": 6
+      },
+      "deathCauses": {
+        "饥饿": 6
+      },
+      "ended200": true,
+      "energy": {
+        "30": {
+          "avg": 0.992,
+          "min": 0.97
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "viability": {
+        "30": {
+          "avg": 1,
+          "min": 1
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "laborMinutes100": 5240,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.598,
+        "maxTickMs": 12,
+        "saveBytes": 582994,
+        "heapDeltaBytes": 66389352,
+        "goalStagnation": 91,
+        "skipped": 0,
+        "rejected": 78
+      }
+    },
+    {
+      "seed": 53,
+      "population": {
+        "30": 5,
+        "100": 0,
+        "200": 0
+      },
+      "births": {
+        "30": 2,
+        "100": 2,
+        "200": 2
+      },
+      "deaths": {
+        "30": 0,
+        "100": 6,
+        "200": 6
+      },
+      "deathCauses": {
+        "饥饿": 6
+      },
+      "ended200": true,
+      "energy": {
+        "30": {
+          "avg": 0.3119,
+          "min": 0.2032
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "viability": {
+        "30": {
+          "avg": 0.76,
+          "min": 0.76
+        },
+        "100": {
+          "avg": null,
+          "min": null
+        },
+        "200": {
+          "avg": null,
+          "min": null
+        }
+      },
+      "laborMinutes100": 3215,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.249,
+        "maxTickMs": 8,
+        "saveBytes": 532810,
+        "heapDeltaBytes": 17963448,
+        "goalStagnation": 112,
+        "skipped": 0,
+        "rejected": 18
+      }
+    }
+  ],
+  "summary": {
+    "mode": "on",
+    "minuteMetab": true,
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      4,
+      3,
+      3,
+      5,
+      5
+    ],
+    "population100": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "population200": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "avg30": 4,
+    "avg100": 0,
+    "avg200": 0,
+    "births100": 10,
+    "deaths100": 30,
+    "extinct200": "5/5",
+    "deathCauses200": {
+      "饥饿": 30
+    },
+    "agentErrors": 0
+  }
+}
