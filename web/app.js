@@ -6,18 +6,18 @@ import { residentLook } from './resident-look.mjs';
 import { guidedOutdoor, planApproach, guideGeometry, GUIDE_COLORS } from './camp-guidance.mjs';
 import { campClimate, paintWeather, plotWeather, stormEffects } from './camp-weather.mjs';
 import { campSight, sightScene, terrainHit } from './camp-sight.mjs';
-import { districtPads } from './camp-districts.mjs';
+import { districtPads } from '../shared/camp-districts.mjs';
 import { roomExposure } from './camp-lighting.mjs';
 import { solarLight } from './camp-sun.mjs';
-import { createCampOutskirts, joinedRoute, moveJoinedWalker } from './camp-outskirts.mjs';
-import { inCamp, WILDS } from './wild-landscape.mjs';
-import { facilityGate, FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from './camp-facility.mjs';
-import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from './camp-interaction.mjs';
-import { floorContains, hash2 } from './camp-terrain.mjs';
+import { createCampOutskirts, joinedRoute, moveJoinedWalker } from '../shared/camp-outskirts.mjs';
+import { inCamp, WILDS } from '../shared/wild-landscape.mjs';
+import { facilityGate, FACILITY_NAMES, FACILITY_PROPS, facilityId, facilityOf } from '../shared/camp-facility.mjs';
+import { ANIMAL_ITEMS as CAMP_ANIMAL_ITEM, CAMP_SITES as SITES, CAMP_TOOLS as CAMP_TOOL, HEAVY_CAMP_TOOLS, REACH, campBeds, wildHabitats, distanceTo, distanceToRect, nearResident } from '../shared/camp-interaction.mjs';
+import { floorContains, hash2 } from '../shared/camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
-import { constructionLot, residentialSite, HOUSING_PLOTS, TOWN_SIZE } from './camp-layout.mjs';
+import { constructionLot, residentialSite, HOUSING_PLOTS, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { campSitesOf, staticCampSites, campSceneContent, tileKey } from '../shared/camp-scene-content.mjs';
-import { CONSTRUCTION_CODES, CONSTRUCTION_REACH } from './camp-construction-access.mjs';
+import { CONSTRUCTION_CODES, CONSTRUCTION_REACH } from '../shared/camp-construction-access.mjs';
 import * as audio from './audio.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
 // 观察端。这里**不再有任何世界状态**：状态、调度、内部调节全在服务器（life/host.mjs）。
@@ -31,12 +31,12 @@ import {
   COLLISION_CELL, ROOM_BOUNDS, ROOM_GRID, mapAllows, moveMapFeet, moveRoomFeet,
   overrideWalk, pathFromWalker, roomAllows,
 } from './collision.mjs';
-import { expandWalk, fillCollisionRect, pixelPath } from './asset-collision.mjs';
-import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from './camp-3d-scene.mjs';
+import { expandWalk, fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
+import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, outdoorStage, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
-import { CAMP_BODY_RADIUS, bodyGrid, separates } from './camp-3d-physics.mjs';
-import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD } from './hall-front.mjs';
+import { CAMP_BODY_RADIUS, bodyGrid, separates } from '../shared/camp-physics.mjs';
+import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD } from '../shared/room-layout.mjs';
 import { campSurface, createSpace, roomSurface, unitsForRealMs } from '../life/space.mjs';
 
 // P2-b：query 是主路径。provider 的初值取 URL 的 camp（校验 32hex），localStorage 只做持久化——

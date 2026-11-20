@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { modelMesh, MODEL_STRIDE, campCamera, regionOnScreen, collisionFootprint } from '../web/camp-3d-render.mjs';
 import { contactShadowMesh, groundContactMesh, materialGrain, roomExposure } from '../web/camp-lighting.mjs';
 import { solarLight } from '../web/camp-sun.mjs';
-import { outdoorHomes, outdoorStage } from '../web/camp-3d-scene.mjs';
+import { outdoorHomes, outdoorStage } from '../shared/camp-scene.mjs';
 
 test('接触阴影只贴接地物，桥桩伸入地面且井沿高于井水',()=>{
   const cast=[{x:1,y:0,z:2,w:2,d:1,h:.35},{x:1,y:2,z:2,w:1,d:1,h:.2}];

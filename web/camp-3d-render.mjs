@@ -1,7 +1,7 @@
 import { animalHead, posedAnimalHead, animalNeck } from './camp-animal-motion.mjs';
 import { residentLook } from './resident-look.mjs';
 import { itemBoxes } from './camp-items.mjs';
-import { CAMP_BODY_RADIUS } from './camp-3d-physics.mjs';
+import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { WALK_DIRECTIONS } from './walk.mjs';
 import { contactShadowMesh, groundContactMesh, materialGrain } from './camp-lighting.mjs';
 import { bakeVertexAO } from '../shared/camp-ao.mjs';

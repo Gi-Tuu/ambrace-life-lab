@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { beam, boxVertices, collisionFootprint, MODEL_STRIDE, cyl, modelBounds, modelMesh, rayBox } from '../web/camp-3d-render.mjs';
-import { fillCollisionRect } from '../web/asset-collision.mjs';
-import { addCampWork } from '../web/camp-3d-scene.mjs';
+import { fillCollisionRect } from '../shared/asset-collision.mjs';
+import { addCampWork } from '../shared/camp-scene.mjs';
 import { outdoorStage, wildVegetation, roomStage, outdoorLife, regionLife } from '../shared/camp-scene.mjs';
 import { itemBoxes } from '../shared/camp-items.mjs';
-import { generateCampLayout } from '../web/camp-layout.mjs';
+import { generateCampLayout } from '../shared/camp-layout.mjs';
 
 const box={x:1,y:2,z:3,w:2,h:3,d:4,color:'#72513B'};
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-8, [a,b].join(' vs '));

@@ -9,8 +9,8 @@ import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { doBuild, doPlan, effectiveMods } from './production.mjs';
 import { finishCooperation } from './cooperation.mjs';
-import { campEntrance, campSite } from '../web/camp-interaction.mjs';
-import { facilityGate, facilityId } from '../web/camp-facility.mjs';
+import { campEntrance, campSite } from '../shared/camp-interaction.mjs';
+import { facilityGate, facilityId } from '../shared/camp-facility.mjs';
 
 const options={residentialDecisions:true,eventRulesVersion:CURRENT_EVENT_RULES,settlementLife:true,
   independentWorld:true,ecosystem:true,wildFood:true,autonomousGoals:true,unifiedCooperation:true,farmLife:true};

@@ -3,17 +3,17 @@ import test from 'node:test';
 import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } from './survplay.mjs';
 import { BUILDINGS, buildLot, regenResources } from './production.mjs';
 import { residentContact } from './camp-play.mjs';
-import { campDistricts, districtPads } from '../web/camp-districts.mjs';
-import { addCampWork, homeAppearance, outdoorHomes } from '../web/camp-3d-scene.mjs';
-import { facilityId } from '../web/camp-facility.mjs';
-import { joinedRoute } from '../web/camp-outskirts.mjs';
-import { inCamp, wildLandscape } from '../web/wild-landscape.mjs';
+import { campDistricts, districtPads } from '../shared/camp-districts.mjs';
+import { addCampWork, homeAppearance, outdoorHomes } from '../shared/camp-scene.mjs';
+import { facilityId } from '../shared/camp-facility.mjs';
+import { joinedRoute } from '../shared/camp-outskirts.mjs';
+import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 
 import { houseLabor, stepHouseholds } from './households.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { move } from './body.mjs';
 import { DAY_TICKS } from './clock.mjs';
-import { HOUSING_PLOTS } from '../web/camp-layout.mjs';
+import { HOUSING_PLOTS } from '../shared/camp-layout.mjs';
 
 const options={mapSeed:13,layoutVersion:2,settlementLife:true,regionalWork:true,independentWorld:true,
   wildFood:true,residentialDecisions:true,unifiedCooperation:true,autonomousGoals:true};

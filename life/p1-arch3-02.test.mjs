@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay, survAct } from './survplay.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
-import { campPen, campSite } from '../web/camp-interaction.mjs';
+import { campPen, campSite } from '../shared/camp-interaction.mjs';
 import { sourceView } from './source-produce.mjs';
 
 const GAME = {

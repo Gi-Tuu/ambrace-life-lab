@@ -1,11 +1,11 @@
 // 玩家与角色的行走几何：碰撞栅格、外部可走性、绕人重算、路线拼接。
 // 从 web/app.js 抽出（2026-11-15，阶段 3）。抽出的都是纯函数：给定 world/walker 就出结果，
 // 不读 DOM、不读模块级状态、不消费随机——所以可以直接单测（见 life/player-move.test.mjs）。
-import { CAMP_BODY_RADIUS, bodyGrid } from './camp-3d-physics.mjs';
-import { inCamp } from './wild-landscape.mjs';
-import { joinedRoute } from './camp-outskirts.mjs';
+import { CAMP_BODY_RADIUS, bodyGrid } from '../shared/camp-physics.mjs';
+import { inCamp } from '../shared/wild-landscape.mjs';
+import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { mapAllows, pathFromWalker } from './collision.mjs';
-import { fillCollisionRect, pixelPath } from './asset-collision.mjs';
+import { fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
 
 export const TILE = 16; // 寻路与布局单位；美术原生 32px，通过独立密度映射，避免改动世界坐标。
 

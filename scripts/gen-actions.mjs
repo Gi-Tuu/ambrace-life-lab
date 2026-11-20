@@ -1,22 +1,64 @@
 import { writeEditorCatalog } from './editor-catalog.mjs';
 import { overridesFor } from './pixel-overrides.mjs';
-// 全套动作精灵图 + 场景细节小动画生成器（零依赖、零许可风险、确定性）。
+// 头像生成器（零依赖、零许可风险、确定性）。
 //
 // 用法：node scripts/gen-actions.mjs
-// 产出：web/assets/actions/{a1,a2,a3,p1,fx}.png + manifest.json
+// 产出：web/assets/actions/portrait_{a1,a2,a3,p1}.png + manifest.json
 //
-// 为什么放子目录：scripts/pack-assets.mjs 的 pack() 只 readdirSync 顶层 .png，
-// 子目录完全不进校验 ⇒ 不必改 manifest schema、不必改打包脚本、不必改引擎。
+// P3（2026-11-20）：2D 世界/动作精灵生成器（gen-pixel-assets/pack-assets）已退役；
+// 这里只保留 4 张仍被 art:check 钉住、并在 canvas 头像失败时兜底的 UI 头像。
+// PNG 编码与 64 色板原先复用 gen-pixel-assets 的导出，现内联在本文件，避免再依赖已删的 2D 管线。
 // 帧号由前端独立渲染时钟驱动（A/B 共用），绝不读 w.t / 不消费 rng / 不写世界状态。
 //
 // 硬约束（docs/HANDOVER-ui-hunyuan-2026-11-09.md §2）：
 //   · 所有颜色 ⊆ 所有者批准的固定 64 色板
 //   · 真像素网格、无抗锯齿、无半透明大面积叠加
 //   · 图内不画文字，文案一律前端渲染
-import { encodePNG, PALETTE } from './gen-pixel-assets.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { deflateSync } from 'node:zlib';
+
+export const PALETTE = [
+  '#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F', '#C2C3C7', '#FFF1E8',
+  '#FF004D', '#FFA300', '#FFEC27', '#00E436', '#29ADFF', '#83769C', '#FF77A8', '#FFCCAA',
+  '#18251E', '#263D29', '#315431', '#3F7036', '#568D3E', '#73A747', '#98BD51', '#BED773',
+  '#D9E8A2', '#32302C', '#514134', '#72513B', '#976A45', '#BA8752', '#D8A667', '#EDC787',
+  '#F6DDA8', '#FFF0CC', '#482D2B', '#6E3830', '#944735', '#B65B3C', '#D27A4A', '#E99E61',
+  '#6D7165', '#939584', '#B9B8A1', '#D9D6B8', '#1E3D4B', '#2D5D6E', '#458996', '#6CB3B4',
+  '#A0D2C6', '#533E5C', '#77607A', '#A18597', '#D4B0B4', '#A85A55', '#D58274', '#F2B29A',
+  '#D6AE69', '#B58A4C', '#8D6A3D', '#664D32', '#497245', '#70905A', '#93AE73', '#C2CFA0',
+];
+const RGB = PALETTE.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+
+// ── 最小 PNG 编码（RGBA8，filter 0；与已退役的 2D 生成器同一实现）──
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c; }
+  return t;
+})();
+function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8); return (c ^ -1) >>> 0; }
+function chunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
+  return Buffer.concat([len, td, crc]);
+}
+export function encodePNG(w, h, px) {
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 4 + 1)] = 0;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const c = px[y * w + x]; // null=透明, 否则 palette index
+      if (c === null || c === undefined) { raw[y * (w * 4 + 1) + 1 + x * 4 + 3] = 0; }
+      else { const [r, g, b] = RGB[c]; raw[y * (w * 4 + 1) + 1 + x * 4] = r; raw[y * (w * 4 + 1) + 2 + x * 4] = g; raw[y * (w * 4 + 1) + 3 + x * 4] = b; raw[y * (w * 4 + 1) + 4 + x * 4] = 255; }
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 const C = (h) => PALETTE.indexOf(h.toUpperCase());
 const K = {
@@ -220,14 +262,12 @@ export function generate(outDir) {
     writeFileSync(join(outDir, `portrait_${id}.png`), encodePNG(32, 32, override(`portrait_${id}.png`, 32, 32, portrait)));
     files.push(`portrait_${id}.png`);
   }
+  // P0/P3：动作图集(4 角色 + fx)已无运行时读取，清单只登记仍被 HUD/头像兜底使用的 4 张 PNG。
   const manifest = {
-    version: 'v2',
-    frame: [W, H], anchor: [16, 48], directions: DIRECTIONS, framesPerAction: FRAMES_PER_ACTION, fps: FPS,
-    fxCell: [FW, FH], fxRows: FX_ROWS,
-    palette: '/web/assets/palette.json',
-    clock: 'independent render clock; A/B share the same frame index; never derived from w.t',
+    version: 'v3-portraits',
+    _说明: 'P0：动作图集(4 角色 + fx)已无运行时读取，随 2D 精灵一起删除；HUD 只加载 4 张头像。',
+    fps: FPS,
     portraits: Object.fromEntries(Object.keys(CHARS).map(id => [id, `/web/assets/actions/portrait_${id}.png`])),
-    actions: ACTIONS.map((a) => ({ id: a.id, label: a.label })),
   };
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   files.push('manifest.json');

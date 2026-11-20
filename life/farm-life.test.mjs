@@ -6,8 +6,8 @@ import { move } from './body.mjs';
 import { goalCandidates } from './goals.mjs';
 import { doExchange, doExpand, regrowWildBerries, takeFood } from './production.mjs';
 import { tillRule } from './farmland.mjs';
-import { campPen, campPlants, campSite } from '../web/camp-interaction.mjs';
-import { outdoorLife } from '../web/camp-3d-scene.mjs';
+import { campPen, campPlants, campSite } from '../shared/camp-interaction.mjs';
+import { outdoorLife } from '../shared/camp-scene.mjs';
 
 const options = { farmLife: true, ecosystem: true, wildFood: true, autonomousGoals: true, independentWorld: true };
 const make = () => createSurvPlay(7, options);

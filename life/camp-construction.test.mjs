@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { doBuild, doPlan, doRepair, BUILDINGS } from './production.mjs';
 import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, survView, tickSurvPlay } from './survplay.mjs';
-import { addCampWork, homeAppearance, homeStyle, outdoorHomes, roomStage, workModelKey } from '../web/camp-3d-scene.mjs';
+import { addCampWork, homeAppearance, homeStyle, outdoorHomes, roomStage, workModelKey } from '../shared/camp-scene.mjs';
 import { GAME_OPTIONS } from './long-run.mjs';
-import { CONSTRUCTION_LOTS, constructionLot, generateCampLayout, overlapsLot } from '../web/camp-layout.mjs';
+import { CONSTRUCTION_LOTS, constructionLot, generateCampLayout, overlapsLot } from '../shared/camp-layout.mjs';
 
 test('预留地彼此留有间距，冲突工地拒绝奠基且不扣材料',()=>{
   const lots=Object.values(CONSTRUCTION_LOTS);

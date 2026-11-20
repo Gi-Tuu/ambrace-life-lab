@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { createSurvPlay, survAct, playerTimeLeft } from './survplay.mjs';
 import { openTalk, sayTo, talkInRange } from './dialogue.mjs';
 import { move } from './body.mjs';
-import { campBeds, campEntrance, campPen, campPlants, campSite } from '../web/camp-interaction.mjs';
-import { TIMBER_GROVE } from '../web/camp-layout.mjs';
+import { campBeds, campEntrance, campPen, campPlants, campSite } from '../shared/camp-interaction.mjs';
+import { TIMBER_GROVE } from '../shared/camp-layout.mjs';
 
 const make=()=>createSurvPlay(13,{independentWorld:true,wildFood:true,ecosystem:true});
 

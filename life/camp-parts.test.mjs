@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addCampWork, homeAppearance, outdoorHomes, workModelKey } from '../web/camp-3d-scene.mjs';
+import { addCampWork, homeAppearance, outdoorHomes, workModelKey } from '../shared/camp-scene.mjs';
 import { fx3d } from '../web/camp-3d-render.mjs';
 import { createSurvPlay, dumpSurv, survView, tickSurvPlay } from './survplay.mjs';
 

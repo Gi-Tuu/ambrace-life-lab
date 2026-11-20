@@ -1,5 +1,5 @@
-import { entrancePoints, workPoints } from './camp-construction-access.mjs';
-import { distanceTo, distanceToRect } from './camp-interaction.mjs';
+import { entrancePoints, workPoints } from '../shared/camp-construction-access.mjs';
+import { distanceTo, distanceToRect } from '../shared/camp-interaction.mjs';
 
 export function guidedOutdoor(entity) {
   return ['door','lot','work','plot'].includes(entity?.kind);

@@ -9,10 +9,10 @@ import { actuate, affordancesFor, spawn } from './body.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { ADULT_DAYS, stepHouseholds, stepRelationships } from './households.mjs';
 import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } from './survplay.mjs';
-import { generateCampLayout, constructionLot, overlapsLot } from '../web/camp-layout.mjs';
+import { generateCampLayout, constructionLot, overlapsLot } from '../shared/camp-layout.mjs';
 import { doPlan } from './production.mjs';
-import { campTerrain } from '../web/camp-terrain.mjs';
-import { outdoorStage, addCampWork } from '../web/camp-3d-scene.mjs';
+import { campTerrain } from '../shared/camp-terrain.mjs';
+import { outdoorStage, addCampWork } from '../shared/camp-scene.mjs';
 
 const options = { residentialDecisions: true };
 

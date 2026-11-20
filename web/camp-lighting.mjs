@@ -1,4 +1,4 @@
-import { hash2 } from './camp-terrain.mjs';
+import { hash2 } from '../shared/camp-terrain.mjs';
 
 export function materialGrain() {
   // 各向同性颗粒：不再用正弦线，避免贴到斜面/墙面后读成规则斜条纹。

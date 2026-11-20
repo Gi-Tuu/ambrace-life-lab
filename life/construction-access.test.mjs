@@ -8,8 +8,8 @@ import { stepHouseholds, houseLabor } from './households.mjs';
 import { clockOf, advanceResidentBusy } from './resident-time.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
-import { overlapsLot, HOUSING_PLOTS } from '../web/camp-layout.mjs';
-import { constructionGate } from '../web/camp-construction-access.mjs';
+import { overlapsLot, HOUSING_PLOTS } from '../shared/camp-layout.mjs';
+import { constructionGate } from '../shared/camp-construction-access.mjs';
 
 const options = {
   eventRulesVersion:CURRENT_EVENT_RULES, gameRules:true, mapSeed:13, layoutVersion:2, regionalWork:true, settlementLife:true,

@@ -5,7 +5,7 @@
 // P2b：A* 的唯一实现在 shared/asset-collision.mjs 的 pixelPath（二叉堆、支持 cellAllows/
 // edgeAllows，能表达桥/门/绕人；服务端 joinedRoute 也用它）。本文件的 astar 只是 tile 栅格
 // 的薄包装：把 pixelPath 的“转向点”展开成逐格路径，保持原有 4 邻接契约。
-import { pixelPath } from './asset-collision.mjs';
+import { pixelPath } from '../shared/asset-collision.mjs';
 export const WALK_DIRECTIONS = Object.freeze(['down','down-left','left','up-left','up','up-right','right','down-right']);
 
 export function walkDirection(dx, dz, previous = 'down') {

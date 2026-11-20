@@ -4,8 +4,8 @@ import { createSurvPlay, dumpSurv, loadSurv, survAct, survView } from './survpla
 import { affordancesFor } from './body.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { campSleepTicks } from './camp-play.mjs';
-import { timberStage } from '../web/camp-3d-scene.mjs';
-import { TOWN_SIZE, TIMBER_GROVE } from '../web/camp-layout.mjs';
+import { timberStage } from '../shared/camp-scene.mjs';
+import { TOWN_SIZE, TIMBER_GROVE } from '../shared/camp-layout.mjs';
 import { readCollisionData, writeCollisionData } from '../web/collision.mjs';
 
 test('伐木产生木料、树苗与树桩，拒绝重复砍伐并可跨档再生',()=>{

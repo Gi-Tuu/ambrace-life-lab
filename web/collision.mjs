@@ -1,5 +1,5 @@
 import { astar, isWalkable } from './walk.mjs';
-import { pixelPath } from './asset-collision.mjs';
+import { pixelPath } from '../shared/asset-collision.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { ROOM_BOUNDS, ROOM_GRID } from '../shared/room-layout.mjs';
 

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSurvPlay, dumpSurv, loadSurv, survAct, survView, tickSurvPlay } from './survplay.mjs';
-import { campEntrance, campPen, campSite, wildHabitats } from '../web/camp-interaction.mjs';
-import { generateCampLayout, overlapsLot } from '../web/camp-layout.mjs';
+import { campEntrance, campPen, campSite, wildHabitats } from '../shared/camp-interaction.mjs';
+import { generateCampLayout, overlapsLot } from '../shared/camp-layout.mjs';
 import { roadCandidate } from './home-roads.mjs';
 import { move } from './body.mjs';
 import { DAY_TICKS } from './clock.mjs';

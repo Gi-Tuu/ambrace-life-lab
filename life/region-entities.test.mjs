@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay, dumpSurv, loadSurv, survAct, survView } from './survplay.mjs';
 import { DAY_TICKS } from './clock.mjs';
-import { findRegionEntity, regionEntities } from '../web/camp-region-entities.mjs';
-import { wildLandscape } from '../web/wild-landscape.mjs';
-import { regionLife } from '../web/camp-3d-scene.mjs';
+import { findRegionEntity, regionEntities } from '../shared/camp-region-entities.mjs';
+import { wildLandscape } from '../shared/wild-landscape.mjs';
+import { regionLife } from '../shared/camp-scene.mjs';
 
 const options={residentialDecisions:true,settlementLife:true,farmLife:true,ecosystem:true,independentWorld:true};
 function world() {

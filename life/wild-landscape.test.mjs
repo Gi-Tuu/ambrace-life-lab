@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCampOutskirts, moveJoinedWalker } from '../web/camp-outskirts.mjs';
+import { createCampOutskirts, moveJoinedWalker } from '../shared/camp-outskirts.mjs';
 import { campCamera, coveredModels } from '../web/camp-3d-render.mjs';
-import { bodyGrid } from '../web/camp-3d-physics.mjs';
-import { campTerrain } from '../web/camp-terrain.mjs';
+import { bodyGrid } from '../shared/camp-physics.mjs';
+import { campTerrain } from '../shared/camp-terrain.mjs';
 import { campDistricts, districtPads } from '../shared/camp-districts.mjs';
-import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, regionSlotPosition, REGION_SIZE } from '../web/wild-landscape.mjs';
+import { moveWildWalker, regionWindow, wildDetails, wildLandscape, wildRegion, regionSlotPosition, REGION_SIZE } from '../shared/wild-landscape.mjs';
 
 function vertices(mesh) {
   const result=[];

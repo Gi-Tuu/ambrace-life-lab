@@ -7,7 +7,7 @@ import { validate } from './rules.mjs';
 import { advanceSurvival, doHarvest, forecastDisasters, stormOn, SURV } from './worldstate.mjs';
 import { weatherFor } from './clock.mjs';
 import { blockersOf } from './geometry.mjs';
-import { constructionLot } from '../web/camp-layout.mjs';
+import { constructionLot } from '../shared/camp-layout.mjs';
 import { effectiveMods, BUILDINGS } from './production.mjs';
 
 function survWorld() {
