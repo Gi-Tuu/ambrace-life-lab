@@ -52,7 +52,7 @@ const urlCampKey = (() => {
 })();
 let campKeyNow = urlCampKey ?? (() => { try { return localStorage.getItem('ambrace.camp.v1'); } catch { return null; } })();
 // P4：客户端只有一个空间来源 —— buildWorld 的 world.space（life/space.mjs）。
-// 旧的 URL/宿主注入回退开关已删除；退役实现只在 life/research-space.mjs 作为研究夹具保留。
+// 旧的 URL/宿主注入回退开关已删除；退役实现只在 test-support/legacy-space-oracle.mjs 作为测试 oracle 保留。
 setCampProvider(() => campKeyNow);
 function setCampKey(key) {
   campKeyNow = key || null;
@@ -4821,6 +4821,7 @@ Object.assign(window.__lifeDebug, {
 });
 
 if (perfSeg()) perfSeg().push({ k:'moduleEvalEnd', at:Number(performance.now().toFixed(1)) });
+
 
 
 

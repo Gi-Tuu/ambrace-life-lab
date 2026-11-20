@@ -4,7 +4,7 @@
 //
 // P4：可走性/碰撞只有一个权威 —— world.space（life/space.mjs）。旧“每帧复制 world 再按体半径
 // 膨胀像素栅格”的包装已删除：像素栅格只作为寻路索引 world.pathGrid（构建期一次算好），
-// 不再回答“能不能站”。退役包装只在 life/research-space.mjs 作为研究夹具保留。
+// 不再回答“能不能站”。退役包装只在 test-support/legacy-space-oracle.mjs 作为测试 oracle 保留。
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { inCamp } from '../shared/wild-landscape.mjs';
 import { joinedRoute } from '../shared/camp-outskirts.mjs';
@@ -78,3 +78,4 @@ export function routeForWalker(world, walker, goal, bodies=[]) {
   if (!exact?.length) return exact;
   return [start,...exact].map(cell=>cell.map(v=>(v+.5)/TILE-.5));
 }
+

@@ -13,12 +13,18 @@ import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
 import { simMinuteNow } from './sim-clock.mjs';
 import { isLaborAction } from './households.mjs';
 import { costFor } from './action-cost.mjs';
-import { legacyResidentTimeRefusal } from './research-time.mjs';
+import {
+  legacyResidentTimeRefusal,
+  RESEARCH_RESIDENT_ACTION_CAP, RESEARCH_RESIDENT_CHAIN_MAX,
+  RESEARCH_TICK_MINUTES, RESEARCH_DAY_MINUTES,
+} from './research-policy.mjs';
 
-export const TICK_MINUTES = 60;
-export const DAY_MINUTES = 1440;
-export const TICK_ACTION_CAP = 4; // 旧路径：同一角色同一世界刻最多几个动作（仅统计；连续路径不再使用）
-export const CHAIN_MAX = 2; // 旧路径：决策环在同一刻最多再追加几次决策（连续路径不再使用）
+// 研究策略的显式常量（不在这里另写 60/1440/4/2）：来源只有 life/research-policy.mjs。
+// 正式连续路径不使用这些值；它们只服务 !world.simClock 的整刻语义。
+export const TICK_MINUTES = RESEARCH_TICK_MINUTES;
+export const DAY_MINUTES = RESEARCH_DAY_MINUTES;
+export const TICK_ACTION_CAP = RESEARCH_RESIDENT_ACTION_CAP; // 研究态：同一角色同一世界刻最多几个动作
+export const CHAIN_MAX = RESEARCH_RESIDENT_CHAIN_MAX; // 研究态：决策环在同一刻最多再追加几次决策
 
 // P1 连续路径：这些动作占用一段连续世界时间（可跨刻），其余动作仍是原子短动作。
 // 短动作立即产生效果；长动作在 endMin 到点后结算，开始/完成都不再对齐 tick 边界。
@@ -169,7 +175,7 @@ export function residentBeginTime(world, id, kind) {
   const tickLeft = Math.max(0, TICK_MINUTES - clock.tick.usedMin);
   const dayLeft = Math.max(0, DAY_MINUTES - clock.usedMin);
   // 研究态旧路径（world.simClock 关闭）：60 分钟刻 + 1440 日池，装不下就返回研究态旧超时码。
-  // 正式连续路径在上一分支已返回，永远走不到这里；字面量只在 research-time.mjs。
+  // 正式连续路径在上一分支已返回，永远走不到这里；字面量只在 research-policy.mjs。
   if (dayLeft + 1e-9 < cost) return legacyResidentTimeRefusal();
   clock.tick.n += 1;
   if (tickLeft + 1e-9 >= cost) {
@@ -300,3 +306,4 @@ export function advanceResidentBusy(world, id, atMin) {
   }
   return { advanced: true, kind: b.kind, progressMin: b.progressMin, remainMin: b.remainMin };
 }
+

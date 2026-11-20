@@ -25,7 +25,7 @@ import { dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
 import { PARAMS } from './params.mjs';
 import { ShortHorizonPlanner } from './m3-planner.mjs';
 import { Coupling, COUPLING_KINDS } from './coupling.mjs';
-import { legacyRefusalWhy } from './research-time.mjs';
+import { legacyRefusalWhy } from './research-policy.mjs';
 import { bodyClockEnabled } from './body-clock.mjs';
 
 const REFLEXES = [

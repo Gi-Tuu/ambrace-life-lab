@@ -7,7 +7,7 @@ import { startMove, RESIDENT_UNITS_PER_TICK, PLAYER_UNITS_PER_TICK } from './bod
 import { GAME_RESIDENT_UNITS_PER_TICK } from './body.mjs';
 import { playerReach } from './survplay-camp.mjs';
 import { constructionSpace } from './construction-access.mjs';
-import { legacyGroundQuery } from './research-space.mjs';
+import { legacyGroundQuery } from '../test-support/legacy-space-oracle.mjs';
 import { campSite, campEntrance } from '../shared/camp-interaction.mjs';
 import { campBridgeBounds } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
@@ -139,14 +139,14 @@ test('P2-07 服务端 construction space：岸带收紧、桥可走、桥面高�
   assert.equal(portal?.room, 'hall');
 });
 
-test('P2-08/P4 fallback 开关已退役：正式模块没有开关，旧谓词只在研究夹具里', () => {
-  // 正式模块里不许再有开关函数/环境变量分支；退役谓词只保留在 life/research-space.mjs。
+test('P2-08/P4 fallback 开关已退役：正式模块没有开关，旧谓词只在 test-support oracle 里', () => {
+  // 正式模块里不许再有开关函数/环境变量分支；退役谓词只保留在 test-support 测试 oracle。
   const formal = ['../life/construction-access.mjs', '../life/camp-play.mjs', '../web/app.js'];
   for (const rel of formal) {
     const text = readFileSync(new URL(rel, import.meta.url), 'utf8');
     assert.equal(/SPACE_V1|spaceQueriesEnabled|__SPACE_LEGACY__|space=legacy/.test(text), false, `${rel} 仍有旧空间开关`);
   }
-  // 研究夹具保留旧谓词：它必须在“岸带”上与正式 space 给出不同答案（证明被替换的是真的旧实现）。
+  // 测试 oracle 保留旧谓词：它必须在“岸带”上与正式 space 给出不同答案（证明被替换的是真的旧实现）。
   const sp = start(), w = sp.world;
   const legacy = legacyGroundQuery({ mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, districts: w.districts });
   const { riverCenter, riverHalfWidth } = campTerrain(w.mapSeed, true, w.layoutVersion);
@@ -167,3 +167,4 @@ test('P2-09 客户端速度换算与服务端预算同一函数：冲刺恰好�
     }
   }
 });
+

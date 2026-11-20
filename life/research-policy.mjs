@@ -1,18 +1,27 @@
-// 研究态旧时间模型（唯一隔离点）。
+// 研究态/旧档（!world.simClock）的**唯一**显式策略模块。
 //
-// 正式游戏（world.simClock 存在）没有旧超时码、没有"每刻/每日 N 次"配额：
-//   · 短动作按连续时钟立即结算；
-//   · 长动作占用 [startMin,endMin)，到点由分钟调度结算；
-//   · 决策机会由 ThinkScheduler 按游戏分钟发放。
+// 这里不是第二套时钟或空间实现：它是“旧行为作为配置”的声明处，正式路径与新时钟/space
+// 仍只有一套共享实现。能由共享实现表达的都已上移：
+//   · 60 分/刻、1440 分/日：直接取 sim-clock 的游戏分钟常量，不再另写 60/1440；
+//   · 居民 12/刻、玩家 10/刻、村内同步 40/刻：space.mjs 的 legacy speed-budget 行，
+//     刻数仍走同一个 travelTicks 公式，没有第二套出行代码；
+//   · 旧 60 分/100 点池的拒绝码与文案留在这里（ARCH-2D-01 的唯一白名单）。
 //
-// 这里只保留 **研究态/旧档/对照回放**（!world.simClock：gameRules:false、simTime:false、
-// V72_TIME=0）仍在使用的 60 分钟刻 + 每日池行为，逐位不变。ARCH-2D-01 只在本文件放行
-// 旧超时码；正式编排层（host/host-world/survplay）不得 import 本模块。
+// 仍保留为**研究策略**（新时钟表达不了、也不该改写的语义）：
+//   · 每 tick = world.t + 1 = 60 游戏分钟，整刻一次 worldTick + per-tick think；
+//   · 居民 60 分池/4 动作 cap/2 次链式决策、玩家每刻 100 点池、旧超时码；
+//   · 居民 12/刻、玩家 10/刻的直线旅行（无 space 路径/几何校验）；
+//   · 研究态身体每 tick 结算一次（不创建 simClock/minuteMetab）。
+// 这些分支由调用方按 !world.simClock / !actTimeModel 显式选择，不得复制成第二个模块。
+import { GAME_MINUTES_PER_HOUR, GAME_MINUTES_PER_DAY } from './sim-clock.mjs';
+
 export const RESEARCH_ONLY = true;
 export const LEGACY_TIME_CODE = 'TIME_WAIT';
+export const RESEARCH_TICK_MINUTES = GAME_MINUTES_PER_HOUR;
+export const RESEARCH_DAY_MINUTES = GAME_MINUTES_PER_DAY;
 export const RESEARCH_PLAYER_BUDGET = 100;
-export const RESEARCH_TICK_MINUTES = 60;
-export const RESEARCH_DAY_MINUTES = 1440;
+export const RESEARCH_RESIDENT_ACTION_CAP = 4;
+export const RESEARCH_RESIDENT_CHAIN_MAX = 2;
 
 // resident-time：legacy 日池装不下一个动作。
 export function legacyResidentTimeRefusal() {
@@ -54,3 +63,4 @@ export function legacyPlayerTimeLeft(w) {
   const s = w.survival;
   return s.p1BudgetTick === w.t ? s.p1BudgetLeft : RESEARCH_PLAYER_BUDGET;
 }
+

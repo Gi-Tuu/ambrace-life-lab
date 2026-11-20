@@ -1,21 +1,15 @@
-// RESEARCH_ONLY：退役的空间/高度实现只在这里保留（研究夹具）。
+// 测试专用：退役的旧空间/高度实现 oracle（只给测试当对照，运行路径 0 import）。
 //
-// 正式游戏（life/space.mjs）本轮已经收口成唯一空间权威；下面这些实现曾经以运行时开关或
-// 每帧包装的形式存在于正式路径，现在**只有研究/对照**可以用：
-//   · 服务端旧地面谓词：营地内解析河 + 桥带，营地外用不带营地平整面的 wild-landscape；
-//   · 客户端体半径像素栅格包装：每帧复制 world，把像素栅格按身体半径膨胀；
-//   · 客户端房间像素行走：像素掩码 + 像素级逐段推进（配合 web/collision.mjs 的旧谓词）。
-//
-// 纪律：正式模块不得 import 本文件；scripts/arch-gates.mjs 的 ARCH-SPACE-01 会静态判红。
-// 研究态（无 simClock / gameRules:false）本来就不建 space，因此保留这些夹具不会改变 dumpSurv。
+// 这里不是研究策略模块，也不是第二套空间实现：正式/研究运行都只用 life/space.mjs。
+// 保留它的唯一目的是让测试能证明“被替换的确实是另一套旧实现”（岸带放行、体半径膨胀、
+// 房间像素行走等语义与新 space 不同）。放在 test-support/ 而不是 life/，由 ARCH-SPACE-01 /
+// ARCH-RESEARCH-01 静态钉死：任何 life/、web/、shared/、scripts/ 运行文件 import 它都判红。
 import { campBridgeBounds } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
 import { inCamp, wildLandscape } from '../shared/wild-landscape.mjs';
 import { districtPads } from '../shared/camp-districts.mjs';
 import { bodyGrid, CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { ROOM_BOUNDS, ROOM_GRID } from '../shared/room-layout.mjs';
-
-export const RESEARCH_ONLY = true;
 
 /**
  * 旧服务端地面谓词（回退开关打开时的唯一答案）。

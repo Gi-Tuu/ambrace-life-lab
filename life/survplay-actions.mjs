@@ -13,12 +13,12 @@ import { recordRepairFailure } from './production.mjs';
 import { isLaborAction } from './households.mjs';
 import { simMinuteNow } from './sim-clock.mjs';
 import { playerReach, survActInner } from './survplay-camp.mjs';
-import { RESEARCH_PLAYER_BUDGET, legacyPlayerTickRefusal, legacySpendPlayerTime, legacyRefundPlayerTime, legacyPlayerTimeLeft } from './research-time.mjs';
+import { RESEARCH_PLAYER_BUDGET, RESEARCH_TICK_MINUTES, RESEARCH_DAY_MINUTES, legacyPlayerTickRefusal, legacySpendPlayerTime, legacyRefundPlayerTime, legacyPlayerTimeLeft } from './research-policy.mjs';
 
 // settleSurvival 由 survplay 注入：本模块只调用，不反向持有世界单例。
 export function createActionDomain({ settleSurvival }) {
-const P1_TICK_MINUTES = 60; // 旧路径：与 resident-time 的 TICK_MINUTES 同源
-const P1_DAY_MINUTES = 1440; // 连续路径：只保留日统计，不再拒绝操作
+const P1_TICK_MINUTES = RESEARCH_TICK_MINUTES; // 研究策略：60 分/刻（与 resident-time 同源）
+const P1_DAY_MINUTES = RESEARCH_DAY_MINUTES; // 连续路径：只保留日统计，不再拒绝操作
 const CONTINUOUS_LONG = new Set(CONTINUOUS_LONG_ACTIONS);
 function legacyPlayerTime(w, kind) {
   if (!w.independentWorld) return 0;
@@ -41,7 +41,7 @@ function playerTimeMax(w) {
   return RESEARCH_PLAYER_BUDGET;
 }
 
-// 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用，判定集中在 research-time。
+// 旧路径（V72_TIME=0）的每刻 100 点预算；正式游戏默认不再使用，判定集中在 research-policy。
 function spendTime(w, cost) {
   if (!w.independentWorld) return true;
   return legacySpendPlayerTime(w, cost);
@@ -107,7 +107,7 @@ function survAct(sp, body) {
           return { ok: true, code: 'BUSY_START', remainMin: cost.minutes, endMin, why: `已排入时间轴，约 ${cost.minutes} 游戏分钟后完成` };
         }
       } else {
-        // 研究态旧路径（!w.simClock）：本刻 60 分池用尽 ⇒ 研究态旧超时码。字面量只在 research-time.mjs。
+        // 研究态旧路径（!w.simClock）：本刻 60 分池用尽 ⇒ 研究态旧超时码。字面量只在 research-policy.mjs。
         const left = Math.max(0, P1_TICK_MINUTES - clock.tick.usedMin);
         if (left <= 1e-9) { const refused = legacyPlayerTickRefusal(); return failTime(refused.code, refused.why); }
         if (cost.minutes <= left + 1e-9) {
@@ -239,3 +239,4 @@ function advancePlayerBusy(sp, atMin) {
 
   return { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTimeMax };
 }
+

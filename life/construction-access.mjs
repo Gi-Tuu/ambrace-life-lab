@@ -89,7 +89,7 @@ function mapFor(w) {
 }
 
 // P4：地面谓词只有 space 一处。旧的“解析河 + 村外 wildLandscape”双谓词回退已退役
-// （只在 life/research-space.mjs 作为研究夹具保留），正式路径没有运行时开关。
+// （只在 test-support/legacy-space-oracle.mjs 作为测试 oracle 保留），正式路径没有运行时开关。
 export function constructionSpace(w) {
   return constructionAccessEnabled(w) ? sceneSpace(w) : null;
 }

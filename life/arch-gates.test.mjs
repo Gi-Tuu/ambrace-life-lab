@@ -7,12 +7,12 @@ import { archGateReport, RULES, ROOT } from '../scripts/arch-gates.mjs';
 const run = (entries) => archGateReport({ files: entries });
 const file = (path, text) => [path, text];
 
-test('ARCH-GATE-00 当前仓库三条闸门全绿（基线不假红）', () => {
+test('ARCH-GATE-00 当前仓库六条闸门全绿（基线不假红）', () => {
   const report = archGateReport({ root: ROOT });
   assert.deepEqual(report.problems, []);
   assert.ok(report.scanned > 100, `扫描文件数太少：${report.scanned}`);
   assert.ok(report.allowed.length > 0, '白名单一条都没命中，说明规则口径可能已漂移');
-  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-SPACE-01', 'ARCH-POS-01', 'ARCH-CLOCK-01']);
+  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-SPACE-01', 'ARCH-POS-01', 'ARCH-CLOCK-01', 'ARCH-RESEARCH-01']);
 });
 
 test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
@@ -35,7 +35,7 @@ test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
 
 test('ARCH-2D-01 TIME_WAIT 只放行研究态隔离模块，正式路径 0', () => {
   const legacy = run([
-    file('life/research-time.mjs', "export const LEGACY_TIME_CODE = 'TIME_WAIT';\n"),
+    file('life/research-policy.mjs', "export const LEGACY_TIME_CODE = 'TIME_WAIT';\n"),
   ]);
   assert.deepEqual(legacy.problems, []);
   assert.equal(legacy.allowed.length, 1);
@@ -96,6 +96,7 @@ test('ARCH-SPACE-01 旧空间开关/包装/房间像素行走逐条能变红，�
     ['if (!roomBodyFits(site, cells, pixels, bounds, x, y)) return;\n', /roomBodyFits/],
     ['const [x,z] = moveRoomFeet(cells, x, y, dx, dz, pixels, fits, bounds);\n', /moveRoomFeet/],
     ['if (!roomAllows(cells, px, py, pixels, bounds)) return false;\n', /roomAllows/],
+    ['const legacy = legacyGroundQuery({ mapSeed: 1 });\n', /legacyGroundQuery/],
   ];
   for (const [text, re] of cases) {
     const report = run([file('web/app.js', text)]);
@@ -103,8 +104,8 @@ test('ARCH-SPACE-01 旧空间开关/包装/房间像素行走逐条能变红，�
     assert.match(report.problems[0], /\[ARCH-SPACE-01\]/);
     assert.ok(re.test(report.problems[0]), report.problems[0]);
   }
-  // 研究夹具用 legacy* 命名，不得被 \b 误伤；测试/文档/证据目录不参与。
-  assert.deepEqual(run([file('life/research-space.mjs',
+  // 测试 oracle 用 legacy* 命名，不得被 \b 误伤；测试/文档/证据目录不参与。
+  assert.deepEqual(run([file('test-support/legacy-space-oracle.mjs',
     'export function legacyCampBodyWorld(world) { return world; }\nexport function legacyMoveRoomFeet() {}\n')]).problems, []);
   assert.deepEqual(run([
     file('life/space.test.mjs', 'campBodyWorld; roomPixelWalk; SPACE_V1;\n'),
@@ -138,6 +139,32 @@ test('ARCH-POS-01 位置字段只允许白名单整字段写入', () => {
   assert.equal(plannerRogue.problems.length, 1);
 });
 
+test('ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时钟/空间常量逐条变红', () => {
+  const cases = [
+    ["const a = await import('./research-time.mjs');\n", /research-time/],
+    ["const a = await import('./research-space.mjs');\n", /research-space/],
+    ["const a = await import('../test-support/legacy-space-oracle.mjs');\n", /legacy-space-oracle/],
+    ['const TICK_MINUTES = 60;\n', /TICK_MINUTES/],
+    ['export const DAY_MINUTES = 1440;\n', /DAY_MINUTES/],
+    ['export const RESIDENT_UNITS_PER_TICK = 12;\n', /RESIDENT_UNITS_PER_TICK/],
+    ['export const PLAYER_UNITS_PER_TICK = 10;\n', /PLAYER_UNITS_PER_TICK/],
+  ];
+  for (const [text, re] of cases) {
+    const report = run([file('life/rogue.mjs', text)]);
+    assert.equal(report.problems.length, 1, `${text.trim()} 应红：${JSON.stringify(report.problems)}`);
+    assert.match(report.problems[0], /\[ARCH-RESEARCH-01\]/);
+    assert.ok(re.test(report.problems[0]), report.problems[0]);
+  }
+  // 显式策略/legacy 配置行是唯一两处合法形态；从常量派生、测试 oracle 路径都不误伤。
+  assert.deepEqual(run([
+    file('life/research-policy.mjs', 'export const RESEARCH_TICK_MINUTES = GAME_MINUTES_PER_HOUR;\n'),
+    file('life/space.mjs', 'export const LEGACY_RESEARCH_UNITS_PER_TICK = Object.freeze({ resident: 12 });\n'),
+    file('test-support/legacy-space-oracle.mjs', "export const x = 1;\n"),
+  ]).problems, []);
+  // 测试文件不参与运行路径扫描，但运行路径 import 测试 oracle 仍然红。
+  assert.deepEqual(run([file('life/foo.test.mjs', 'const TICK_MINUTES = 60;\n')]).problems, []);
+});
+
 test('每条问题都带 file:line + 规则名，便于直接定位', () => {
   const { problems } = run([
     file('web/app.js', '\n\nfunction paintTerrain() {}\n'),
@@ -147,3 +174,5 @@ test('每条问题都带 file:line + 规则名，便于直接定位', () => {
   assert.match(problems[0], /^web\/app\.js:3: \[ARCH-2D-01\] /);
   assert.match(problems[1], /^life\/rogue\.mjs:2: \[ARCH-POS-01\] /);
 });
+
+

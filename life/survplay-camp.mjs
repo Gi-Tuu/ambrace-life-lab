@@ -1,6 +1,6 @@
 // 生存营地动作入口：玩家在聚落/外围的建造、住房、设施、家庭、营地与规则层动作。
 // 这里只裁决“能不能、做了什么”并结算世界侧后果；时间/体力预算与账本在 survplay-actions。
-import { move, actuate, isAlive, SURV_COST, PLAYER_UNITS_PER_TICK } from './body.mjs';
+import { move, actuate, isAlive, SURV_COST } from './body.mjs';
 import { validate, validateCamp } from './rules.mjs';
 import { noteWorkMotion } from './work-motion.mjs';
 import { regionPoint } from '../shared/camp-region-entities.mjs';
@@ -20,19 +20,19 @@ import { constructionAccess, constructionAccessEnabled, constructionSpace, recor
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseAction } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK, roomContains } from './space.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId, WORLD_SPACE } from './actor-pos.mjs';
 
 // P0-1：玩家外围位置 w.survival.playerPos={x,z,t}。带 from 的外围动作先做连续性校验。
 // 村内额度另行放宽：客户端在村里保留冲刺（SPEED 0.5×6fps=3.0 格/秒，冲刺 ×1.75=5.25），
-// 而原先全村一律按 PLAYER_UNITS_PER_TICK=10/刻（6 秒刻下只有 1.67 格/秒）⇒ 正常走路就超 1.8 倍、
-// 冲刺超 3.15 倍，每次上报被判 TELEPORT 再被拉回（线上"像高延迟"的真因）。
+// 而原先全村一律按 10/刻（6 秒刻下只有 1.67 格/秒）⇒ 正常走路就超 1.8 倍、
+// 冲刺超 3.15 倍，每次上报被判 TELEPORT 再被拉回（线上“像高延迟”的真因）。
 // 外围同权（V4-03）只针对外围同程，这里不动它；40 单位/刻 同时盖住 7.5 秒刻的冲刺 39.4。
-const CAMP_UNITS_PER_TICK = 40;
-// 只有"位置上报"这一种动作享受村内宽带：它是技术同步，不是劳动。采集/进出等动作仍按 10/刻 判连续，
+// 这三个旧预算是 space.mjs 的 legacy speed-budget 行（同一张每刻预算表，不是第二套空间）。
+// 只有“位置上报”这一种动作享受村内宽带：它是技术同步，不是劳动。采集/进出等动作仍按 10/刻 判连续，
 // 这样 A/B 对照那条闸门（from=[0,0] 离采集点 28.1 单位 ⇒ TELEPORT）保持原意不变。
-// inCamp 只在合法坐标上有意义；越界坐标（哨兵值）按"村外"从严处理，绝不因探测地形抛错而改变拒绝码。
+// inCamp 只在合法坐标上有意义；越界坐标（哨兵值）按“村外”从严处理，绝不因探测地形抛错而改变拒绝码。
 const syncBudget = (from, kind, w) => {
   // P2：正式游戏的玩家**移动上报**按 space.mjs 的“单位/游戏分钟”单一口径（含冲刺）；
   // 非移动动作（采集/建造…）按基础步行预算校验，伪造端点仍会被拒——冲刺是移动能力，不是动作瞬移。
@@ -41,7 +41,7 @@ const syncBudget = (from, kind, w) => {
   }
   let inside = false;
   try { inside = kind === "player_sync" && inCamp(from[0], from[1]); } catch { inside = false; }
-  return inside ? CAMP_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK;
+  return inside ? LEGACY_RESEARCH_UNITS_PER_TICK.playerSyncInCamp : LEGACY_RESEARCH_UNITS_PER_TICK.player;
 };
 // P2b：位置权威不再只校验速度。正式游戏的室外脚点必须落在 space 的可走面内（含实体半径），
 // 室内位置（campPlayerRoom + 房间 16×12 坐标）是显式房间空间，不做室外几何判定。

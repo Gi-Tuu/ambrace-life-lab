@@ -3,7 +3,7 @@
 //   02 客户端 buildWorld 与服务端 construction-access 同一输入、同一结果（含高度）；
 //   03 村内地面/桥/野外由同一条 campTerrain/wild-landscape 高度链派生，stage.floors 只是可站表面；
 //   04 室内只走 roomSurface（16×12 + portal）；
-//   05 旧实现只在研究夹具里（legacy* 命名），正式模块不 import；
+//   05 旧实现只在 test-support 测试 oracle，运行路径 0 import；
 //   06 旧档位置连续（读档后仍可站、仍可继续走）；
 //   07 研究态 dumpSurv 逐位不变（space 不进存档）。
 import test from 'node:test';
@@ -21,7 +21,7 @@ import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { playerReach } from './survplay-camp.mjs';
 import {
   legacyCampBodyWorld, legacyGroundQuery, legacyMoveRoomFeet, legacyRoomAllows,
-} from './research-space.mjs';
+} from '../test-support/legacy-space-oracle.mjs';
 
 const FORMAL = {
   gameRules: true, mapSeed: 13, layoutVersion: 2, settlementLife: true, regionalWork: true,
@@ -77,14 +77,13 @@ function samplesFor(seed, version) {
   return points;
 }
 
-test('P4-01 正式路径 0 处旧空间开关/包装/房间像素行走', () => {
-  const BANNED = [
+test('P4-01 正式路径 0 处旧空间开关/包装/房间像素行走', () => {  const BANNED = [
     /\bSPACE_V1\b/, /\bspaceQueriesEnabled\b/, /\b__SPACE_LEGACY__\b/, /space=legacy/,
     /\bcampBodyWorld\b/, /\broomPixelWalk\b/, /\broomBodyFits\b/, /\bmoveRoomFeet\b/, /\broomAllows\b/,
     /\bperipheralStepCap\b/,
   ];
   const formal = [
-    ...readdirSync(LIFE).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== 'research-space.mjs').map((f) => `life/${f}`),
+    ...readdirSync(LIFE).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs')).map((f) => `life/${f}`),
     ...readdirSync(WEB).filter((f) => f.endsWith('.mjs') || f.endsWith('.js')).map((f) => `web/${f}`),
     'shared/camp-scene.mjs', 'shared/camp-scene-content.mjs', 'shared/wild-landscape.mjs', 'shared/camp-terrain.mjs',
   ];
@@ -210,17 +209,17 @@ test('P4-04 室内只走 roomSurface：16×12 + portal，家具/墙/越界同一
   assert.equal(/moveRoomFeet|roomBodyFits|roomPixelWalk/.test(app), false);
 });
 
-test('P4-05 旧实现只在研究夹具里：legacy* 语义保留，正式模块不 import 它', () => {
-  // 正式模块不得 import 研究夹具（注释里提到文件名不算 import；只认 from/import() 的模块说明符）。
+test('P4-05 旧实现只在 test-support oracle：legacy* 语义保留，运行路径不 import 它', () => {
+  // 运行路径不得 import 测试 oracle（注释里提到文件名不算 import；只认 from/import() 的模块说明符）。
   const root = fileURLToPath(new URL('../', import.meta.url));
   const files = [
-    ...readdirSync(LIFE).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== 'research-space.mjs').map((f) => `life/${f}`),
+    ...readdirSync(LIFE).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs')).map((f) => `life/${f}`),
     ...readdirSync(WEB).filter((f) => f.endsWith('.mjs') || f.endsWith('.js')).map((f) => `web/${f}`),
     'serve.mjs',
   ];
-  const importSpec = /(?:from\s*|import\s*\(\s*)['"][^'"]*research-space\.mjs['"]/;
+  const importSpec = /(?:from\s*|import\s*\(\s*)['"][^'"]*legacy-space-oracle\.mjs['"]/;
   const importers = files.filter((rel) => importSpec.test(readFileSync(root + rel, 'utf8')));
-  assert.deepEqual(importers, [], `正式模块 import 了研究夹具：${importers.join(',')}`);
+  assert.deepEqual(importers, [], `运行路径 import 了测试 oracle：${importers.join(',')}`);
 
   // 旧地面谓词：岸带放行（正式 space 拒）。
   const sp = start(), w = sp.world;
@@ -236,7 +235,7 @@ test('P4-05 旧实现只在研究夹具里：legacy* 语义保留，正式模块
   assert.notEqual(wrapped.collisionGrid, grid);
   assert.equal(wrapped.collisionGrid.walk[0], 0, '贴边格按身体半径挖掉');
 
-  // 旧房间像素行走：像素掩码挡住即不可走（研究夹具保留旧口径）。
+  // 旧房间像素行走：像素掩码挡住即不可走（测试 oracle 保留旧口径）。
   const cells = new Map(), pixels = new Uint8Array(ROOM_PX.width * ROOM_PX.height).fill(1);
   const bounds = { left: 32, right: 224, top: 50, bottom: 192 };
   pixels[(120) * ROOM_PX.width + 128] = 0; // 在 (128,120) 放一个像素障碍
@@ -284,5 +283,8 @@ test('P4-07 研究态 dumpSurv 逐位不变：space/高度不进存档，夹具�
   assert.equal(createSurvPlay(7, { gameRules: false }).world.pos, undefined);
 });
 
-// 房间像素网格只在研究夹具里用；这里显式写出来，避免从正式模块借常量。
+// 房间像素网格只在测试 oracle 里用；这里显式写出来，避免从正式模块借常量。
 const ROOM_PX = Object.freeze({ width: 256, height: 192 });
+
+
+

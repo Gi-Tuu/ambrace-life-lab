@@ -21,7 +21,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
-import { GAME_RESIDENT_UNITS_PER_TICK, unitsPerTick } from './space.mjs';
+import { GAME_RESIDENT_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks, travelTicksAt, unitsPerTick } from './space.mjs';
 import { advanceTravelPos, beginTravel, clearTravel, defaultActorPos, isInteriorLoc, isRoomSpace, moveActor, noteArrival, placeActor, posOf, roomOfSpace, roomSpaceId, setPlayerRoom, spawnActor, travelStartWorld, WORLD_SPACE } from './actor-pos.mjs';
 import { routeLength, worldRoute } from '../shared/asset-collision.mjs';
 
@@ -208,10 +208,11 @@ export function spawn(world, id, loc) {
 }
 
 // Distant trips consume world time. Occupancy changes once, when the resident arrives.
-// 旧路径（研究态 / actTimeModel=false）仍用 12 与 10，保证旧档与研究面逐位不变。
+// 旧路径（研究态 / actTimeModel=false）仍用 12 与 10：这是 space.mjs 的 legacy speed-budget 行，
+// 不再在 body 里另写常量。研究策略是“直线距离 + 无路径”，刻数仍走同一个 travelTicksAt 公式。
 // P2c：正式游戏居民沿 space 的 A* 路径逐段走；到达刻数由路径长度 / 同一 speedBudget 推导。
-export const RESIDENT_UNITS_PER_TICK = 12;
-export const PLAYER_UNITS_PER_TICK = 10;
+export const RESIDENT_UNITS_PER_TICK = LEGACY_RESEARCH_UNITS_PER_TICK.resident;
+export const PLAYER_UNITS_PER_TICK = LEGACY_RESEARCH_UNITS_PER_TICK.player;
 export { GAME_RESIDENT_UNITS_PER_TICK };
 
 // 路径缓存：同一 (起点,终点) 只算一次。A* 是纯函数；缓存只省时间，不改变结果。
@@ -327,7 +328,7 @@ export function startMove(world,id,to) {
     const length = trip?.length ?? access?.distance ?? straight;
     // 逐段推进的实际到达刻：走完路径所需刻数 +1 到点缓冲（与 P2b/旧 travelTicks 同口径，
     // 避免把居民整体出行时间缩短一截而改写长程轨迹）。
-    const ticks = Math.max(2, Math.ceil(length / unitsPerTick(kind)) + 1);
+    const ticks = travelTicksAt(length, unitsPerTick(kind));
     const path = trip?.route ?? [];
     beginTravel(world, id, {
       from, to, arrive: world.t + ticks, kind, length,
@@ -340,7 +341,7 @@ export function startMove(world,id,to) {
   }
   const start=worldSite(world,from), end=worldSite(world,to);
   const distance=access?.distance ?? (start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0);
-  const ticks = Math.max(2,Math.ceil(distance/RESIDENT_UNITS_PER_TICK)+1);
+  const ticks = researchTravelTicks(distance);
   beginTravel(world, id, {from,to,arrive:world.t+ticks, ...(access?.destination && {at:access.destination})});
 }
 
@@ -1004,3 +1005,4 @@ function actuateInner(world, agentId, action, actionLoc) {
       return { action, ok: false, code: 'UNKNOWN', observation: '没这个动作', evt: evt({ kind: 'thwarted', valence: -0.4 }) };
   }
 }
+

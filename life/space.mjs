@@ -14,7 +14,7 @@
 //   · 门户：stage.entrances（campEntrance）+ 桥带；房间区域显式 16×12，不再靠隐式 /16 判位置。
 //
 // 退役的旧实现（服务端旧地面回退谓词、客户端每帧包裹像素栅格的体半径包装、房间像素行走）
-// 只在 life/research-space.mjs 里作为研究夹具保留，正式模块不得 import 它们。
+// 只在 test-support/legacy-space-oracle.mjs 里作为测试 oracle 保留；运行路径 0 import。
 import { campTerrain, floorHeight, floorSurface, hash2 } from '../shared/camp-terrain.mjs';
 import { campBridgeBounds, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { modelBounds } from '../shared/camp-geometry.mjs';
@@ -45,12 +45,27 @@ export const SPEED_BUDGET_UNITS_PER_GAME_MINUTE = Object.freeze({
 export const speedBudget = (kind = 'walk') =>
   kind === 'sprint' ? SPEED_BUDGET_UNITS_PER_GAME_MINUTE.sprint : SPEED_BUDGET_UNITS_PER_GAME_MINUTE.walk;
 export const unitsPerTick = (kind = 'walk') => speedBudget(kind) * GAME_MINUTES_PER_TICK;
-// 同一路径的刻数：居民旅行与玩家移动用同一函数。+1 是到点缓冲（旧 startMove 的保守口径）。
+// 同一路径的刻数：居民旅行与玩家移动用同一公式。+1 是到点缓冲（旧 startMove 的保守口径）。
+export const travelTicksAt = (distance, perTick, min = 2) =>
+  Math.max(min, Math.ceil(Math.max(0, distance) / perTick) + 1);
 export const travelTicks = (distance, kind = 'sprint', min = 2) =>
-  Math.max(min, Math.ceil(Math.max(0, distance) / unitsPerTick(kind)) + 1);
+  travelTicksAt(distance, unitsPerTick(kind), min);
 // 正式游戏居民与玩家共用同一预算表：居民按 walk（22.5/刻）出行；玩家移动上报可冲刺
 // （sprint 39.375/刻）。两者都由 speedBudget/unitsPerTick 派生，不再有独立常数 12。
 export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
+
+// ── 研究态 legacy 速度行（唯一配置，不是第二套空间）─────────────────────────
+// 研究态/旧时间模型没有连续路径与 space 几何，但仍是一种“每刻走多少单位”的预算；
+// 把它作为同一张每刻预算表的 legacy 行，刻数仍由上面的 travelTicksAt 公式推导。
+// 旧空间实现（地面谓词/体半径像素栅格/房间像素行走）已迁到 test-support/legacy-space-oracle.mjs，
+// 运行路径 0 import；ARCH-SPACE-01 / ARCH-RESEARCH-01 静态钉死。
+export const LEGACY_RESEARCH_UNITS_PER_TICK = Object.freeze({
+  resident: 12,
+  player: 10,
+  playerSyncInCamp: 40,
+});
+export const researchTravelTicks = (distance, min = 2) =>
+  travelTicksAt(distance, LEGACY_RESEARCH_UNITS_PER_TICK.resident, min);
 // tickMs 只决定“一刻的真实时长”；游戏分钟→真实时间的换算必须与宿主一致。
 export const unitsForRealMs = (ms, tickMs = 7500, sprint = false) => {
   const minutes = GAME_MINUTES_PER_TICK * (Number.isFinite(ms) ? ms : 0) /

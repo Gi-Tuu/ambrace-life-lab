@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import {
   TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker,
 } from '../web/player-move.mjs';
-import { legacyCampBodyWorld } from './research-space.mjs';
+import { legacyCampBodyWorld } from '../test-support/legacy-space-oracle.mjs';
 import { postJson, persistNotices } from '../web/net.mjs';
 
 const makeGrid = (tw, th, fill = 1) => ({ tw, th, walk: new Uint8Array(tw * th).fill(fill) });
@@ -23,7 +23,7 @@ test('P3-02 TILE 由行走几何模块拥有，且仍是 16 【变红法：把 1
   assert.equal(TILE, 16);
 });
 
-test('P3-03/P4 体半径栅格包装只在研究夹具里：返回新栅格、不改写输入、openEdge 真的改变结果', () => {
+test('P3-03/P4 体半径栅格包装只在 test-support oracle：返回新栅格、不改写输入、openEdge 真的改变结果', () => {
   const world = { tw: 24, th: 24, collisionGrid: makeGrid(24, 24) };
   const closed = legacyCampBodyWorld(world);
   assert.notEqual(closed.collisionGrid, world.collisionGrid, '必须给出新栅格对象');
@@ -102,3 +102,4 @@ test('P4-02 postJson：POST 形状正确、非 2xx 抛错、成功返回 JSON �
     globalThis.fetch = realFetch;
   }
 });
+
