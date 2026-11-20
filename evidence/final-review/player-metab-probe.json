@@ -1,0 +1,96 @@
+{
+  "at": "2026-11-20T17:57:32.763Z",
+  "rows": [
+    {
+      "mode": "on",
+      "perHourP1EnergyDelta": -0.024,
+      "trace": [
+        {
+          "hour": 1,
+          "p1Energy": 0.988,
+          "p1Metab": 60,
+          "a1Energy": 1,
+          "a1Metab": 60
+        },
+        {
+          "hour": 2,
+          "p1Energy": 0.964,
+          "p1Metab": 120,
+          "a1Energy": 0.9182,
+          "a1Metab": 120
+        },
+        {
+          "hour": 3,
+          "p1Energy": 0.94,
+          "p1Metab": 180,
+          "a1Energy": 0.8974,
+          "a1Metab": 180
+        },
+        {
+          "hour": 4,
+          "p1Energy": 0.916,
+          "p1Metab": 240,
+          "a1Energy": 0.8766,
+          "a1Metab": 240
+        },
+        {
+          "hour": 5,
+          "p1Energy": 0.892,
+          "p1Metab": 300,
+          "a1Energy": 0.8558,
+          "a1Metab": 300
+        },
+        {
+          "hour": 6,
+          "p1Energy": 0.868,
+          "p1Metab": 360,
+          "a1Energy": 0.835,
+          "a1Metab": 360
+        }
+      ]
+    },
+    {
+      "mode": "off",
+      "perHourP1EnergyDelta": -0.012,
+      "trace": [
+        {
+          "hour": 1,
+          "p1Energy": 0.988,
+          "a1Energy": 0.992,
+          "a1Metab": 1
+        },
+        {
+          "hour": 2,
+          "p1Energy": 0.976,
+          "a1Energy": 0.8445,
+          "a1Metab": 2
+        },
+        {
+          "hour": 3,
+          "p1Energy": 0.964,
+          "a1Energy": 0.8197,
+          "a1Metab": 4
+        },
+        {
+          "hour": 4,
+          "p1Energy": 0.952,
+          "a1Energy": 0.8077,
+          "a1Metab": 5
+        },
+        {
+          "hour": 5,
+          "p1Energy": 0.94,
+          "a1Energy": 0.7957,
+          "a1Metab": 6
+        },
+        {
+          "hour": 6,
+          "p1Energy": 0.928,
+          "a1Energy": 0.7365,
+          "a1Metab": 7
+        }
+      ]
+    }
+  ],
+  "note": "p1 每游戏小时能量下降：on 应为 -0.024（0.012 分钟积分 + 0.012 worldTick 再 tick 一次），off 为 -0.012。居民 a1 的 metabCount=60（只走分钟步）。"
+}

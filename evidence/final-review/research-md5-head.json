@@ -1,0 +1,42 @@
+{
+  "at": "2026-11-20T17:57:37.763Z",
+  "method": "HEAD 重跑 node life/run.mjs --<face>，stdout 写到临时文件，CRLF 归一后 md5",
+  "allMatch": true,
+  "faces": {
+    "report": {
+      "bytes": 1886,
+      "md5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedBytes": 1886,
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "match": true
+    },
+    "sweep": {
+      "bytes": 2850,
+      "md5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedBytes": 2850,
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "match": true
+    },
+    "viab": {
+      "bytes": 4526,
+      "md5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedBytes": 4526,
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "match": true
+    },
+    "recover": {
+      "bytes": 12150,
+      "md5": "fe198109386d048356f2fa69312e5183",
+      "expectedBytes": 12150,
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "match": true
+    },
+    "metab": {
+      "bytes": 13357,
+      "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedBytes": 13357,
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "match": true
+    }
+  }
+}

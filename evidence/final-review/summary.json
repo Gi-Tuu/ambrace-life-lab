@@ -1,0 +1,224 @@
+{
+  "review": "1.1 发布前独立审查（只读）",
+  "date": "2026-11-21",
+  "head": "caad92b",
+  "master": "4f2577b",
+  "report": "docs/审查-1.1-2026-11-21.md",
+  "method": "读代码/测试 + HEAD 复跑全部声称闸门 + 独立探针；未改代码、未 commit、未 push、未动 master",
+  "gatesReproduced": {
+    "fullTest": "1163/1163 fail 0",
+    "staticCheck": "488 files / 206 tests / 341 runtime / 12 whitelist",
+    "researchMd5": "5/5 (HEAD rerun)",
+    "researchLedgers": "12 artifacts / 65 records / 0 mismatch",
+    "golden": "45/45 diffs 0 (clean HEAD archive rerun)",
+    "parity22k": "2x11000 all 0",
+    "quickstart": "PASS",
+    "perf": "cold 648.2ms / warm 526.4ms / fps 50 / p95 33.4ms / buildWorld p50 213.8ms (all pass, no 1.1 regression)",
+    "balance100on": "0/5 extinct, 7,9,10,9,9",
+    "balance200on": "1/5 extinct, 1,9,1,0,7, aging 35 + hunger 10, agentErrors 0"
+  },
+  "findings": [
+    {
+      "id": "P0-1",
+      "title": "部署目标未定版：tag v1.0.0 会在第 101 日灭绝；1.1 未打 tag、package 仍 1.0.0",
+      "severity": "P0",
+      "evidence": [
+        "package.json:3 version=1.0.0; CHANGELOG.md:3 only [1.0.0]; git tag v1.0.0 -> 4f2577b; main caad92b untagged",
+        "evidence/final-review/master-1.0.0/exact-extinction.json: v1.0.0 host seed7 store0 day97, playerDead day100, ended day101",
+        "evidence/final-review/long-run-on-200d-head.json: 1.1 seed7 day200 pop1 (not extinct)"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": true,
+      "fix": "bump to 1.1.0, tag v1.1.0 at fixed commit, Qoder CN pin commit/tag (not main/master/v1.0.0)"
+    },
+    {
+      "id": "P1-1",
+      "title": "玩家 p1 每游戏小时被结算两次（worldTick + 分钟步）",
+      "severity": "P1",
+      "evidence": [
+        "life/survplay.mjs:712-716 unconditional pl.drives.tick(1)/pl.viab.tick(1)",
+        "life/survplay.mjs:406-415 + life/body-clock.mjs:37-66 60 x (1/60) per hour",
+        "life/survplay.mjs:699 has the !minuteBody guard, p1 block does not",
+        "evidence/final-review/player-metab-probe.json: p1 -0.024/hour (on) vs -0.012 (off); a1 metabCount 60/h",
+        "life/v11-metab.test.mjs:34-56 quiet() excludes p1 from conservation assertions"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": true,
+      "fix": "wrap survplay.mjs:713-716 in if (!minuteBody); include p1 in V11-METAB-01/02"
+    },
+    {
+      "id": "P1-2",
+      "title": "正式世界重启后离线补时完全不生效（missed 恒 0）",
+      "severity": "P1",
+      "evidence": [
+        "life/host-world.mjs:875 only catchUp when !simClock; :827 S.missed=0; :876 catchUpSurvival(S.missed.minutes)=0; :540-541 early return",
+        "evidence/final-review/offline-catchup-probe.log: backdated savedAt 60min -> t unchanged, gameMinutes +0.002, missed 0",
+        "ARCHITECTURE.md:93 still promises bounded offline catch-up"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": true,
+      "fix": "compute downtime for continuous worlds too, set S.missed, call catchUpSurvival(minutes)"
+    },
+    {
+      "id": "P1-3",
+      "title": "200 日双峰：seed7/29 只剩 1 人、seed41 灭绝；报告未解释 seed7",
+      "severity": "P1",
+      "evidence": [
+        "evidence/final-review/long-run-on-200d-head.json: pop200 [1,9,1,0,7], extinct 1/5, causes {aging:35,hunger:10}",
+        "seed7 curve: 7 -> 1 after day 100, all aging deaths, no new births after day 100",
+        "docs/回报-1.1-正式钟生存-2026-11-20.md §5 explains seed29/41 but not seed7"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "disclose seed7 200d collapse in the report; balance decision (reproduction threshold / winter food floor), do not silently retune in review"
+    },
+    {
+      "id": "P1-4",
+      "title": "1.1 部署冒烟/镜像未复验（证据早于 1.1 全部提交）",
+      "severity": "P1",
+      "evidence": [
+        "evidence/deploy-smoke/* mtime 2026-11-20 19:23 vs 1.1 commits 2026-11-21 01:25-01:46",
+        "docs/回报-部署冒烟-2026-11-20.md: Docker build not run, online iframe not verified, rollback not rehearsed"
+      ],
+      "reproducibility": "环境相关",
+      "fixBeforeRelease": true,
+      "fix": "docker build + container smoke on Qoder CN; real iframe test on modelscope.cn"
+    },
+    {
+      "id": "P2-1",
+      "title": "compare 单侧暂停/倍速时回放无场景；tick 查询会 fallback 到不同分钟的场景",
+      "severity": "P2",
+      "evidence": [
+        "life/host-replay.mjs:166-175 frames only at max(A,B) minute",
+        "life/replay-history.mjs:114-122 scenes null unless both sides have target minute; :105-107/:116 fallback by t only"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "index scene by (side, minute); return per-side minute; no cross-minute fallback; add paused-side replay gate"
+    },
+    {
+      "id": "P2-2",
+      "title": "前端 HUD 自估 msPerGameMinute（第二套速度读数）",
+      "severity": "P2",
+      "evidence": [
+        "web/app.js:2961-2971 observed = deltaMs/deltaMinutes clamped 0.55-1.6x nominal",
+        "evidence/v11-time-ui/hud-samples.log: 86.9-135.9ms vs nominal 125ms",
+        "life/frontend-time-ui.test.mjs:79-93 T7 only source-string regex"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "use server clock.msPerGameMinute for anchor; observed rate only for diagnostics"
+    },
+    {
+      "id": "P2-3",
+      "title": "静态闸门整文件白名单 + 运行路径排除 *.test.mjs",
+      "severity": "P2",
+      "evidence": [
+        "scripts/arch-gates.mjs:159-171 host-world/build-efficiency/camp-instances entries have no only regex (contradicts :10)",
+        "scripts/arch-gates.mjs:41-45 all *.test.mjs excluded from runtime scan; no rule forbids runtime importing them",
+        "live: 341 files / 12 whitelist green; arch-gates.test.mjs red fixtures are real"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "per-line only allowlist; add runtime-import-of-test rule"
+    },
+    {
+      "id": "P2-4",
+      "title": "research-policy 是部分抽取，不是唯一策略",
+      "severity": "P2",
+      "evidence": [
+        "life/research-policy.mjs only constants/refusals/pool helpers",
+        "life/survplay.mjs:604-693 (!minuteBody branch), :659-668 (chain), resident-time.mjs !simClock pool, survplay-actions.mjs:110-112",
+        "author report §6 admits branch bodies remain in shared modules"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "soften claim to 'single constants/adapter layer' or move branch bodies behind policy; add static rule"
+    },
+    {
+      "id": "P2-5",
+      "title": "sim-clock 边界：state().t 少 1e-6；rate=0 忽略 startMinutes 归零",
+      "severity": "P2",
+      "evidence": [
+        "life/sim-clock.mjs:109 floor(gameMinutes/60) vs :57/:128 with +1e-6",
+        "life/sim-clock.mjs:42 rate=0 returns 0; :37 startMinutes anchor ignored"
+      ],
+      "reproducibility": "环境相关",
+      "fixBeforeRelease": false,
+      "fix": "state.t uses nowTick(); rate=0 as paused; assert startMinutes/rate combos"
+    },
+    {
+      "id": "P2-6",
+      "title": "研究五面 md5 证据脚本只 hash 已落盘 log，不重跑代码",
+      "severity": "P2",
+      "evidence": [
+        "evidence/v11-research/run-research-md5.mjs reads evidence/v11-research/research/*.log only",
+        "my HEAD rerun of all five faces matches 5/5: evidence/final-review/research-md5-head.json"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "rerun life/run.mjs before hashing, or put the rerun in release checklist"
+    },
+    {
+      "id": "P2-7",
+      "title": "版本/文档/镜像卫生",
+      "severity": "P2",
+      "evidence": [
+        "package.json:3 = 1.0.0, no 1.1 in CHANGELOG/README/QUICKSTART, no v1.1 tag",
+        "deploy doc §6.1 labels SURV_CATCHUP_CAP as minutes; code host-world.mjs:550 uses ticks*60 game minutes (real downtime ~15min at TICK_MS=7500)",
+        "Dockerfile COPY life/ pulls 206 test files into image"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": true,
+      "fix": "bump version/tag with P0-1; fix cap wording; .dockerignore tests/evidence"
+    },
+    {
+      "id": "P2-8",
+      "title": "安全面：CSP 允许 *.ms.show/无 XFO；写路由默认 loopback 可写",
+      "severity": "P2",
+      "evidence": [
+        "serve.mjs:53-58 frame-ancestors 'self' https://*.ms.show https://modelscope.cn https://www.modelscope.cn, no XFO",
+        "live smoke: /life/space.mjs 200; /life/agent.mjs,/docs,/Dockerfile,/package.json,/.env,/.git/HEAD, traversal 404; app.js gzip 101645 + 304; world gzip 4648; immutable cc",
+        "request-guard.mjs:62-65 no-token loopback allowed; forged Origin /act -> 403 CROSS_SITE; destructive ctl needs token or server nonce (fail-closed)"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "deploy with CTL_TOKEN + COOKIE_SECURE=1; verify iframe on platform; consider specific ms.show host"
+    },
+    {
+      "id": "P2-9",
+      "title": "前端时间行为闸门是源码字符串断言，真行为只在手工 Chrome 脚本",
+      "severity": "P2",
+      "evidence": [
+        "life/frontend-time-ui.test.mjs:79-109 T7/T8/T9 assert.match(APP, /.../)",
+        "scripts/v11-time-ui.mjs + evidence/v11-time-ui/hud-samples.log are manual, not in npm test"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "move HUD/pause/rate/hidden assertions into CI or a fake-DOM integration test"
+    },
+    {
+      "id": "P2-10",
+      "title": "旧档兼容已验，但 compare 旧 archive 只覆盖到“能读”",
+      "severity": "P2",
+      "evidence": [
+        "V11-CMP-04 deletes clock/minute/minutes/sceneMinutes and restarts: readable, t*60 re-anchor",
+        "cross-version: 1.0.0 dump (t=30, clock=1800, pos/weather) loads in HEAD; t/clock/minuteMetab/pos preserved; +60min -> t=31"
+      ],
+      "reproducibility": "可复现",
+      "fixBeforeRelease": false,
+      "fix": "add a 1.0.0 fixture -> HEAD loadSurv regression gate"
+    }
+  ],
+  "qoderCnTarget": {
+    "recommended": "tag v1.1.0 at the commit after fixing P1-1/P1-2; otherwise pin commit caad92b",
+    "doNotUse": ["master", "v1.0.0", "floating main"]
+  },
+  "limitations": [
+    "no docker build / container smoke (daemon unavailable)",
+    "no online iframe test",
+    "no Qoder CN deployment performed",
+    "perf is a single HEAD rerun, not multi-round median",
+    "200-day run only 5 seeds (same as author)"
+  ]
+}

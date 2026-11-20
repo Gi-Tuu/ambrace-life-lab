@@ -1,0 +1,528 @@
+{
+  "_说明": "caad92b HEAD 复跑 on 200 日",
+  "at": "2026-11-20T17:49:38.495Z",
+  "rows": [
+    {
+      "seed": 7,
+      "population": {
+        "30": 3,
+        "100": 7,
+        "200": 1
+      },
+      "births": {
+        "100": 4,
+        "200": 4
+      },
+      "deaths": {
+        "100": 0,
+        "200": 7
+      },
+      "deathCauses200": {
+        "衰老": 7
+      },
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "energy200": {
+        "avg": 1,
+        "min": 1
+      },
+      "viability200": {
+        "avg": 1,
+        "min": 1
+      },
+      "store200": 16,
+      "laborMinutes100": 19730,
+      "runtime": {
+        "avgTickMs": 1.413,
+        "maxTickMs": 14,
+        "saveBytes": 957092,
+        "heapDeltaBytes": 217938744,
+        "goalStagnation": 4,
+        "skipped": 0,
+        "rejected": 574
+      },
+      "agentErrors": 0,
+      "curve": [
+        [
+          20,
+          3,
+          14
+        ],
+        [
+          40,
+          4,
+          16
+        ],
+        [
+          60,
+          6,
+          14
+        ],
+        [
+          80,
+          6,
+          18
+        ],
+        [
+          100,
+          7,
+          9
+        ],
+        [
+          120,
+          5,
+          12
+        ],
+        [
+          140,
+          4,
+          13
+        ],
+        [
+          160,
+          4,
+          14
+        ],
+        [
+          180,
+          2,
+          17
+        ],
+        [
+          200,
+          1,
+          16
+        ]
+      ]
+    },
+    {
+      "seed": 13,
+      "population": {
+        "30": 5,
+        "100": 9,
+        "200": 9
+      },
+      "births": {
+        "100": 6,
+        "200": 14
+      },
+      "deaths": {
+        "100": 0,
+        "200": 9
+      },
+      "deathCauses200": {
+        "衰老": 9
+      },
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "energy200": {
+        "avg": 0.9989,
+        "min": 0.99
+      },
+      "viability200": {
+        "avg": 1,
+        "min": 1
+      },
+      "store200": 10,
+      "laborMinutes100": 26575,
+      "runtime": {
+        "avgTickMs": 4.415,
+        "maxTickMs": 18,
+        "saveBytes": 2072043,
+        "heapDeltaBytes": 106442216,
+        "goalStagnation": 2,
+        "skipped": 0,
+        "rejected": 3407
+      },
+      "agentErrors": 0,
+      "curve": [
+        [
+          20,
+          4,
+          28
+        ],
+        [
+          40,
+          6,
+          10
+        ],
+        [
+          60,
+          8,
+          8
+        ],
+        [
+          80,
+          8,
+          9
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          7,
+          10
+        ],
+        [
+          140,
+          8,
+          9
+        ],
+        [
+          160,
+          8,
+          10
+        ],
+        [
+          180,
+          8,
+          9
+        ],
+        [
+          200,
+          9,
+          8
+        ]
+      ]
+    },
+    {
+      "seed": 29,
+      "population": {
+        "30": 6,
+        "100": 10,
+        "200": 1
+      },
+      "births": {
+        "100": 7,
+        "200": 7
+      },
+      "deaths": {
+        "100": 0,
+        "200": 10
+      },
+      "deathCauses200": {
+        "饥饿": 10
+      },
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "energy200": {
+        "avg": 0.972,
+        "min": 0.972
+      },
+      "viability200": {
+        "avg": 1,
+        "min": 1
+      },
+      "store200": 16,
+      "laborMinutes100": 22980,
+      "runtime": {
+        "avgTickMs": 1.273,
+        "maxTickMs": 16,
+        "saveBytes": 1299112,
+        "heapDeltaBytes": 187186216,
+        "goalStagnation": 94,
+        "skipped": 0,
+        "rejected": 592
+      },
+      "agentErrors": 0,
+      "curve": [
+        [
+          20,
+          5,
+          12
+        ],
+        [
+          40,
+          7,
+          10
+        ],
+        [
+          60,
+          8,
+          9
+        ],
+        [
+          80,
+          9,
+          7
+        ],
+        [
+          100,
+          10,
+          0
+        ],
+        [
+          120,
+          1,
+          7
+        ],
+        [
+          140,
+          1,
+          18
+        ],
+        [
+          160,
+          1,
+          27
+        ],
+        [
+          180,
+          1,
+          17
+        ],
+        [
+          200,
+          1,
+          16
+        ]
+      ]
+    },
+    {
+      "seed": 41,
+      "population": {
+        "30": 6,
+        "100": 9,
+        "200": 0
+      },
+      "births": {
+        "100": 6,
+        "200": 6
+      },
+      "deaths": {
+        "100": 0,
+        "200": 10
+      },
+      "deathCauses200": {
+        "衰老": 10
+      },
+      "ended200": true,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "energy200": {
+        "avg": null,
+        "min": null
+      },
+      "viability200": {
+        "avg": null,
+        "min": null
+      },
+      "store200": 33,
+      "laborMinutes100": 30180,
+      "runtime": {
+        "avgTickMs": 3.629,
+        "maxTickMs": 15,
+        "saveBytes": 1177933,
+        "heapDeltaBytes": -311804208,
+        "goalStagnation": 1,
+        "skipped": 0,
+        "rejected": 3086
+      },
+      "agentErrors": 0,
+      "curve": [
+        [
+          20,
+          5,
+          11
+        ],
+        [
+          40,
+          7,
+          20
+        ],
+        [
+          60,
+          8,
+          12
+        ],
+        [
+          80,
+          9,
+          8
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          7,
+          10
+        ],
+        [
+          140,
+          6,
+          11
+        ],
+        [
+          160,
+          3,
+          20
+        ],
+        [
+          180,
+          2,
+          34
+        ],
+        [
+          200,
+          0,
+          33
+        ]
+      ]
+    },
+    {
+      "seed": 53,
+      "population": {
+        "30": 6,
+        "100": 9,
+        "200": 7
+      },
+      "births": {
+        "100": 6,
+        "200": 12
+      },
+      "deaths": {
+        "100": 0,
+        "200": 9
+      },
+      "deathCauses200": {
+        "衰老": 9
+      },
+      "ended200": false,
+      "playerAlive200": false,
+      "playerViab200": 0,
+      "energy200": {
+        "avg": 0.9986,
+        "min": 0.99
+      },
+      "viability200": {
+        "avg": 1,
+        "min": 1
+      },
+      "store200": 14,
+      "laborMinutes100": 23690,
+      "runtime": {
+        "avgTickMs": 2.183,
+        "maxTickMs": 14,
+        "saveBytes": 1799126,
+        "heapDeltaBytes": 303355424,
+        "goalStagnation": 1,
+        "skipped": 0,
+        "rejected": 1127
+      },
+      "agentErrors": 0,
+      "curve": [
+        [
+          20,
+          5,
+          12
+        ],
+        [
+          40,
+          7,
+          14
+        ],
+        [
+          60,
+          8,
+          8
+        ],
+        [
+          80,
+          8,
+          8
+        ],
+        [
+          100,
+          9,
+          7
+        ],
+        [
+          120,
+          8,
+          18
+        ],
+        [
+          140,
+          8,
+          17
+        ],
+        [
+          160,
+          8,
+          9
+        ],
+        [
+          180,
+          7,
+          12
+        ],
+        [
+          200,
+          7,
+          14
+        ]
+      ]
+    }
+  ],
+  "summary": {
+    "mode": "on",
+    "days": 200,
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      3,
+      5,
+      6,
+      6,
+      6
+    ],
+    "population100": [
+      7,
+      9,
+      10,
+      9,
+      9
+    ],
+    "population200": [
+      1,
+      9,
+      1,
+      0,
+      7
+    ],
+    "avg30": 5.2,
+    "avg100": 8.8,
+    "avg200": 3.6,
+    "births100": 29,
+    "deaths100": 0,
+    "extinct100": "0",
+    "extinct100n": "0/5",
+    "extinct200": "1/5",
+    "deathCauses200": {
+      "衰老": 35,
+      "饥饿": 10
+    },
+    "playerAlive200": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "agentErrors": 0
+  }
+}

@@ -1,0 +1,11 @@
+{"hour":240,"day":10,"t":240,"population":3,"playerDead":false,"store":15,"ended":false}
+{"hour":480,"day":20,"t":480,"population":3,"playerDead":false,"store":13,"ended":false}
+{"hour":720,"day":30,"t":720,"population":3,"playerDead":false,"store":14,"ended":false}
+{"hour":960,"day":40,"t":960,"population":3,"playerDead":false,"store":15,"ended":false}
+{"hour":1200,"day":50,"t":1200,"population":3,"playerDead":false,"store":19,"ended":false}
+{"hour":1440,"day":60,"t":1440,"population":3,"playerDead":false,"store":17,"ended":false}
+{"hour":1680,"day":70,"t":1680,"population":3,"playerDead":false,"store":13,"ended":false}
+{"hour":1920,"day":80,"t":1920,"population":3,"playerDead":false,"store":13,"ended":false}
+{"hour":2160,"day":90,"t":2160,"population":3,"playerDead":false,"store":21,"ended":false}
+{"hour":2400,"day":100,"t":2400,"population":3,"playerDead":false,"store":0,"ended":false}
+{"summary":{"head":"master v1.0.0 host formal","final":{"hour":2400,"day":100,"t":2400,"population":3,"playerDead":false,"store":0,"ended":false},"deathCauses":null}}
