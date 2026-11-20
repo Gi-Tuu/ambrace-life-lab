@@ -1,0 +1,56 @@
+{
+  "_说明": "P3 研究五面 md5 更正台账：用 evidence/redo-p3/research/*.log 实际字节重算。原 research-md5.json 保留不改，作为“当时记错”的证据。",
+  "supersedes": "evidence/redo-p3/research-md5.json（只更正数值与 same 的依据，不删原文件）",
+  "generatedAt": "2026-11-20T07:07:56.105Z",
+  "algorithm": "md5",
+  "logDir": "evidence/redo-p3/research",
+  "faces": {
+    "report": {
+      "log": "evidence/redo-p3/research/report.log",
+      "bytes": 1886,
+      "md5": "de764430c8bc88cd8dbbc24512621e4f",
+      "recordedInOriginal": "19a2803182a5a63ae944120dd0a528bc",
+      "recordedMatch": false,
+      "archGatesMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "archGatesMatch": true
+    },
+    "sweep": {
+      "log": "evidence/redo-p3/research/sweep.log",
+      "bytes": 2850,
+      "md5": "aadd4895e84ae657d5a1e22c132228b1",
+      "recordedInOriginal": "22f76c48897713ddcee9bae8f767e31b",
+      "recordedMatch": false,
+      "archGatesMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "archGatesMatch": true
+    },
+    "viab": {
+      "log": "evidence/redo-p3/research/viab.log",
+      "bytes": 4526,
+      "md5": "b923787830eb26c3853ecf959987cf9d",
+      "recordedInOriginal": "86da5c0a4a0e26b082fbfb54fd6c1736",
+      "recordedMatch": false,
+      "archGatesMd5": "b923787830eb26c3853ecf959987cf9d",
+      "archGatesMatch": true
+    },
+    "recover": {
+      "log": "evidence/redo-p3/research/recover.log",
+      "bytes": 12150,
+      "md5": "fe198109386d048356f2fa69312e5183",
+      "recordedInOriginal": "feac239b364b8a771042d3996529181e",
+      "recordedMatch": false,
+      "archGatesMd5": "fe198109386d048356f2fa69312e5183",
+      "archGatesMatch": true
+    },
+    "metab": {
+      "log": "evidence/redo-p3/research/metab.log",
+      "bytes": 13357,
+      "md5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "recordedInOriginal": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+      "recordedMatch": false,
+      "archGatesMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "archGatesMatch": true
+    }
+  },
+  "allFiveCorrected": true,
+  "note": "原台账 md5 是旧 P0/P2b 值（19a280…/22f76c…/86da5c…/feac23…/e0a23d…），且 same:true 是旧值之间自比；真实值见 faces.*.md5。"
+}

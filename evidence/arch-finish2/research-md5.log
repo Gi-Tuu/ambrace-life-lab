@@ -1,0 +1,13 @@
+台账 9 份 / 记录 50 条；不一致 35 条
+[P0] evidence/redo-p0/baseline-md5.json  match 0/5  mismatches 5
+[P0] evidence/redo-p0/main-research-md5.json  match 10/10  mismatches 0
+[P1] evidence/redo-p1/research-md5.json  match 0/5  mismatches 5
+[P1b] evidence/redo-p1b/research-md5.json  match 0/5  mismatches 5
+[P2] evidence/redo-p2/research-md5.json  match 0/5  mismatches 5
+[P2b] evidence/redo-p2b/research-md5.json  match 0/5  mismatches 5
+[P2c] evidence/redo-p2c/research-md5.json  match 0/5  mismatches 5
+[P3] evidence/redo-p3/research-md5.json  match 0/5  mismatches 5
+[arch-gates] evidence/arch-gates/research-md5.json  match 5/5  mismatches 0
+实际 log 跨阶段五面逐位相同：true
+旧值被仓库内任何 log 佐证：false
+已写：evidence/arch-finish2/research-md5-audit.json / evidence/redo-p3/research-md5.corrected.json
