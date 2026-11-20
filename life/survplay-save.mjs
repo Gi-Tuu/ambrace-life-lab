@@ -44,7 +44,9 @@ function dumpSurv(sp) {
     // P2c：位置唯一事实只在正式游戏入档（研究态 dumpSurv 逐位不变）。
     ...(w.survival?.actTimeModel === true && w.pos ? { pos: w.pos } : {}),
     // P1：连续时钟只随正式游戏入档；研究态没有 simClock ⇒ 哈希逐位不变。
-    ...(w.simClock ? { clock: { rate: w.simClock.rate, msPerGameMinute: w.simClock.msPerGameMinute, gameMinutes: w.simClock.nowMinutes(), t: w.t } } : {}),
+    // 天气也只在正式态入档：新世界的 weather 在首个 worldTick 前是 null，读档若擅自
+    // 按 seed/day 重算，会让同起点的 A/B 轨迹从第一分钟就分叉。旧档没有 weather 仍按旧法补。
+    ...(w.simClock ? { clock: { rate: w.simClock.rate, msPerGameMinute: w.simClock.msPerGameMinute, gameMinutes: w.simClock.nowMinutes(), t: w.t, paused: w.simClock.paused }, weather: w.weather } : {}),
     sex: w.sex, pinv: w.pinv, minds, ...(w.survival.households ? { housing: w.housing } : {}),
     // V7.3.2：fair 调度的欠账/上次机会随档走，重启后不重置轮转（仅正式游戏）。
  };
@@ -104,7 +106,8 @@ function loadSurv(raw,seed=7,options) {
       if (!rec || Number.isFinite(rec.born)) continue;
       w.survival.households.residents[id] = { ...rec, born: w.t - ADULT_DAYS * DAY_TICKS, parents: rec.parents ?? [], legacy: true };
     }
-    w.weather = weatherFor(w.seed, dayOf(w.t));
+    // 正式档带 weather 就原样恢复（新世界首拍前可为 null）；旧档/研究态按旧法由 seed/day 重算。
+    w.weather = Object.hasOwn(raw, 'weather') ? raw.weather : weatherFor(w.seed, dayOf(w.t));
     sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };
     sp.world.pending = structuredClone(raw.pending ?? []);
     if (raw.residentTravel) adoptTravels(w, raw.residentTravel, null);

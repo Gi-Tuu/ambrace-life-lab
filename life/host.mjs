@@ -103,7 +103,7 @@ const {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
   modelBrain, modelTalk, modelConfigured, buildDeliberationPrompt, deliberationPrompt,
 } = model;
-const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison } = replay;
+const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison, controlComparison } = replay;
 const {
   viewers, writeQueue, start, stop, flushWrites, save, saveWorld, saveMain, saveCampEntry,
   campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
@@ -331,11 +331,17 @@ export const host = {
     });
   },
   ctl(body, campKey) {
-    if (body.action === 'step' && body.mode === 'compare') return queueWorldWrite(async () => {
-      await tickComparison();
-      publishComparison();
-      return {...this.status(), ok: true, persisted: await saveComparison()};
-    });
+    if (body.action === 'step' && body.mode === 'compare') {
+      // 手动单步仍是显式 60 游戏分/侧；锁、publish 在 tickComparison 内，落盘在锁外。
+      return tickComparison(Date.now(), {minutes: 60, explicit: true}).then(async (pair) => {
+        if (!pair) return {...this.status(), ok: false, error: 'NO_COMPARISON'};
+        return {...this.status(), ok: true, persisted: await saveComparison()};
+      });
+    }
+    // 1.1 第 3 项：compare 的单侧/全局 pause、resume、rate 走同一把 compare 短锁。
+    if (body.mode === 'compare' && ['pause', 'resume', 'rate'].includes(body.action)) {
+      return controlComparison(body).then((result) => ({...this.status(), ...result}));
+    }
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
       const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death'];

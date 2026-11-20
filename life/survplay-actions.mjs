@@ -11,6 +11,7 @@ import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { facilityOf } from '../shared/camp-facility.mjs';
 import { recordRepairFailure } from './production.mjs';
 import { isLaborAction } from './households.mjs';
+import { simMinuteNow } from './sim-clock.mjs';
 import { playerReach, survActInner } from './survplay-camp.mjs';
 import { RESEARCH_PLAYER_BUDGET, legacyPlayerTickRefusal, legacySpendPlayerTime, legacyRefundPlayerTime, legacyPlayerTimeLeft } from './research-time.mjs';
 
@@ -89,7 +90,7 @@ function survAct(sp, body) {
       }
       if (w.simClock) {
         // P1 连续路径：没有"本刻池"这个拒绝条件。短动作立即结算；长动作占用 [startMin,endMin)。
-        const nowMin = w.simClock.nowMinutes();
+        const nowMin = simMinuteNow(w);
         clock.tick.n = (clock.tick.n ?? 0) + 1;
         if (!CONTINUOUS_LONG.has(kind)) {
           clock.tick.usedMin += cost.minutes;
@@ -199,7 +200,7 @@ function advancePlayerBusy(sp, atMin) {
   if (!b) return;
   if (!isAlive(w.agents.p1)) { playerBusyAbort(sp, 'DEAD'); return; }
   if (w.simClock) {
-    const nowMin = Number.isFinite(atMin) ? atMin : w.simClock.nowMinutes();
+    const nowMin = Number.isFinite(atMin) ? atMin : simMinuteNow(w);
     const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
     const elapsed = Math.max(0, nowMin - fromMin);
     if (elapsed > 1e-9) {

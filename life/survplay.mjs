@@ -388,7 +388,11 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
   // 目标分钟来自时钟 + 本次显式步长；不再先把时钟整段推到头，再逐分钟处理——
   // 否则 w.t 在整段循环里都是终点派生的刻，分钟边界/感知/日界会错位。
   const requested = Number.isFinite(minutes) ? minutes : Number.isFinite(advanceMinutes) ? advanceMinutes : 0;
-  const targetMinute = Math.floor(clock.nowMinutes() + requested + 1e-9);
+  // 1.1：调用方给了 `now` 就按这个共享时刻求目标分钟。compare 的 A/B 用同一个 now，
+  // 否则“A 先跑、B 后跑”的几毫秒差会在整分边界把同一拍拆成 M/M+1，两个受控世界就不同步了。
+  // 没给 now（主世界自动拍/离线补时/研究态）仍按调用时刻换算，行为不变。
+  const atMs = Number.isFinite(now) ? now : undefined;
+  const targetMinute = Math.floor(clock.nowMinutes(atMs) + requested + 1e-6);
   const cursor = simMinuteCursor(w);
   if (targetMinute <= cursor) return w;
   const to = Math.min(targetMinute, cursor + MAX_SIM_STEP_MIN);
@@ -531,7 +535,7 @@ function drainThinkQueue(w, sp) {
     const job = think.queue.shift();
     const a = w.agents[job.id];
     if (!a || !isAlive(a) || a.simThinkPromise) { if (a) a.simThinkPending = false; continue; }
-    const nowMin = Math.floor(w.simClock.nowMinutes() + 1e-9);
+    const nowMin = Math.floor(w.simClock.nowMinutes() + 1e-6);
     const atMin = job.explicit ? job.atMin : Math.max(job.atMin, nowMin);
     startResidentThink(w, job.sp ?? sp, a, atMin, job);
   }
@@ -875,24 +879,3 @@ export function survView(sp) {
 
 const SURV_TARGET = 10; // 无尽模式落地前的里程碑显示；P2-B 终局语义替换
 // DATA5-13：deaths 随 survival 整块入档，长期运行必须封顶；总死亡数单独累计。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

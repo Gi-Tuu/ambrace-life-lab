@@ -10,6 +10,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { actuate } from './body.mjs';
 import { validate } from './rules.mjs';
 import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
+import { simMinuteNow } from './sim-clock.mjs';
 import { isLaborAction } from './households.mjs';
 import { costFor } from './action-cost.mjs';
 import { legacyResidentTimeRefusal } from './research-time.mjs';
@@ -99,7 +100,7 @@ export function clockOf(world, id) {
   if (!clock.tick || clock.tick.t !== world.t) clock.tick = { t: world.t, usedMin: 0, n: 0 };
   // P1：旧档 busy 只有 {startTick, remainMin, progressMin}，连续路径首次取用时补成绝对区间。
   if (world.simClock && clock.busy && !Number.isFinite(clock.busy.endMin)) {
-    const nowMin = world.simClock.nowMinutes();
+    const nowMin = simMinuteNow(world);
     const progressMin = Math.max(0, Number(clock.busy.progressMin) || 0);
     const remainMin = Math.max(0, Number(clock.busy.remainMin) || 0);
     clock.busy.startMin = nowMin - progressMin;
@@ -152,7 +153,7 @@ export function residentBeginTime(world, id, kind) {
   if (cost <= 0) { clock.tick.n += 1; return { ok: true, minutes: 0, staged: false }; }
   if (world.simClock) {
     clock.tick.n += 1;
-    const nowMin = world.simClock.nowMinutes();
+    const nowMin = simMinuteNow(world);
     if (!CONTINUOUS_LONG.has(kind)) {
       clock.usedMin += cost;
       clock.tick.usedMin += cost;
@@ -224,7 +225,7 @@ export function advanceResidentBusy(world, id, atMin) {
 
   let chunk;
   if (world.simClock) {
-    const nowMin = Number.isFinite(atMin) ? atMin : world.simClock.nowMinutes();
+    const nowMin = Number.isFinite(atMin) ? atMin : simMinuteNow(world);
     const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
     const elapsed = Math.max(0, nowMin - fromMin);
     if (elapsed <= 1e-9) return { none: true };

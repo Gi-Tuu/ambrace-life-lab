@@ -15,6 +15,7 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { noteConsumed } from './resource-ledger.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
+import { simMinuteNow } from './sim-clock.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecastDisasters } from './worldstate.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
@@ -176,7 +177,7 @@ export function addSecret(world, { kind, about, holder, valence, violates, detai
 // 且超过 PERCEPT_TTL_MIN 的迟到事件会被丢弃（见 agent.tick），避免同一事件被多个 10 分 think 重复消费。
 export function emitPercept(world, row) {
   if (!world?.percepts) return null;
-  const at = world.simClock ? world.simClock.nowMinutes() : Math.max(0, Number(world.t ?? 0)) * 60;
+  const at = simMinuteNow(world);
   const seq = (world.perceptSeq = (Number.isSafeInteger(world.perceptSeq) ? world.perceptSeq : 0) + 1);
   const event = { ...row, seq, at };
   world.percepts.push(event);
@@ -218,12 +219,17 @@ const routeCache = new WeakMap();
 // 每刻寻路预算：单刻阻塞必须远低于"慢磁盘"闸门的 300ms。超预算的旅行退回无路径出行，
 // 已缓存的可走性格子让下一次尝试更快；预算按世界+刻重置。
 const ROUTE_BUDGET_MS = Number(process.env.P2C_ROUTE_BUDGET_MS ?? 120);
-// 预算是"宿主一刻"级别的：同一刻里 7 个世界（营地主 + A/B + 6 营地）共享一份，
-// 否则每个世界各花 120ms，单刻阻塞会叠到 800ms+。
-let globalRouteBudget = { t: null, spent: 0 };
+// 预算是"每世界每刻"的：A/B 对照与多营地必须互不借用寻路额度，否则一侧/一个营地的
+// 路径耗时会让另一侧在同一刻拿不到路由，轨迹随负载分叉（1.1 compare 连续的直接闸门）。
+// 单世界研究态的预算与旧全局单键等价，形状/轨迹不变。
+const routeBudgets = new WeakMap();
 function routeBudgetState(world) {
-  if (globalRouteBudget.t !== world.t) globalRouteBudget = { t: world.t, spent: 0 };
-  return globalRouteBudget;
+  let budget = routeBudgets.get(world);
+  if (!budget || budget.t !== world.t) {
+    budget = { t: world.t, spent: 0 };
+    routeBudgets.set(world, budget);
+  }
+  return budget;
 }
 function cachedRoute(world, key, compute) {
   let cache = routeCache.get(world);
@@ -444,7 +450,7 @@ export function affordancesFor(world, agentId) {
   // （实测正式钟 100 日饥饿灭绝；见 docs/回报-1.1-正式钟生存-2026-11-20.md）。
   // 因此移动候选按旧刻（60 游戏分）发放；饥饿/天气等局部动作仍是分钟级。研究态/旧路径无此门。
   const movePlanDue = !world.simClock || !world.gameRules ||
-    !(Number(me?.nextMovePlanMin ?? -Infinity) > world.simClock.nowMinutes());
+    !(Number(me?.nextMovePlanMin ?? -Infinity) > simMinuteNow(world));
   const present = othersAt(world, agentId);
   const away = Object.keys(world.agents).filter((x) => x !== agentId && world.loc[x] !== here && (world.stash[x] ?? 0) > 0);
   const rel = (id) => (me?.relations ? me.relations.get(id) : { trust: 50, familiarity: 0 });
@@ -802,7 +808,9 @@ function actuateInner(world, agentId, action, actionLoc) {
       if (travel && !travel.ok) return {...travel,action};
       // 1.1 P1b：一次移动承诺的最低重新规划间隔 = 旧刻 60 游戏分。移动本身要占几刻，
       // 不能让 10 分 think 把它当成"随手可做"的 5 分钟动作反复重选（见 affordancesFor 的 movePlanDue）。
-      if (world.simClock && world.gameRules) world.agents[agentId].nextMovePlanMin = world.simClock.nowMinutes() + 60;
+      // 必须用整分钟（simMinuteNow）：带真实毫秒小数的 nextMovePlanMin 会让"到点没到点"
+      // 取决于动作落在这一分钟的哪个微秒，同输入的 A/B/单独跑会在这里随机分叉。
+      if (world.simClock && world.gameRules) world.agents[agentId].nextMovePlanMin = simMinuteNow(world) + 60;
       if (world.survival?.districtTravel?.[agentId])
         return { action, ok:true, code:'OK', observation:'出发前往'+world.locs[action.to], novel:true };
       const crowd = othersAt(world, agentId);

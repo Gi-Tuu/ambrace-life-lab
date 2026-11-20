@@ -52,7 +52,9 @@ export function createSimClock({
     nowMs: clockNow,
     nowMinutes(atMs = clockNow()) { return gameMinutesAt(atMs); },
     // 派生刻：保留旧整数量纲，供日历/旧 RNG 键/存档对账使用；不驱动新结算。
-    nowTick(atMs = clockNow()) { return Math.floor(gameMinutesAt(atMs) / GAME_MINUTES_PER_HOUR); },
+    // +1e-6 只吸收浮点回算误差（如 60*16666.666… 反算成 59.99999999999999），
+    // 不改变“跨过整分钟才进位”的语义；否则同一分钟步在不同真实时刻会随机落 t-1/t。
+    nowTick(atMs = clockNow()) { return Math.floor((gameMinutesAt(atMs) + 1e-6) / GAME_MINUTES_PER_HOUR); },
     // 显式推进世界时间（真实毫秒）。暂停时推进暂停点，恢复后时间仍然只向前。
     advance(deltaMs) {
       const delta = finite(deltaMs, 0);
@@ -123,7 +125,7 @@ export function bindDerivedTick(world) {
   Object.defineProperty(world, 't', {
     configurable: true,
     enumerable: true,
-    get() { return Math.floor(clock.nowMinutes() / GAME_MINUTES_PER_HOUR); },
+    get() { return Math.floor((clock.nowMinutes() + 1e-6) / GAME_MINUTES_PER_HOUR); },
     set(value) {
       const n = Number(value);
       if (Number.isFinite(n) && n >= 0) clock.setGameMinutes(n * GAME_MINUTES_PER_HOUR);
@@ -138,8 +140,16 @@ export function worldMinutes(world) {
   return Number.isFinite(t) ? Math.max(0, t) * GAME_MINUTES_PER_HOUR : 0;
 }
 
+// 动作/忙碌区间的“当前游戏分钟”：取整，不把真实毫秒的小数带进 endMin/存档/完成边界。
+// 正式世界的 1 分钟微步本来就在整分钟上结算；用小数会让同一输入在不同负载下晚/早 1 分完成。
+export function simMinuteNow(world) {
+  if (world?.simClock?.nowMinutes) return Math.max(0, Math.floor(Number(world.simClock.nowMinutes()) + 1e-6));
+  const t = Number(world?.t ?? 0);
+  return Number.isFinite(t) ? Math.max(0, Math.floor(t)) * GAME_MINUTES_PER_HOUR : 0;
+}
+
 export function worldTick(world) {
-  if (world?.simClock?.nowMinutes) return Math.floor(world.simClock.nowMinutes() / GAME_MINUTES_PER_HOUR);
+  if (world?.simClock?.nowMinutes) return Math.floor((world.simClock.nowMinutes() + 1e-6) / GAME_MINUTES_PER_HOUR);
   const t = Number(world?.t ?? 0);
   return Number.isFinite(t) ? Math.max(0, Math.floor(t)) : 0;
 }

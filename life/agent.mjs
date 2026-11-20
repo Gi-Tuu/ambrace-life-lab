@@ -18,6 +18,7 @@ import { recordConstructionBlock } from './construction-access.mjs';
 import { channelsFor, visibleActions, scoreAll, temperatureOf, softmaxPick, makeHabit } from './model.mjs';
 import { makeRng } from './rng.mjs';
 import { sampleTraits, DIMS } from './traits.mjs';
+import { simMinuteNow } from './sim-clock.mjs';
 import { SelfMaintain } from './viability.mjs';
 import { ForwardModel } from './s4-predictor.mjs';
 import { dayOf, isSunset, phaseOf, isNight } from './clock.mjs';
@@ -142,7 +143,7 @@ export class Organism {
     const external = (() => {
       const rows = (world.percepts ?? []).filter((p) => p.for === this.id || p.for === 'all');
       if (!world.simClock) return rows;
-      const nowMin = world.simClock.nowMinutes();
+      const nowMin = simMinuteNow(world);
       let seq = Number.isSafeInteger(world.perceptSeq) ? world.perceptSeq : 0;
       const fresh = [];
       for (const p of rows) {

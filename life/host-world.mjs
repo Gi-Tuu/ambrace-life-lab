@@ -29,6 +29,9 @@ export function createHostWorld({ S, CFG, C, getModel, getReplay, observerActive
   const publishComparison = () => getReplay().publishComparison();
   const saveComparison = () => getReplay().saveComparison();
   const tickComparison = (...a) => getReplay().tickComparison(...a);
+  // 1.1：compare 两侧各有独立连续钟；自动调度要能回答“哪一侧到点了”和“最近一次唤醒”。
+  const comparisonDue = (...a) => getReplay().comparisonDue?.(...a) ?? 0;
+  const nextComparisonDelayMs = (...a) => getReplay().nextComparisonDelayMs?.(...a) ?? Infinity;
   const modelBrain = (...a) => getModel().modelBrain(...a);
   let sigHandlers = null;
   let shuttingDown = false;
@@ -441,7 +444,11 @@ function primarySimScheduler() {
 function armAutoTick(minDelayMs = 5) {
   if (S.timer) { clearTimeout(S.timer); S.timer = null; }
   const scheduler = primarySimScheduler();
-  const delay = Math.max(minDelayMs, scheduler ? scheduler.nextDelayMs() : TICK_MS);
+  // primary 与 compare 谁先到点就按谁叫醒；compare 全局暂停/无观众返回 Infinity。
+  const delay = Math.max(minDelayMs, Math.min(
+    scheduler ? scheduler.nextDelayMs() : TICK_MS,
+    nextComparisonDelayMs(),
+  ));
   S.timer = setTimeout(() => {
     S.timer = null;
     autoTick();
@@ -496,8 +503,9 @@ function autoTick() {
   if (!S.running && !(S.compareRunning && observerActive(Math.max(S.viewers.compare ?? 0, S.viewers.comparison ?? 0),Date.now()))) return;
   if (autoPending) return; // 上一拍还没跑完/还在排队：跳过这一拍
   // 连续世界由 SimScheduler 判定"是否真的过了一个整游戏分钟"；没有欠账就不排队。
+  // 1.1：primary 没有欠账但 compare 到了分钟，也要叫醒，否则对照会停在原地。
   const scheduler = primarySimScheduler();
-  if (scheduler && scheduler.peek().minutes < 1) return;
+  if (scheduler && scheduler.peek().minutes < 1 && comparisonDue() < 1) return;
   autoPending = true;
   enqueueTick(true).finally(() => { autoPending = false; });
 }

@@ -141,12 +141,23 @@ test('host exposes independent journal records in survival, A and B', async () =
       from: point, otherContact: { from: far, target: `work:${target.loc}:${target.type}` },
     });
     assert.equal(r.sides.A.ok, true, JSON.stringify(r));
-    assert.equal(r.sides.B.ok, false);
+    // 1.1：正式态 compare 也走连续钟，长动作（repair=30 分）先 BUSY_START，到点才按同一
+    // 连续性规则结算；旧“每刻结算”下则当场拒绝。两种都属于同一分钟/刻断言，独立性不放宽：
+    // B 的 far 上报最终必须被 OUT_OF_REACH 拒绝，A 必须成功。
+    assert.ok(r.sides.B.ok === false || r.sides.B.code === 'BUSY_START', JSON.stringify(r.sides.B));
+    if (r.sides.A.code === 'BUSY_START' || r.sides.B.code === 'BUSY_START') {
+      assert.equal((await host.ctl({mode:'compare', action:'step'})).ok, true);
+    }
     const after = host.snapshot('compare').comparison;
-    assert.equal(after.A.settlementEvents.at(-1).kind, 'repair');
-    assert.equal(after.A.settlementEvents.at(-1).actor, 'p1');
-    assert.equal(after.B.settlementEvents.at(-1).code, 'OUT_OF_REACH');
-    assert.equal(after.B.settlementEvents.at(-1).ok, false);
+    const lastRepair = (side) => side.settlementEvents.findLast((e) => e.kind === 'repair' && e.actor === 'p1');
+    assert.equal(lastRepair(after.A)?.ok, true);
+    assert.equal(lastRepair(after.A)?.kind, 'repair');
+    // 连续钟的长动作在到点时走 advancePlayerBusy：失败记 player_action(aborted)，不再补一条
+    // repair 失败；旧“每刻结算”则在 repair 事件里直接失败。两者都必须带 OUT_OF_REACH。
+    const failed = after.B.settlementEvents.findLast((e) =>
+      (e.kind === 'repair' || (e.kind === 'player_action' && e.action === 'repair')) && e.actor === 'p1');
+    assert.equal(failed?.code, 'OUT_OF_REACH');
+    assert.ok(failed?.ok === false || failed?.status === 'aborted');
     assert.deepEqual(host.snapshot().survival.settlementEvents, official);
 
     await host.stop();
