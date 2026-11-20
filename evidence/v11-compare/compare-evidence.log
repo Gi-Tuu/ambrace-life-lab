@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-11-20T17:22:47.789Z",
+  "dataDir": "C:\\Users\\sheng\\AppData\\Local\\Temp\\v11-compare-evidence-h4GRLI",
+  "start": {
+    "startTick": 0,
+    "A": {
+      "gameMinutes": 0.001,
+      "t": 0,
+      "rate": 1,
+      "paused": false,
+      "msPerGameMinute": 16666.666666666668
+    },
+    "B": {
+      "gameMinutes": 0.001,
+      "t": 0,
+      "rate": 1,
+      "paused": false,
+      "msPerGameMinute": 16666.666666666668
+    },
+    "AeqB": true
+  },
+  "trajectory": {
+    "tA": 6,
+    "tB": 6,
+    "tOfficial": 6,
+    "AeqOfficial": true,
+    "Bdiverged": true
+  },
+  "sidePause": {
+    "A_paused": true,
+    "B_paused": false,
+    "A_delta": 0,
+    "B_delta": 1,
+    "A_clock": {
+      "gameMinutes": 360.001,
+      "t": 6,
+      "rate": 1,
+      "paused": true,
+      "msPerGameMinute": 16666.666666666668
+    },
+    "B_clock": {
+      "gameMinutes": 420,
+      "t": 7,
+      "rate": 1,
+      "paused": false,
+      "msPerGameMinute": 16666.666666666668
+    }
+  },
+  "sideRate": {
+    "A_rate": 2,
+    "B_rate": 1
+  },
+  "replay": {
+    "ok": true,
+    "frameMinute": 360,
+    "sceneA_t": 6,
+    "sceneB_t": 6,
+    "locMatchA": true,
+    "locMatchB": true,
+    "occupancyMatchA": true,
+    "occupancyMatchB": true
+  },
+  "oldArchive": {
+    "saveError": null,
+    "A_t": 6,
+    "B_t": 7,
+    "archiveT": 6,
+    "clocksRebuilt": true,
+    "replayOk": true,
+    "replayCode": null,
+    "replayNote": null,
+    "replayHasScenes": true
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-11-20T17:00:06.178Z",
+  "tickMs": 250,
+  "steps": {
+    "warm": {
+      "tA": 5,
+      "tB": 5,
+      "minutesA": 352.48,
+      "minutesB": 351.48
+    },
+    "sidePause": {
+      "A_paused": true,
+      "B_paused": false,
+      "deltaA": 0,
+      "deltaB": 314.28
+    },
+    "sideRate": {
+      "A_rate": 2,
+      "B_rate": 1,
+      "deltaA": 634.28,
+      "deltaB": 309.12,
+      "ratio": 2.05
+    },
+    "globalPause": {
+      "compareRunning": false,
+      "deltaA": 0,
+      "deltaB": 0
+    }
+  }
+}

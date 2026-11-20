@@ -1,0 +1,17 @@
+✔ V11-CMP-01 正式态 A/B 同起点独立时钟；A 轨迹=官方生存，B 分叉 (198.5542ms)
+✔ V11-CMP-02 单侧暂停只冻结该侧；全局 pause 仍可手动 60 分 step (91.0426ms)
+✔ V11-CMP-03 单侧倍速只改该侧；独立 scheduler 按各自 rate 欠分钟 (53.0513ms)
+✔ V11-CMP-04 回放：tick→分钟取场景，场景与实时一致；旧 archive 可读 (111.1017ms)
+✔ V11-CMP-05 camp_sleep 在 compare 内走同一把短锁：两侧各推进 ticks×60，不重入死锁 (102.4495ms)
+✔ V11-CMP-06 同起点同输入跑 1020 分：A 逐位=官方、B 逐位=单独跑（每小时比 dumpSurv） (358.0992ms)
+✔ V11-CMP-07 暂停一侧 100 拍：被暂停侧冻结，另一侧逐位=单独跑（锚定不累计漂移） (2101.0211ms)
+✔ V11-CMP-08 倍速一侧 100 拍：两侧轨迹仍逐位=各自单独跑 (3173.8647ms)
+✔ V11-CMP-09 act 在 tick 在途时可返回；compare 的 act/tick 不交叉写 A/B (80.1368ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11401.7254

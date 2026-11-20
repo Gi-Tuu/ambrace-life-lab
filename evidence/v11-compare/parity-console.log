@@ -1,0 +1,11 @@
+host meta {"mapSeed":0,"layoutVersion":0}
+[host] samples 11000 · terrainDiff 0 · walkDiff 0 · heightDiff 0 · portalDiff 0 · bridgeHeightDiff 0
+[host] walk buckets {"client-collider":0,"server-collider":0,"terrain":0}
+[host] walk 14bafb0483a011e2c16aaf96fa5e2919ef26ec8d3642998a11f8533d75685683 · terrainWalk3d 1ea7580e86703932f42a2a5c04a3fbacb97bdcb5772a358d6973b44ea002c0ce
+[host] quickstart probe [[30,24,true,true,[]],[30.5,24,true,true,[]],[31,24,true,true,[]],[31.5,24,true,true,[]],[32,24,true,true,[]]]
+[walk] {"key":"cvA:p1","before":{"x":30,"y":24},"after":{"x":32.25030000000002,"y":24},"moved":2.25}
+[seed13v2] samples 11000 · terrainDiff 0 · walkDiff 0 · heightDiff 0 · portalDiff 0 · bridgeHeightDiff 0
+[seed13v2] walk buckets {"client-collider":0,"server-collider":0,"terrain":0}
+[seed13v2] walk 4c4c72a495d201d065faedbe524e8fd5a3f280d57b3b0a4a50b5aa6c0abd0b6d · terrainWalk3d 791d2c6b3b5d929d43f4ed8939182b1302480eb7734766e3ae62b5c1b5b47eaf
+[host] PASS：11000 点 terrain/walk/height/portal 全 0 差异
+[seed13v2] PASS：11000 点 terrain/walk/height/portal 全 0 差异

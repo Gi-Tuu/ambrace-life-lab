@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2026-11-20T17:22:57.351Z",
+  "tickMs": 250,
+  "samples": [
+    {
+      "tA": 1,
+      "tB": 1,
+      "minutesA": 60.44,
+      "minutesB": 60.44,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 1,
+      "tB": 1,
+      "minutesA": 116.24,
+      "minutesB": 116.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 2,
+      "tB": 2,
+      "minutesA": 179.24,
+      "minutesB": 179.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 3,
+      "tB": 3,
+      "minutesA": 235.24,
+      "minutesB": 235.48,
+      "dtMinutes": -0.24,
+      "sameTick": true
+    },
+    {
+      "tA": 4,
+      "tB": 4,
+      "minutesA": 291.48,
+      "minutesB": 291.48,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 5,
+      "tB": 5,
+      "minutesA": 354.24,
+      "minutesB": 354.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 6,
+      "tB": 6,
+      "minutesA": 410,
+      "minutesB": 410.24,
+      "dtMinutes": -0.24,
+      "sameTick": true
+    },
+    {
+      "tA": 7,
+      "tB": 7,
+      "minutesA": 466.24,
+      "minutesB": 466.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 8,
+      "tB": 8,
+      "minutesA": 522.48,
+      "minutesB": 522.48,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 9,
+      "tB": 9,
+      "minutesA": 585.24,
+      "minutesB": 585.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 10,
+      "tB": 10,
+      "minutesA": 641.24,
+      "minutesB": 641.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    },
+    {
+      "tA": 11,
+      "tB": 11,
+      "minutesA": 697.24,
+      "minutesB": 697.24,
+      "dtMinutes": 0,
+      "sameTick": true
+    }
+  ],
+  "summary": {
+    "samples": 12,
+    "exactSamples": 10,
+    "maxAbsDtMinutes": 0.24,
+    "fullMinuteSkew": false,
+    "advanced": true,
+    "sameTickAll": true
+  }
+}
