@@ -1,0 +1,49 @@
+{
+  "at": "2026-11-20T10:10:43.623Z",
+  "host": {
+    "mapSeed": 0,
+    "layoutVersion": 0
+  },
+  "cases": [
+    {
+      "label": "host",
+      "seed": 0,
+      "version": 0,
+      "samples": 11000,
+      "diffs": {
+        "terrain": 0,
+        "walk": 0,
+        "height": 0,
+        "portal": 0,
+        "kind": 0
+      },
+      "walkBuckets": {
+        "client-collider": 0,
+        "server-collider": 0,
+        "terrain": 0
+      },
+      "bridgeHeightDiffs": 0,
+      "portalDiffCount": 0
+    },
+    {
+      "label": "seed13v2",
+      "seed": 13,
+      "version": 2,
+      "samples": 11000,
+      "diffs": {
+        "terrain": 0,
+        "walk": 0,
+        "height": 0,
+        "portal": 0,
+        "kind": 0
+      },
+      "walkBuckets": {
+        "client-collider": 0,
+        "server-collider": 0,
+        "terrain": 0
+      },
+      "bridgeHeightDiffs": 0,
+      "portalDiffCount": 0
+    }
+  ]
+}

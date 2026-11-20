@@ -1,0 +1,526 @@
+{
+  "label": "seg6",
+  "at": "2026-11-20T09:43:12.270Z",
+  "node": "v24.18.0",
+  "reps": 1,
+  "env": {
+    "headless": true,
+    "gpu": false
+  },
+  "runs": [
+    {
+      "i": 0,
+      "coldSurvival": 815,
+      "requests": 51,
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "seg": [
+        {
+          "k": "moduleEvalStart",
+          "at": 120.3
+        },
+        {
+          "k": "createCampRenderer",
+          "ms": 4,
+          "at": 120.3
+        },
+        {
+          "k": "moduleEvalEnd",
+          "at": 130.4
+        },
+        {
+          "k": "buildWorld",
+          "ms": 297.4,
+          "at": 152.8
+        },
+        {
+          "k": "glSetup",
+          "ms": 117.7
+        },
+        {
+          "k": "render",
+          "scale": 0.5,
+          "size": [
+            346,
+            182
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 121.2,
+          "gpu": 0,
+          "blit": 5.5,
+          "phases": [
+            91.1,
+            0,
+            28.2
+          ],
+          "buffers": {
+            "ms": 89.9,
+            "floats": 4945320,
+            "calls": 16,
+            "list": [
+              [
+                "region",
+                51840,
+                0.8
+              ],
+              [
+                "region",
+                216450,
+                5.6
+              ],
+              [
+                "region",
+                223560,
+                0.8
+              ],
+              [
+                "region",
+                316800,
+                6.9
+              ],
+              [
+                "region",
+                51840,
+                0.2
+              ],
+              [
+                "region",
+                175050,
+                3.4
+              ],
+              [
+                "region",
+                220860,
+                0.7
+              ],
+              [
+                "region",
+                148050,
+                2.6
+              ],
+              [
+                "region",
+                51840,
+                0.1
+              ],
+              [
+                "region",
+                161100,
+                2.2
+              ],
+              [
+                "region",
+                254250,
+                3
+              ],
+              [
+                "region",
+                320400,
+                5.4
+              ],
+              [
+                "region",
+                0,
+                0
+              ],
+              [
+                "stage",
+                2641230,
+                56.4
+              ],
+              [
+                "life",
+                90450,
+                1.2
+              ],
+              [
+                "homes",
+                21600,
+                0.6
+              ]
+            ]
+          }
+        },
+        {
+          "k": "renderCall",
+          "ms": 245.1,
+          "at": 568.3
+        },
+        {
+          "k": "overlay",
+          "ms": 1.4,
+          "at": 813.4
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 814.9
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.2,
+          "at": 819.2
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 11.3,
+          "gpu": 0,
+          "blit": 16.4,
+          "phases": [
+            0.1,
+            0.9,
+            8.2
+          ],
+          "buffers": {
+            "ms": 0,
+            "floats": 0,
+            "calls": 0,
+            "list": []
+          }
+        },
+        {
+          "k": "renderCall",
+          "ms": 27.9,
+          "at": 836.9
+        },
+        {
+          "k": "overlay",
+          "ms": 0.4,
+          "at": 864.8
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 865.2
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.1,
+          "at": 866.8
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 10.5,
+          "gpu": 0,
+          "blit": 4,
+          "phases": [
+            0.2,
+            0.4,
+            9.8
+          ],
+          "buffers": {
+            "ms": 0,
+            "floats": 0,
+            "calls": 0,
+            "list": []
+          }
+        },
+        {
+          "k": "renderCall",
+          "ms": 14.6,
+          "at": 880.4
+        },
+        {
+          "k": "overlay",
+          "ms": 0.4,
+          "at": 895
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 895.4
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.1,
+          "at": 901.4
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 8.1,
+          "gpu": 0,
+          "blit": 8.8,
+          "phases": [
+            0.1,
+            0.4,
+            7.5
+          ],
+          "buffers": {
+            "ms": 0,
+            "floats": 0,
+            "calls": 0,
+            "list": []
+          }
+        },
+        {
+          "k": "renderCall",
+          "ms": 16.9,
+          "at": 913.2
+        },
+        {
+          "k": "overlay",
+          "ms": 0.2,
+          "at": 930.1
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 930.4
+        }
+      ],
+      "warmTitle": 572.5,
+      "titleSeg": [
+        {
+          "k": "moduleEvalStart",
+          "at": 72.6
+        },
+        {
+          "k": "createCampRenderer",
+          "ms": 3.1,
+          "at": 72.6
+        },
+        {
+          "k": "moduleEvalEnd",
+          "at": 81.8
+        },
+        {
+          "k": "titleBuildWorld",
+          "ms": 267.1,
+          "at": 85.1
+        },
+        {
+          "k": "glSetup",
+          "ms": 3.7
+        },
+        {
+          "k": "render",
+          "scale": 0.5,
+          "size": [
+            287,
+            142
+          ],
+          "target": [
+            574,
+            284
+          ],
+          "prep": 98.7,
+          "gpu": 0,
+          "blit": 9.9,
+          "phases": [
+            97,
+            0,
+            0.4
+          ],
+          "buffers": {
+            "ms": 95.7,
+            "floats": 5952060,
+            "calls": 20,
+            "list": [
+              [
+                "region",
+                51840,
+                0.7
+              ],
+              [
+                "region",
+                51840,
+                0.2
+              ],
+              [
+                "region",
+                216450,
+                4.8
+              ],
+              [
+                "region",
+                223560,
+                0.6
+              ],
+              [
+                "region",
+                316800,
+                6.2
+              ],
+              [
+                "region",
+                51840,
+                0.2
+              ],
+              [
+                "region",
+                155700,
+                3.2
+              ],
+              [
+                "region",
+                51840,
+                0.2
+              ],
+              [
+                "region",
+                193950,
+                2.7
+              ],
+              [
+                "region",
+                220860,
+                0.6
+              ],
+              [
+                "region",
+                148050,
+                2.1
+              ],
+              [
+                "region",
+                51840,
+                0.2
+              ],
+              [
+                "region",
+                166050,
+                2.3
+              ],
+              [
+                "region",
+                51840,
+                0.5
+              ],
+              [
+                "region",
+                258300,
+                3.2
+              ],
+              [
+                "region",
+                214110,
+                1
+              ],
+              [
+                "region",
+                324450,
+                5.4
+              ],
+              [
+                "region",
+                243000,
+                2.8
+              ],
+              [
+                "stage",
+                2794590,
+                56.8
+              ],
+              [
+                "life",
+                165150,
+                2.1
+              ]
+            ]
+          }
+        },
+        {
+          "k": "titleRenderCall",
+          "ms": 113.4,
+          "at": 458.7
+        },
+        {
+          "k": "titleBuildWorld",
+          "ms": 0,
+          "at": 578.6
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            574,
+            284
+          ],
+          "target": [
+            574,
+            284
+          ],
+          "prep": 2.6,
+          "gpu": 0,
+          "blit": 4.6,
+          "phases": [
+            0.3,
+            0,
+            1.3
+          ],
+          "buffers": {
+            "ms": 0,
+            "floats": 0,
+            "calls": 0,
+            "list": []
+          }
+        },
+        {
+          "k": "titleRenderCall",
+          "ms": 7.2,
+          "at": 578.6
+        }
+      ],
+      "fps": {
+        "place": "走廊 · 户外",
+        "frames": 153,
+        "fps": 38.3,
+        "p50ms": 33.2,
+        "p95ms": 33.4,
+        "maxMs": 50.1,
+        "longFrames50": 2
+      },
+      "wallMs": 8398
+    }
+  ],
+  "ok": true,
+  "summary": {
+    "coldSurvival": {
+      "median": 815,
+      "all": [
+        815
+      ]
+    },
+    "warmTitle": {
+      "median": 572.5,
+      "all": [
+        572.5
+      ]
+    },
+    "requests": 51,
+    "fps": {
+      "place": "走廊 · 户外",
+      "frames": 153,
+      "fps": 38.3,
+      "p50ms": 33.2,
+      "p95ms": 33.4,
+      "maxMs": 50.1,
+      "longFrames50": 2
+    }
+  }
+}

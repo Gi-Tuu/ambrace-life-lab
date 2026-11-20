@@ -1,0 +1,74 @@
+{
+  "label": "c1-firstframe",
+  "at": "2026-11-20T09:35:03.071Z",
+  "node": "v24.18.0",
+  "reps": 3,
+  "env": {
+    "headless": true,
+    "gpu": false
+  },
+  "runs": [
+    {
+      "i": 0,
+      "coldSurvival": 944.2,
+      "requests": 52,
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "warmTitle": 702.5,
+      "fps": {
+        "place": "走廊 · 户外",
+        "frames": 102,
+        "fps": 25.6,
+        "p50ms": 33.4,
+        "p95ms": 66.7,
+        "maxMs": 100.1,
+        "longFrames50": 11
+      },
+      "wallMs": 8171
+    },
+    {
+      "i": 1,
+      "coldSurvival": 919.4,
+      "requests": 58,
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "warmTitle": 667.6,
+      "wallMs": 2082
+    },
+    {
+      "i": 2,
+      "coldSurvival": 874.3,
+      "requests": 52,
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "warmTitle": 662,
+      "wallMs": 2025
+    }
+  ],
+  "ok": true,
+  "summary": {
+    "coldSurvival": {
+      "median": 919.4,
+      "all": [
+        944.2,
+        919.4,
+        874.3
+      ]
+    },
+    "warmTitle": {
+      "median": 667.6,
+      "all": [
+        702.5,
+        667.6,
+        662
+      ]
+    },
+    "requests": 52,
+    "fps": {
+      "place": "走廊 · 户外",
+      "frames": 102,
+      "fps": 25.6,
+      "p50ms": 33.4,
+      "p95ms": 66.7,
+      "maxMs": 100.1,
+      "longFrames50": 11
+    }
+  }
+}

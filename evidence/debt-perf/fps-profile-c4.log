@@ -1,0 +1,104 @@
+[debt-perf-fps] {
+ "place": "走廊 · 户外",
+ "fps": {
+  "frames": 168,
+  "fps": 40.3,
+  "p50ms": 16.7,
+  "p95ms": 33.4,
+  "maxMs": 100,
+  "longFrames50": 3
+ },
+ "cpuPerFrameMs": 8.13,
+ "top": [
+  [
+   "render @ /web/camp-3d-render.mjs:824",
+   355.8
+  ],
+  [
+   "drawImage @ :-1",
+   317.8
+  ],
+  [
+   "at @ /web/camp-sight.mjs:8",
+   106.6
+  ],
+  [
+   "sightScene @ /web/camp-sight.mjs:22",
+   73.4
+  ],
+  [
+   "drawCamp @ /web/app.js:1315",
+   72
+  ],
+  [
+   "rayBeam @ /web/camp-3d-render.mjs:75",
+   58.6
+  ],
+  [
+   "(garbage collector) @ :-1",
+   41.8
+  ],
+  [
+   "rayBox @ /web/camp-3d-render.mjs:46",
+   36.6
+  ],
+  [
+   "(program) @ :-1",
+   35
+  ],
+  [
+   "clear @ /web/camp-sight.mjs:39",
+   34.4
+  ]
+ ],
+ "chains": [
+  [
+   "render @ /web/camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517",
+   347.4
+  ],
+  [
+   "drawImage @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   317.8
+  ],
+  [
+   "at @ /web/camp-sight.mjs:8 <- (anonymous)@camp-sight.mjs:6 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+   106
+  ],
+  [
+   "sightScene @ /web/camp-sight.mjs:22 <- campVisibility@app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   73.4
+  ],
+  [
+   "drawCamp @ /web/app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517 <- (root)@:-1",
+   70.2
+  ],
+  [
+   "rayBeam @ /web/camp-3d-render.mjs:75 <- rayBox@camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+   57.6
+  ],
+  [
+   "(garbage collector) @ :-1 <- (root)@:-1",
+   41.8
+  ],
+  [
+   "rayBox @ /web/camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865",
+   36.4
+  ],
+  [
+   "(program) @ :-1 <- (root)@:-1",
+   35
+  ],
+  [
+   "clear @ /web/camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865 <- drawCamp@app.js:1315",
+   34.4
+  ],
+  [
+   "campSight @ /web/camp-sight.mjs:63 <- campVisibility@app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   33.6
+  ],
+  [
+   "bufferData @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   15.2
+  ]
+ ]
+}

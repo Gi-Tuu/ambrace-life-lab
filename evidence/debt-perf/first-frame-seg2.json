@@ -1,0 +1,304 @@
+{
+  "label": "seg2",
+  "at": "2026-11-20T09:40:25.542Z",
+  "node": "v24.18.0",
+  "reps": 1,
+  "env": {
+    "headless": true,
+    "gpu": false
+  },
+  "runs": [
+    {
+      "i": 0,
+      "coldSurvival": 1240.9,
+      "requests": 52,
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "seg": [
+        {
+          "k": "moduleEvalStart",
+          "at": 419.8
+        },
+        {
+          "k": "createCampRenderer",
+          "ms": 4.3,
+          "at": 419.8
+        },
+        {
+          "k": "moduleEvalEnd",
+          "at": 430.5
+        },
+        {
+          "k": "buildWorld",
+          "ms": 350.3,
+          "at": 489.7
+        },
+        {
+          "k": "render",
+          "scale": 0.5,
+          "size": [
+            346,
+            182
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 140.4,
+          "gpu": 0,
+          "blit": 5.7
+        },
+        {
+          "k": "renderCall",
+          "ms": 273.3,
+          "at": 966
+        },
+        {
+          "k": "overlay",
+          "ms": 1.5,
+          "at": 1239.3
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 1240.9
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.3,
+          "at": 1246.1
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 11.9,
+          "gpu": 0,
+          "blit": 18.5
+        },
+        {
+          "k": "renderCall",
+          "ms": 30.7,
+          "at": 1268.7
+        },
+        {
+          "k": "overlay",
+          "ms": 0.4,
+          "at": 1299.4
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 1299.8
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.3,
+          "at": 1303.6
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 12.8,
+          "gpu": 0,
+          "blit": 3.9
+        },
+        {
+          "k": "renderCall",
+          "ms": 16.9,
+          "at": 1324.7
+        },
+        {
+          "k": "overlay",
+          "ms": 0.4,
+          "at": 1341.6
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 1342
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.2,
+          "at": 1347.9
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 9.6,
+          "gpu": 0,
+          "blit": 8.3
+        },
+        {
+          "k": "renderCall",
+          "ms": 18,
+          "at": 1361.3
+        },
+        {
+          "k": "overlay",
+          "ms": 0.3,
+          "at": 1379.3
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 1379.7
+        },
+        {
+          "k": "buildWorld",
+          "ms": 0.1,
+          "at": 1381.6
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            692,
+            364
+          ],
+          "target": [
+            692,
+            364
+          ],
+          "prep": 6.7,
+          "gpu": 0,
+          "blit": 9.7
+        },
+        {
+          "k": "renderCall",
+          "ms": 16.5,
+          "at": 1392.5
+        },
+        {
+          "k": "overlay",
+          "ms": 0.2,
+          "at": 1409
+        },
+        {
+          "k": "firstFrameAt",
+          "at": 1409.2
+        }
+      ],
+      "warmTitle": 592.4,
+      "titleSeg": [
+        {
+          "k": "moduleEvalStart",
+          "at": 70.2
+        },
+        {
+          "k": "createCampRenderer",
+          "ms": 3.6,
+          "at": 70.2
+        },
+        {
+          "k": "moduleEvalEnd",
+          "at": 79.2
+        },
+        {
+          "k": "titleBuildWorld",
+          "ms": 256.5,
+          "at": 92.5
+        },
+        {
+          "k": "render",
+          "scale": 0.5,
+          "size": [
+            287,
+            142
+          ],
+          "target": [
+            574,
+            284
+          ],
+          "prep": 119.1,
+          "gpu": 0.1,
+          "blit": 10.7
+        },
+        {
+          "k": "titleRenderCall",
+          "ms": 135.2,
+          "at": 456.8
+        },
+        {
+          "k": "titleBuildWorld",
+          "ms": 0,
+          "at": 599
+        },
+        {
+          "k": "render",
+          "scale": 1,
+          "size": [
+            574,
+            284
+          ],
+          "target": [
+            574,
+            284
+          ],
+          "prep": 2.2,
+          "gpu": 0,
+          "blit": 6.4
+        },
+        {
+          "k": "titleRenderCall",
+          "ms": 8.7,
+          "at": 599
+        }
+      ],
+      "fps": {
+        "place": "走廊 · 户外",
+        "frames": 179,
+        "fps": 44.8,
+        "p50ms": 16.7,
+        "p95ms": 33.4,
+        "maxMs": 50.1,
+        "longFrames50": 2
+      },
+      "wallMs": 8470
+    }
+  ],
+  "ok": true,
+  "summary": {
+    "coldSurvival": {
+      "median": 1240.9,
+      "all": [
+        1240.9
+      ]
+    },
+    "warmTitle": {
+      "median": 592.4,
+      "all": [
+        592.4
+      ]
+    },
+    "requests": 52,
+    "fps": {
+      "place": "走廊 · 户外",
+      "frames": 179,
+      "fps": 44.8,
+      "p50ms": 16.7,
+      "p95ms": 33.4,
+      "maxMs": 50.1,
+      "longFrames50": 2
+    }
+  }
+}

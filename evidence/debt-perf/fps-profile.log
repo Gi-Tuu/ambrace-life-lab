@@ -1,0 +1,62 @@
+[debt-perf-fps] {
+ "place": "走廊 · 户外",
+ "fps": {
+  "frames": 86,
+  "fps": 20.4,
+  "p50ms": 50,
+  "p95ms": 83.3,
+  "maxMs": 183.4,
+  "longFrames50": 19
+ },
+ "cpuPerFrameMs": 15.98,
+ "top": [
+  [
+   "rawHeight @ /shared/wild-landscape.mjs:67",
+   336.2
+  ],
+  [
+   "render @ /web/camp-3d-render.mjs:896",
+   218.6
+  ],
+  [
+   "drawImage @ :-1",
+   172.6
+  ],
+  [
+   "at @ /web/camp-sight.mjs:8",
+   70.4
+  ],
+  [
+   "sightScene @ /web/camp-sight.mjs:22",
+   52.2
+  ],
+  [
+   "rayBeam @ /web/camp-3d-render.mjs:75",
+   50.4
+  ],
+  [
+   "river @ /shared/camp-terrain.mjs:16",
+   49.2
+  ],
+  [
+   "drawCamp @ /web/app.js:1306",
+   48.4
+  ],
+  [
+   "noise @ /shared/wild-landscape.mjs:25",
+   46.6
+  ],
+  [
+   "clear @ /web/camp-sight.mjs:39",
+   39.2
+  ],
+  [
+   "rayBox @ /web/camp-3d-render.mjs:46",
+   29
+  ],
+  [
+   "(garbage collector) @ :-1",
+   28.4
+  ]
+ ]
+}

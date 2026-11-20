@@ -1,0 +1,46 @@
+=== /web/app.js (Accept-Encoding: gzip) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+etag: "3698caa8988f7ea7d87a930868e8245e"
+cache-control: no-cache, must-revalidate
+content-encoding: gzip
+vary: accept-encoding
+content-type: text/javascript; charset=utf-8
+content-length: 98896
+=== /web/index.html (Accept-Encoding: gzip) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+etag: "4f38dfdd430672a91ff4aefe33be74d2"
+cache-control: no-cache, must-revalidate
+content-encoding: gzip
+vary: accept-encoding
+content-type: text/html; charset=utf-8
+content-length: 6711
+=== /web/app.css (Accept-Encoding: gzip) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+etag: "f5d0bc280dfd0c15e603fa4a1d07b636"
+cache-control: no-cache, must-revalidate
+content-encoding: gzip
+vary: accept-encoding
+content-type: text/css; charset=utf-8
+content-length: 12705
+=== /world?mode=survival (Accept-Encoding: gzip) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+content-type: application/json; charset=utf-8
+content-encoding: gzip
+vary: accept-encoding
+content-length: 19851
+=== /web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2 (Accept-Encoding: gzip) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+etag: "f6e698d93c8ef991335670233a9bb80e"
+cache-control: no-cache, must-revalidate
+content-type: font/woff2
+content-length: 953220
+=== /web/app.js (no Accept-Encoding) ===
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+content-type: text/javascript; charset=utf-8
+content-length: 265891

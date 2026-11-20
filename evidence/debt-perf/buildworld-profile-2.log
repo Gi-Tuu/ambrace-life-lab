@@ -1,0 +1,106 @@
+[bw-profile] {
+ "buildWorld": {
+  "p50": 281.1,
+  "max": 285.2
+ },
+ "top": [
+  [
+   "roadDist @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:158",
+   68.7
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:260",
+   51.4
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:255",
+   19.7
+  ],
+  [
+   "terrainKinds @ http://127.0.0.1:9872/web/app.js:252",
+   19.5
+  ],
+  [
+   "buildWorld @ http://127.0.0.1:9872/web/app.js:439",
+   18.1
+  ],
+  [
+   "bodyGrid @ http://127.0.0.1:9872/shared/camp-physics.mjs:4",
+   15.9
+  ],
+  [
+   "worldWithCollisions @ http://127.0.0.1:9872/web/app.js:331",
+   10.7
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:567",
+   7.3
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:356",
+   6.8
+  ],
+  [
+   "distance @ http://127.0.0.1:9872/web/app.js:270",
+   5.2
+  ],
+  [
+   "(garbage collector) @ :-1",
+   4.4
+  ],
+  [
+   "campSceneContent @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:80",
+   3.7
+  ],
+  [
+   "reliefAt @ http://127.0.0.1:9872/shared/camp-terrain.mjs:42",
+   2.5
+  ],
+  [
+   "tileKey @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:41",
+   2.1
+  ]
+ ],
+ "chains": [
+  [
+   "roadDist @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:158 <- (anon)@app.js:470 <- terrainKinds@app.js:252 <- buildWorld@app.js:439 <- (anon)@:0",
+   66
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:260 <- terrainKinds@app.js:252 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0",
+   51.4
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/shared/camp-scene-content.mjs:255 <- campSceneContent@camp-scene-content.mjs:80 <- campSceneBundle@camp-scene-content.mjs:276 <- buildWorld@app.js:439 <- (anon)@:0",
+   19.6
+  ],
+  [
+   "terrainKinds @ http://127.0.0.1:9872/web/app.js:252 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0 <- (root)@:-1",
+   19.5
+  ],
+  [
+   "buildWorld @ http://127.0.0.1:9872/web/app.js:439 <- (anon)@:0 <- (anon)@:0 <- (root)@:-1",
+   18.1
+  ],
+  [
+   "bodyGrid @ http://127.0.0.1:9872/shared/camp-physics.mjs:4 <- worldWithCollisions@app.js:331 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0",
+   15.9
+  ],
+  [
+   "worldWithCollisions @ http://127.0.0.1:9872/web/app.js:331 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0 <- (root)@:-1",
+   10.7
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:567 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0 <- (root)@:-1",
+   7.3
+  ],
+  [
+   "(anon) @ http://127.0.0.1:9872/web/app.js:356 <- worldWithCollisions@app.js:331 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0",
+   6.8
+  ],
+  [
+   "distance @ http://127.0.0.1:9872/web/app.js:270 <- terrainKinds@app.js:252 <- buildWorld@app.js:439 <- (anon)@:0 <- (anon)@:0",
+   5.2
+  ]
+ ]
+}

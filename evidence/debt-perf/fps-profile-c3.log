@@ -1,0 +1,104 @@
+[debt-perf-fps] {
+ "place": "走廊 · 户外",
+ "fps": {
+  "frames": 93,
+  "fps": 21.6,
+  "p50ms": 33.4,
+  "p95ms": 100,
+  "maxMs": 200,
+  "longFrames50": 17
+ },
+ "cpuPerFrameMs": 14.26,
+ "top": [
+  [
+   "rawHeight @ /shared/wild-landscape.mjs:67",
+   309.8
+  ],
+  [
+   "render @ /web/camp-3d-render.mjs:824",
+   222.4
+  ],
+  [
+   "drawImage @ :-1",
+   187.2
+  ],
+  [
+   "at @ /web/camp-sight.mjs:8",
+   66.2
+  ],
+  [
+   "river @ /shared/camp-terrain.mjs:16",
+   51.2
+  ],
+  [
+   "noise @ /shared/wild-landscape.mjs:25",
+   47.4
+  ],
+  [
+   "sightScene @ /web/camp-sight.mjs:22",
+   46.2
+  ],
+  [
+   "drawCamp @ /web/app.js:1315",
+   44
+  ],
+  [
+   "rayBeam @ /web/camp-3d-render.mjs:75",
+   41.6
+  ],
+  [
+   "clear @ /web/camp-sight.mjs:39",
+   34.8
+  ]
+ ],
+ "chains": [
+  [
+   "render @ /web/camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517",
+   209.2
+  ],
+  [
+   "drawImage @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   187.2
+  ],
+  [
+   "rawHeight @ /shared/wild-landscape.mjs:67 <- height@wild-landscape.mjs:96 <- height@camp-outskirts.mjs:18 <- heightAt@space.mjs:250",
+   151.2
+  ],
+  [
+   "rawHeight @ /shared/wild-landscape.mjs:67 <- height@wild-landscape.mjs:96 <- groundContactMesh@camp-lighting.mjs:18 <- render@camp-3d-render.mjs:824",
+   71.4
+  ],
+  [
+   "at @ /web/camp-sight.mjs:8 <- (anonymous)@camp-sight.mjs:6 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+   66
+  ],
+  [
+   "sightScene @ /web/camp-sight.mjs:22 <- campVisibility@app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+   46.2
+  ],
+  [
+   "drawCamp @ /web/app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517 <- (root)@:-1",
+   41.8
+  ],
+  [
+   "rayBeam @ /web/camp-3d-render.mjs:75 <- rayBox@camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+   39.6
+  ],
+  [
+   "clear @ /web/camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865 <- drawCamp@app.js:1315",
+   34.8
+  ],
+  [
+   "rawHeight @ /shared/wild-landscape.mjs:67 <- height@wild-landscape.mjs:96 <- heightAt@space.mjs:302 <- campSight@camp-sight.mjs:63",
+   34.4
+  ],
+  [
+   "(garbage collector) @ :-1 <- (root)@:-1",
+   31.4
+  ],
+  [
+   "(program) @ :-1 <- (root)@:-1",
+   29.2
+  ]
+ ]
+}

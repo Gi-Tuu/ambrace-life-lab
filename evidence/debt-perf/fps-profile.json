@@ -1,0 +1,287 @@
+{
+  "at": "2026-11-20T09:38:06.571Z",
+  "node": "v24.18.0",
+  "env": {
+    "headless": true,
+    "gpu": false
+  },
+  "ok": true,
+  "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "place": "走廊 · 户外",
+  "fps": {
+    "frames": 168,
+    "fps": 40.3,
+    "p50ms": 16.7,
+    "p95ms": 33.4,
+    "maxMs": 100,
+    "longFrames50": 3
+  },
+  "cpu": {
+    "totalMs": 1366.2,
+    "top": [
+      [
+        "render @ /web/camp-3d-render.mjs:824",
+        355.8
+      ],
+      [
+        "drawImage @ :-1",
+        317.8
+      ],
+      [
+        "at @ /web/camp-sight.mjs:8",
+        106.6
+      ],
+      [
+        "sightScene @ /web/camp-sight.mjs:22",
+        73.4
+      ],
+      [
+        "drawCamp @ /web/app.js:1315",
+        72
+      ],
+      [
+        "rayBeam @ /web/camp-3d-render.mjs:75",
+        58.6
+      ],
+      [
+        "(garbage collector) @ :-1",
+        41.8
+      ],
+      [
+        "rayBox @ /web/camp-3d-render.mjs:46",
+        36.6
+      ],
+      [
+        "(program) @ :-1",
+        35
+      ],
+      [
+        "clear @ /web/camp-sight.mjs:39",
+        34.4
+      ],
+      [
+        "campSight @ /web/camp-sight.mjs:63",
+        33.6
+      ],
+      [
+        "(anonymous) @ /web/app.js:852",
+        15.6
+      ],
+      [
+        "quad @ /web/camp-3d-render.mjs:121",
+        15.4
+      ],
+      [
+        "bufferData @ :-1",
+        15.2
+      ],
+      [
+        "rotate @ /shared/camp-geometry.mjs:12",
+        11.6
+      ],
+      [
+        "(anonymous) @ /web/camp-sight.mjs:6",
+        11.2
+      ],
+      [
+        "coveredModels @ /web/camp-3d-render.mjs:101",
+        7
+      ],
+      [
+        "campVisibility @ /web/app.js:865",
+        6.2
+      ],
+      [
+        "osc @ /web/audio-synth.mjs:53",
+        6.2
+      ],
+      [
+        "texImage2D @ :-1",
+        5.8
+      ],
+      [
+        "(anonymous) @ /web/app.js:1190",
+        4.6
+      ],
+      [
+        "rawAt @ /shared/wild-landscape.mjs:102",
+        4.4
+      ],
+      [
+        "groundContactMesh @ /web/camp-lighting.mjs:18",
+        4.4
+      ],
+      [
+        "groundHeightOf @ /web/app.js:317",
+        4
+      ],
+      [
+        "rotateXZ @ /shared/camp-geometry.mjs:6",
+        3.4
+      ],
+      [
+        "prism @ /web/camp-3d-render.mjs:143",
+        3.2
+      ],
+      [
+        "drawHerd @ /web/app.js:1176",
+        2.8
+      ],
+      [
+        "heightAt @ /life/space.mjs:250",
+        2.6
+      ],
+      [
+        "paintStage @ /web/camp-3d-render.mjs:787",
+        2.2
+      ],
+      [
+        "buildWorld @ /web/app.js:432",
+        2.2
+      ],
+      [
+        "mix @ /web/audio-synth.mjs:137",
+        2.2
+      ],
+      [
+        "height @ /shared/wild-landscape.mjs:109",
+        2.2
+      ],
+      [
+        "draw @ /web/app.js:1633",
+        2
+      ],
+      [
+        "animate @ /web/app.js:4517",
+        1.8
+      ],
+      [
+        "worldWithCollisions @ /web/app.js:324",
+        1.8
+      ],
+      [
+        "normalize @ /web/audio-synth.mjs:182",
+        1.8
+      ],
+      [
+        "isCamp @ /life/space.mjs:285",
+        1.6
+      ],
+      [
+        "emit @ /web/camp-lighting.mjs:23",
+        1.6
+      ],
+      [
+        "vertexAttribPointer @ :-1",
+        1.6
+      ],
+      [
+        "sceneGuidance @ /web/app.js:4218",
+        1.6
+      ]
+    ],
+    "chains": [
+      [
+        "render @ /web/camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517",
+        347.4
+      ],
+      [
+        "drawImage @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        317.8
+      ],
+      [
+        "at @ /web/camp-sight.mjs:8 <- (anonymous)@camp-sight.mjs:6 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+        106
+      ],
+      [
+        "sightScene @ /web/camp-sight.mjs:22 <- campVisibility@app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        73.4
+      ],
+      [
+        "drawCamp @ /web/app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517 <- (root)@:-1",
+        70.2
+      ],
+      [
+        "rayBeam @ /web/camp-3d-render.mjs:75 <- rayBox@camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+        57.6
+      ],
+      [
+        "(garbage collector) @ :-1 <- (root)@:-1",
+        41.8
+      ],
+      [
+        "rayBox @ /web/camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865",
+        36.4
+      ],
+      [
+        "(program) @ :-1 <- (root)@:-1",
+        35
+      ],
+      [
+        "clear @ /web/camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865 <- drawCamp@app.js:1315",
+        34.4
+      ],
+      [
+        "campSight @ /web/camp-sight.mjs:63 <- campVisibility@app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        33.6
+      ],
+      [
+        "bufferData @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        15.2
+      ],
+      [
+        "rotate @ /shared/camp-geometry.mjs:12 <- rayBox@camp-3d-render.mjs:46 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63",
+        11.4
+      ],
+      [
+        "(anonymous) @ /web/camp-sight.mjs:6 <- clear@camp-sight.mjs:39 <- campSight@camp-sight.mjs:63 <- campVisibility@app.js:865",
+        11
+      ],
+      [
+        "quad @ /web/camp-3d-render.mjs:121 <- prism@camp-3d-render.mjs:143 <- (anonymous)@camp-3d-render.mjs:249 <- draw@camp-3d-render.mjs:299",
+        8.8
+      ],
+      [
+        "render @ /web/camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- refresh@app.js:3256",
+        8.2
+      ],
+      [
+        "(anonymous) @ /web/app.js:852 <- campShadows@app.js:847 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        8
+      ],
+      [
+        "(anonymous) @ /web/app.js:852 <- (anonymous)@app.js:852 <- campShadows@app.js:847 <- drawCamp@app.js:1315",
+        7.6
+      ],
+      [
+        "coveredModels @ /web/camp-3d-render.mjs:101 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517",
+        7
+      ],
+      [
+        "osc @ /web/audio-synth.mjs:53 <- renderMusicBar@audio-data.mjs:485 <- (anonymous)@audio.mjs:145 <- stereoBuffer@audio.mjs:81",
+        6.2
+      ],
+      [
+        "campVisibility @ /web/app.js:865 <- drawCamp@app.js:1315 <- draw@app.js:1633 <- animate@app.js:4517",
+        6
+      ],
+      [
+        "texImage2D @ :-1 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        5.8
+      ],
+      [
+        "groundContactMesh @ /web/camp-lighting.mjs:18 <- render@camp-3d-render.mjs:824 <- drawCamp@app.js:1315 <- draw@app.js:1633",
+        4.4
+      ],
+      [
+        "rawAt @ /shared/wild-landscape.mjs:102 <- height@wild-landscape.mjs:109 <- height@camp-outskirts.mjs:18 <- heightAt@space.mjs:250",
+        4.2
+      ],
+      [
+        "rotateXZ @ /shared/camp-geometry.mjs:6 <- boxVertices@camp-geometry.mjs:28 <- prism@camp-3d-render.mjs:143 <- render@camp-3d-render.mjs:824",
+        3.4
+      ]
+    ]
+  },
+  "cpuPerFrameMs": 8.13
+}

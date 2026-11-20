@@ -1,0 +1,1157 @@
+{
+  "at": "2026-11-20T10:01:18.909Z",
+  "node": "v24.18.0",
+  "port": 9692,
+  "env": {
+    "headless": true,
+    "gpu": false,
+    "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "scenarios": {
+    "coldSurvival": {
+      "first3d": 747.2999999970198,
+      "longtasks": [
+        [
+          156,
+          594,
+          "self"
+        ],
+        [
+          751,
+          50,
+          "self"
+        ]
+      ],
+      "measures": [],
+      "renderers": {
+        "title": null,
+        "a": "3d"
+      },
+      "place": "走廊 · 户外",
+      "webgl": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "resources": {
+        "count": 51,
+        "byExt": {
+          "js": 2,
+          "mjs": 39,
+          "css": 1,
+          "woff2": 1,
+          "1:9692/world?mode=survival": 1,
+          "json": 1,
+          "png": 6
+        },
+        "modules": 41,
+        "png": 6,
+        "names": [
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            34,
+            953520
+          ],
+          [
+            "/web/app.css",
+            31,
+            13005
+          ],
+          [
+            "/life/space.mjs",
+            30,
+            6789
+          ],
+          [
+            "/shared/camp-scene-content.mjs",
+            30,
+            7304
+          ],
+          [
+            "/shared/camp-scene.mjs",
+            20,
+            30555
+          ],
+          [
+            "/shared/room-layout.mjs",
+            19,
+            2710
+          ],
+          [
+            "/world?mode=survival",
+            18,
+            20150
+          ],
+          [
+            "/shared/camp-physics.mjs",
+            18,
+            1026
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            18,
+            3468
+          ],
+          [
+            "/web/app.js",
+            17,
+            99196
+          ],
+          [
+            "/web/net.mjs",
+            17,
+            1647
+          ],
+          [
+            "/web/collision.mjs",
+            17,
+            3234
+          ],
+          [
+            "/web/walk.mjs",
+            16,
+            1859
+          ],
+          [
+            "/web/player-move.mjs",
+            16,
+            2453
+          ],
+          [
+            "/web/audio.mjs",
+            15,
+            6006
+          ],
+          [
+            "/web/audio-events.mjs",
+            15,
+            4862
+          ],
+          [
+            "/shared/camp-layout.mjs",
+            14,
+            2783
+          ],
+          [
+            "/shared/camp-construction-access.mjs",
+            14,
+            1070
+          ],
+          [
+            "/shared/camp-terrain.mjs",
+            13,
+            2251
+          ],
+          [
+            "/web/camp-items.mjs",
+            13,
+            996
+          ],
+          [
+            "/shared/camp-facility.mjs",
+            12,
+            1163
+          ],
+          [
+            "/shared/camp-interaction.mjs",
+            12,
+            2226
+          ],
+          [
+            "/shared/wild-landscape.mjs",
+            11,
+            6634
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            10,
+            17977
+          ],
+          [
+            "/shared/camp-outskirts.mjs",
+            10,
+            1884
+          ],
+          [
+            "/web/boot-prefetch.js",
+            9,
+            1197
+          ],
+          [
+            "/web/camp-sun.mjs",
+            9,
+            1130
+          ],
+          [
+            "/web/camp-sight.mjs",
+            8,
+            1649
+          ],
+          [
+            "/web/camp-lighting.mjs",
+            8,
+            1953
+          ],
+          [
+            "/shared/camp-districts.mjs",
+            8,
+            2295
+          ],
+          [
+            "/web/camp-weather.mjs",
+            7,
+            2321
+          ],
+          [
+            "/web/assets/terrain_dirt1.png",
+            7,
+            593
+          ],
+          [
+            "/web/resident-look.mjs",
+            6,
+            959
+          ],
+          [
+            "/web/camp-guidance.mjs",
+            6,
+            1704
+          ],
+          [
+            "/web/assets/terrain_grass1.png",
+            6,
+            589
+          ],
+          [
+            "/web/assets/terrain_grass2.png",
+            6,
+            582
+          ],
+          [
+            "/web/assets/terrain_grass3.png",
+            6,
+            562
+          ],
+          [
+            "/web/assets/terrain_dirt0.png",
+            6,
+            592
+          ],
+          [
+            "/shared/camp-orchard-look.mjs",
+            5,
+            1055
+          ],
+          [
+            "/web/resident-portrait.mjs",
+            5,
+            1418
+          ],
+          [
+            "/web/assets/terrain_grass0.png",
+            5,
+            586
+          ],
+          [
+            "/web/camp-work-motion.mjs",
+            4,
+            4946
+          ],
+          [
+            "/web/camp-animal-motion.mjs",
+            4,
+            1686
+          ],
+          [
+            "/shared/camp-items.mjs",
+            4,
+            2903
+          ],
+          [
+            "/web/music-tracks.mjs",
+            4,
+            1287
+          ],
+          [
+            "/web/audio-data.mjs",
+            4,
+            9044
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            3,
+            1887
+          ],
+          [
+            "/shared/camp-ao.mjs",
+            3,
+            1143
+          ],
+          [
+            "/shared/camp-region-entities.mjs",
+            3,
+            1200
+          ],
+          [
+            "/web/audio-synth.mjs",
+            2,
+            4060
+          ],
+          [
+            "/web/assets/manifest.json",
+            2,
+            674
+          ]
+        ]
+      }
+    },
+    "warmTitle": {
+      "first3d": 633.1000000014901,
+      "longtasks": [
+        [
+          124,
+          510,
+          "self"
+        ]
+      ],
+      "measures": [],
+      "renderers": {
+        "title": "3d",
+        "a": null
+      },
+      "resources": {
+        "count": 47,
+        "byExt": {
+          "js": 2,
+          "mjs": 39,
+          "woff2": 1,
+          "css": 1,
+          "1:9692/world?mode=menu": 1,
+          "json": 1,
+          "1:9692/saves": 1,
+          "1:9692/world": 1
+        },
+        "modules": 41,
+        "png": 0,
+        "names": [
+          [
+            "/shared/camp-ao.mjs",
+            23,
+            300
+          ],
+          [
+            "/shared/room-layout.mjs",
+            22,
+            300
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            22,
+            300
+          ],
+          [
+            "/shared/camp-items.mjs",
+            22,
+            300
+          ],
+          [
+            "/web/collision.mjs",
+            21,
+            300
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            21,
+            300
+          ],
+          [
+            "/shared/camp-physics.mjs",
+            21,
+            300
+          ],
+          [
+            "/web/net.mjs",
+            19,
+            300
+          ],
+          [
+            "/web/player-move.mjs",
+            17,
+            300
+          ],
+          [
+            "/web/walk.mjs",
+            16,
+            300
+          ],
+          [
+            "/web/audio-events.mjs",
+            16,
+            300
+          ],
+          [
+            "/web/audio.mjs",
+            16,
+            300
+          ],
+          [
+            "/shared/camp-construction-access.mjs",
+            15,
+            300
+          ],
+          [
+            "/shared/camp-terrain.mjs",
+            14,
+            300
+          ],
+          [
+            "/web/camp-items.mjs",
+            14,
+            300
+          ],
+          [
+            "/shared/camp-layout.mjs",
+            14,
+            300
+          ],
+          [
+            "/shared/camp-facility.mjs",
+            13,
+            300
+          ],
+          [
+            "/shared/camp-interaction.mjs",
+            13,
+            300
+          ],
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            12,
+            300
+          ],
+          [
+            "/shared/camp-outskirts.mjs",
+            12,
+            300
+          ],
+          [
+            "/shared/wild-landscape.mjs",
+            12,
+            300
+          ],
+          [
+            "/web/camp-lighting.mjs",
+            11,
+            300
+          ],
+          [
+            "/web/camp-sun.mjs",
+            11,
+            300
+          ],
+          [
+            "/shared/camp-districts.mjs",
+            10,
+            300
+          ],
+          [
+            "/web/camp-sight.mjs",
+            10,
+            300
+          ],
+          [
+            "/web/app.js",
+            9,
+            300
+          ],
+          [
+            "/shared/camp-scene.mjs",
+            9,
+            300
+          ],
+          [
+            "/web/camp-weather.mjs",
+            9,
+            300
+          ],
+          [
+            "/web/assets/manifest.json",
+            9,
+            300
+          ],
+          [
+            "/life/space.mjs",
+            8,
+            300
+          ],
+          [
+            "/web/app.css",
+            8,
+            300
+          ],
+          [
+            "/world?mode=menu",
+            8,
+            20163
+          ],
+          [
+            "/web/resident-look.mjs",
+            8,
+            300
+          ],
+          [
+            "/web/camp-guidance.mjs",
+            8,
+            300
+          ],
+          [
+            "/web/resident-portrait.mjs",
+            8,
+            300
+          ],
+          [
+            "/world",
+            8,
+            20166
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            7,
+            300
+          ],
+          [
+            "/shared/camp-scene-content.mjs",
+            7,
+            300
+          ],
+          [
+            "/shared/camp-orchard-look.mjs",
+            7,
+            300
+          ],
+          [
+            "/web/camp-animal-motion.mjs",
+            7,
+            300
+          ],
+          [
+            "/web/boot-prefetch.js",
+            6,
+            300
+          ],
+          [
+            "/web/camp-work-motion.mjs",
+            6,
+            300
+          ],
+          [
+            "/shared/camp-region-entities.mjs",
+            4,
+            300
+          ],
+          [
+            "/web/music-tracks.mjs",
+            4,
+            300
+          ],
+          [
+            "/web/audio-data.mjs",
+            3,
+            300
+          ],
+          [
+            "/web/audio-synth.mjs",
+            3,
+            300
+          ],
+          [
+            "/saves",
+            2,
+            314
+          ]
+        ]
+      }
+    },
+    "coldTitle": {
+      "first3d": 821.1999999992549,
+      "longtasks": [
+        [
+          24,
+          51,
+          "self"
+        ],
+        [
+          134,
+          689,
+          "self"
+        ]
+      ],
+      "measures": [],
+      "renderers": {
+        "title": "3d",
+        "a": null
+      },
+      "resources": {
+        "count": 49,
+        "byExt": {
+          "js": 2,
+          "mjs": 39,
+          "woff2": 1,
+          "css": 1,
+          "1:9692/world?mode=menu": 1,
+          "json": 1,
+          "1:9692/saves": 1,
+          "1:9692/world": 1,
+          "png": 2
+        },
+        "modules": 41,
+        "png": 2,
+        "names": [
+          [
+            "/shared/room-layout.mjs",
+            21,
+            2710
+          ],
+          [
+            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
+            20,
+            953520
+          ],
+          [
+            "/web/collision.mjs",
+            20,
+            3234
+          ],
+          [
+            "/shared/camp-physics.mjs",
+            20,
+            1026
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            20,
+            3468
+          ],
+          [
+            "/web/net.mjs",
+            19,
+            1647
+          ],
+          [
+            "/web/audio.mjs",
+            17,
+            6006
+          ],
+          [
+            "/web/walk.mjs",
+            17,
+            1859
+          ],
+          [
+            "/web/audio-events.mjs",
+            17,
+            4862
+          ],
+          [
+            "/web/player-move.mjs",
+            17,
+            2453
+          ],
+          [
+            "/life/space.mjs",
+            16,
+            6789
+          ],
+          [
+            "/web/app.css",
+            16,
+            13005
+          ],
+          [
+            "/shared/camp-construction-access.mjs",
+            16,
+            1070
+          ],
+          [
+            "/shared/camp-layout.mjs",
+            15,
+            2783
+          ],
+          [
+            "/world?mode=menu",
+            14,
+            20169
+          ],
+          [
+            "/shared/camp-interaction.mjs",
+            13,
+            2226
+          ],
+          [
+            "/shared/camp-terrain.mjs",
+            13,
+            2251
+          ],
+          [
+            "/web/app.js",
+            12,
+            99196
+          ],
+          [
+            "/shared/camp-facility.mjs",
+            12,
+            1163
+          ],
+          [
+            "/shared/wild-landscape.mjs",
+            12,
+            6634
+          ],
+          [
+            "/web/camp-items.mjs",
+            12,
+            996
+          ],
+          [
+            "/web/camp-3d-render.mjs",
+            11,
+            17977
+          ],
+          [
+            "/shared/camp-scene.mjs",
+            11,
+            30555
+          ],
+          [
+            "/shared/camp-scene-content.mjs",
+            11,
+            7304
+          ],
+          [
+            "/shared/camp-outskirts.mjs",
+            11,
+            1884
+          ],
+          [
+            "/web/camp-weather.mjs",
+            9,
+            2321
+          ],
+          [
+            "/shared/camp-districts.mjs",
+            9,
+            2295
+          ],
+          [
+            "/web/camp-sight.mjs",
+            9,
+            1649
+          ],
+          [
+            "/web/camp-lighting.mjs",
+            9,
+            1953
+          ],
+          [
+            "/web/camp-sun.mjs",
+            9,
+            1130
+          ],
+          [
+            "/web/assets/manifest.json",
+            9,
+            674
+          ],
+          [
+            "/web/boot-prefetch.js",
+            8,
+            1197
+          ],
+          [
+            "/web/camp-guidance.mjs",
+            7,
+            1704
+          ],
+          [
+            "/world",
+            7,
+            20166
+          ],
+          [
+            "/web/camp-animal-motion.mjs",
+            5,
+            1686
+          ],
+          [
+            "/shared/camp-orchard-look.mjs",
+            5,
+            1055
+          ],
+          [
+            "/web/resident-portrait.mjs",
+            5,
+            1418
+          ],
+          [
+            "/web/resident-look.mjs",
+            5,
+            959
+          ],
+          [
+            "/web/assets/terrain_grass0.png",
+            5,
+            586
+          ],
+          [
+            "/web/assets/terrain_grass1.png",
+            5,
+            589
+          ],
+          [
+            "/web/camp-work-motion.mjs",
+            4,
+            4946
+          ],
+          [
+            "/shared/camp-ao.mjs",
+            4,
+            1143
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            4,
+            1887
+          ],
+          [
+            "/shared/camp-region-entities.mjs",
+            4,
+            1200
+          ],
+          [
+            "/web/music-tracks.mjs",
+            4,
+            1287
+          ],
+          [
+            "/web/audio-data.mjs",
+            4,
+            9044
+          ],
+          [
+            "/shared/camp-items.mjs",
+            3,
+            2903
+          ],
+          [
+            "/web/audio-synth.mjs",
+            2,
+            4060
+          ],
+          [
+            "/saves",
+            1,
+            314
+          ]
+        ]
+      }
+    }
+  },
+  "buildWorld": [
+    {
+      "mapSeed": 7,
+      "ms": 216.90000000223517
+    },
+    {
+      "mapSeed": 123456,
+      "ms": 251.80000000074506
+    },
+    {
+      "mapSeed": 654321,
+      "ms": 249.79999999701977
+    }
+  ],
+  "buildWorldSummary": {
+    "p50": 249.8,
+    "max": 251.8,
+    "rows": [
+      {
+        "mapSeed": 7,
+        "ms": 216.9
+      },
+      {
+        "mapSeed": 123456,
+        "ms": 251.8
+      },
+      {
+        "mapSeed": 654321,
+        "ms": 249.8
+      }
+    ]
+  },
+  "fps": {
+    "place": "走廊 · 户外",
+    "frames": 156,
+    "fps": 39.2,
+    "p50ms": 16.7,
+    "p95ms": 50,
+    "maxMs": 66.7,
+    "longFrames50": 2,
+    "longFrames33": 17
+  },
+  "clickToFirstFrame": {
+    "ok": true,
+    "clickAt": 30088.4,
+    "first3d": 30604.2,
+    "deltaMs": 515.8,
+    "place": "走廊 · 户外"
+  },
+  "profiles": {
+    "title": {
+      "totalMs": 269.4,
+      "top": [
+        [
+          "ensureSetup @ /web/camp-3d-render.mjs:726",
+          44.4
+        ],
+        [
+          "(program) @ :-1",
+          37.8
+        ],
+        [
+          "(anonymous) @ /web/app.js:261",
+          24.4
+        ],
+        [
+          "roadDist @ /shared/camp-scene-content.mjs:160",
+          13.8
+        ],
+        [
+          "(anonymous) @ /shared/camp-scene-content.mjs:257",
+          11.4
+        ],
+        [
+          "(garbage collector) @ :-1",
+          10.2
+        ],
+        [
+          "quad @ /web/camp-3d-render.mjs:121",
+          8.2
+        ],
+        [
+          "render @ /web/camp-3d-render.mjs:856",
+          8
+        ],
+        [
+          "buildWorld @ /web/app.js:440",
+          7.8
+        ],
+        [
+          "put @ /shared/wild-landscape.mjs:215",
+          6.6
+        ],
+        [
+          "terrainKinds @ /web/app.js:253",
+          5.4
+        ],
+        [
+          "bodyGrid @ /shared/camp-physics.mjs:4",
+          5.4
+        ],
+        [
+          "rawHeight @ /shared/wild-landscape.mjs:67",
+          4.8
+        ],
+        [
+          "wildRegion @ /shared/wild-landscape.mjs:250",
+          4.4
+        ],
+        [
+          "(idle) @ :-1",
+          4.2
+        ],
+        [
+          "(anonymous) @ /web/app.js:357",
+          4.2
+        ],
+        [
+          "worldWithCollisions @ /web/app.js:332",
+          3.4
+        ],
+        [
+          "stageBuffer @ /web/camp-3d-render.mjs:796",
+          3.2
+        ],
+        [
+          "baseRiver @ /shared/camp-terrain.mjs:10",
+          2.8
+        ],
+        [
+          "stageMesh @ /web/camp-3d-render.mjs:163",
+          2.6
+        ],
+        [
+          "southEdge @ /shared/wild-landscape.mjs:47",
+          2.4
+        ],
+        [
+          "campSceneContent @ /shared/camp-scene-content.mjs:80",
+          2.4
+        ],
+        [
+          "reliefAt @ /shared/camp-terrain.mjs:42",
+          2
+        ],
+        [
+          "(anonymous) @ /web/app.js:568",
+          2
+        ],
+        [
+          "regions @ /shared/camp-outskirts.mjs:41",
+          2
+        ],
+        [
+          "drawTitleScene @ /web/app.js:1105",
+          1.8
+        ],
+        [
+          "rawAt @ /shared/wild-landscape.mjs:102",
+          1.6
+        ],
+        [
+          "createCampRenderer @ /web/camp-3d-render.mjs:702",
+          1.4
+        ],
+        [
+          "mix @ /shared/wild-landscape.mjs:24",
+          1.4
+        ],
+        [
+          "tileKey @ /shared/camp-scene-content.mjs:41",
+          1.4
+        ]
+      ]
+    },
+    "survival": {
+      "totalMs": 306.2,
+      "top": [
+        [
+          "ensureSetup @ /web/camp-3d-render.mjs:726",
+          47
+        ],
+        [
+          "(program) @ :-1",
+          31.6
+        ],
+        [
+          "(anonymous) @ /web/app.js:261",
+          22
+        ],
+        [
+          "roadDist @ /shared/camp-scene-content.mjs:160",
+          15.8
+        ],
+        [
+          "render @ /web/camp-3d-render.mjs:856",
+          14.4
+        ],
+        [
+          "(garbage collector) @ :-1",
+          12.2
+        ],
+        [
+          "quad @ /web/camp-3d-render.mjs:121",
+          11.6
+        ],
+        [
+          "terrainKinds @ /web/app.js:253",
+          10.2
+        ],
+        [
+          "(idle) @ :-1",
+          9
+        ],
+        [
+          "buildWorld @ /web/app.js:440",
+          8.2
+        ],
+        [
+          "(anonymous) @ /shared/camp-scene-content.mjs:257",
+          8
+        ],
+        [
+          "rawHeight @ /shared/wild-landscape.mjs:67",
+          7.6
+        ],
+        [
+          "put @ /shared/wild-landscape.mjs:215",
+          6.8
+        ],
+        [
+          "wildRegion @ /shared/wild-landscape.mjs:250",
+          5.6
+        ],
+        [
+          "bodyGrid @ /shared/camp-physics.mjs:4",
+          5.4
+        ],
+        [
+          "drawCamp @ /web/app.js:1327",
+          4
+        ],
+        [
+          "stageBuffer @ /web/camp-3d-render.mjs:796",
+          4
+        ],
+        [
+          "worldWithCollisions @ /web/app.js:332",
+          3.8
+        ],
+        [
+          "campSceneContent @ /shared/camp-scene-content.mjs:80",
+          3
+        ],
+        [
+          "(anonymous) @ /web/app.js:357",
+          3
+        ],
+        [
+          "reliefAt @ /shared/camp-terrain.mjs:42",
+          2.8
+        ],
+        [
+          "southEdge @ /shared/wild-landscape.mjs:47",
+          2.6
+        ],
+        [
+          "face @ /shared/wild-landscape.mjs:216",
+          2.2
+        ],
+        [
+          "(anonymous) @ /web/app.js:568",
+          2
+        ],
+        [
+          "stageMesh @ /web/camp-3d-render.mjs:163",
+          2
+        ],
+        [
+          "noise @ /shared/wild-landscape.mjs:25",
+          1.8
+        ],
+        [
+          "createCampRenderer @ /web/camp-3d-render.mjs:702",
+          1.6
+        ],
+        [
+          "addModel @ /shared/camp-scene.mjs:24",
+          1.6
+        ],
+        [
+          "distance @ /web/app.js:271",
+          1.6
+        ],
+        [
+          "riverCenter @ /shared/camp-terrain.mjs:24",
+          1.4
+        ]
+      ]
+    }
+  },
+  "ok": true
+}
