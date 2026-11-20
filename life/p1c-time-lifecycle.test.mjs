@@ -216,22 +216,20 @@ test('P1c-06 暂停/倍速/离线补时同一 rate：rate=2 时 60 真实分补 
   assert.equal(resumed.ok, true);
 });
 
-test('P1c-07 居民生理每 60 分只结算一次，不因 6 个 10 分 think 变成 6 倍', async () => {
+test('P1c-07 正式世界居民生理按分钟积分：50 分 = 50/60 刻，不随 think 次数放大', async () => {
   const { sp } = formalWorld(19);
   const a = sp.world.agents.a1;
   a.nextThinkMin = 0;
   a.drives.v.energy = 0.9;
   const metab0 = a.metabCount ?? 0;
   const age0 = a.viab.age ?? 0;
-  for (let i = 0; i < 5; i += 1) { // 前 50 分钟：同一个派生刻
+  for (let i = 0; i < 5; i += 1) { // 前 50 分钟：5 个 10 分 think
     await tickSurvPlay(sp, { minutes: 10 });
   }
-  assert.equal((a.metabCount ?? 0) - metab0, 1, '5 个 10 分 think 只能结算 1 刻基础代谢');
-  assert.ok(Math.abs((a.viab.age ?? 0) - age0 - 1) < 1e-9, 'viab 时间只前进 1 刻');
-  await tickSurvPlay(sp, { minutes: 10 }); // 第 60 分钟跨入下一派生刻
-  await tickSurvPlay(sp, { minutes: 10 }); // 下一次 10 分 think 落在新刻
-  assert.equal((a.metabCount ?? 0) - metab0, 2, '跨刻后结算第二次，绝不是 6 倍');
-  assert.ok(Math.abs((a.viab.age ?? 0) - age0 - 2) < 1e-9, '两刻时间对应两次结算');
+  assert.equal((a.metabCount ?? 0) - metab0, 50, '50 游戏分 = 50 个分钟身体步（不是 1 次/小时，也不是 6 倍）');
+  assert.ok(Math.abs((a.viab.age ?? 0) - age0 - 50 / 60) < 1e-9, 'viab 时间前进 50/60 刻');
+  await tickSurvPlay(sp, { minutes: 10 }); // 第 60 分钟：整一小时
+  assert.ok(Math.abs((a.viab.age ?? 0) - age0 - 1) < 1e-9, '60 分钟 = 1 刻');
 });
 
 test('P1c-08 正式连续世界取消"每拍最多 N 次"：同刻两个事件都真的问到模型', async (t) => {

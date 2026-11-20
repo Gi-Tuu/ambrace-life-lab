@@ -126,7 +126,9 @@ export async function runLong(seed, days = 30, { eventRulesVersion = CURRENT_EVE
   const heap0 = process.memoryUsage().heapUsed;
   for (let i = 0; i < ticks; i += 1) {
     const t0 = Date.now();
-    await tickSurvPlay(sp);
+    // 1.1：连续时钟长程用显式游戏分钟步（同一 simClock，不另起时钟），
+    // 否则 tickSurvPlay 只按真实毫秒推进，长程节拍不可复现。
+    await tickSurvPlay(sp, sp.world.simClock ? { minutes: 60 } : undefined);
     const dt = Date.now() - t0;
     if (recordTimeline) for (const [id, person] of Object.entries(w.survival.households.residents)) {
       const h = w.survival.households;

@@ -34,8 +34,11 @@ export class Drives {
     this.v.stimulation = m.arousal;
   }
 
-  tick(dt = 1, hadContact) {
-    this.v.energy = Math.max(0, this.v.energy - NEED_META.energy.decay * dt);
+  // 1.1 分钟生理：正式世界把能量按 1/60 刻/分钟积分，社交/aloneTicks 仍按整点一步（social:true）。
+  // 缺省两项都开 ⇒ 研究态/旧调用方逐位不变。
+  tick(dt = 1, hadContact, { energy = true, social = true } = {}) {
+    if (energy) this.v.energy = Math.max(0, this.v.energy - NEED_META.energy.decay * dt);
+    if (!social) return;
     this.aloneTicks = hadContact ? 0 : this.aloneTicks + dt;
     const extra = this.aloneTicks > 60 ? 0.002 * (this.aloneTicks - 60) : 0;
     const comfort = this.traits ? 1.3 - this.traits.comfortAlone : 1; // 孤僻 ⇒ 衰减慢

@@ -33,6 +33,7 @@ import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysF
 import { createActionDomain } from './survplay-actions.mjs';
 import { createSaveDomain } from './survplay-save.mjs';
 import { createSimClock, createTokenBucket, bindDerivedTick } from './sim-clock.mjs';
+import { bodyClockEnabled, stepBodyMinute, stepBodyHour, ELDER_DECAY_PER_HOUR } from './body-clock.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 import { workMotionView } from './work-motion.mjs';
@@ -90,7 +91,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   // P1 连续时钟只属于正式游戏（gameRules）且必须显式开启；研究态/旧参数路径不创建、不写字段。
   const continuous = simTime === true && gameRules === true;
@@ -101,6 +102,12 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     // 不再是独立推进的计数器；写它等同于把时钟重锚到该刻（仅存档/夹具）。
     bindDerivedTick(world);
     resetSimMinuteCursor(world);
+    // 1.1 第 2 项：正式游戏默认按游戏分钟积分身体（energy/viab/饥饿）；
+    // M5_MINUTE_METAB=0 精确回退到旧“每刻一次”结算（对照/旧档/发布回退）。
+    // 研究态没有 simClock ⇒ 不写这个字段，旧 dumpSurv 逐位不变。
+    world.minuteMetab = minuteMetab === null || minuteMetab === undefined
+      ? process.env.M5_MINUTE_METAB !== '0'
+      : Boolean(minuteMetab);
   }
   if (eventRulesVersion !== LEGACY_EVENT_RULES && eventRulesVersion !== CURRENT_EVENT_RULES) {
     const error = new Error(`未知生存概率规则版本 ${eventRulesVersion}`);
@@ -318,8 +325,8 @@ export { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTim
 export { playerReach } from './survplay-camp.mjs';
 
 
-// P1-1 老年额外代谢（每刻）：体能随衰老下降。
-const ELDER_DECAY = 0.0004;
+// P1-1 老年额外代谢（每刻）：体能随衰老下降。分钟身体路径复用同一常量（body-clock 按 1/60 积分）。
+const ELDER_DECAY = ELDER_DECAY_PER_HOUR;
 // P1-1 生命周期推进（日界）：阶段跃迁事件（成年/老年）＋老年自然衰老死亡。
 // 死亡概率随龄升、用确定哈希（无 Math.random）⇒ 可复现；置 viab=0 交 reapDeaths 统一收尸记录 cause='衰老'。
 function stepLifecycle(w, log) {
@@ -386,10 +393,33 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
   if (targetMinute <= cursor) return w;
   const to = Math.min(targetMinute, cursor + MAX_SIM_STEP_MIN);
   const explicit = requested > 0;
+  // 1.1：正式世界每个游戏分钟积分一次身体；M5_MINUTE_METAB=0 时走旧 think 结算。
+  const minuteBody = bodyClockEnabled(w);
   let dispatched = false;
   for (let minute = cursor + 1; minute <= to; minute += 1) {
     clock.setGameMinutes(minute);
     advancePlayerBusy(sp, minute);
+    if (minuteBody) {
+      // 身体先于 think 落地：本分钟到期的 think 读到的是“已积分到本分钟”的快照。
+      // 步内不消费世界 RNG（见 life/v11-metab.test.mjs 的 RNG 闸门）。
+      const population = livingResidents(w).length;
+      for (const id of Object.keys(w.agents)) {
+        const a = w.agents[id];
+        if (!a || !isAlive(a)) continue;
+        if (a.isPlayer && !(w.independentWorld || (!w.survival.ended && !w.survival.failed))) continue;
+        stepBodyMinute(w, a, { atMin: minute, population });
+      }
+      if (minute % 60 === 0) {
+        // 社交需求/M4 耦合仍按“刻”标定：整点一步，不把 tau 改成分钟。
+        const population = livingResidents(w).length;
+        for (const id of Object.keys(w.agents)) {
+          const a = w.agents[id];
+          if (!a || !isAlive(a)) continue;
+          if (a.isPlayer && !(w.independentWorld || (!w.survival.ended && !w.survival.failed))) continue;
+          stepBodyHour(w, a, { population });
+        }
+      }
+    }
     // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
     if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;
@@ -556,99 +586,104 @@ async function worldTick(sp, { now, onResidentAction, think }) {
     }
   }
   if (w.survival.talk && !talkInRange(w, w.survival.talk)) w.survival.talk = null;
-  // V7.3.3：每刻执行前登记当前在世集合（新生/动态加入不等到下一次 prepare）。
-  // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
-  for (const id of Object.keys(w.agents)) {
-    const a = w.agents[id];
-    if (a.isPlayer) continue;
-    if (!isAlive(a)) continue; // P0-1：死者不再参与任何自主决策与行动
-    const travel=travelOf(w,id);
-    if (travel) {
-      if (w.t<travel.arrive && Object.hasOwn(w.locs,travel.to)) {
-        a.drives.tick(1,false);
-        a.viab.tick(1);
-        a.metabCount = (a.metabCount ?? 0) + 1;
-        continue;
-      }
-      // 正式游戏：有路径的旅行已由 advanceTravels 结算；还在路上就不进入决策。
-      if (w.survival?.actTimeModel === true && Array.isArray(travel.path) && w.t < travel.arrive) continue;
-      if (w.survival?.actTimeModel !== true) {
-        delete w.survival.districtTravel[id];
-        const site = constructionDestination(w,travel.to);
-        const access = site && residentConstructionAccess(w,id,site);
-        if (access && !access.ok) recordConstructionBlock(w,id,travel.to,'move_to',access.code);
-        else if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) {
-          move(w,id,travel.to);
-          if (access?.destination && w.residentTravel[id]) w.residentTravel[id].at = access.destination;
+  // 1.1：正式分钟身体路径下，这里不再做“每 60 分一次”的身体结算（已由 tickSim 逐分钟积分）；
+  // 旅行/交谈/老年/角色化饥饿/公仓饥饿的旧侧效应由 body-clock 的分钟步与整点步承担。
+  const minuteBody = bodyClockEnabled(w);
+  if (!minuteBody) {
+    // V7.3.3：每刻执行前登记当前在世集合（新生/动态加入不等到下一次 prepare）。
+    // 同权：居民走完整决策环（survival affordances 已含全部玩家动作）
+    for (const id of Object.keys(w.agents)) {
+      const a = w.agents[id];
+      if (a.isPlayer) continue;
+      if (!isAlive(a)) continue; // P0-1：死者不再参与任何自主决策与行动
+      const travel=travelOf(w,id);
+      if (travel) {
+        if (w.t<travel.arrive && Object.hasOwn(w.locs,travel.to)) {
+          a.drives.tick(1,false);
+          a.viab.tick(1);
+          a.metabCount = (a.metabCount ?? 0) + 1;
+          continue;
+        }
+        // 正式游戏：有路径的旅行已由 advanceTravels 结算；还在路上就不进入决策。
+        if (w.survival?.actTimeModel === true && Array.isArray(travel.path) && w.t < travel.arrive) continue;
+        if (w.survival?.actTimeModel !== true) {
+          delete w.survival.districtTravel[id];
+          const site = constructionDestination(w,travel.to);
+          const access = site && residentConstructionAccess(w,id,site);
+          if (access && !access.ok) recordConstructionBlock(w,id,travel.to,'move_to',access.code);
+          else if (Object.hasOwn(w.locs,travel.to) && homeEntry(w,id,travel.to).ok) {
+            move(w,id,travel.to);
+            if (access?.destination && w.residentTravel[id]) w.residentTravel[id].at = access.destination;
+          }
         }
       }
-    }
-    // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
-    if (w.survival.talk?.target === id) {
-      try { a.drives.tick(1, false); a.viab.tick(1); a.metabCount = (a.metabCount ?? 0) + 1; } catch { /* 对话优先 */ }
-      continue;
-    }
-    if (!think) {
-      // 连续路径：忙碌/思考已在分钟调度里处理；这里只保留"每 60 分一次"的身体副作用。
-      if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY);
+      // 交谈中只跑基础代谢，不做自主决策：否则居民会边聊边走去干活，把对话打断。
+      if (w.survival.talk?.target === id) {
+        try { a.drives.tick(1, false); a.viab.tick(1); a.metabCount = (a.metabCount ?? 0) + 1; } catch { /* 对话优先 */ }
+        continue;
+      }
+      if (!think) {
+        // 连续路径：忙碌/思考已在分钟调度里处理；这里只保留"每 60 分一次"的身体副作用。
+        if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY);
+        if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
+        else if (w.survival.allHunger) a.drives.tick(1, false);
+        if (w.survival.storeHunger === true) {
+          const popH = livingResidents(w).length;
+          const mult = 1 + (w.survival.hungerK ?? 1) * Math.max(0, 1 - w.survival.store / (popH * 3));
+          if (mult > 1) a.drives.tick(mult - 1, false);
+        }
+        continue;
+      }
+      const traceStart = onResidentAction ? a.trace.length : 0;
+      // V7.2：进行中的动作推进（旧路径按刻）。
+      if (residentTimeModel(w)) {
+        const adv = advanceResidentBusy(w, id);
+        if (adv.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: adv.code });
+      }
+      try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
+      // 旧路径：同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX）。
+      // 正式连续世界不存在"同一拍最多 N 次"：决策机会由 ThinkScheduler 按游戏分钟发放。
+      if (!w.simClock && residentTimeModel(w) && a.lastMetabTick === w.t) {
+        const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
+        const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
+        for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {
+          if (!residentCanChain(w, id) || residentBusy(w, id)) break;
+          const before = a.counters.actions ?? 0;
+          try { await a.decideOn(w, { metab: a.lastMetab, reason: null, told: false, silent: true, sameKind }); } catch { break; }
+          if ((a.counters.actions ?? 0) === before) break;
+        }
+      }
+      // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
+      if (w.gameRules && a.pendingSay) {
+        const say = a.pendingSay;
+        delete a.pendingSay;
+        const here = w.loc[a.id];
+        const other = (w.occupancy[here] ?? []).find((id) => id !== a.id && w.agents[id] && !w.agents[id].dead);
+        if (other) {
+          const r = converse(w, a.id, other, { act: say.act, topic: say.topic, say: say.text, served: 'node' });
+          if (!r.ok) { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = r.code; }
+        } else { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = 'NO_COMPANY'; }
+      }
+      if (onResidentAction) onResidentAction(a, a.trace.slice(traceStart));
+      if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
+      if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
+      // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
       if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
       else if (w.survival.allHunger) a.drives.tick(1, false);
+      // §16 E4 公仓目标挂钩饥饿：公仓低于 pop×3 时全员饿感上升⇒集体劳动；§17 L1 强度乘数 hungerK
       if (w.survival.storeHunger === true) {
-        const popH = livingResidents(w).length;
+        const popH = livingResidents(w).length; // P0-1：饥饿压力按存活人口
         const mult = 1 + (w.survival.hungerK ?? 1) * Math.max(0, 1 - w.survival.store / (popH * 3));
         if (mult > 1) a.drives.tick(mult - 1, false);
       }
-      continue;
-    }
-    const traceStart = onResidentAction ? a.trace.length : 0;
-    // V7.2：进行中的动作推进（旧路径按刻）。
-    if (residentTimeModel(w)) {
-      const adv = advanceResidentBusy(w, id);
-      if (adv.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: adv.code });
-    }
-    try { await a.tick(w); } catch (e) { w.survival.agentErrors = (w.survival.agentErrors ?? 0) + 1; sp.log.push({ t: w.t, kind: 'agentError', ok: false, code: String(e?.message ?? e).slice(0, 80) }); }
-    // 旧路径：同一刻在预算内还可以再决策几次（硬上限 CHAIN_MAX）。
-    // 正式连续世界不存在"同一拍最多 N 次"：决策机会由 ThinkScheduler 按游戏分钟发放。
-    if (!w.simClock && residentTimeModel(w) && a.lastMetabTick === w.t) {
-      const last = a.trace.findLast((row) => row.t === w.t && row.kind && row.ok !== false);
-      const sameKind = last?.kind && !['move_to', 'look_out', 'talk'].includes(last.kind) && !last.kind.startsWith('discuss_') ? last.kind : null;
-      for (let extra = 0; sameKind && extra < CHAIN_MAX; extra += 1) {
-        if (!residentCanChain(w, id) || residentBusy(w, id)) break;
-        const before = a.counters.actions ?? 0;
-        try { await a.decideOn(w, { metab: a.lastMetab, reason: null, told: false, silent: true, sameKind }); } catch { break; }
-        if ((a.counters.actions ?? 0) === before) break;
-      }
-    }
-    // S2 say：模型写的那句话，动作执行后由规则层投递（词表/上限/关系后果都在 converse 里）。
-    if (w.gameRules && a.pendingSay) {
-      const say = a.pendingSay;
-      delete a.pendingSay;
-      const here = w.loc[a.id];
-      const other = (w.occupancy[here] ?? []).find((id) => id !== a.id && w.agents[id] && !w.agents[id].dead);
-      if (other) {
-        const r = converse(w, a.id, other, { act: say.act, topic: say.topic, say: say.text, served: 'node' });
-        if (!r.ok) { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = r.code; }
-      } else { w.survival.sayRejects = (w.survival.sayRejects ?? 0) + 1; w.survival.lastSayCode = 'NO_COMPANY'; }
-    }
-    if (onResidentAction) onResidentAction(a, a.trace.slice(traceStart));
-    if (w.independentWorld && a.trace.length > SURV_TRACE_LIMIT) a.trace.splice(0, a.trace.length - SURV_TRACE_LIMIT);
-    if (w.survival.households && residentStage(w, id) === 'elder') a.viab.v = Math.max(0, a.viab.v - ELDER_DECAY); // P1-1 老年体能下降（额外代谢）
-    // §15.7：R1 农夫额外衰减（持久饥饿）；R2' 全员额外衰减（community 驱动的替代实现，不碰全局 NEED_META）
-    if (w.survival.roleFarmer && id === w.survival.farmerId) a.drives.tick(3, false);
-    else if (w.survival.allHunger) a.drives.tick(1, false);
-    // §16 E4 公仓目标挂钩饥饿：公仓低于 pop×3 时全员饿感上升⇒集体劳动；§17 L1 强度乘数 hungerK
-    if (w.survival.storeHunger === true) {
-      const popH = livingResidents(w).length; // P0-1：饥饿压力按存活人口
-      const mult = 1 + (w.survival.hungerK ?? 1) * Math.max(0, 1 - w.survival.store / (popH * 3));
-      if (mult > 1) a.drives.tick(mult - 1, false);
     }
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
   try { maybeResidentRequest(w); maybePeerRequest(w); stepPeerRequests(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
-  // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理）。
-  if (w.independentWorld && w.survival.households && w.agents.p1 && isAlive(w.agents.p1) && residentStage(w, 'p1') === 'elder') {
+  // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理；分钟身体路径在 body-clock 里处理）。
+  if (!minuteBody && w.independentWorld && w.survival.households && w.agents.p1 && isAlive(w.agents.p1) && residentStage(w, 'p1') === 'elder') {
     w.agents.p1.viab.v = Math.max(0, w.agents.p1.viab.v - ELDER_DECAY);
   }
   if (w.unifiedCooperation && w.survival.coop.enabled) finishCooperation(w);
@@ -785,7 +820,7 @@ export function survView(sp) {
     workMotions: workMotionView(w),
     t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: s.actTimeModel === true ? GAME_PLAYER_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
     // P1：连续时钟只读视图。research/旧路径没有 simClock ⇒ 不出现这两个字段。
-    ...(w.simClock ? { timeMode: 'continuous', serverNow: Date.now(), gameMinutes: Number(w.simClock.nowMinutes().toFixed(3)), clock: w.simClock.state() } : {}),
+    ...(w.simClock ? { timeMode: 'continuous', serverNow: Date.now(), gameMinutes: Number(w.simClock.nowMinutes().toFixed(3)), clock: w.simClock.state(), minuteMetab: w.minuteMetab !== false } : {}),
     season: SEASONS[seasonOf(dayOf(w.t))], dayInSeason: (dayOf(w.t) % SEASON_DAYS) + 1,
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,

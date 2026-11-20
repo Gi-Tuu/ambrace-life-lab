@@ -25,6 +25,7 @@ import { PARAMS } from './params.mjs';
 import { ShortHorizonPlanner } from './m3-planner.mjs';
 import { Coupling, COUPLING_KINDS } from './coupling.mjs';
 import { legacyRefusalWhy } from './research-time.mjs';
+import { bodyClockEnabled } from './body-clock.mjs';
 
 const REFLEXES = [
   { when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },
@@ -113,15 +114,17 @@ export class Organism {
     const t = world.t;
     // 仅记录本轮输入处理之前已知的公开状态，供时间留出实验使用。
     this.tickStart = { t, loc: world.loc[this.id], drives: { ...this.drives.v } };
-    // P1：同一世界刻可能有多轮 10 分 think。基础代谢/驱动只结算一次（不产生 6 倍），
-    // 但感知/事件/决策每轮都跑——忙碌居民同样能感知到本刻新发生的事。
+    // P1：同一世界刻可能有多轮 10 分 think。调制 bank/前向模型仍只在该刻首个 think 更新一次
+    // （RNG 抽取位置/次数与旧路径一致）；身体量已由 tickSurvPlay 的分钟 micro-step 结算。
     const reuseMetab = this.lastMetabTick === t && Boolean(this.lastMetab);
+    // 1.1 第 2 项：正式连续世界的能量/存续/饥饿已按游戏分钟积分，think 只读快照。
+    const minuteBody = bodyClockEnabled(world);
     // M3 的目标只属于"本刻真的做过非反射决策"的那些刻：反射提前 return 时不得沿用上一次的目标，否则特征表会把反射刻当成 M3 决策
     this.m3Last = null;
     // M4：τ 按刻计（不按决策机会计）——"躲一阵子"是时间量，不是机会量。关闭时不写任何状态。
-    // 正式连续世界把这一步放进 metabolize（每刻一次）；研究态保持原位置逐位不变。
+    // 正式分钟身体路径在整点步里结算（stepBodyHour）；其余旧路径保持原位置逐位不变。
     const continuousClock = Boolean(world.simClock);
-    if (this.ch.coupling && !(continuousClock && world.independentWorld)) this.coupling.tick(1);
+    if (this.ch.coupling && !minuteBody && !(continuousClock && world.independentWorld)) this.coupling.tick(1);
 
     const incoming = world.pending.filter((p) => p.for === this.id);
     world.pending = world.pending.filter((p) => p.for !== this.id);
@@ -192,20 +195,13 @@ export class Organism {
     if (reason) this.counters.triggered += 1;
     if (told) this.informedTick = null;
 
-    // P1-A：基础代谢只结算一次；正式游戏先于反射判断（反射不免代谢），
-    // 研究模式保持旧顺序（反射提前 return 不结算），保护既有实验轨迹。
-    // P1c：按"距上次结算过了几个派生刻"推进（正常 think 间隔 10 分 ⇒ 1 刻），
-    // 既不会在同一刻内 6 次扣代谢，也不会因为错过一班 think 而漏掉整刻时间。
-    // M5 快/慢仓只接受 dt=1，无法做完整的 Body micro-step：先按 1 刻结算，
-    // 缺口记在 metabRemainder（只观测、不入档），见 docs/回报-债务-时间-2026-11-20.md。
+    // P1c：按"距上次结算过了几个派生刻"推进。正式分钟身体路径不再在 think 里扣身体，
+    // 但调制 bank 仍按旧口径在该刻首个 think 更新（M5 只 step(1)，其余按 elapsedTicks）。
     const elapsedTicks = reuseMetab ? 0 : Math.max(1, t - (Number.isFinite(this.lastMetabTick) ? this.lastMetabTick : t));
-    const metabolize = () => {
-      // 研究态保持旧的"每次 tick 一单位"（反射刻不补代谢，逐位基线要求）；只有正式连续
-      // 世界才按错过的派生刻补时间。
-      const step = this.ch.m5 ? 1 : (world.simClock ? elapsedTicks : 1);
-      if (this.ch.m5 && world.simClock && elapsedTicks > 1) this.metabRemainder = (this.metabRemainder ?? 0) + (elapsedTicks - 1);
-      this.metabCount = (this.metabCount ?? 0) + 1; // 观测用，不进入存档
-      // 先预测，再执行调制更新和学习；反射提前返回时没有更新，也不生成样本。
+    const step = this.ch.m5 ? 1 : (world.simClock ? elapsedTicks : 1);
+    // 只更新调制 bank / 前向模型（旧顺序：先预测，再 bank.tick，再学习）；不碰能量/存续/饥饿。
+    // 分钟身体路径与研究态共用这一段，保证 bank 的 RNG 抽取点与次数逐位不变。
+    const cognitionStep = () => {
       const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
       const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
       // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
@@ -221,6 +217,13 @@ export class Organism {
         this.lpFast = this.lpFast === undefined ? err : this.lpFast + (err - this.lpFast) * PARAMS.lp.fast;
         this.lpSlow = this.lpSlow === undefined ? err : this.lpSlow + (err - this.lpSlow) * PARAMS.lp.slow;
       }
+      return { ch: this.ch, prediction };
+    };
+    // 旧路径（研究态 / M5_MINUTE_METAB=0 回退）：身体仍由 think 每刻结算一次，逐位不变。
+    const metabolize = () => {
+      if (this.ch.m5 && world.simClock && elapsedTicks > 1) this.metabRemainder = (this.metabRemainder ?? 0) + (elapsedTicks - 1);
+      this.metabCount = (this.metabCount ?? 0) + 1; // 观测用，不进入存档
+      const metab = cognitionStep();
       const contact = (world.occupancy[world.loc[this.id]] ?? []).length > 1;
       this.drives.tick(step, contact);
       // PLAN §28 A：坏天气下在户外额外耗一点能量（town 启用；lab 的 weatherEnabled=false ⇒ 不执行）。
@@ -231,13 +234,12 @@ export class Organism {
       if (erosion) this.noteErosion(erosion, t);
       // M4：正式连续世界里随基础代谢一起每刻一次；研究态在 tick 顶部按旧位置结算。
       if (this.ch.coupling && continuousClock && world.independentWorld) this.coupling.tick(step);
-
       const ch = this.ch;
       const effUtil = ch.util ? this.bank.m : { ...this.traits.baseline };
       if (ch.driveRegulation !== 0) this.drives.regulate(effUtil); // 被调量：警觉。通道②关着就喂基线
-      return { ch, prediction };
+      return metab;
     };
-    const preMetab = !reuseMetab && world.independentWorld ? metabolize() : null;
+    const preMetab = !reuseMetab && world.independentWorld ? (minuteBody ? cognitionStep() : metabolize()) : null;
     // V7.3.2 P0：被 episode 配额挡下的居民只结算基础代谢/感知，不做自主决策。
     if (this.fairSuppress) {
       const metab = reuseMetab ? this.lastMetab : (preMetab ?? metabolize());
@@ -261,7 +263,7 @@ export class Organism {
     // P1 连续路径：身体忙不等于头脑停——照常感知/评价/决策，行动由 execute 以 BUSY trace 拒绝。
     if (residentTimeModel(world) && !world.simClock && clockOf(world, this.id).busy) return null;
 
-    const metab = reuseMetab ? this.lastMetab : (preMetab ?? metabolize());
+    const metab = reuseMetab ? this.lastMetab : (preMetab ?? (minuteBody ? cognitionStep() : metabolize()));
     this.lastMetab = metab;
     this.lastMetabTick = t;
     return this.decideOn(world, { metab, reason, told, silent: external.length === 0 });
