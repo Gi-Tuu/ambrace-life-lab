@@ -1,0 +1,91 @@
+{"seed":7,"version":1,"population":[5,6,1],"births":6,"deaths":{"衰竭":1,"衰老":8},"status":"boundary","errors":0}
+{"seed":13,"version":1,"population":[4,2,0],"births":2,"deaths":{"衰竭":1,"衰老":5},"status":"extinct","errors":0}
+{"seed":29,"version":1,"population":[5,6,4],"births":14,"deaths":{"衰竭":1,"衰老":13},"status":"alive","errors":0}
+{"seed":41,"version":1,"population":[5,6,7],"births":13,"deaths":{"衰竭":1,"衰老":9},"status":"alive","errors":0}
+{"seed":53,"version":1,"population":[5,6,1],"births":8,"deaths":{"衰竭":1,"衰老":10},"status":"boundary","errors":0}
+{"seed":7,"version":2,"population":[5,0,0],"births":2,"deaths":{"衰竭":1,"衰老":5},"status":"extinct","errors":0}
+{"seed":13,"version":2,"population":[6,3,0],"births":6,"deaths":{"衰竭":1,"衰老":9},"status":"extinct","errors":0}
+{"seed":29,"version":2,"population":[5,3,0],"births":4,"deaths":{"衰竭":1,"衰老":7},"status":"extinct","errors":0}
+{"seed":41,"version":2,"population":[5,2,0],"births":3,"deaths":{"衰竭":1,"衰老":6},"status":"extinct","errors":0}
+{"seed":53,"version":2,"population":[5,5,0],"births":10,"deaths":{"衰竭":1,"衰老":13},"status":"extinct","errors":0}
+{"seed":7,"population":{"30":6,"100":10,"200":5},"births100":7,"ended200":false,"errors":0}
+{"seed":13,"population":{"30":3,"100":7,"200":1},"births100":4,"ended200":false,"errors":0}
+{"seed":29,"population":{"30":5,"100":7,"200":0},"births100":4,"ended200":true,"errors":0}
+{"seed":41,"population":{"30":4,"100":9,"200":3},"births100":6,"ended200":false,"errors":0}
+{"seed":53,"population":{"30":4,"100":7,"200":1},"births100":4,"ended200":false,"errors":0}
+{
+  "summary": {
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      6,
+      3,
+      5,
+      4,
+      4
+    ],
+    "population100": [
+      10,
+      7,
+      7,
+      9,
+      7
+    ],
+    "population200": [
+      5,
+      1,
+      0,
+      3,
+      1
+    ],
+    "avg30": 4.4,
+    "avg100": 8,
+    "avg200": 2,
+    "births100": 25,
+    "extinct200": "1/5",
+    "knownDeathCauses": [
+      "衰老"
+    ],
+    "agentErrors": 0
+  },
+  "quick30x3": {
+    "ok": true,
+    "rows": [
+      {
+        "seed": 7,
+        "ticks": 720,
+        "t": 720,
+        "population": 6,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 3,
+        "days": 30
+      },
+      {
+        "seed": 13,
+        "ticks": 720,
+        "t": 720,
+        "population": 3,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 0,
+        "days": 30
+      },
+      {
+        "seed": 29,
+        "ticks": 720,
+        "t": 720,
+        "population": 5,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 2,
+        "days": 30
+      }
+    ]
+  }
+}

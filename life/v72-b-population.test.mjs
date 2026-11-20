@@ -6,7 +6,7 @@ import { FORMAL_OPTIONS } from './balance-probe.mjs';
 import { createSurvPlay, dumpSurv, loadSurv } from './survplay.mjs';
 import { residentStage } from './households.mjs';
 
-test('B-01 正式游戏 5 种子 100 日：平均人口 ∈[4,7]、出生 ∈[10,25]、玩家全活', async () => {
+test('B-01 正式游戏 5 种子 100 日：平均人口 ∈[4,10]、出生 ∈[10,32]、玩家全活', async () => {
   const pops = [], births = [], alive = [];
   for (const seed of LONG_SEEDS) {
     const r = await runLong(seed, 100, { checkpoints: [100], options: FORMAL_OPTIONS });
@@ -15,8 +15,10 @@ test('B-01 正式游戏 5 种子 100 日：平均人口 ∈[4,7]、出生 ∈[10
   const avg = pops.reduce((a, b) => a + b, 0) / pops.length;
   const totalBirths = births.reduce((a, b) => a + b, 0);
   // P2c：居民连续路径到点更可靠，100 日人口/出生上移一档；闸门放宽，原意（有人口、有出生、不爆）不变。
-  assert.ok(avg >= 4 && avg <= 10, `100 日平均人口应在 [4,10]（P2c 轨迹），实测 ${avg}（${JSON.stringify(pops)}）`);
-  assert.ok(totalBirths >= 10 && totalBirths <= 32, `100 日总出生应在 [10,32]（P2c 轨迹），实测 ${totalBirths}`);
+  // P3 重定基线（2026-11-20）：P2c 0dc76c4 与 P3 HEAD 的 5 种子独立 100 日实测均为
+  // [10,7,7,9,7]（均 8.00）、出生 25；P2c 回报的 [7,10,7,10,9]/8.6/28 不可复现，阈值未改。
+  assert.ok(avg >= 4 && avg <= 10, `100 日平均人口应在 [4,10]（P2c/P3 实测 8.00），实测 ${avg}（${JSON.stringify(pops)}）`);
+  assert.ok(totalBirths >= 10 && totalBirths <= 32, `100 日总出生应在 [10,32]（P2c/P3 实测 25），实测 ${totalBirths}`);
 });
 
 test('B-02 正式游戏 5 种子 200 日：灭绝 ∈[1,3]/5（目标 2–3，实测 1，未达标已标注）', async () => {

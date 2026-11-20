@@ -1,0 +1,253 @@
+{
+  "at": "2026-11-20T04:46:36.432Z",
+  "options": {
+    "residentialDecisions": true,
+    "ecosystem": true,
+    "unifiedCooperation": true,
+    "independentWorld": true,
+    "wildFood": true,
+    "autonomousGoals": true,
+    "farmLife": true,
+    "settlementLife": true,
+    "regionalWork": true,
+    "playerRation": true,
+    "gameRules": true,
+    "discussions": true
+  },
+  "rows": [
+    {
+      "seed": 7,
+      "population": {
+        "30": 6,
+        "100": 10,
+        "200": 5
+      },
+      "births": {
+        "30": 3,
+        "100": 7,
+        "200": 10
+      },
+      "deaths": {
+        "100": 0,
+        "200": 9
+      },
+      "deathCauses": {
+        "衰老": 9
+      },
+      "ended200": false,
+      "laborMinutes100": 17780,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 1.429,
+        "maxTickMs": 8,
+        "saveBytes": 1561154,
+        "heapDeltaBytes": 34807336,
+        "goalStagnation": 36,
+        "skipped": 0,
+        "rejected": 259
+      }
+    },
+    {
+      "seed": 13,
+      "population": {
+        "30": 3,
+        "100": 7,
+        "200": 1
+      },
+      "births": {
+        "30": 0,
+        "100": 4,
+        "200": 4
+      },
+      "deaths": {
+        "100": 0,
+        "200": 7
+      },
+      "deathCauses": {
+        "衰老": 7
+      },
+      "ended200": false,
+      "laborMinutes100": 16485,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.836,
+        "maxTickMs": 6,
+        "saveBytes": 975322,
+        "heapDeltaBytes": -43810616,
+        "goalStagnation": 39,
+        "skipped": 0,
+        "rejected": 67
+      }
+    },
+    {
+      "seed": 29,
+      "population": {
+        "30": 5,
+        "100": 7,
+        "200": 0
+      },
+      "births": {
+        "30": 2,
+        "100": 4,
+        "200": 4
+      },
+      "deaths": {
+        "100": 0,
+        "200": 8
+      },
+      "deathCauses": {
+        "衰老": 8
+      },
+      "ended200": true,
+      "laborMinutes100": 18260,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 0.824,
+        "maxTickMs": 10,
+        "saveBytes": 958653,
+        "heapDeltaBytes": -27924608,
+        "goalStagnation": 12,
+        "skipped": 0,
+        "rejected": 57
+      }
+    },
+    {
+      "seed": 41,
+      "population": {
+        "30": 4,
+        "100": 9,
+        "200": 3
+      },
+      "births": {
+        "30": 1,
+        "100": 6,
+        "200": 7
+      },
+      "deaths": {
+        "100": 0,
+        "200": 8
+      },
+      "deathCauses": {
+        "衰老": 8
+      },
+      "ended200": false,
+      "laborMinutes100": 17305,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 1.14,
+        "maxTickMs": 12,
+        "saveBytes": 1248575,
+        "heapDeltaBytes": 175302992,
+        "goalStagnation": 21,
+        "skipped": 0,
+        "rejected": 105
+      }
+    },
+    {
+      "seed": 53,
+      "population": {
+        "30": 4,
+        "100": 7,
+        "200": 1
+      },
+      "births": {
+        "30": 1,
+        "100": 4,
+        "200": 5
+      },
+      "deaths": {
+        "100": 0,
+        "200": 8
+      },
+      "deathCauses": {
+        "衰老": 8
+      },
+      "ended200": false,
+      "laborMinutes100": 18340,
+      "agentErrors": 0,
+      "runtime": {
+        "avgTickMs": 1.153,
+        "maxTickMs": 5,
+        "saveBytes": 1074955,
+        "heapDeltaBytes": 168424360,
+        "goalStagnation": 33,
+        "skipped": 0,
+        "rejected": 125
+      }
+    }
+  ],
+  "summary": {
+    "seeds": [
+      7,
+      13,
+      29,
+      41,
+      53
+    ],
+    "population30": [
+      6,
+      3,
+      5,
+      4,
+      4
+    ],
+    "population100": [
+      10,
+      7,
+      7,
+      9,
+      7
+    ],
+    "population200": [
+      5,
+      1,
+      0,
+      3,
+      1
+    ],
+    "avg30": 4.4,
+    "avg100": 8,
+    "avg200": 2,
+    "births100": 25,
+    "extinct200": "1/5",
+    "knownDeathCauses": [
+      "衰老"
+    ],
+    "agentErrors": 0
+  },
+  "quick30x3": {
+    "ok": true,
+    "rows": [
+      {
+        "seed": 7,
+        "ticks": 720,
+        "t": 720,
+        "population": 6,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 3,
+        "days": 30
+      },
+      {
+        "seed": 13,
+        "ticks": 720,
+        "t": 720,
+        "population": 3,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 0,
+        "days": 30
+      },
+      {
+        "seed": 29,
+        "ticks": 720,
+        "t": 720,
+        "population": 5,
+        "initialStore": 6,
+        "agentErrors": 0,
+        "births": 2,
+        "days": 30
+      }
+    ]
+  }
+}

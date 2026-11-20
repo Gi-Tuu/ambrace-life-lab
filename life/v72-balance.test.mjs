@@ -21,8 +21,12 @@ test('B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显�
   // P2c：居民按 space 路径连续移动后，到点更可靠（不再有"锚点已到但实际路没走"的抽象），
   // 100 日人口/出生整体上移一档；闸门从 [4,8]/[10,25] 放宽到 [4,10]/[10,32]，
   // 仍保留"有劳动、非零出生、不爆人口"的原意（见 P2c 回报 §长程变化）。
-  assert.ok(avg(populations) >= 4 && avg(populations) <= 10, `100 日平均人口应在 [4,10]（P2c 轨迹），实测 ${avg(populations)}（${JSON.stringify(populations)}）`);
-  assert.ok(births >= 10 && births <= 32, `100 日总出生应在 [10,32]（P2c 轨迹），实测 ${births}`);
+  // P3（2026-11-20）重定基线：只改导入/删壳，不触碰模拟。P2c 提交 0dc76c4 与 P3 HEAD 各自
+  // 重跑 5 种子独立 100 日，结果逐位相同：[10,7,7,9,7]（均 8.00）、出生 25；200 日灭绝 1/5。
+  // P2c 回报里的 [7,10,7,10,9]/8.6/28 不可复现（同 commit 复跑已是 8.00/25），本轮不改阈值，
+  // 仍用 [4,10]/[10,32]；提高上限才叫放宽，这里没有动。
+  assert.ok(avg(populations) >= 4 && avg(populations) <= 10, `100 日平均人口应在 [4,10]（P2c/P3 实测 8.00），实测 ${avg(populations)}（${JSON.stringify(populations)}）`);
+  assert.ok(births >= 10 && births <= 32, `100 日总出生应在 [10,32]（P2c/P3 实测 25），实测 ${births}`);
   assert.ok(labor > 0, '正式游戏里居民应该真的在劳动（劳动分钟数 > 0）');
   assert.ok(rows.every((r) => (r.final.agentErrors ?? 0) === 0), '长跑不得出现 agentErrors');
   assert.ok([...causes].every((c) => KNOWN_CAUSES.has(c)), `出现未知死因：${[...causes].join(',')}`);
