@@ -2,6 +2,7 @@
 //
 import { themeForSeason } from './audio-data.mjs';
 import { MUSIC_TRACKS } from './music-tracks.mjs';
+import { TOWN_SIZE } from '../shared/camp-layout.mjs';
 
 // 单独成模块的原因：差分规则（谁盖过谁、一次只播一条）是"声音语义"，
 // 必须能被闸门钉住；留在 app.js 里就只能靠手点验证，改坏了没人知道。
@@ -86,8 +87,9 @@ export function diffAudioEvents(prev, next) {
 }
 
 // 环境声与 BGM 的切换判据：只有这些读数变了才重排，避免每 900ms 抖一次。
-export const sceneSignature = (sv) => [sv.season, sv.phase, sv.weather, sv.settlement,
-  (sv.crisisDays ?? 0) > 0 ? 1 : 0, sv.player?.dead ? 1 : 0].join('|');
+// disasterToday / drought 也要进签名：天气床按 climate 选素材，暴雨/寒潮/干旱会换层。
+export const sceneSignature = (sv) => [sv.season, sv.phase, sv.weather, sv.disasterToday ?? '',
+  sv.drought ? 1 : 0, sv.settlement, (sv.crisisDays ?? 0) > 0 ? 1 : 0, sv.player?.dead ? 1 : 0].join('|');
 
 // ───────────────── BGM 播放窗口：音乐不是背景板，是"村子在热闹"的信号 ─────────────────
 //
@@ -100,16 +102,36 @@ export const sceneSignature = (sv) => [sv.season, sv.phase, sv.weather, sv.settl
 // 播的时候也有节拍：连续 6 刻后歇 6 刻，留出听劳动声的空隙。
 
 export const CORE_CENTER = [60, 40];      // 聚落核心 = 120×80 地块的几何中心
-export const FAR_RADIUS = 70;             // ≈ 核心到村界对角距离，超过即算"出村"
+export const FAR_RADIUS = 70;             // 环境声 proximity 的参考半径；BGM 边界已改用聚落矩形
 export const PLAY_TICKS = 6;              // 连续播放刻数
 export const REST_TICKS = 6;              // 间歇刻数
+
+// BGM 的"村内"以聚落矩形为准，不再用半径 70 的圆：
+// 圆半径 70 会让镇角 (119,79)（距核心 70.7）在镇内却不播，也会让矩形外的点误判为村内。
+export const CAMP_REGION = Object.freeze({ west: 0, north: 0, east: TOWN_SIZE.width, south: TOWN_SIZE.depth });
+
+const positionOf = (pos) => Array.isArray(pos) && Number.isFinite(pos[0]) && Number.isFinite(pos[1])
+  ? pos
+  : pos && Number.isFinite(pos.x) && Number.isFinite(pos.z) ? [pos.x, pos.z] : null;
+
+export const inCampRegion = (pos, region = CAMP_REGION) => {
+  const p = positionOf(pos);
+  // 没有位置读数（旧档 / 内核内）按"在村内"处理，与 playerDistance 的兜底口径一致。
+  if (!p) return true;
+  const [x, z] = p;
+  return x >= region.west && x < region.east && z >= region.north && z < region.south;
+};
+
+// 玩家是否在聚落矩形内：优先服务端 playerPos，旧档退回 loc 坐标，最后算"在村内"。
+export function playerInCamp(sv) {
+  return inCampRegion(sv?.playerPos ?? sv?.locs?.[sv?.loc?.p1]);
+}
 
 export const distanceFromCore = (pos, center = CORE_CENTER) =>
   Array.isArray(pos) ? Math.hypot(pos[0] - center[0], pos[1] - center[1])
     : pos && Number.isFinite(pos.x) ? Math.hypot(pos.x - center[0], pos.z - center[1]) : 0;
 
-// 玩家离核心多远：优先用服务端拥有的 playerPos（外围同权后的事实来源），
-// 没有（旧档/内核内）再退回 loc 的坐标，最后算"在村内"。
+// 玩家离核心多远：只用于环境声的风床远近（proximity），不再决定 BGM 是否播放。
 export function playerDistance(sv) {
   const pos = sv.playerPos ?? sv.locs?.[sv.loc?.p1];
   return distanceFromCore(pos);
@@ -120,14 +142,16 @@ const busyVillage = (sv) => (sv.coop?.task?.workers?.length ?? 0) > 0 || (sv.sit
 // 返回 { play, theme, day, reason, t }；reason 是给闸门与报告看的，不是给玩家看的。
 // t 是这次判定用的世界刻：调用方已经把 sv.t 传进来了，顺手带回去，
 // 免得起播点轮转要额外从 app.js 传参数（那文件此刻由另一路在改）。
-function computeWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 0 } = {}) {
+function computeWindow(sv, { region = CAMP_REGION, now = 0 } = {}) {
   if (!sv) return { play: false, theme: 'menu', day: true, reason: 'no-world' };
   const day = sv.phase !== '夜';
   if (sv.player?.dead) return { play: false, theme: 'death', day, reason: 'player-dead' };
   // 第二批素材到位后（所有者 2026-11-21）：灭绝与夜不再整段静音，各用自己的曲目；
   // 村外与闲日白天仍不放——那是 2026-11-15 定的「挑部分时段播放」。死人不在这里播，由 audio.scene 处理。
   if (sv.settlement === 'extinct') return { play: true, theme: 'extinct', day, reason: 'extinct' };
-  if (playerDistance(sv) > far) return { play: false, theme: 'menu', day, reason: 'away' };
+  if (!inCampRegion(sv.playerPos ?? sv.locs?.[sv.loc?.p1], region)) {
+    return { play: false, theme: 'menu', day, reason: 'away' };
+  }
 
   const crisis = sv.settlement === 'crisis' || (sv.crisisDays ?? 0) > 0;
   const dayTheme = themeForSeason(sv.season);
@@ -168,6 +192,51 @@ export const musicTarget = (win, settlement) => {
   return MUSIC_LEVEL;
 };
 
+// ───────────────── 环境床：槽位名 ≠ 素材名 ─────────────────
+// setBed 的第一参数是槽位（weather/daynight/wind/crisis），实际播放的素材来自
+// audio-data.mjs 的 rain/wind/cold/day/night/crisis。两者不是同一个命名空间，
+// 混用会让 renderAmbience 返回 null、整层床静默——2026-11-21 审计的 P0。
+export const BED_SLOTS = Object.freeze({
+  weather: Object.freeze(['rain', 'wind', 'cold']),
+  daynight: Object.freeze(['day', 'night']),
+  wind: Object.freeze(['wind']),
+  crisis: Object.freeze(['crisis']),
+});
+export const AMBIENCE_MATERIALS = Object.freeze(
+  Object.values(BED_SLOTS).flat().filter((v, i, a) => a.indexOf(v) === i),
+);
+
+// 2026-11-21 ffmpeg ebur128 实测（压缩器之前、master=1 的素材级 LUFS）；
+// 素材换了就必须重测，否则下面的增益表会把新素材推到错误的电平。
+export const AMBIENCE_LUFS = Object.freeze({
+  rain: -18.6, wind: -24.0, cold: -27.4, day: -34.0, night: -28.4, crisis: -19.2,
+});
+// 目标有效 LUFS（含 master 0.7）。天气/昼夜床压到常规 BGM（约 -31.6…-33.6）之下，
+// 但不再像修复前那样低 13dB；crisis 心跳保持比 BGM 高约 2dB，仍是最突出的那一层。
+export const BED_TARGET_LUFS = Object.freeze({
+  rain: -39.5, wind: -33.0, cold: -39.5, day: -39.5, night: -40.0, crisis: -30.0,
+});
+const MASTER_REFERENCE = 0.7;
+// gain = 10^((目标 LUFS − 素材 LUFS)/20) / master ⇒ 换成素材再照表复核。
+export const BED_GAIN = Object.freeze(Object.fromEntries(Object.entries(BED_TARGET_LUFS)
+  .map(([name, target]) => [name, 10 ** ((target - AMBIENCE_LUFS[name]) / 20) / MASTER_REFERENCE])));
+export const bedGain = (material) => (Number.isFinite(BED_GAIN[material]) ? BED_GAIN[material] : 0);
+
+// 天气槽按气候选素材：雨/风暴 → rain，寒潮/雪 → cold，干旱 → wind。
+export function weatherBed(climate = null, weather = null) {
+  if (climate?.storm || climate?.rain || weather === 'rain') return 'rain';
+  if (climate?.frost || climate?.snow || weather === 'cold') return 'cold';
+  if (climate?.drought) return 'wind';
+  return null;
+}
+export const dayNightBed = (phase) => (phase === '夜' ? 'night' : 'day');
+
+// 显式 ducking：天气床在场时，常规日曲让 2dB 给天气；危机/夜曲/送别/灭绝本来就更低，
+// 不再压，否则恢复期的雨声会反超 BGM。
+export const MUSIC_DUCK_WEATHER = 10 ** (-2 / 20);
+export const musicDuck = (weatherMaterial, level = 0) =>
+  (weatherMaterial && level >= MUSIC_LEVEL ? MUSIC_DUCK_WEATHER : 1);
+
 // 一截 = 6 刻播 + 6 刻歇，所以每过一整循环换一段起播点：同一首听久了也不腻。
 // 关键是这个序号取自**世界刻**而不是本地历史，于是同一营地的所有观众、以及录屏回放
 // 听到的都是同一段（外围同权的口径到这里同样成立）。
@@ -180,7 +249,7 @@ export function musicStartFor(theme, tick, tracks = MUSIC_TRACKS) {
   return t.starts[i];
 }
 
-// 远近程度 0（村内）→ 1（村外远征），用于环境声的连续 ducking。
+// 远近程度 0（村内）→ 1（村外远征），用于风床与天气/昼夜床的连续衰减。
 export function proximity(sv, { center = CORE_CENTER, far = FAR_RADIUS } = {}) {
   const d = playerDistance(sv);
   return Math.max(0, Math.min(1, (d - far * 0.55) / (far * 0.9)));

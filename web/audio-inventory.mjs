@@ -55,17 +55,19 @@ export const SOUND_INVENTORY = [
   { id: 'sleep', cat: '生命', zh: '入睡（渐弱）', trigger: 'camp_sleep', status: 'ready' },
 
   // ── 天气与灾害 ──
-  { bed: true, id: 'rain', cat: '天气', zh: '雨声底', trigger: 'weather=rain', status: 'ready' },
-  { bed: true, id: 'wind', cat: '天气', zh: '风底（寒潮/风暴）', trigger: 'weather=cold', status: 'ready' },
+  // 槽位（slot）与素材（id）分开登记：weather 槽会按 climate 在 rain/wind/cold 之间换素材，
+  // 音频闸门 A-32 用这张表对账，防止"清单写 ready、实际接线却静音"再次发生。
+  { bed: true, id: 'rain', slot: 'weather', cat: '天气', zh: '雨声底', trigger: 'weather=rain / disasterToday=storm', status: 'ready' },
+  { bed: true, id: 'wind', slot: 'wind', cat: '天气', zh: '风底（村外旷野）', trigger: '出村 proximity>0.15（与天气无关）', status: 'ready' },
   { id: 'storm', cat: '天气', zh: '雷暴两连', trigger: 'disasterToday=storm', status: 'ready' },
-  { id: 'cold', cat: '天气', zh: '寒潮（冰晶泛音）', trigger: 'disasterToday=coldsnap', status: 'ready' },
+  { bed: true, id: 'cold', slot: 'weather', cat: '天气', zh: '寒潮（冰晶泛音）', trigger: 'weather=cold / disasterToday=coldsnap / 冬雪', status: 'ready' },
   { id: 'drought', cat: '天气', zh: '干旱（干裂噪声）', trigger: 's.drought 变 true', status: 'ready' },
-  { bed: true, id: 'night', cat: '天气', zh: '夜虫', trigger: 'phase=夜', status: 'ready' },
-  { bed: true, id: 'day', cat: '天气', zh: '白日微风', trigger: 'phase=晨/昼/暮', status: 'ready' },
+  { bed: true, id: 'night', slot: 'daynight', cat: '天气', zh: '夜虫', trigger: 'phase=夜', status: 'ready' },
+  { bed: true, id: 'day', slot: 'daynight', cat: '天气', zh: '白日微风', trigger: 'phase=晨/昼/暮', status: 'ready' },
 
   // ── 聚落状态 ──
   { id: 'crisisEnter', cat: '聚落', zh: '进入缺粮危机（低音下沉）', trigger: 'settlement→crisis', status: 'ready' },
-  { bed: true, id: 'crisis', cat: '聚落', zh: '危机心跳（随缺口天数加密）', trigger: 'settlement=crisis/recovering', status: 'ready' },
+  { bed: true, id: 'crisis', slot: 'crisis', cat: '聚落', zh: '危机心跳（随缺口天数加密）', trigger: 'settlement=crisis/recovering 或 crisisDays>0，且村内 prox<0.5、非灭绝/倒下', status: 'ready' },
   { id: 'recover', cat: '聚落', zh: '危机缓解（回升三音）', trigger: 'crisis→recovering', status: 'ready' },
   { id: 'extinct', cat: '聚落', zh: '聚落灭绝（空场长音）', trigger: 'settlement=extinct', status: 'ready' },
   { id: 'ration', cat: '聚落', zh: '每日配给（公仓一勺）', trigger: '跨日且有配给', status: 'ready' },

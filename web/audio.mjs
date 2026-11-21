@@ -4,7 +4,7 @@
 // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
 
 import { renderSfx, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
-import { musicTarget, musicStartFor, MUSIC_STINT_TICKS } from './audio-events.mjs';
+import { BED_SLOTS, bedGain, dayNightBed, musicDuck, musicTarget, musicStartFor, MUSIC_STINT_TICKS, weatherBed } from './audio-events.mjs';
 import { MUSIC_TRACKS } from './music-tracks.mjs';
 
 const STORE_KEY = 'ambrace.audio';
@@ -216,53 +216,73 @@ export function menu(on) {
   fadeMusic(musicTarget({ play: true, theme: 'menu' }, 'active'));
 }
 
-// 环境声床：最多三层（天气 / 昼夜 / 危机），换状态时 1.5 秒交叉淡入淡出。
-function setBed(name, want, gain) {
-  const current = state.beds.get(name);
-  if (!want && current) {
-    current.gain.gain.setTargetAtTime(0.0001, state.ctx.currentTime, 0.5);
-    setTimeout(() => { try { current.src.stop(); } catch { /* 已停 */ } }, 1600);
-    state.beds.delete(name);
+// 环境声床：最多四层（天气 / 昼夜 / 风 / 危机），换状态时 1.5 秒交叉淡入淡出。
+// 第一参数是**槽位名**，第二参数是 **renderAmbience 的素材名**；缓存键跟着素材走，
+// 否则 weather 槽先 rain 后 cold 会复用同一份缓冲（审计 P0 的第二个坑）。
+function fadeOutBed(voice) {
+  voice.gain.gain.setTargetAtTime(0.0001, state.ctx.currentTime, 0.5);
+  setTimeout(() => { try { voice.src.stop(); } catch { /* 已停 */ } }, 1600);
+}
+
+function setBed(slot, material, gain) {
+  if (!state.ctx) return;
+  const current = state.beds.get(slot);
+  if (!material) {
+    if (current) { state.beds.delete(slot); fadeOutBed(current); }
     return;
   }
-  if (want && !current) {
-    const buf = stereoBuffer(`amb:${name}`, () => renderAmbience(name));
-    const voice = play(buf, { gain: 0.0001, loop: true });
-    if (!voice) return;
-    voice.gain.gain.setTargetAtTime(gain, state.ctx.currentTime, 0.8);
-    state.beds.set(name, voice);
+  // 槽位与素材各有命名空间：传错就明确不建层，测试会盯住这条边界。
+  if (!(BED_SLOTS[slot] ?? []).includes(material)) return;
+  if (current && current.material === material) {
+    current.gain.gain.setTargetAtTime(gain, state.ctx.currentTime, 0.8);
     return;
   }
-  if (want && current) current.gain.gain.setTargetAtTime(gain, state.ctx.currentTime, 0.8);
+  if (current) { state.beds.delete(slot); fadeOutBed(current); }
+  const buf = stereoBuffer(`amb:${material}`, () => renderAmbience(material));
+  const voice = play(buf, { gain: 0.0001, loop: true });
+  if (!voice) return;
+  voice.slot = slot;
+  voice.material = material;
+  voice.gain.gain.setTargetAtTime(gain, state.ctx.currentTime, 0.8);
+  state.beds.set(slot, voice);
 }
 
 // 世界差分进来就调这里；调用方只在"状态真的变了"时才调，避免每刻重算。
 export function scene({ season = '春', phase = '昼', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false,
-  window = null, proximity = 0 } = {}) {
+  window = null, proximity = 0, climate = null } = {}) {
   if (!state.ready || state.muted) return;
   const day = phase !== '夜';
   if (dead) {
     // 玩家倒下：换一首送别曲（2026-11-21 素材到位后，所有者改了"只留心跳"的旧口径）。
     startMusic('death', window?.t ?? 0);
     fadeMusic(musicTarget({ play: true, theme: 'death' }, settlement));
-    setBed('crisis', true, 0.5);
-    setBed('weather', false, 0);
-    setBed('daynight', false, 0);
+    setBed('crisis', 'crisis', bedGain('crisis'));
+    setBed('weather', null, 0);
+    setBed('daynight', null, 0);
+    setBed('wind', null, 0);
     return;
   }
   state.menu = false;
   // BGM 由 audio-events.mjs 的窗口规则决定：夜、村外、灭绝、闲日不播，播也有间歇。
   const win = window ?? { play: true, theme: musicTheme({ season, settlement }), day };
-  setBed('weather', weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : null, 0.5 * (1 - proximity * 0.5));
-  setBed('daynight', day ? 'day' : 'night', (day ? 0.4 : 0.7) * (1 - proximity * 0.7));
-  // 出村后风声接管；危机心跳只在村内听得见（远征时不叠加）。
-  setBed('wind', proximity > 0.15 ? 'wind' : null, 0.25 + proximity * 0.55);
-  setBed('crisis', (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0)
-    && settlement !== 'extinct' && proximity < 0.5, 0.55);
+  // 天气槽按气候选素材（rain/wind/cold），昼夜槽只认 day/night；
+  // 两槽都按 proximity 连续衰减，槽位名与素材名在 setBed 里严格分开。
+  const weatherName = weatherBed(climate, weather);
+  // 出村后由独立风床接管；这里不叠第二份 wind 素材，避免两份风声相加。
+  const weatherMaterial = weatherName === 'wind' && proximity > 0.15 ? null : weatherName;
+  setBed('weather', weatherMaterial, weatherMaterial ? bedGain(weatherMaterial) * (1 - proximity * 0.5) : 0);
+  const dayMaterial = dayNightBed(phase);
+  setBed('daynight', dayMaterial, bedGain(dayMaterial) * (1 - proximity * 0.7));
+  // 危机心跳只在村内听得见（远征时不叠加）。
+  setBed('wind', proximity > 0.15 ? 'wind' : null, bedGain('wind') * (0.35 + proximity * 0.65));
+  const crisisBed = (settlement === 'crisis' || settlement === 'recovering' || crisisDays > 0)
+    && settlement !== 'extinct' && proximity < 0.5 ? 'crisis' : null;
+  setBed('crisis', crisisBed, crisisBed ? bedGain('crisis') : 0);
   // 世界刻从窗口读数里带出来（musicWindow 已算过），所以轮转序号与 app.js 的传参无关。
   if (win.play) startMusic(`${win.theme}:${win.day ? 'day' : 'night'}`, win.t ?? 0);
   // 单一出口：窗口说停就淡到 0，不留"算对了但没接线"的余地。
-  fadeMusic(musicTarget(win, settlement));
+  const level = musicTarget(win, settlement);
+  fadeMusic(level * musicDuck(weatherMaterial, level));
 }
 
 // 音乐淡入淡出：淡入 2.5 秒、淡出 3.5 秒，且淡出期间已排程的小节照常放完 ⇒ 听不到硬切。
@@ -296,10 +316,21 @@ export function setVolume(v) {
 export function toggleMute() {
   state.muted = !state.muted;
   applyGain(); savePrefs();
-  if (state.muted) { stopMusic(); ['weather', 'daynight', 'crisis'].forEach((b) => setBed(b, false, 0)); }
+  if (state.muted) {
+    stopMusic();
+    Object.keys(BED_SLOTS).forEach((slot) => setBed(slot, null, 0)); // 含 wind：静音期间不该留循环
+  }
   return state.muted;
 }
 
 export const status = () => ({ ready: state.ready, volume: state.volume, muted: state.muted });
+
+// 闸门专用：读真实接线状态（槽位、素材名、当前增益、缓冲键），
+// 让 life/audio.test.mjs 能断言"层真的建起来了"，而不是只调了 setBed。
+export const audioDebug = () => ({
+  beds: [...state.beds].map(([slot, v]) => ({ slot, material: v.material, gain: v.gain.gain.value })),
+  buffers: [...state.buffers.keys()],
+  music: state.musicBus ? state.musicBus.gain.value : 0,
+});
 
 loadPrefs();

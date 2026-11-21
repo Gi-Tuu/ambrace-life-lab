@@ -3211,7 +3211,7 @@ function syncAudioScene(sv) {
     audioSceneSig = sig;
     audioWindowSig = wsig;
     audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement,
-      crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead),
+      crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead), climate: campClimate(sv),
       window: win, proximity: proximity(sv) });
   }
   const next = readWorld(sv);
