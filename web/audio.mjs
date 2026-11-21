@@ -3,7 +3,7 @@
 // 表现层约定：只读世界差分与本地 UI 事件，不写世界、不消费 rng、不进世界 tick。
 // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
 
-import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
+import { renderSfx, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
 import { musicTarget, musicStartFor, MUSIC_STINT_TICKS } from './audio-events.mjs';
 import { MUSIC_TRACKS } from './music-tracks.mjs';
 
@@ -11,7 +11,6 @@ const STORE_KEY = 'ambrace.audio';
 const SR = 44100;
 const VOICE_LIMIT = 10;          // 同时发声上限：超了直接丢，保护移动端
 const THROTTLE_MS = 55;          // 同名音效最小间隔，避免连点成机枪
-const LOOKAHEAD_S = 0.6;         // BGM 提前排程窗口
 const FADE_IN = 2.5;             // 音乐淡入秒数
 const FADE_OUT = 3.5;            // 音乐淡出秒数：比淡入长，收尾不像被掐断
 
@@ -62,6 +61,7 @@ export function unlock() {
   state.ctx = ctx; state.master = master;
   applyGain();
   state.ready = true;
+  loadTrack('menu');   // 开始屏放的就是它：先预取，免得解锁后的第一段是静音
   return true;
 }
 
@@ -140,35 +140,8 @@ function musicTheme({ season, settlement }) {
 }
 
 
-// 一小节的缓冲：变体切换时才渲染，单节约 15–25ms，且只在换季/昼夜/聚落状态时发生。
-function barBuffer(key, bar) {
-  const [theme, dayFlag = 'day'] = key.split(':');
-  return stereoBuffer(`music:${key}:${bar}`, () => renderMusicBar({ theme, day: dayFlag === 'day', bar }));
-}
-
-function scheduleMusic() {
-  const m = state.music;
-  if (!m.playing || !state.ctx) return;
-  const [theme, dayFlag = 'day'] = m.key.split(':');
-  const meta = musicMeta({ theme });
-  const now = state.ctx.currentTime;
-  while (m.nextAt < now + LOOKAHEAD_S) {
-    const buf = barBuffer(m.key, m.bar % meta.bars);
-    m.bar++;
-    if (buf) {
-      const src = state.ctx.createBufferSource();
-      src.buffer = buf;
-      const g = state.ctx.createGain();
-      g.gain.setValueAtTime(0.0001, m.nextAt);
-      g.gain.exponentialRampToValueAtTime(0.9, m.nextAt + 0.06);
-      src.connect(g); g.connect(state.musicBus ?? state.master);
-      src.start(m.nextAt);
-      src.onended = () => src.disconnect();
-    }
-    m.nextAt += meta.secondsPerBar;
-  }
-  m.timer = setTimeout(scheduleMusic, 220);
-}
+// BGM 只放成品曲，没有合成器兜底（所有者 2026-11-19：「不要这种兜底，很破坏统一性」）。
+// 素材还没解码好时，这一截保持安静，下一截再进；静音是可接受的降级，音色不统一不是。
 
 // ───────────────────────── 成品曲音源（web/music/*.ogg） ─────────────────────────
 // 每首只在第一次要用时拉取并解码（约 2MB / 首）：菜单页不该顺带下载四季。
@@ -178,7 +151,7 @@ function loadTrack(theme) {
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((b) => state.ctx.decodeAudioData(b))
     .then((buf) => { state.tracks.set(theme, buf); state.loading.delete(theme); })
-    .catch(() => { state.loading.delete(theme); });   // 拉不到就一直用合成版，不报错、不重试刷屏
+    .catch(() => { state.loading.delete(theme); });   // 拉不到就静音、下截再试：不回落合成器、不刷屏
   state.loading.set(theme, p);
 }
 
@@ -204,21 +177,12 @@ function playFile(theme, offset) {
     if (!state.music.playing || state.music.fileTheme !== theme) return;
     state.music.tick += MUSIC_STINT_TICKS;              // 窗口还没关但曲子放完了：换下一段起播点
     const next = musicStartFor(theme, state.music.tick);
-    if (next === null || !playFile(theme, next)) startSynth(theme);
+    if (next !== null) playFile(theme, next);
   };
   src.start(state.ctx.currentTime + 0.12, Math.max(0, offset), Math.max(0, buf.duration - offset));
   state.music.src = src;
   state.music.fileTheme = theme;
   return true;
-}
-
-function startSynth(theme) {
-  const m = state.music;
-  const meta = musicMeta({ theme });
-  m.bars = meta.bars; m.bar = 0;
-  m.nextAt = state.ctx.currentTime + 0.15;
-  clearTimeout(m.timer);
-  scheduleMusic();
 }
 
 // tick 是世界刻：起播点序号由它算，所以同营地的两个观众听到同一段，录屏也能复现。
@@ -229,8 +193,8 @@ function startMusic(key, tick = 0) {
   stopMusic();
   m.key = key; m.tick = Math.max(0, Number(tick) || 0); m.playing = true;
   const start = musicStartFor(theme, m.tick);
-  if (start === null) { startSynth(theme); return; }     // 灭绝等没素材的槽位：维持合成口径
-  if (!playFile(theme, start)) { loadTrack(theme); startSynth(theme); }
+  if (start === null) { m.playing = false; return; }   // 没有素材的槽位就静音，不合成
+  if (!playFile(theme, start)) loadTrack(theme);       // 还没解码好：这一截静音，下一截再进
 }
 
 function stopMusic() {

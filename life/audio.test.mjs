@@ -384,3 +384,17 @@ test('A-30 成品曲接进 musicBus，且不许再出现强制循环', () => {
     'BGM 不许设 loop=true：所有者口径是每截换段落，不是无缝循环');
   assert.match(wired, /musicStartFor\(/, '接线必须按世界刻取起播点，而不是固定从 0 秒放');
 });
+
+// A-31（所有者 2026-11-19）：「不要这种兜底，很破坏统一性」——BGM 只放成品曲。
+// 钉两件事：合成器 BGM 的代码彻底离开运行期；没素材时唯一允许的降级是静音。
+test('A-31 BGM 不再有合成器兜底：没有素材就静音，绝不回落到代码音乐', () => {
+  const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
+  for (const sym of ['renderMusicBar', 'scheduleMusic', 'barBuffer', 'startSynth']) {
+    assert.equal(new RegExp('\\b' + sym + '\\b').test(wired), false, `audio.mjs 仍在用 ${sym}：合成器 BGM 应已移除`);
+  }
+  assert.match(wired, /if \(start === null\) \{ m\.playing = false; return; \}/, '没素材的槽位必须静音退出，不许找替身');
+  assert.match(wired, /loadTrack\('menu'\)/, '开始屏要预取菜单曲，否则解锁后第一段是静音');
+  for (const t of PLAYING_SLOTS) {
+    assert.ok(MUSIC_TRACKS[t] && MUSIC_TRACKS[t].starts.length >= 1, `${t} 缺素材却仍会被窗口选中`);
+  }
+});
