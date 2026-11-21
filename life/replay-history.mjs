@@ -95,30 +95,52 @@ export function replayRange(replay, { from, to, revision } = {}) {
 
 // tick→scene 映射：请求仍是刻（前端/旧档契约），查找按该刻对应的世界分钟。
 // 新 compare 的逐帧场景来自实时 survView；旧帧没有 sceneMinutes，退回 frame.scene。
+//
+// 1.1 P2-1：不做任何跨分钟兜底。请求刻 t 只对应世界分钟 t×60：
+//   · 该分钟没有帧 ⇒ REPLAY_NO_FRAME（不借相邻分钟或另一侧场景）；
+//   · 某侧在该分钟没有场景 ⇒ 该侧显式 null，并带上该侧实际记录分钟；
+//   · 只有旧档（帧没有 minute/minutes）才允许用 frame.scene，因为旧档一刻就是 60 分。
 export function replayPoint(replay, t, revision) {
   if (!replay) return { ok: false, code: 'NO_REPLAY' };
   if (revision !== undefined && revision !== replay.revision) return { ok: false, code: 'REPLAY_STALE', revision: replay.revision };
   const targetMinute = Math.max(0, Number(t)) * 60;
-  const candidates = replay.frames.filter((f) => replayFrameMinute(f) === targetMinute);
-  // 旧帧没有 minute 时同一刻可能有多帧（例如一侧暂停后同 tick 两帧）；优先选两侧场景都
-  // 正好落在请求刻的那一帧，避免拿“半侧新、半侧旧”的最后一帧把画面判成不可用。
-  const frame = candidates.findLast((f) => f.scene?.A?.t === t && f.scene?.B?.t === t)
-    ?? candidates.at(-1)
-    ?? replay.frames.findLast((f) => f.t === t);
+  // 候选帧先按“派生刻”对齐（旧档一刻=60 分，必有 minute===t*60 的帧）。
+  // 单侧暂停/倍速时同一刻可能有多帧（分钟不同）：只优先选“该侧分钟正好等于 t×60”的帧；
+  // 不选相邻分钟——逐侧场景仍必须命中 sceneMinutes[side][t×60]，否则该侧显式 null。
+  const sameTick = replay.frames.filter((f) => f.t === t);
+  const frame = sameTick.findLast((f) => replayFrameMinute(f) === targetMinute)
+    ?? sameTick.findLast((f) => Object.values(f.minutes ?? {}).some((minute) => minute === targetMinute));
   const events = (replay.events ?? []).filter((e) => e.t === t);
   if (!frame) {
     const min = replay.frames[0]?.t ?? null, max = replay.frames.at(-1)?.t ?? null;
-    return { ok: false, code: 'REPLAY_NO_FRAME', t, events, coverage: { min, max }, note: events.length ? '该刻没有可回放状态，但事件详情仍可读；历史画面标记为不可用' : '该刻没有可回放状态（在窗口之外或未记录）' };
+    return {
+      ok: false, code: 'REPLAY_NO_FRAME', t, minute: targetMinute, events,
+      coverage: { min, max },
+      note: events.length
+        ? '该刻没有可回放状态，但事件详情仍可读；历史画面标记为不可用'
+        : '该刻没有可回放状态（在窗口之外或未记录）',
+    };
   }
   const {scene,...summary}=frame;
-  const indexed = (side) => replay.sceneMinutes?.[side]?.[minuteKey(targetMinute)] ?? null;
-  // 旧档/同分钟帧：scene 自带 t，只有正好是请求刻时才采用。
-  const fallback = (side) => scene?.[side]?.t === t ? scene[side] : null;
-  const A = indexed('A') ?? fallback('A');
-  const B = indexed('B') ?? fallback('B');
-  // 只有两侧都在请求分钟有真实场景才返回画面；缺一侧就 null，前端按“无场景”显示。
-  const scenes = replay.terrain && A && B
-    ? Object.fromEntries(['A','B'].map(side=>[side,{...replay.terrain,...(side==='A'?A:B)}]))
-    : null;
-  return { ok:true, revision:replay.revision, frame:summary, scenes, events };
+  // 旧档：没有 minute 也没有逐侧 minutes，场景只能按同一个 t 解释。
+  const legacyFrame = !Number.isFinite(frame.minute) && !frame.minutes;
+  const sceneOf = (side) => {
+    const indexed = replay.sceneMinutes?.[side]?.[minuteKey(targetMinute)] ?? null;
+    if (indexed) return indexed;
+    if (legacyFrame && scene?.[side]?.t === t) return scene[side];
+    return null;
+  };
+  const actualMinute = (side) => Number.isFinite(frame.minutes?.[side]) ? frame.minutes[side] : targetMinute;
+  const merge = (sideScene) => ({...replay.terrain, ...sideScene});
+  const sides = Object.fromEntries(['A','B'].map((side) => {
+    const found = sceneOf(side);
+    return [side, { minute: actualMinute(side), scene: found ? merge(found) : null }];
+  }));
+  // 部分缺场景时仍返回对象：前端按侧画“这一刻没有场景记录”，另一侧正常显示。
+  const scenes = sides.A.scene || sides.B.scene ? { A: sides.A.scene, B: sides.B.scene } : null;
+  const missing = ['A','B'].filter((side) => !sides[side].scene);
+  return {
+    ok:true, revision:replay.revision, frame:summary, scenes, sceneSides:sides, events,
+    ...(missing.length ? { note: `该刻 ${missing.join('/')} 侧没有场景（按缺场景返回 null，不借用相邻分钟或另一侧）` } : {}),
+  };
 }

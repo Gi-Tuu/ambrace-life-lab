@@ -34,12 +34,15 @@ export function createSimClock({
   const safeTickMs = Math.max(1, finite(tickMs, 7500));
   const safeMsPerMinute = Math.max(1e-6, finite(msPerGameMinute, safeTickMs / GAME_MINUTES_PER_HOUR));
   let safeRate = Math.max(0, finite(rate, 1));
-  let anchorMs = clockNow() - (Math.max(0, finite(startMinutes, 0)) * safeMsPerMinute) / (safeRate || 1);
+  // rate=0 是冻结语义，不是“公式乘 0 把世界归零”：世界停在 startMinutes（或最近一次
+  // setGameMinutes/换挡时的分钟），既不除零也不产生 NaN。
+  let frozenMinutes = Math.max(0, finite(startMinutes, 0));
+  let anchorMs = clockNow() - (frozenMinutes * safeMsPerMinute) / (safeRate || 1);
   let pausedAtMs = paused ? clockNow() : null;
 
   const gameMinutesAt = (atMs) => {
+    if (safeRate === 0) return frozenMinutes;
     const base = pausedAtMs ?? atMs;
-    if (safeRate === 0) return ((base - anchorMs) * 0) / safeMsPerMinute;
     return ((base - anchorMs) * safeRate) / safeMsPerMinute;
   };
 
@@ -59,6 +62,8 @@ export function createSimClock({
     advance(deltaMs) {
       const delta = finite(deltaMs, 0);
       if (delta === 0) return clock.nowMinutes();
+      // rate=0 与暂停同属冻结：真实时间流逝不推世界分钟。
+      if (safeRate === 0) return frozenMinutes;
       if (pausedAtMs !== null) pausedAtMs += delta;
       else anchorMs -= delta;
       return clock.nowMinutes();
@@ -66,15 +71,21 @@ export function createSimClock({
     advanceMinutes(minutes) {
       const m = finite(minutes, 0);
       if (m === 0) return clock.nowMinutes();
-      return clock.advance(safeRate === 0 ? 0 : (m * safeMsPerMinute) / safeRate);
+      // 显式推进在 rate=0 下同样不改变冻结分钟（与 pause 语义一致）。
+      if (safeRate === 0) return frozenMinutes;
+      return clock.advance((m * safeMsPerMinute) / safeRate);
     },
     // 读档/迁移：把"当前世界分钟"钉到指定值，不产生时间跳跃记录。
     setGameMinutes(minutes, atMs = clockNow()) {
       const m = Math.max(0, finite(minutes, 0));
+      if (safeRate === 0) {
+        frozenMinutes = m;
+        return m;
+      }
       if (pausedAtMs !== null) {
-        anchorMs = pausedAtMs - (m * safeMsPerMinute) / (safeRate || 1);
+        anchorMs = pausedAtMs - (m * safeMsPerMinute) / safeRate;
       } else {
-        anchorMs = atMs - (m * safeMsPerMinute) / (safeRate || 1);
+        anchorMs = atMs - (m * safeMsPerMinute) / safeRate;
       }
       return m;
     },
@@ -94,19 +105,27 @@ export function createSimClock({
       // 换挡不能改变此刻的世界分钟：先把 anchor 平移到新 rate 下等价的点。
       const current = gameMinutesAt(atMs);
       safeRate = next;
-      const base = pausedAtMs ?? atMs;
-      anchorMs = base - (current * safeMsPerMinute) / (safeRate || 1);
+      if (safeRate === 0) {
+        // 冻结在当前分钟；从 0 换回正速率时以 frozenMinutes 为锚继续走。
+        frozenMinutes = current;
+        anchorMs = pausedAtMs ?? atMs;
+      } else {
+        const base = pausedAtMs ?? atMs;
+        anchorMs = base - (current * safeMsPerMinute) / safeRate;
+      }
       return current;
     },
     state(atMs = clockNow()) {
+      const minutes = gameMinutesAt(atMs);
       return {
         anchorMs,
         rate: safeRate,
         paused: pausedAtMs !== null,
         pausedAtMs,
         msPerGameMinute: safeMsPerMinute,
-        gameMinutes: gameMinutesAt(atMs),
-        t: Math.floor(gameMinutesAt(atMs) / GAME_MINUTES_PER_HOUR),
+        gameMinutes: minutes,
+        // 复用 nowTick 的 +1e-6 浮点吸收；state().t 与 world.t getter 永远同源。
+        t: Math.floor((minutes + 1e-6) / GAME_MINUTES_PER_HOUR),
       };
     },
   };

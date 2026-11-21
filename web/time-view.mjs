@@ -11,11 +11,34 @@
 
 export const GAME_MINUTES_PER_DAY = 1440;
 export const MAX_EXTRAPOLATION_MS = 5000;
+// 只有视图完全没有 clock 时才用的标称值；服务端给了 msPerGameMinute 就绝不估算。
+export const FALLBACK_MS_PER_GAME_MINUTE = 125;
 
 const finite = (value, fallback = NaN) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
+
+// /world → HUD 锚点：只读服务端 clock 的 msPerGameMinute/rate/paused。
+// 不从相邻两次轮询的 serverNow/gameMinutes 差分估速（那会形成第二套时间读数）。
+export function clockAnchorFromView(view, at = 0) {
+  if (view?.timeMode !== 'continuous') return null;
+  const gameMinutes = finite(view?.gameMinutes);
+  if (!Number.isFinite(gameMinutes)) return null;
+  const clock = view.clock ?? {};
+  const msPerGameMinute = finite(clock.msPerGameMinute);
+  const rate = finite(clock.rate);
+  return {
+    gameMinutes,
+    at: Number.isFinite(at) ? Number(at) : 0,
+    // rate=0 是冻结语义：保留 0，让 interpolateGameMinutes 停在锚点，不回退到 125ms 继续走。
+    rate: Number.isFinite(rate) ? Math.max(0, rate) : 1,
+    msPerGameMinute: Number.isFinite(msPerGameMinute) && msPerGameMinute > 0
+      ? msPerGameMinute
+      : FALLBACK_MS_PER_GAME_MINUTE,
+    paused: clock.paused === true,
+  };
+}
 
 // anchor: { gameMinutes, rate, msPerGameMinute, paused, at? }
 // elapsedMs: 现在 - anchor.at（调用方用 performance.now() 算，避免受系统时钟回拨影响）

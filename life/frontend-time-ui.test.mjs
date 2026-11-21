@@ -13,13 +13,14 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  GAME_MINUTES_PER_DAY, MAX_EXTRAPOLATION_MS,
+  GAME_MINUTES_PER_DAY, MAX_EXTRAPOLATION_MS, FALLBACK_MS_PER_GAME_MINUTE,
   interpolateGameMinutes, gameMinuteOfDay, formatGameClock,
-  gameMinutesLeftToday, busyRemainMinutes, clockReadout,
+  gameMinutesLeftToday, busyRemainMinutes, clockReadout, clockAnchorFromView,
 } from '../web/time-view.mjs';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HOST = readFileSync('life/host.mjs', 'utf8');
+const TIME_VIEW = readFileSync('web/time-view.mjs', 'utf8');
 
 const anchor = (over = {}) => ({
   gameMinutes: 360, at: 1000, rate: 1, msPerGameMinute: 125, paused: false, ...over,
@@ -48,6 +49,31 @@ test('T3 倍速严格按 rate 缩放', () => {
   assert.equal(interpolateGameMinutes(anchor({ rate: 2 }), 1000), 376, '2×：1s=16 游戏分钟');
   assert.equal(interpolateGameMinutes(anchor({ rate: 0.5 }), 1000), 364, '0.5×：1s=4 游戏分钟');
   assert.equal(interpolateGameMinutes(anchor({ rate: 4 }), 900), 388.8, '4×：900ms=28.8 分钟');
+});
+
+test('T7b HUD 锚点只读服务端 clock：不抖动、缺失回退 125、暂停/零倍速冻结', () => {
+  const view = (clock, over = {}) => ({
+    timeMode: 'continuous', gameMinutes: 360, serverNow: 1_000, clock, ...over,
+  });
+  // 相邻两次 /world 的 serverNow 差再离谱（任何历史抖动），锚点数值必须逐位相同。
+  const a = clockAnchorFromView(view({ msPerGameMinute: 125, rate: 1, paused: false }, { serverNow: 1_000 }), 10);
+  const b = clockAnchorFromView(view({ msPerGameMinute: 125, rate: 1, paused: false }, { serverNow: 9_999_999 }), 20);
+  assert.deepEqual({ ...a, at: 0 }, { ...b, at: 0 }, 'serverNow 不得参与速度估计');
+  assert.equal(a.msPerGameMinute, 125);
+  assert.equal(a.rate, 1);
+  // 服务端给了非标称速率就用它；只有 clock 缺失/字段缺失才回退 125。
+  assert.equal(clockAnchorFromView(view({ msPerGameMinute: 250, rate: 1 })).msPerGameMinute, 250);
+  assert.equal(clockAnchorFromView(view(undefined)).msPerGameMinute, FALLBACK_MS_PER_GAME_MINUTE);
+  assert.equal(clockAnchorFromView(view({ rate: 1 })).msPerGameMinute, 125);
+  assert.equal(clockAnchorFromView(view(undefined)).rate, 1);
+  // 暂停与 rate=0 都冻结；rate=0 即使 clock 缺 msPerGameMinute 也不得回退成继续走。
+  for (const clock of [{ msPerGameMinute: 125, rate: 1, paused: true }, { msPerGameMinute: 125, rate: 0 }]) {
+    const anchor = clockAnchorFromView(view(clock));
+    const read = clockReadout(anchor, 60_000);
+    assert.equal(read.minutes, 360, `clock=${JSON.stringify(clock)} 必须冻结`);
+  }
+  assert.equal(clockAnchorFromView(view(undefined)).paused, false);
+  assert.equal(clockAnchorFromView({ ...view(undefined), timeMode: 'legacy' }), null);
 });
 
 test('T4 离线/掉轮询时外推封顶 5s，不无限漂', () => {
@@ -81,8 +107,9 @@ test('T7 前端复用 /world 的同一时钟字段，rAF 只改显示', () => {
   assert.match(APP, /function setClockAnchor\(view\)/, '缺少每次轮询重锚');
   assert.match(APP, /view\?\.timeMode === 'continuous'|view\?\.timeMode !== 'continuous'/, '只对连续世界启用插值');
   assert.match(APP, /view\?\.gameMinutes/, '时间来源必须是 /world 的 gameMinutes');
-  assert.match(APP, /view\.clock \?\? \{\}/, '必须复用服务端 clock，不能造第二套');
-  assert.match(APP, /\.msPerGameMinute/, 'msPerGameMinute 必须复用服务端 clock');
+  assert.match(TIME_VIEW, /view\.clock \?\? \{\}/, '必须复用服务端 clock，不能造第二套');
+  assert.match(TIME_VIEW, /clock\.msPerGameMinute/, 'msPerGameMinute 必须复用服务端 clock');
+  assert.match(APP, /clockAnchorFromView\(view, performance\.now\(\)\)/, 'HUD 锚点必须走纯函数、只读服务端 clock');
   assert.match(APP, /paintClockHud\(now\)/, 'rAF 主循环没有驱动 HUD 时钟');
   assert.match(APP, /requestAnimationFrame\(animate\)/, '必须用 rAF 而不是新定时器');
   assert.match(APP, /data-hud="dayleft"/, '今日剩余缺少稳定更新锚点');
@@ -91,6 +118,11 @@ test('T7 前端复用 /world 的同一时钟字段，rAF 只改显示', () => {
   const paint = APP.slice(APP.indexOf('function paintClockHud('), APP.indexOf('// 页面隐藏：'));
   assert.ok(paint.length > 100, 'paintClockHud 不存在或位置变了');
   assert.doesNotMatch(paint, /fetch\(|postJson|Math\.random|\bapi\(|\/act/, '插值只读显示：不得请求、不得消费 RNG、不得写世界');
+  const anchorFn = APP.slice(APP.indexOf('function setClockAnchor('), APP.indexOf('function hudClockReadout('));
+  assert.ok(anchorFn.length > 50, 'setClockAnchor 不存在或位置变了');
+  assert.doesNotMatch(anchorFn, /serverNow|deltaMinutes|deltaMs|observed|delta\s*Minutes/,
+    'setClockAnchor 不得用相邻轮询差分自估速度');
+  assert.doesNotMatch(APP, /hudLastClockSample/, 'HUD 自估速度的样本状态必须删除');
 });
 
 test('T8 玩家 timeLeft 在连续世界是日统计、不是配额，HUD 不得把它当资源', () => {

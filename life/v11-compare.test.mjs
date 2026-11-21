@@ -337,6 +337,38 @@ test('V11-CMP-08 倍速一侧 100 拍：两侧轨迹仍逐位=各自单独跑', 
   }
 });
 
+test('V11-CMP-10 暂停 A 100 拍后回放：A 缺场景=null、B 正常，不跨分钟兜底', async (t) => {
+  await host.start();
+  t.after(() => host.stop());
+  await freshCompare();
+  await stepBoth(1);
+  const startPair = host.snapshot('compare').comparison;
+  assert.equal((await host.ctl({ mode: 'compare', action: 'pause', side: 'A' })).ok, true);
+  for (let tick = 1; tick <= 100; tick += 1) {
+    assert.equal((await host.ctl({ mode: 'compare', action: 'step' })).ok, true);
+  }
+  const pair = host.snapshot('compare').comparison;
+  assert.equal(pair.A.t, startPair.A.t, 'A 暂停期间不得推进');
+  assert.equal(pair.B.t, startPair.B.t + 100, 'B 必须推进 100 刻');
+  assert.equal(pair.A.clock.paused, true);
+
+  const replay = host.replay({ t: pair.B.t, revision: pair.revision });
+  assert.equal(replay.ok, true, JSON.stringify(replay));
+  assert.equal(replay.frame.minute, pair.B.t * 60, '回放帧必须是 B 的请求分钟');
+  assert.equal(replay.sceneSides.A.scene, null, '暂停侧在该分钟没有场景，必须返回 null');
+  assert.equal(replay.sceneSides.A.minute, startPair.A.t * 60, '暂停侧实际记录分钟仍是冻结分钟');
+  assert.ok(replay.sceneSides.B.scene, '未暂停侧应有正常场景');
+  assert.equal(replay.sceneSides.B.minute, pair.B.t * 60);
+  assert.equal(replay.scenes.A, null, '部分缺场景时 A 侧不得借用 B 侧');
+  assert.equal(replay.scenes.B.weather, pair.B.weather, 'B 侧场景必须来自 B 自己的分钟');
+  assert.match(replay.note, /A 侧没有场景/);
+  // 相邻分钟/另一侧都不能冒充：按暂停侧的冻结刻查，暂停侧有场景，B 侧在该分钟无场景。
+  const frozen = host.replay({ t: pair.A.t, revision: pair.revision });
+  assert.equal(frozen.ok, true, JSON.stringify(frozen));
+  assert.ok(frozen.sceneSides.A.scene, '冻结刻本身有 A 的场景（初始帧）');
+  assert.equal(frozen.sceneSides.B.scene, null, 'B 不得把 100 刻后的场景借给冻结分钟');
+});
+
 test('V11-CMP-09 act 在 tick 在途时可返回；compare 的 act/tick 不交叉写 A/B', async (t) => {
   await host.start();
   t.after(() => { host.stop(); });

@@ -59,6 +59,54 @@ test('RP-05 空历史/无对照：可解释，不抛异常', () => {
   assert.equal(replayPoint(null, 1).code, 'NO_REPLAY');
 });
 
+test('RP-06 单侧暂停：缺场景侧显式 null，不借相邻分钟/另一侧场景', () => {
+  const replay = createReplay(4);
+  replay.terrain = { mapSeed: 13 };
+  // A 冻结在 60 分；B 推进到 120 分。新帧 minute 取共同前沿，逐侧 minutes 各自入索引。
+  recordReplayFrame(replay, {
+    t: 1, minute: 60, minutes: { A: 60, B: 60 }, A: card('A', 1), B: card('B', 1),
+    scene: { A: { t: 1, weather: 'clear' }, B: { t: 1, weather: 'clear' } },
+  });
+  recordReplayFrame(replay, {
+    t: 2, minute: 120, minutes: { A: 60, B: 120 }, A: card('A', 1), B: card('B', 2),
+    scene: { A: { t: 1, weather: 'clear' }, B: { t: 2, weather: 'rain' } },
+  });
+  const atB = replayPoint(replay, 2, 4);
+  assert.equal(atB.ok, true);
+  assert.equal(atB.sceneSides.A.scene, null, 'A 在 120 分没有场景，必须为 null');
+  assert.equal(atB.sceneSides.A.minute, 60, '缺场景侧仍要带出自己的实际记录分钟');
+  assert.ok(atB.sceneSides.B.scene, 'B 在该分钟有真实场景');
+  assert.equal(atB.sceneSides.B.minute, 120);
+  assert.equal(atB.scenes.A, null);
+  assert.equal(atB.scenes.B.weather, 'rain');
+  assert.match(atB.note, /A 侧没有场景/);
+});
+
+test('RP-07 相邻分钟不冒充：tick 1 的 B 侧不得拿 62 分场景', () => {
+  const replay = createReplay(5);
+  replay.terrain = { mapSeed: 13 };
+  // 只有 62 分的帧（t 派生为 1）；B 侧分钟 62 ≠ t×60=60，必须 null。
+  recordReplayFrame(replay, {
+    t: 1, minute: 62, minutes: { A: 60, B: 62 }, A: card('A', 1), B: card('B', 1),
+    scene: { A: { t: 1, weather: 'clear' }, B: { t: 1, weather: 'rain' } },
+  });
+  const partial = replayPoint(replay, 1, 5);
+  assert.equal(partial.ok, true);
+  assert.equal(partial.sceneSides.B.scene, null, '相邻分钟场景不得冒充请求分钟');
+  assert.equal(partial.sceneSides.B.minute, 62);
+  assert.ok(partial.sceneSides.A.scene, 'A 侧本身在 60 分，仍可显示');
+  // 两侧都不在请求分钟 ⇒ 明确缺帧，不借任何相邻帧。
+  recordReplayFrame(replay, {
+    t: 2, minute: 122, minutes: { A: 61, B: 122 }, A: card('A', 1), B: card('B', 2),
+    scene: { A: { t: 1, weather: 'clear' }, B: { t: 2, weather: 'rain' } },
+  });
+  const missing = replayPoint(replay, 2, 5);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'REPLAY_NO_FRAME');
+  assert.equal(missing.minute, 120);
+  assert.equal(missing.scenes, undefined);
+});
+
 test('同一刻保留最新场景及已有事件；旧帧不借用新场景',()=>{
   const replay=createReplay(2);
   replay.terrain={mapSeed:13};

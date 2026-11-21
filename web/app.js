@@ -27,7 +27,7 @@ import { TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker } fro
 import { postJson, persistNotices, setCampProvider } from './net.mjs';
 // 1.1：世界分钟只读显示投影（纯函数）。时间来源仍是 /world 的 gameMinutes/serverNow/clock，
 // 这里只在两次轮询之间外推显示，不回写世界、不发请求、不消费 RNG。
-import { clockReadout, formatGameClock, gameMinutesLeftToday, busyRemainMinutes } from './time-view.mjs';
+import { clockAnchorFromView, clockReadout, formatGameClock, gameMinutesLeftToday, busyRemainMinutes } from './time-view.mjs';
 
 
 import {
@@ -2927,7 +2927,6 @@ function renderHousing(s) {
 // 唯一时钟是服务端 world.simClock；/world 的 gameMinutes/serverNow/clock 是它的只读投影。
 // 两次轮询之间用 rAF 外推显示；下一次 /world 到达即重锚。这里不写世界、不请求、不消费 RNG。
 let hudClockAnchor = null;
-let hudLastClockSample = null;
 let hudWeatherLabel = '—';
 let hudClockNodes = null;
 let hudClockHiddenAt = null;
@@ -2940,45 +2939,12 @@ function viewGameMinutes(view) {
 }
 
 // 每次轮询重锚：服务端读数永远覆盖本地的外推，避免显示越过权威状态。
-// 插值速率优先用「相邻两次 /world 的 gameMinutes/serverNow 差」估计实际世界速度：
-// 服务端 tick 会按分钟 setGameMinutes，满拍处理期间有效速度可能略低于配置 rate；
-// 直接用配置换算会在每次重锚时产生向后跳变。估计值只用于两次轮询之间的显示，不写世界。
+// 1.1 P2-2：锚点只读服务端 clock 的 msPerGameMinute/rate/paused；不再用相邻两次
+// serverNow/gameMinutes 差分估速（那会让 HUD 出现 87–136ms 的第二套速度读数）。
+// clock 缺失时回退 125ms；rate=0/paused 由纯函数保留为冻结语义，绝不回退成“继续走”。
 function setClockAnchor(view) {
   hudClockNodes = null;
-  const minutes = Number(view?.gameMinutes);
-  if (view?.timeMode !== 'continuous' || !Number.isFinite(minutes)) {
-    hudClockAnchor = null;
-    hudLastClockSample = null;
-    return;
-  }
-  const clock = view.clock ?? {};
-  const nominalMs = Number(clock.msPerGameMinute);
-  const rate = Number(clock.rate);
-  const safeRate = Number.isFinite(rate) ? rate : 1;
-  const nominal = Number.isFinite(nominalMs) && nominalMs > 0 ? nominalMs : 125;
-  const paused = clock.paused === true;
-  const serverNow = Number(view.serverNow);
-  let msPerGameMinute = nominal;
-  const prev = hudLastClockSample;
-  if (prev && !paused && !prev.paused && prev.rate === safeRate && Number.isFinite(serverNow)) {
-    const deltaMinutes = minutes - prev.gameMinutes;
-    const deltaMs = serverNow - prev.serverNow;
-    // 只在"同一档、都在跑、间隔合理"的相邻两拍上估速；换挡/暂停边界直接回标称值。
-    if (deltaMinutes > 0.05 && deltaMs >= 200 && deltaMs <= 15000) {
-      const observed = deltaMs / deltaMinutes;
-      const smooth = prev.msPerGameMinute * 0.7 + observed * 0.3;
-      // 单拍估计只允许在标称值附近修正，防止一次慢拍把显示速度带偏。
-      msPerGameMinute = Math.min(nominal * 1.6, Math.max(nominal * 0.55, smooth));
-    }
-  }
-  hudLastClockSample = { gameMinutes: minutes, serverNow, rate: safeRate, paused, msPerGameMinute };
-  hudClockAnchor = {
-    gameMinutes: minutes,
-    at: performance.now(),
-    rate: safeRate,
-    msPerGameMinute,
-    paused,
-  };
+  hudClockAnchor = clockAnchorFromView(view, performance.now());
 }
 
 function hudClockReadout(now = performance.now()) {
