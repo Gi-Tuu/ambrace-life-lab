@@ -1,0 +1,27 @@
+✖ EXP-RENDER-04 天气跨日不再一帧硬切：10–30s 平滑、30s 到位、端点与旧硬切一致 (1.9396ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 168.9603
+
+✖ failing tests:
+
+test at life\worldview-fix.test.mjs:184:1
+✖ EXP-RENDER-04 天气跨日不再一帧硬切：10–30s 平滑、30s 到位、端点与旧硬切一致 (1.9396ms)
+  AssertionError [ERR_ASSERTION]: 一帧湿地面跳变 0.65
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/worldview-fix.test.mjs:200:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

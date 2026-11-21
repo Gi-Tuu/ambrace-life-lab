@@ -1,0 +1,27 @@
+✖ EXP-RENDER-03 8 个房间入口不压实心、中心可站，camp_exit 落到可站位置 (78.7128ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 224.0811
+
+✖ failing tests:
+
+test at life\worldview-fix.test.mjs:143:1
+✖ EXP-RENDER-03 8 个房间入口不压实心、中心可站，camp_exit 落到可站位置 (78.7128ms)
+  AssertionError [ERR_ASSERTION]: 0/0 home 入口矩形不得压实心 AABB（1.2650000000000101）
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/worldview-fix.test.mjs:151:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
