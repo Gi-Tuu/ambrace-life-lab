@@ -38,6 +38,7 @@ import {
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
 import { districtResources, addCampWork, forestStage, homeAppearance, homeStyle, outdoorHomes, outdoorLife, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
+import { campLivestock } from '../shared/camp-livestock.mjs';
 import { forestCutsOf, forestOccluderId } from '../shared/camp-forest.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   fadeableCovered, fadesAsOccluder, modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
@@ -527,7 +528,7 @@ function buildWorld(w) {
   const pads=districtPads(w.districts);
   const sites=staticSites;
   const sig=JSON.stringify([w.compareSide??'survival',w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,true,Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
-    .map(([k])=>k).sort(),wildClaimSignature(w),null]);
+    .map(([k])=>k).sort(),wildClaimSignature(w),w.livestock??null,null]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -540,7 +541,7 @@ function buildWorld(w) {
     camp:w.camp, timber:Boolean(w.camp?.timber), sites:staticSites,
     districts:w.districts, peripheralHomes:w.peripheralHomes,
     households:w.households, homeRoads:w.homeRoads, ecoSources:w.ecoSources,
-    wildPlots:w.wildPlots,
+    wildPlots:w.wildPlots, livestock:w.livestock??null,
   });
   const { trees, hills, bridges, bridgeCells, rocks, landscape, blockers, roads, beds, grove, river,
     flatLand, roadDistance, plantClearance, harvestNodes, terrainHash, streamCenter, streamHalfWidth } = content;
@@ -2083,7 +2084,7 @@ const SURV_CODE_ZH = { OK: '成功', NO_MATURE: '没有成熟的菜畦', NO_EMPT
 const TOOL_ZH={hand:'空手',axe:'斧',pick:'镐',hoe:'锄',hammer:'锤',basket:'篮子',shears:'剪刀',bucket:'桶'};
 const CAMP_ITEMS={meat:'肉',wood:'木料',stone:'石料',berry:'浆果',fruit:'水果',crop:'蔬菜',egg:'鸡蛋',wool:'羊毛',milk:'牛奶',water:'水',tray:'木托盘'};
 const CAMP_FOOD=['meat','berry','fruit','crop','egg','milk'];
-const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',coop_request:'请求协助',respond_request:'回应居民'};
+const campLabels={animal_feed:'投喂',animal_slaughter:'屠宰',road_lay:'铺路',road_remove:'移除小路',facility_use:'使用设施',home_fix:'修门',camp_chop:'伐木',camp_store:'放入',camp_take:'取出',camp_eat:'吃饭',camp_craft:'制作托盘',camp_collect:'采集',camp_plant:'播种',camp_water:'浇水',camp_sleep:'睡觉',camp_rest:'休息',coop_request:'请求协助',respond_request:'回应居民'};
 const campCodes={
   ...CONSTRUCTION_CODES,
   ACCEPTED:'已答应', DECLINED:'已拒绝', NO_REQUEST:'该请求已经结束', REQUESTER_GONE:'提出请求的居民已离开',
@@ -2243,8 +2244,9 @@ function inspectRoomProp(prop) {
         // 谷仓直接吃一份与家里餐桌共用“今日已吃”计数；不饿时服务端会拒绝，按钮这里先给出原因。
         propOption(options,'在公仓吃一份',s.store<1?'公仓没有粮食':(s.player?.energy??1)>0.6?'还不饿':'',()=>performCamp({kind:'camp_eat'},ui.interior));
       } else if (facility.type==='shelter') {
-        $('campPropDetail').textContent='在避难住所休息可恢复精力。';
+        $('campPropDetail').textContent=`在避难住所休息可恢复精力（棚下 +${s.energyRules?.shelterRest ?? 0.15}/刻）。`;
         bindAction('休息',()=>use('rest'));
+        propOption(options,`坐下歇 ${s.energyRules?.restMinutes ?? 30} 分（体力 +${s.energyRules?.restAmount ?? 0.06}）`,'',()=>performCamp({kind:'camp_rest'},ui.interior));
       } else {
         $('campPropDetail').textContent='木料 ×2，制作一个木托盘。';
         propOption(options,'用锤制作木托盘',(s.pinv.p1.wood??0)<2?'背包木料不足':'',()=>{
@@ -2296,7 +2298,8 @@ function inspectRoomProp(prop) {
         if (!privateVisitor) bindAction('躺下睡觉',()=>sleepInBed(prop));
         break;
       case 'bench':
-        bindAction('坐下',()=>{ campPose={kind:'sit',prop}; });
+        detail=`长凳。坐下歇 ${S.view?.energyRules?.restMinutes ?? 30} 游戏分，体力 +${S.view?.energyRules?.restAmount ?? 0.06}（每游戏时 1 次 / 每日上限 ${S.view?.energyRules?.restDailyCap ?? 0.24}）。`;
+        propOption(options,'坐下休息', '', ()=>performCamp({kind:'camp_rest'},ui.interior));
         break;
       case 'telescope': detail=weather; break;
       case 'banner': {
@@ -2320,9 +2323,10 @@ function inspectRoomProp(prop) {
         detail=`鸡 ${counts.chickens} · 牛 ${counts.cows} · 羊 ${counts.sheep} · 公仓木 ${s.inv.wood} / 石 ${s.inv.stone}`;
         if (s.ecoSources) detail+='。到室外靠近动物，用对应工具收集。';
         for (const type of ['chickens','cows','sheep']) {
-          const cost=s.economy.expand[type];
-          propOption(options,`扩建${s.economy.expandLabel[type]}（木 ${cost.wood} · 石 ${cost.stone}）`,
-            counts[type]>=s.economy.cap?'已达上限':s.inv.wood<cost.wood+4 || s.inv.stone<cost.stone+3?'公仓材料不足':'',
+          const cost=s.economy.expand[type], cap=s.economy.penCap?.[type]??s.economy.cap;
+          const verb=(counts[type]??0)>0?'扩':'建';
+          propOption(options,`${verb}${s.economy.expandLabel[type]}（木 ${cost.wood} · 石 ${cost.stone}）`,
+            counts[type]>=cap?'已达上限':s.inv.wood<cost.wood+4 || s.inv.stone<cost.stone+3?'公仓材料不足':'',
             ()=>{ dialog.close(); runSurvAction({kind:'expand',type}); });
         }
         for (const type of ['egg','milk','wool']) {
@@ -2362,7 +2366,12 @@ async function performCamp(body,site,done) {
     if (result.ok) markFirstRun(body.kind);
     await refresh();
     if (done && $('campPropDialog').open) done();
-    const msg=result.code==='BUSY_START' ? '已开始，下一刻继续。' : result.ok ? (body.kind==='camp_sleep'?`睡过了 ${result.ticks} 刻`:`${campLabels[body.kind]??ACT_ZH[body.kind]??'操作'}成功`)
+    const gain=result.recovery?.gain ?? result.energyGain ?? result.gain;
+    const msg=result.code==='BUSY_START' ? '已开始，下一刻继续。' : result.ok
+      ? (body.kind==='camp_sleep'
+        ? `睡过了 ${result.ticks} 刻${gain>0?`，体力 +${Number(gain).toFixed(2)}`:''}`
+        : body.kind==='camp_rest' && gain>0 ? `歇了 ${result.site ?? ''}，体力 +${Number(gain).toFixed(2)}`
+        : `${campLabels[body.kind]??ACT_ZH[body.kind]??'操作'}成功${gain>0?`，体力 +${Number(gain).toFixed(2)}`:''}`)
       : campCodes[result.code]??SURV_CODE_ZH[result.code]??'动作未完成';
     toast(msg);
     return result;
@@ -2457,7 +2466,10 @@ function atPen(world,walker) {
   const p=penLayout(world.sites);
   if (!p || !walker) return false;
   const x=walker.x+.5, z=walker.y+.5;
-  return rectGap(x,z,p.x+p.gate-.55,p.z+p.d-.95,p.opening+1.1,1.9)<=.65;
+  // 1.6：主门在东侧走道；也允许站在任一舍门口打开围栏面板。
+  const doors=campLivestock(world.sites?.yard, world.livestock)?.doors;
+  if (!doors) return rectGap(x,z,p.x+p.w-p.d,p.z+p.d*.42,.7,1.8)<=.75;
+  return Object.values(doors).some((r)=>rectGap(x,z,r.x-.25,r.z-.25,r.w+.5,r.d+.5)<=.7);
 }
 function localSurvSite(world,walker) {
   if (!walker) return null;
@@ -3371,7 +3383,7 @@ function renderSeasonHud(view, location, outdoor) {
     const busyLeft = busy ? busyRemainMinutes(busy, minutes, hudClockAnchor?.gameMinutes ?? viewGameMinutes(view)) : null;
     const busyText = busy ? `${esc(busy.kind)} 剩 <span data-hud="busy">${Number.isFinite(busyLeft) ? busyLeft.toFixed(1) : (busy.remainMin ?? 0)} 分</span>` : '';
     const stats = [
-      [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?'],
+      [`${STAT_ICON.heart}`, '体力', view.player?.energy ?? '?', null, view.energyRules?.text ?? ''],
       [`${STAT_ICON.shield}`, '存续', view.player?.viab ?? '?'],
       // 今日剩余 = 距离今天的游戏日结束还有多少游戏分钟（平滑递减，非行动配额）。
       [`${STAT_ICON.action}`, '今日剩余', `${gameMinutesLeftToday(minutes)} 分`, 'dayleft', '今日剩余游戏分钟（世界时钟插值；不是行动配额）'],
@@ -3404,8 +3416,9 @@ function ecoButtons(s, which) {
   }).join('');
   return Object.entries(s.economy?.expand ?? {}).map(([k, c]) => {
     const label = s.economy?.expandLabel?.[k] ?? k;
+    const verb = (s.livestock?.[k] ?? 0) > 0 ? '扩建' : '建造';
     const ok = (s.inv?.wood ?? 0) >= c.wood && (s.inv?.stone ?? 0) >= c.stone;
-    return `<button data-sk="expand" data-type="${k}" title="建造${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
+    return `<button data-sk="expand" data-type="${k}" title="${verb}${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
   }).join('');
 }
 function renderExchangeDlg(s) { const el=$('exchangeBody'); if(el) el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'exchange')}</div>`; }
@@ -3498,8 +3511,10 @@ function renderSurv(s) {
       <span class="stat" title="时段与天气">${STAT_ICON.weather}<b>${esc(s.phase)} ${esc(s.weather ?? '')}</b></span>
       ${ghost
         ? `<span class="stat ghost" title="已死亡：只能观察世界"><b>${STAT_ICON.eye}幽魂观察</b></span>`
-        : `<span class="stat" title="体力">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
+        : `<span class="stat" title="${esc(s.energyRules?.text ?? '体力恢复：睡觉/休息/棚下/吃饭')}">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
       <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>`}
+      ${!ghost && s.energyRules?.text ? `<span class="dim" title="体力恢复来源与上限">恢复：${esc(s.energyRules.text)}</span>` : ''}
+      ${!ghost && s.energyRules?.restState?.allowed && (s.player?.energy ?? 0) < 0.98 ? `<button id="btnCampRest" title="休息 ${s.energyRules?.restMinutes ?? 30} 游戏分，体力 +${s.energyRules?.restAmount ?? 0.06}">歇 ${s.energyRules?.restMinutes ?? 30} 分 · 体力+${s.energyRules?.restAmount ?? 0.06}</button>` : ''}
       <span class="stat" title="当前地点">${STAT_ICON.place}<b>${ghost ? '幽魂 · 观察中' : `${esc(location)}${outdoor ? '·户外' : '·室内'}`}</b></span>
       ${!ghost && outside ? '<span class="bad" title="村外按世界时间限速；玩家与居民共用移动预算">村外·限速</span>' : ''}
       ${!ghost && s.player?.timeLeft != null ? `<span class="stat" title="日统计：今天已用于动作的分钟，不限制行动">${STAT_ICON.action}<b>${s.player?.timeMax === 1440 ? '今日动作已用' : '本刻动作已用'} ${Math.max(0, (s.player?.timeMax ?? 0) - s.player.timeLeft)} 分</b></span>` : ''}
@@ -3519,12 +3534,14 @@ function renderSurv(s) {
         }).join('')}
         ${Object.entries(s.economy?.expand ?? {}).map(([k, c]) => {
           const label = s.economy?.expandLabel?.[k] ?? k;
+          const verb = (s.livestock?.[k] ?? 0) > 0 ? '扩建' : '建造';
           const ok = (s.inv?.wood ?? 0) >= c.wood && (s.inv?.stone ?? 0) >= c.stone;
-          return `<button data-sk="expand" data-type="${k}" title="扩建${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
+          return `<button data-sk="expand" data-type="${k}" title="${verb}${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
         }).join('')}
       </div>
     </details>`}`;
   el.querySelectorAll(':scope > details').forEach((d, i) => { if (openState[i]) d.open = true; });
+  el.querySelector('#btnCampRest')?.addEventListener('click',()=>performCamp({kind:'camp_rest'}));
   renderItemBar(s);
   renderSeasonHud(s, location, outdoor);
   renderLabCoop(s);

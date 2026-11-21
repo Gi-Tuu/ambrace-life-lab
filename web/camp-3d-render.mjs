@@ -119,10 +119,11 @@ export function coveredModels(camera, player, ...lists) {
 
 // 遮挡淡出白名单（唯一来源，渲染与闸门共用）：
 //   roof:/room-roof: = 屋盖；wall: = 建筑墙身、连廊栏杆/立柱、井台/棚架、瞭台塔身；
-//   tree:/wildtree: = 场景树/荒野树（树冠遮住玩家时必须能看穿——2026-11-21 树可砍透明修复）。
-// 仍然天然排除 pen:（栅栏）、plot:（田地/作物）、rock:（石）、timber:/resource:（木料/资源）、
-// landmark:（地标）——这些命中遮挡也不改材质（grove 的 timber: 走 work 动态层自己的淡出，不在本表）。
-export const FADE_OCCLUDERS = /^(roof|room-roof|wall|tree|wildtree):/;
+//   tree:/wildtree: = 场景树/荒野树（树冠遮住玩家时必须能看穿——2026-11-21 树可砍透明修复）；
+//   livestock: = 1.6 牲畜圈舍的屋舍/棚顶（真实建筑体量，挡住玩家时同样要能看穿）。
+// 仍然天然排除 pen:（围栏；1.6 起围栏仍不淡，避免整圈栅栏变透明）、plot:（田地/作物）、rock:（石）、
+// timber:/resource:（木料/资源）、landmark:（地标）——这些命中遮挡也不改材质。
+export const FADE_OCCLUDERS = /^(roof|room-roof|wall|tree|wildtree|livestock):/;
 export const fadesAsOccluder = (id) => typeof id === 'string' && FADE_OCCLUDERS.test(id);
 export const fadeableCovered = (covered) => [...(covered ?? [])].filter(fadesAsOccluder);
 

@@ -84,8 +84,11 @@ test('EXP-RENDER-01 遮挡分件：建筑墙/屋顶/连廊各自成组，白名�
   assert.equal(/uniform\.Cutout/.test(render), false, '不得再有 uniform.Cutout 的取址/上传');
   assert.equal(/gl\.uniform4f\(uniform\.Cutout/.test(render), false, '不得再有 cutout 分支的上传');
   // 白名单必须是显式常量并被 paintStage 复用（不是内联只认 roof 的正则）
-  assert.ok(/export const FADE_OCCLUDERS\s*=\s*\/\^\(roof\|room-roof\|wall\|tree\|wildtree\)/.test(render), 'FADE_OCCLUDERS 白名单缺失（必须含 tree/wildtree）');
+  assert.ok(/export const FADE_OCCLUDERS\s*=\s*\/\^\(roof\|room-roof\|wall\|tree\|wildtree\|livestock\)/.test(render), 'FADE_OCCLUDERS 白名单缺失（必须含 tree/wildtree/livestock）');
   assert.ok(/!fadesAsOccluder\(r\.id\)/.test(render), 'paintStage 必须复用 fadesAsOccluder 白名单');
+  // 1.6：牲畜圈舍的屋舍/棚顶是真实建筑体量，必须能淡出；围栏 pen: 仍不淡。
+  assert.equal(fadesAsOccluder('livestock:chickens:roof'), true);
+  assert.equal(fadesAsOccluder('pen:fence:0'), false);
   // 室外场景本身不再出现"整栋共用一个 site: 前缀"的屋顶：屋顶与墙必须能分开识别
   const { stage } = build(0, 0);
   const houseRoofs = stage.boxes.filter((b) => b.occluder === 'roof:home' && b.rot && b.h === .13);
