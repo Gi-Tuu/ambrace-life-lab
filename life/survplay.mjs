@@ -23,6 +23,8 @@ import { campForestView, campTimberView } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout } from '../shared/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, buildingsFor, initFoodStore, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
+import { LIVESTOCK_CAPACITY } from '../shared/camp-livestock.mjs';
+import { ENERGY_RULES_TEXT, SLEEP_RECOVERY_CAP, SLEEP_RECOVERY_PER_HOUR, CAMP_REST_AMOUNT, CAMP_REST_MINUTES, CAMP_REST_DAILY_CAP, SHELTER_REST_AMOUNT, campRestState } from './rest-energy.mjs';
 import { finishCooperation } from './cooperation.mjs';
 import { forecastDisasters } from './worldstate.mjs';
 import { recordStormWarning } from './settlement-events.mjs';
@@ -882,10 +884,11 @@ export function survView(sp) {
     log: sp.log.slice(-12),
     ...(w.gameRules && { settlementEvents: s.eventJournal?.rows.slice() ?? [] }),
     produce: { ...(s.produce ?? {}) }, livestock: { ...(s.livestock ?? DEFAULT_LIVESTOCK) },
+    energyRules: { text: ENERGY_RULES_TEXT, sleepPerHour: SLEEP_RECOVERY_PER_HOUR, sleepCap: SLEEP_RECOVERY_CAP, restMinutes: CAMP_REST_MINUTES, restAmount: CAMP_REST_AMOUNT, restDailyCap: CAMP_REST_DAILY_CAP, shelterRest: SHELTER_REST_AMOUNT, restState: { ...campRestState(w), restRecovery: s.restRecovery ?? null } },
     wildBerries: s.wildBerries, berryPatches: s.berryPatches, ecoSources: sourceView(w),
     eco: s.ecosystem ? { chickens: (s.ecoPop?.chickens ?? []).length, orchards: (s.ecoPop?.orchards ?? []).length, chickenCap: ECO.chickenCap, orchardCap: ECO.orchardCap } : null,
     produceCap: s.produceCap ?? PRODUCE_CAP, forageCd: s.forageCd ?? 0,
-    economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP },
+    economy: { exchange: EXCHANGE, expand: EXPAND, expandLabel: EXPAND_LABEL, produceLabel: PRODUCE_LABEL, cap: LIVESTOCK_CAP, penCap: { ...LIVESTOCK_CAPACITY } },
     buildingsDef: buildingsFor(w),
   };
 }

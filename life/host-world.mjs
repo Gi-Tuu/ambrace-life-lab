@@ -13,6 +13,7 @@ import { hashSeed, CURRENT_EVENT_RULES } from './rng.mjs';
 import { PARAMS } from './params.mjs';
 import { validateM5State } from './m5-bank.mjs';
 import { campSleepTicks } from './camp-play.mjs';
+import { applySleepRecovery } from './rest-energy.mjs';
 import { CampInstances, listSaves, normalizeName, sweepSaves, validCampArchive, readIndex, writeIndex, readOwnerSidecar, writeOwnerSidecar, rebuildIndexFromSaves } from './camp-instances.mjs';
 import { tickSurvPlay, survAct, survView, dumpSurv, loadSurv, setSurvivalDeliberator, settleSurvival, cancelPlayerBusy, advancePlayerBusy, simMinuteCursor } from './survplay.mjs';
 import { createSimScheduler, gameMinutesForRealMinutes } from './sim-scheduler.mjs';
@@ -493,9 +494,11 @@ async function sleepSurvival(sp) {
     if (w.independentWorld && w.survival.playerDead) { died = true; break; }
   }
   const ticks=worldTick(w)-start;
+  // 1.6 C：只按这一次实际推进的小时结算（死亡中断不补）；时间本身仍由上面的 tick 循环推进。
+  const recovery = died ? { gain: 0, hours: 0 } : applySleepRecovery(w, ticks);
   sp.log.push({t:w.t,kind:'camp_sleep',ok:true,code:'OK'});
   const persisted=await saveWorld(sp);
-  return {ok:true,code:'OK',ticks,persisted,...(died?{ghost:true}:{})};
+  return {ok:true,code:'OK',ticks,persisted,recovery,...(died?{ghost:true}:{})};
 }
 function enqueueTick(auto = false) {
   return queueWorldWrite(async () => {

@@ -24,6 +24,8 @@ export const SHARED_COST = Object.freeze({
   feed: { minutes: 10, energy: 0.02 },
   slaughter: { minutes: 30, energy: 0.08 },
   rest: { minutes: 15, energy: 0 },
+  // 1.6 C：通用休息是独立的 30 分钟短动作；不改居民 rest 的 15 分口径（避免搬动居民轨迹）。
+  camp_rest: { minutes: 30, energy: 0 },
   sleep: { minutes: 60, energy: 0 },
   free: { minutes: 0, energy: 0 },
   unknown: { minutes: 5, energy: 0.01 }, // 未知动作不得零成本
@@ -44,6 +46,7 @@ export const PLAYER_TO_SHARED = Object.freeze({
   camp_store: 'store', camp_take: 'take', camp_eat: 'eat', camp_resident: 'talk',
   camp_talk: 'free', camp_talk_say: 'free', camp_talk_close: 'free',
   camp_sleep: 'sleep', camp_exit: 'free',
+  camp_rest: 'camp_rest',
   // 居民动作名 → 共享动作（正式游戏与玩家同表；研究态不读本表）。
   move_to: 'move', look_out: 'talk', house_work: 'house_work', road_lay: 'road', road_remove: 'road',
   discuss_open: 'talk', discuss_join: 'talk', discuss_share: 'talk', discuss_decline: 'talk', discuss_leave: 'talk',

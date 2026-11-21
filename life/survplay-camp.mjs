@@ -12,6 +12,7 @@ import { changeHomeAccess, doorWork, homeEntry, householdAccess } from './home-a
 import { campEntrance, distanceToRect } from '../shared/camp-interaction.mjs';
 import { worldSite } from './geometry.mjs';
 import { campAction, campSleepTicks, residentContact } from './camp-play.mjs';
+import { CAMP_REST_MINUTES, campRestRule, SHELTER_REST_AMOUNT } from './rest-energy.mjs';
 import { residentialSite } from '../shared/camp-layout.mjs';
 import { buildLot, doBuild, doRepair, effectiveMods, addFood, takeFood, takeFoodKind } from './production.mjs';
 import { COOP, willingness } from './cooperation.mjs';
@@ -234,7 +235,11 @@ export function survActInner(sp, body) {
     } else if (building.type==='shelter') {
       if (s.lastShelterRest===w.t) return {ok:false,code:'ACTION_BUDGET'};
       s.lastShelterRest=w.t;
-      w.agents.p1.drives.reward('energy',.15);
+      const before=w.agents.p1.drives.v.energy;
+      w.agents.p1.drives.reward('energy',SHELTER_REST_AMOUNT);
+      const gain=Number((w.agents.p1.drives.v.energy-before).toFixed(4));
+      playerViabSpend(w, .01);
+      return {ok:true,code:'OK',energyGain:gain,source:'shelter'};
     }
     playerViabSpend(w, .01);
     return {ok:true,code:'OK'};
@@ -348,6 +353,13 @@ export function survActInner(sp, body) {
     const slept = campSleepTicks(w);
     if (!slept.ok) return slept;
     return { ok: true, code: 'OK', ticks: slept.ticks, observation: '睡了一觉' };
+  }
+  // 1.6 C：通用休息。位置/冷却/日上限/满能量在 rest-energy.mjs 一处裁决；
+  // 这里只把结果接进动作账（时间成本走 action-cost 的 camp_rest=30 分）。
+  if (kind === 'camp_rest') {
+    const rested = campRestRule(w);
+    if (!rested.ok) return rested;
+    return { ...rested, observation: `在${rested.site}歇了 ${CAMP_REST_MINUTES} 分钟`, source: 'rest' };
   }
   if (kind.startsWith('camp_')) {
     // ARCH4-07：营地动作先过规则层 validateCamp（kind/成本/reach），campAction 只做效果结算。

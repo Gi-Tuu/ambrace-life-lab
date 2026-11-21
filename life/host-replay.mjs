@@ -4,6 +4,7 @@ import { mkdir, writeFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { dumpSurv, loadSurv, survView, tickSurvPlay, simMinuteCursor, resetSimMinuteCursor } from './survplay.mjs';
 import { campSleepTicks } from './camp-play.mjs';
+import { applySleepRecovery } from './rest-energy.mjs';
 import { createReplay, recordReplayFrame, replayRange, replayPoint } from './replay-history.mjs';
 import { replayTerrain, replayScene } from './replay-scene.mjs';
 import { speechLine } from './speech.mjs';
@@ -318,6 +319,14 @@ async function actInComparison(body) {
       const continuous = COMPARE_SIDES.some(key => current.branches[key].play.world.simClock);
       if (ticks && continuous) await tickComparisonLocked(now, {minutes: ticks * 60, explicit: true});
       else if (ticks) for (let i = 0; i < ticks; i++) await tickComparisonLocked(now);
+      // 1.6 C：恢复必须逐分支、按各自实际睡眠小时结算；A/B 仍可逐位对照。
+      for (const key of COMPARE_SIDES) {
+        const r = results[key], w = current.branches[key].play.world;
+        results[key] = {...r, recovery: r.ok ? applySleepRecovery(w, r.ticks ?? 0) : {gain: 0, hours: 0}};
+      }
+    } else if (body.kind === 'camp_rest') {
+      // 对照态不提供通用休息（避免把新恢复来源写进 A/B 轨迹）。
+      for (const key of COMPARE_SIDES) results[key] = {ok: false, code: 'REST_UNSUPPORTED'};
     } else {
       for (const key of COMPARE_SIDES) {
         const command = key==='B' && body.otherContact ? {
