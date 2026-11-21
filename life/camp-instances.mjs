@@ -12,6 +12,8 @@ import { dirname, join, resolve } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
 import { createSurvPlay, dumpSurv, loadSurv, tickSurvPlay } from './survplay.mjs';
+import { DAY_TICKS } from './clock.mjs';
+import { writeArchiveAtomic } from './host-saves.mjs';
 
 export const NAME_MIN = 1;
 export const NAME_MAX = 16;
@@ -156,8 +158,97 @@ export function rebuildIndexFromSaves(dataDir) {
   return entries.length;
 }
 
-function rotateCorrupt(dataDir, keep = 10) {
-  try {
+// ─── #52 营地备份：导出包 = index + 每档 gz(base64) + owner 侧车 ───
+// 导入的纪律（与 SAV-01 同源）：
+//  · key 必须过 32hex 路径闸，越界 key 在拼路径之前就 rejected，零写入；
+//  · 先解压 + validCampArchive，坏档绝不覆盖任何已有档；
+//  · 已有 owner 的档 skipped，不覆盖不换绑（防止旧导出回滚别人的档）；
+//  · 写盘只走 writeArchiveAtomic，且落盘前再验 realpath 仍在 saves/ 内。
+function indexEntryFromArchive(key, name, raw, lastSeenAt, ownerHash) {
+  const minds = Object.values(raw.minds ?? {});
+  return {
+    key,
+    name,
+    day: Math.floor((Number.isFinite(raw.t) ? raw.t : 0) / DAY_TICKS),
+    population: Math.max(0, minds.filter((x) => x && !x.dead).length - (raw.minds?.p1 ? 1 : 0)),
+    status: raw.survival?.ended ? 'extinct' : raw.survival?.playerDead ? 'ghost' : 'active',
+    lastSeenAt,
+    ...(ownerHash ? { ownerHash } : {}),
+  };
+}
+
+export function buildCampExport(dataDir, { now = Date.now() } = {}) {
+  const index = readIndex(dataDir);
+  const camps = {};
+  for (const entry of index.entries) {
+    if (!isCampKey(entry.key)) continue;
+    let file;
+    try { file = campFile(dataDir, entry.key); } catch { continue; }
+    if (!existsSync(file) || !safeSavesFile(dataDir, file)) continue;
+    let archive;
+    try { archive = readFileSync(file); } catch { continue; }
+    camps[entry.key] = {
+      archive: archive.toString('base64'),
+      owner: readOwnerSidecar(dataDir, entry.key),
+    };
+  }
+  return {
+    version: 1,
+    exportedAt: now,
+    index: { generation: index.generation, entries: index.entries },
+    camps,
+  };
+}
+
+export async function importCampExport(dataDir, pkg, { now = Date.now() } = {}) {
+  const result = { imported: 0, skipped: 0, rejected: 0, entries: [] };
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)
+    || !pkg.camps || typeof pkg.camps !== 'object' || Array.isArray(pkg.camps)) {
+    result.rejected = 1;
+    return result;
+  }
+  mkdirSync(savesDir(dataDir), { recursive: true });
+  const index = readIndex(dataDir);
+  const ownerByKey = new Map();
+  for (const entry of index.entries) {
+    if (isCampKey(entry.key) && typeof entry.ownerHash === 'string' && /^[0-9a-f]{64}$/.test(entry.ownerHash)) {
+      ownerByKey.set(entry.key, entry.ownerHash);
+    }
+  }
+  for (const [key, item] of Object.entries(pkg.camps)) {
+    // 第一道闸：key 不合法时连路径都不拼（越界 key 必须零写入）。
+    if (!isCampKey(key)) { result.rejected += 1; continue; }
+    let raw;
+    try {
+      raw = JSON.parse(gunzipSync(Buffer.from(String(item?.archive ?? ''), 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8'));
+    } catch { result.rejected += 1; continue; }
+    // 坏档不得覆盖唯一副本：形状不合格一律 rejected，后面的写盘根本不执行。
+    if (!validCampArchive(raw)) { result.rejected += 1; continue; }
+    const file = campFile(dataDir, key); // 第二道闸：只有 32hex key 才可能到达这里
+    const existing = existsSync(file);
+    if (existing && !safeSavesFile(dataDir, file)) { result.rejected += 1; continue; }
+    const ownerHash = ownerByKey.get(key) ?? readOwnerSidecar(dataDir, key)?.ownerHash ?? null;
+    if (ownerHash) { result.skipped += 1; continue; } // 已有 owner：不覆盖、不换绑
+    const side = item?.owner && typeof item.owner === 'object' && !Array.isArray(item.owner) ? item.owner : {};
+    const sideName = typeof side.name === 'string' && side.name ? side.name.slice(0, 64) : key;
+    const sideOwner = /^[0-9a-f]{64}$/.test(String(side.ownerHash ?? '')) ? side.ownerHash : null;
+    const written = await writeArchiveAtomic({ file, text: gzipSync(Buffer.from(JSON.stringify(raw))) });
+    if (!written.ok) { result.rejected += 1; continue; }
+    writeOwnerSidecar(dataDir, key, { name: sideName, ownerHash: sideOwner });
+    result.entries.push(indexEntryFromArchive(key, sideName, raw, now, sideOwner));
+    result.imported += 1;
+  }
+  if (result.imported) {
+    // 导入后重建/校验索引：索引整体丢失时先走 :124 的自愈路径，再把本次导入条目 merge 进去。
+    try { rebuildIndexFromSaves(dataDir); } catch { /* 下面的 merge 仍会落盘 */ }
+    writeIndex(dataDir, { entries: result.entries }, { merge: true });
+    // 响应只回逐条结果，不回 ownerHash（侧车哈希留在服务端）。
+    result.entries = result.entries.map(({ ownerHash, ...entry }) => entry);
+  }
+  return result;
+}
+
+function rotateCorrupt(dataDir, keep = 10) {  try {
     const dir = savesDir(dataDir);
     const olds = readdirSync(dir).filter((n) => n.startsWith('index.json.corrupt-')).sort();
     for (const n of olds.slice(0, Math.max(0, olds.length - keep))) rmSync(join(dir, n), { force: true });

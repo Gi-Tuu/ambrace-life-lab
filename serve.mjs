@@ -9,7 +9,7 @@ import { host, listCamps, openCamp, backToMainCamp, modelGate, modelCharged, mod
 import { mutatingDenied, interactionDenied, ctlDenied, tokenMatches, bearerOf, isJson, DESTRUCTIVE_CTL } from './life/request-guard.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { normalizeName } from './life/camp-instances.mjs';
+import { normalizeName, buildCampExport, importCampExport } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 
 const ROOT = resolve('.');
@@ -73,12 +73,12 @@ const send = (res, code, body, type = 'application/json; charset=utf-8') => {
 };
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj));
 
-async function readBody(req) {
+async function readBody(req, maxBytes = MAX_BODY) {
   let size = 0;
   const chunks = [];
   for await (const c of req) {
     size += c.length;
-    if (size > MAX_BODY) { const e = new Error('BODY_TOO_LARGE'); e.code = 'BODY_TOO_LARGE'; throw e; }
+    if (size > maxBytes) { const e = new Error('BODY_TOO_LARGE'); e.code = 'BODY_TOO_LARGE'; throw e; }
     chunks.push(c);
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -145,6 +145,10 @@ async function serveStatic(req, res, urlPath, search = '') {
 // BUG-8：/chat 是一条带服务器密钥的转发通道。没有配 CHAT_TOKEN 就整个端点 404 ——
 // 默认关闭而不是默认开放；配了则要求 Bearer/ x-chat-token 完全一致。
 const CHAT_TOKEN = process.env.CHAT_TOKEN ?? '';
+
+// #52 营地备份：与 /chat、大脑中继同一条纪律——**没配 SAVE_EXPORT_TOKEN 就整组端点 404**，
+// 默认关闭而不是默认开放；token 只从 query 读（网关会剥自定义头），比较走 constant-time。
+const EXPORT_TOKEN = process.env.SAVE_EXPORT_TOKEN ?? '';
 
 // 定长比较：避免用长度或前缀差异做旁路探测
 function chatAuthorized(req) {
@@ -240,6 +244,28 @@ const openBucketKey = (name) => {
   const n = normalizeName(name);
   return n.ok ? `n:${n.key}` : 'n:invalid';
 };
+
+// ── #52 导出/导入的 token 桶（**不按 IP**：反代下所有访客同源）──
+// 导出/导入共用一只桶；令牌就是 EXPORT_TOKEN 本身，配置错误时先在 404/401 挡掉，不消耗桶。
+const EXPORT_BURST = positiveInt(process.env.EXPORT_BURST, 10);
+const EXPORT_REFILL_MS = positiveInt(process.env.EXPORT_REFILL_MS, 6000);
+const EXPORT_IMPORT_MAX_BYTES = positiveInt(process.env.SAVE_IMPORT_MAX_BYTES, 32 * 1024 * 1024);
+const exportBucket = { tokens: EXPORT_BURST, at: Date.now() };
+function exportRateAllowed(now = Date.now()) {
+  const refill = Math.floor((now - exportBucket.at) / EXPORT_REFILL_MS);
+  if (refill > 0) {
+    exportBucket.tokens = Math.min(EXPORT_BURST, exportBucket.tokens + refill);
+    exportBucket.at += refill * EXPORT_REFILL_MS;
+  }
+  if (exportBucket.tokens < 1) return false;
+  exportBucket.tokens -= 1;
+  return true;
+}
+function exportTokenPresented(req) {
+  try { return String(new URL(req.url, 'http://export.local').searchParams.get('export_token') ?? ''); }
+  catch { return ''; }
+}
+const exportAuthorized = (req) => Boolean(EXPORT_TOKEN) && constantTimeEqual(exportTokenPresented(req), EXPORT_TOKEN);
 
 async function chatProxy(req, res) {
   let charged = false;
@@ -450,6 +476,38 @@ async function handle(req, res) {
     res.appendHeader('set-cookie', `camp=${opened.key}; Path=/; Max-Age=2592000; ${campCookieScope(req)}`);
     res.appendHeader('set-cookie', `camp_owner=${ownerToken}; Path=/; Max-Age=2592000; HttpOnly; ${campCookieScope(req)}`);
     return json(res, 200, opened);
+  }
+  // ── #52 营地备份：token 未配置 ⇒ 404（默认关闭）；错误 token ⇒ 401（不回显、不记日志）──
+  // 响应里绝不出现 token / saves 路径；限流按 token 桶，不按客户端 IP。
+  if (req.method === 'GET' && p === '/export') {
+    if (!EXPORT_TOKEN) return json(res, 404, { error: 'NOT_FOUND' });
+    if (!exportAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
+    if (!exportRateAllowed()) return json(res, 429, { error: 'RATE_LIMITED' });
+    try {
+      return json(res, 200, buildCampExport(host.dataDir));
+    } catch {
+      return json(res, 500, { error: 'EXPORT_FAILED' });
+    }
+  }
+  if (req.method === 'POST' && p === '/import') {
+    if (!EXPORT_TOKEN) return json(res, 404, { error: 'NOT_FOUND' });
+    if (!exportAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
+    if (!exportRateAllowed()) return json(res, 429, { error: 'RATE_LIMITED' });
+    let rawBody;
+    try { rawBody = await readBody(req, EXPORT_IMPORT_MAX_BYTES); }
+    catch (e) {
+      if (e?.code === 'BODY_TOO_LARGE') return json(res, 413, { error: 'BODY_TOO_LARGE' });
+      return json(res, 400, { error: 'BAD_REQUEST' });
+    }
+    let pkg;
+    try { pkg = JSON.parse(rawBody); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
+    try {
+      const result = await importCampExport(host.dataDir, pkg);
+      return json(res, 200, { ok: true, ...result });
+    } catch {
+      // 不把 fs message / 路径带回 HTTP；坏包按 rejected 计，不假装成功。
+      return json(res, 200, { ok: true, imported: 0, skipped: 0, rejected: 1, entries: [] });
+    }
   }
 if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entry');
   // 诊断（只读）：创空间网关会改写 Host，"真实浏览器访客能不能过写路由守卫"只能在线上量，

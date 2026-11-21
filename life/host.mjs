@@ -207,6 +207,8 @@ export const host = {
   },
   async tickOnce() { await manualTick(); return this.snapshot(); },
   stop() { return stop(); },
+  // 只读：serve 的 /export、/import 用它定位 saves/（不把路径回显给客户端）。
+  get dataDir() { return S.dir; },
   status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, rate: (S.mainSurv ?? S.surv)?.world?.simClock?.rate ?? S.rate ?? 1, clock: statusClock(), campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
   listCamps,
   guestCampView,
