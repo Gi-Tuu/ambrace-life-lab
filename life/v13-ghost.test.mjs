@@ -87,7 +87,7 @@ test('GHOST-02 幽魂动作全被拒：采集/建造/吃/睡/交易/移动实体
 });
 
 test('GHOST-03 死亡后 10 游戏分世界仍推进，居民仍行动（含跨整点世界重结算）', async () => {
-  const sp = formal(7, { startMinutes: 55 });
+    const sp = formal(7, { simClock: createSimClock({ now: () => 0, startMinutes: 55 }) });
   const w = sp.world, s = w.survival;
   killPlayer(sp);
   const view0 = survView(sp);
