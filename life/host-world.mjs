@@ -892,6 +892,9 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
   S.mainSurv = loaded.surv;
       S.startRaw = structuredClone(loaded.raw);
       S.model = loaded.raw.model ?? S.model;
+      // 旧档写的时候还没有 chatter 这一格：补成零，免得 /world 少一个键、计数从 undefined 起。
+      // 这不是假想路径——仓库里的 seed/world.json 就是旧形状，全新部署第一次读档必然撞上（闸门 CHATTER-02）。
+      S.model.chatter ??= { asked: 0, ok: 0, timeout: 0, http: 0, empty: 0, invalid: 0 };
       S.saveError = loaded.warning ?? S.saveError;
       // 1.1 P1-2：停机时长必须先落进 S.missed（start() 开场会把它归零），否则正式连续世界
       // 在下面走到 catchUpSurvival(0) 就什么也不补。正式世界（simClock）不跑 A/B 的 catchUp——
