@@ -249,11 +249,12 @@ function setBed(slot, material, gain) {
 
 // 世界差分进来就调这里；调用方只在"状态真的变了"时才调，避免每刻重算。
 export function scene({ season = '春', phase = '昼', weather = 'clear', settlement = 'active', crisisDays = 0, dead = false,
-  window = null, proximity = 0, climate = null } = {}) {
+  window = null, proximity = 0, climate = null, ghost = false } = {}) {
   if (!state.ready || state.muted) return;
   const day = phase !== '夜';
-  if (dead) {
+  if (dead && !ghost) {
     // 玩家倒下：换一首送别曲（2026-11-21 素材到位后，所有者改了"只留心跳"的旧口径）。
+    // 1.3 起死亡会转幽魂观察：那时走正常窗口（村庄/夜曲，压低一档），这里只负责"刚死那一下"。
     startMusic('death', window?.t ?? 0);
     fadeMusic(musicTarget({ play: true, theme: 'death' }, settlement));
     setBed('crisis', 'crisis', bedGain('crisis'));

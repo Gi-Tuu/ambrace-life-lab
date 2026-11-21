@@ -3358,14 +3358,16 @@ function syncAudioScene(sv) {
   if (ui.menu) { audioSceneSig = null; audioWindowSig = null; return; }
   const sig = sceneSignature(sv);
   // 播放窗口每轮都重算（纯函数，成本可忽略）：它比场景签名变得频繁，音乐该淡出时就淡出。
-  const win = musicWindow(sv, { now: sv.t ?? 0 });
+  const ghost = ghostActive();
+  // 幽魂观察不算"人死了"：窗口照常给季节曲，电平由 musicTarget 压到 GHOST 档。
+  const win = musicWindow(sv, { now: sv.t ?? 0, ghost });
   const wsig = windowSignature(win);
   if (sig !== audioSceneSig || wsig !== audioWindowSig) {
     audioSceneSig = sig;
     audioWindowSig = wsig;
     audio.scene({ season: sv.season, phase: sv.phase, weather: sv.weather, settlement: sv.settlement,
       crisisDays: sv.crisisDays ?? 0, dead: Boolean(sv.player?.dead), climate: campClimate(sv),
-      window: win, proximity: proximity(sv) });
+      window: win, proximity: proximity(sv), ghost });
   }
   const next = readWorld(sv);
   const cues = diffAudioEvents(audioPrev, next);

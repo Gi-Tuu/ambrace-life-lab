@@ -142,10 +142,11 @@ const busyVillage = (sv) => (sv.coop?.task?.workers?.length ?? 0) > 0 || (sv.sit
 // 返回 { play, theme, day, reason, t }；reason 是给闸门与报告看的，不是给玩家看的。
 // t 是这次判定用的世界刻：调用方已经把 sv.t 传进来了，顺手带回去，
 // 免得起播点轮转要额外从 app.js 传参数（那文件此刻由另一路在改）。
-function computeWindow(sv, { region = CAMP_REGION, now = 0 } = {}) {
+function computeWindow(sv, { region = CAMP_REGION, now = 0, ghost = false } = {}) {
   if (!sv) return { play: false, theme: 'menu', day: true, reason: 'no-world' };
   const day = sv.phase !== '夜';
-  if (sv.player?.dead) return { play: false, theme: 'death', day, reason: 'player-dead' };
+  // 1.3 幽魂观察：人死了但世界还在看——那时不再按死亡处理，回到正常窗口（压低一档）。
+  if (sv.player?.dead && !ghost) return { play: false, theme: 'death', day, reason: 'player-dead' };
   // 第二批素材到位后（所有者 2026-11-21）：灭绝与夜不再整段静音，各用自己的曲目；
   // 村外与闲日白天仍不放——那是 2026-11-15 定的「挑部分时段播放」。死人不在这里播，由 audio.scene 处理。
   if (sv.settlement === 'extinct') return { play: true, theme: 'extinct', day, reason: 'extinct' };
@@ -167,7 +168,7 @@ function computeWindow(sv, { region = CAMP_REGION, now = 0 } = {}) {
 
 export function musicWindow(sv, opts = {}) {
   const w = computeWindow(sv, opts);
-  return { ...w, t: Math.max(0, Number(opts.now ?? sv?.t ?? 0) || 0) };
+  return { ...w, t: Math.max(0, Number(opts.now ?? sv?.t ?? 0) || 0), ...(opts.ghost ? { ghost: true } : {}) };
 }
 
 // 窗口签名：只有它变了才做淡入/淡出，避免同一秒内反复接管。
@@ -182,8 +183,11 @@ export const MUSIC_LEVEL_CRISIS = 0.45;
 export const MUSIC_LEVEL_NIGHT = 0.42;
 export const MUSIC_LEVEL_DEATH = 0.5;
 export const MUSIC_LEVEL_EXTINCT = 0.35;
+// 幽魂观察：人在看，但世界不再属于他——比夜曲再低一点。
+export const MUSIC_LEVEL_GHOST = 0.4;
 export const musicTarget = (win, settlement) => {
   if (!win || !win.play) return 0;
+  if (win.ghost) return MUSIC_LEVEL_GHOST;
   const theme = String(win.theme || '');
   if (theme === 'crisis' || settlement === 'crisis') return MUSIC_LEVEL_CRISIS;
   if (theme === 'death') return MUSIC_LEVEL_DEATH;

@@ -9,7 +9,7 @@ import {
   renderSfx, sfxNames, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND, themeForSeason,
 } from '../web/audio-data.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
-import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS, MUSIC_LEVEL_NIGHT, MUSIC_LEVEL_DEATH, MUSIC_LEVEL_EXTINCT } from '../web/audio-events.mjs';
+import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS, MUSIC_LEVEL_NIGHT, MUSIC_LEVEL_DEATH, MUSIC_LEVEL_EXTINCT, MUSIC_LEVEL_GHOST } from '../web/audio-events.mjs';
 import {
   BED_SLOTS, AMBIENCE_MATERIALS, AMBIENCE_LUFS, BED_TARGET_LUFS, BED_GAIN, bedGain,
   weatherBed, dayNightBed, CAMP_REGION, inCampRegion, playerInCamp, musicDuck, MUSIC_DUCK_WEATHER,
@@ -668,3 +668,22 @@ function sceneArgs(over = {}) {
     ...over,
   };
 }
+
+// A-36（2026-11-21，1.3 幽魂观察）：人死了但世界还在看。死那一下由 audio.scene 播送别曲，
+// 幽魂观察期间必须回到季节曲（夜里就是夜曲），并且压到 GHOST 档——不能一路静音。
+test('A-36 幽魂观察不静音：回到季节曲并压到 GHOST 档', () => {
+  const dead = win({ player: { dead: true } });
+  assert.equal(dead.play, false, '刚死那一下由 audio.scene 播 death，不走窗口');
+  // 用晨间取样：白天闲散本来就'不放'，不能拿它证明幽魂静音。
+  const gDay = musicWindow({ ...inVillage, phase: '晨', player: { dead: true } }, { now: inVillage.t, ghost: true });
+  assert.equal(gDay.play, true, '幽魂观察期必须有曲，否则 1.3 的观察会一路静音');
+  assert.equal(gDay.theme, 'spring');
+  assert.equal(gDay.ghost, true);
+  const gNight = musicWindow({ ...inVillage, phase: '夜', player: { dead: true } }, { now: inVillage.t, ghost: true });
+  assert.equal(gNight.theme, 'spring-night', '幽魂在夜里也该是夜曲');
+  assert.equal(musicTarget(gDay, 'active'), MUSIC_LEVEL_GHOST);
+  assert.ok(MUSIC_LEVEL_GHOST < MUSIC_LEVEL_NIGHT, '幽魂档应低于夜曲档');
+  const app = readFileSync(resolve(process.cwd(), 'web', 'app.js'), 'utf8');
+  assert.match(app, /musicWindow\(sv, \{ now: sv\.t \?\? 0, ghost \}\)/, 'app.js 必须把 ghost 传给窗口');
+  assert.match(app, /proximity: proximity\(sv\), ghost \}\)/, 'app.js 必须把 ghost 传给 audio.scene');
+});
