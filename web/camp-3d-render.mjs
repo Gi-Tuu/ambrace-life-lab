@@ -118,12 +118,22 @@ export function coveredModels(camera, player, ...lists) {
 }
 
 // 遮挡淡出白名单（唯一来源，渲染与闸门共用）：
-//   roof:/room-roof: = 屋盖；wall: = 建筑墙身、连廊栏杆/立柱、井台/棚架、瞭台塔身。
-// 天然排除 pen:（栅栏）、plot:（田地/作物）、tree:/wildtree:（树）、rock:（石）、
-// timber:/resource:（木料/资源）、landmark:（地标）——这些命中遮挡也不改材质。
-export const FADE_OCCLUDERS = /^(roof|room-roof|wall):/;
+//   roof:/room-roof: = 屋盖；wall: = 建筑墙身、连廊栏杆/立柱、井台/棚架、瞭台塔身；
+//   tree:/wildtree: = 场景树/荒野树（树冠遮住玩家时必须能看穿——2026-11-21 树可砍透明修复）。
+// 仍然天然排除 pen:（栅栏）、plot:（田地/作物）、rock:（石）、timber:/resource:（木料/资源）、
+// landmark:（地标）——这些命中遮挡也不改材质（grove 的 timber: 走 work 动态层自己的淡出，不在本表）。
+export const FADE_OCCLUDERS = /^(roof|room-roof|wall|tree|wildtree):/;
 export const fadesAsOccluder = (id) => typeof id === 'string' && FADE_OCCLUDERS.test(id);
 export const fadeableCovered = (covered) => [...(covered ?? [])].filter(fadesAsOccluder);
+
+// 一帧真正要进淡出通道的 range（纯函数，渲染与闸门共用）：
+//   · 命中 covered（玩家被它挡住）且在白名单里；
+//   · 不在 hidden（被砍倒/尚未再生的树）里——hidden 连不透明通道都不画。
+export function fadedRanges(ranges, covered, hidden = null) {
+  return (ranges ?? []).filter((r) =>
+    r.id && fadesAsOccluder(r.id) && covered?.has(r.id) && !hidden?.has(r.id));
+}
+
 
 const QUAD_UV=[[0,0],[0,0],[0,0],[0,0]];
 const noFx=()=>[0,0,0];
@@ -169,7 +179,7 @@ function prism(data,b) {
   face(c,d0,D,C,.91); face(d0,a,A,D,.65);
 }
 
-function stageMesh(stage) {
+export function stageMesh(stage) {
   const out=[], ranges=[];
   const floors=stage.floors;
   let terrainCount=0;
@@ -838,10 +848,16 @@ export function createCampRenderer() {
   // 遮挡淡出（2026-11-21）：只把 FADE_OCCLUDERS 白名单里的 range 推进 faded，
   // 复用 paintFaded 的一次预写深度 + 一次混合（Alpha=.28）。旧的 cutout 分支已删：
   // 它把屋顶按原色整块重画、抢在淡出之前，而 uCutout 在片元里从未被引用（死 uniform）。
-  function paintStage({b,count,ranges,terrainCount}, covered, faded) {
+  function paintStage({b,count,ranges,terrainCount}, covered, faded, hidden=null) {
     if (terrainCount) paint(b,terrainCount);
     let from=terrainCount;
     for (const r of ranges) {
+      // hidden = 被砍倒的森林树：整段 range 跳过（不透明/淡出都不画），不重建 mesh。
+      if (hidden?.has(r.id)) {
+        if (from<r.from) paint(b,r.from-from,from);
+        from=r.from+r.count;
+        continue;
+      }
       if (!covered.has(r.id) || !fadesAsOccluder(r.id)) continue;
       if (from<r.from) paint(b,r.from-from,from);
       faded.push({b,...r});
@@ -866,7 +882,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, resolutionScale=1 }) {
+    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),hidden=null,frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, resolutionScale=1 }) {
       if (lost || gl.isContextLost()) return false;
       if (!ensureSetup()) return false;
       // 归因探针（仅 ?perfseg=1 时由页面侧建立 window.__perfSeg；正常路径只多一次 undefined 判断）。
@@ -930,13 +946,13 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         for (const region of regions) {
           if (!regionOnScreen(region.viewBounds,camera,width,height)) continue;
           gl.uniform1i(uniform.RegionTexture,Number(Boolean(regionAtlas && region.mesh)));
-          paintStage(stageBuffer(region,cacheLimit,'region'),covered,faded);
+          paintStage(stageBuffer(region,cacheLimit,'region'),covered,faded,hidden);
         }
         gl.uniform1i(uniform.RegionTexture,0);
       }
-      paintStage(stageBuffer(stage,cacheLimit,'stage'),covered,faded);
-      if (life) paintStage(stageBuffer(life,cacheLimit,'life'),covered,faded);
-      if (homes) paintStage(stageBuffer(homes,cacheLimit,'homes'),covered,faded);
+      paintStage(stageBuffer(stage,cacheLimit,'stage'),covered,faded,hidden);
+      if (life) paintStage(stageBuffer(life,cacheLimit,'life'),covered,faded,hidden);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit,'homes'),covered,faded,hidden);
       if (perf) phaseT.push(performance.now());
       if (physical && shadows) {
         const base=groundContactMesh(shadows);

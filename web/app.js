@@ -37,7 +37,8 @@ import {
   overrideWalk, pathFromWalker,
 } from './collision.mjs';
 import { expandWalk, fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
-import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
+import { districtResources, addCampWork, forestStage, homeAppearance, homeStyle, outdoorHomes, outdoorLife, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
+import { forestCutsOf, forestOccluderId } from '../shared/camp-forest.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
   fadeableCovered, fadesAsOccluder, modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { bodyGrid, CAMP_BODY_RADIUS, separates } from '../shared/camp-physics.mjs';
@@ -344,13 +345,51 @@ function terrainPixels() {
   if (worldCache.terrainWalk3d) return worldCache.terrainWalk3d;
   return worldCache.terrainPixels ??= expandWalk(worldCache.movementWalk, WORLD_TW, TILE);
 }
+// 一棵森林树在像素栅格上的脚点（树干 solid 盒；找不到就按 tile 中心兜底）。
+function forestFootprint(cache, occluder) {
+  const box=cache.scene3d?.boxes?.find(b=>b.occluder===occluder&&b.solid);
+  if (box) return collisionFootprint(box,TILE);
+  const [,tx,tz]=String(occluder).split(':');
+  return [Math.floor((Number(tx)+.3)*TILE),Math.floor((Number(tz)+.29)*TILE),Math.ceil(.4*TILE),Math.ceil(.42*TILE)];
+}
+// 森林砍伐的增量入口：只改 hidden/树桩/space/像素/寻路，不重建 stage。
+// golden 实测全量 buildWorld 冷建 270–285ms，绝不能把“砍一棵树”做成 sig 变化触发的全量重建。
+// 一次快照里砍 N 棵也只走一次（forestKey 是整份清单的签名），50 棵连砍闸门依赖这一点。
+function applyForestChange(w, forest) {
+  const previous=new Set(worldCache.forestOccluders??[]);
+  const occluders=new Set(forest.map(t=>`tree:${t.tx}:${t.tz}`));
+  worldCache.forestRasterChanges=[
+    ...[...occluders].filter(id=>!previous.has(id)).map(id=>({id,cut:true})),
+    ...[...previous].filter(id=>!occluders.has(id)).map(id=>({id,cut:false})),
+  ];
+  worldCache.forestKey=forest.map(t=>t.id).join(',');
+  worldCache.forestCuts=forest.map(t=>t.id);
+  worldCache.forestOccluders=occluders;
+  worldCache.forest3d=forestStage(w.camp?.forest,(x,z)=>worldCache.space?.heightAt?.(x,z)??worldCache.landscape?.height?.(x,z)??0);
+  // 未砍的树全部仍是拾取目标；被砍的从清单里摘掉（树桩不挡手、不可再砍到 TREE_GROWING 之前）。
+  const all=worldCache.allForestTargets??[];
+  worldCache.forestTargets=occluders.size?all.filter(t=>!occluders.has(t.id)):all;
+  // 阴影/雾视野用的是同一份场景 box：被砍的树不再投影、不再挡视线（数组身份只在砍/再生时换一次）。
+  worldCache.stageBoxes=occluders.size?worldCache.scene3d.boxes.filter(b=>!occluders.has(b.occluder)):worldCache.scene3d.boxes;
+  // tile 级 walk（A* 兜底/旧路径）同步：被砍树所在 tile 立刻可走，再生后恢复挡住。
+  if (worldCache.walk) for (const [tx,tz] of worldCache.trees??[]) {
+    worldCache.walk[tz*WORLD_TW+tx]=occluders.has(`tree:${tx}:${tz}`)?1:0;
+  }
+  worldCache.space=worldCache.spaceFor?.(occluders)??worldCache.space;
+  worldCache.collisionRevision=-1; // 下一次 worldWithCollisions 只重建一次 pathGrid
+}
 function worldWithCollisions(sites, w) {
   const buildings = w.buildings ?? [];
   const timber=w.camp?.timber;
+  const forest=forestCutsOf(w.camp?.forest);
+  const forestKey=forest.map(t=>t.id).join(',');
+  const forestChanged=worldCache.forestKey!==forestKey;
+  if (forestChanged) applyForestChange(w,forest);
+  const cutOccluders=worldCache.forestOccluders??new Set();
   const treeSignature=timber?worldCache.grove.map(t=>timber[t.id]?.stage??'mature').join(','):'';
   const appearance=homeAppearance(w,sites);
   const signature=workModelKey(w,appearance,treeSignature);
-  if (worldCache.buildingMaskSignature !== signature) {
+  if (worldCache.buildingMaskSignature !== signature || forestChanged) {
     const { assetWalk, scene3d } = worldCache;
     if (scene3d) {
       const boxes=[], previous=worldCache.workProjects;
@@ -362,14 +401,39 @@ function worldWithCollisions(sites, w) {
       worldCache.workProjects=projects;
       boxes.push(...timberStage(timber,worldCache.grove).boxes);
       worldCache.work3d=boxes;
-      const solids=boxes.filter(b=>b.solid).map(b=>({...b,...(b.bounds??modelBounds(b))}));
+      const solids=boxes.filter(b=>b.solid && !cutOccluders.has(b.occluder)).map(b=>({...b,...(b.bounds??modelBounds(b))}));
       worldCache.outsideSolids=solids.filter(b=>!inCamp(b.x+b.w/2,b.z+b.d/2));
-      const collisionSignature=JSON.stringify(solids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort());
+      const collisionSignature=JSON.stringify([forestKey,solids.map(b=>[b.x,b.z,b.w,b.d].join(',')).sort()]);
       if (worldCache.solidSignature!==collisionSignature) {
         worldCache.solidSignature=collisionSignature;
-        worldCache.assetPixels=solids.length?assetWalk.slice():assetWalk;
+        const changes=worldCache.forestRasterChanges??[];
+        if (!worldCache.assetWalk || !forestChanged) {
+          // 首次/建筑变化：重印整张场景底栅格（被砍的树不印）。
+          const base=new Uint8Array(WORLD_W*WORLD_H).fill(1);
+          stampSceneCollision(base,WORLD_W,WORLD_H,{boxes:worldCache.stageBoxes.filter(b=>b.solid)});
+          worldCache.assetWalk=base;
+        } else {
+          // 只有森林变化：按树干脚点打补丁，省掉 2.4M 像素的整表重扫。
+          for (const change of changes) {
+            const rect=forestFootprint(worldCache,change.id);
+            fillCollisionRect(worldCache.assetWalk,WORLD_W,WORLD_H,rect[0],rect[1],rect[2],rect[3],change.cut?1:0);
+          }
+        }
+        worldCache.assetPixels=worldCache.assetWalk.slice();
         stampSceneCollision(worldCache.assetPixels,WORLD_W,WORLD_H,{boxes:solids});
-        worldCache.pixelBase=terrainPixels().map((value,index)=>value & worldCache.assetPixels[index]);
+        if (forestChanged && changes.length && worldCache.pixelBase) {
+          const terrain=terrainPixels();
+          for (const change of changes) {
+            const [left,top,width,height]=forestFootprint(worldCache,change.id);
+            for (let y=top;y<top+height;y+=1) for (let x=left;x<left+width;x+=1) {
+              const i=y*WORLD_W+x;
+              worldCache.pixelBase[i]=terrain[i]&worldCache.assetPixels[i];
+            }
+          }
+        } else {
+          worldCache.pixelBase=terrainPixels().map((value,index)=>value & worldCache.assetPixels[index]);
+        }
+        worldCache.forestRasterChanges=null;
         worldCache.collisionRevision=-1;
       }
       const homeSolids=solids.filter(b=>b.occluder?.endsWith(':house'));
@@ -443,7 +507,9 @@ function worldWithCollisions(sites, w) {
     }
   }
   worldCache.districtResources??=districtResources(w.districts);
-  return { ...worldCache, sites, beds, life3d, timber, openLots, blockers:worldCache.visibleBlockers??worldCache.blockers };
+  return { ...worldCache, sites, beds, life3d, timber, openLots,
+    forest:worldCache.forest3d, hidden:worldCache.forestOccluders, forestKey,
+    blockers:worldCache.visibleBlockers??worldCache.blockers };
 }
 function stampSceneCollision(walk, width, height, scene) {
   for (const b of scene.boxes) {
@@ -557,12 +623,16 @@ function buildWorld(w) {
   // scene3d.floors 只作为“可站表面/建筑地板”注册进 space（桥面、连廊、房间地板）。
   // 桥带只认画出来的那份 content.bridges（默认存档 layout=null 时同样有效）；crossing 由它反推，
   // 不再在调用点各写一个 `?? 24`（那会让桥面在 mesh 里、在 space 里消失）。
-  const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape,bridges,extraSolids:wildHouseSolids(w)});
-  const space=createSpace({
-    camp,
-    wild:wildSurface(landscape,{crossing:camp.crossing}),
-    terrain:landscape,
-  });
+  // spaceFor 只给森林砍伐用：exclude = 被砍倒树的 occluder，不重建 stage/地形。
+  const spaceFor=(excludeOccluders=null)=>{
+    const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape,bridges,extraSolids:wildHouseSolids(w),excludeOccluders});
+    return createSpace({
+      camp,
+      wild:wildSurface(landscape,{crossing:camp.crossing}),
+      terrain:landscape,
+    });
+  };
+  const space=spaceFor();
   const habitats=wildHabitats(w.layout);
   const wildlife=[];
   for (const {id,x:hx,z:hz,kind} of habitats) {
@@ -585,7 +655,15 @@ function buildWorld(w) {
 
   const terrainWalk3d=terrain.map((k,i)=>Number((k!==GROUND.water && k!==GROUND.bank) ||
     bridgeCells.has(tileKey(Math.floor((i%WORLD_W)/TILE),Math.floor(i/WORLD_W/TILE)))));
-  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, space, lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
+  // 森林拾取目标（与渲染 occluder 同一 id）：id=`tree:tx:tz`（命中合并用）、target=`forest:tx:tz`（服务端动作）。
+  const allForestTargets=trees.map(([tx,tz])=>({
+    id:`tree:${tx}:${tz}`,kind:'timber',target:`forest:${tx}:${tz}`,at:[tx+.5,tz+.5],
+    reach:REACH.timber,tool:'axe',name:'树',
+  }));
+  worldCache = { sig, mapSeed, river, hills, grove, groveEntrance:w.layout?.nodes.grove??[15,42], terrainWalk3d, flatLand, roadDistance, landscape, plantClearance, harvestNodes, blockers, roads, bridgeCells, bridges, beds, trees, chimneys, flora, wildlife, walk, movementWalk, assetWalk, scene3d, space, spaceFor,
+    // 森林砍伐状态初值：全部为空 = 全树在（旧存档没有 camp.forest ⇒ 这里就是首帧）。
+    forestKey:'', forestCuts:[], forestOccluders:new Set(), forest3d:forestStage(null), allForestTargets, forestTargets:allForestTargets, stageBoxes:scene3d.boxes,
+    lifeLayers:new Map(), tw: WORLD_TW, th: WORLD_TH };
   worldCaches.set(sig, worldCache);
   if (worldCaches.size > 3) worldCaches.delete(worldCaches.keys().next().value);
   return worldWithCollisions(liveSites, w);
@@ -904,7 +982,8 @@ const coverControl=previewFlags.get('cover');
 const FIRST_FRAME_SCALE=Math.max(.35,Math.min(1,Number(previewFlags.get('firstScale')??.5)||.5));
 const campShadowSources=new WeakMap();
 function campShadows(world,regions) {
-  const layers=[world.scene3d.boxes,world.work3d,world.homes3d?.boxes,
+  // stageBoxes 是“排除被砍倒森林树”后的场景 box（没砍树时就是 scene3d.boxes 同一个数组）。
+  const layers=[world.stageBoxes??world.scene3d.boxes,world.work3d,world.homes3d?.boxes,
     ...regions.flatMap(region=>region.boxes?[region.boxes]:[])].filter(Boolean);
   const old=campShadowSources.get(world);
   if (old?.layers.length===layers.length && layers.every((layer,i)=>old.layers[i]===layer)) return old.source;
@@ -923,7 +1002,7 @@ function roomContactSource(stage) {
 
 function campVisibility(world,cvId,x,z,phase,extended,regional,regions) {
   const radius=sightRadius(phase);
-  const lists=[world.scene3d.boxes,world.homes3d?.boxes,world.work3d,world.life3d?.boxes,regional?.boxes,
+  const lists=[world.stageBoxes??world.scene3d.boxes,world.homes3d?.boxes,world.work3d,world.life3d?.boxes,regional?.boxes,
     ...regions.flatMap(r=>r.boxes && r!==regional?[r.boxes]:[])].filter(Boolean);
   let views=campFog.get(world);
   if (!views) { views=new Map(); campFog.set(world,views); }
@@ -1537,7 +1616,7 @@ function drawCamp(cv,w,historical=false) {
       if (visibility && who!=='p1' && !visibility.sees(px+.5,pz+.5)) continue;
       people.push({who,x:px+.5,z:pz+.5,moving:walker?.moving,direction:walker?.direction,act:campAct(w,who)});
     }
-    work=[...(historical?world.work3d??[]:animatedConstruction(world)),...world.districtResources];
+    work=[...(historical?world.work3d??[]:animatedConstruction(world)),...world.districtResources,...(world.forest?.boxes??[])];
   }
   // 相机跟随平滑：室外视角指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
   // 幽魂镜头不用平滑：WASD 平移必须跟手；跟随居民时居民位置本身已是连续插值的。
@@ -1650,14 +1729,16 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
   const regionDetails=regions?.flatMap(region=>region.boxes?[region.boxes]:[])??[];
   // 屋顶遮罩是纯视觉：首帧不算；之后按 0.5 世界单位量化，玩家/镜头没跨格就复用上一帧的集合。
   // （覆盖判定每帧要对上百个 occluder 做射线，室外移动时是可持续的 CPU 开销。）
-  const coverKey=`${Math.round((player?.x??0)*2)},${Math.round((player?.z??0)*2)},${Math.round(x*2)},${Math.round(z*2)},${stage.boxes.length},${life?.boxes?.length??0},${regions?.length??0},${work.length}`;
+  const coverKey=`${Math.round((player?.x??0)*2)},${Math.round((player?.z??0)*2)},${Math.round(x*2)},${Math.round(z*2)},${stage.boxes.length},${life?.boxes?.length??0},${regions?.length??0},${work.length},${exterior?.hidden?.size??0}`;
   let covered;
   if (coverControl==='none') covered=new Set();   // 验收对照帧：关掉遮挡淡出
   else if (firstFrame3d) covered=new Set();
   else if (cv._cover?.key===coverKey) covered=cv._cover.set;
-  else { covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails); cv._cover={key:coverKey,set:covered}; }
+  // 被砍倒的树已从 stageBoxes 里摘掉：遮挡判定不必再对“不画的树”做射线（也避免 debug 读数把它们算进 covered）。
+  else { covered=coveredModels(camera,player,exterior?.stageBoxes??stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails); cv._cover={key:coverKey,set:covered}; }
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site,covered,
-    exterior,extended,people,animals,work,visibility,sight,regionDetails};
+    exterior,extended,people,animals,work,visibility,sight,regionDetails,
+    hidden:exterior?.hidden??null,forestKey:exterior?.forestKey??''};
   const hover=!historical && campHover?.cv===cv.id?campHover:null;
   const hoverHit=hover?pointedEntity(cv,hover):null;
   const hints=!historical && S.playing && !overview && !ui.surveyRoom && player
@@ -1667,7 +1748,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
   // 首帧策略：第一张 3D 帧不出接触阴影、GL 内部半分辨率，先把 #cvA[data-renderer] 打出来；
   // 同一 rAF 链的下一帧立刻按全分辨率+阴影重画（forceRepaint），所以停留画面与金样逐像素一致。
   const renderT0=performance.now();
-  if(!campRenderer.render({target:cv,stage,regions:firstFrame3d?undefined:regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
+  if(!campRenderer.render({target:cv,stage,regions:firstFrame3d?undefined:regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,hidden:exterior?.hidden??null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight,
@@ -1710,6 +1791,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
   cv._debug={tick:w.t,historical,ghost:Boolean(ghost),ghostCam:ghost&&ghostCam?{x:ghostCam.x,z:ghostCam.z,span:ghostCam.span,follow:ghostCam.follow}:null,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),attention:people.filter(q=>q.attentionPose).map(q=>q.who+':'+q.direction),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
     // 验收读数（DOM 断言用）：遮挡命中的全部 occluder、真正会淡出的子集、以及天气过渡层的连续量。
     covered:[...covered].sort(),occluded:fadeableCovered(covered).sort(),coverControl:coverControl??null,
+    // 森林：被砍倒（隐藏）的树 occluder、树桩数、以及这份清单的签名（验收用，只读）。
+    hidden:[...(exterior?.hidden??[])].sort(),hiddenCount:exterior?.hidden?.size??0,forestKey:exterior?.forestKey??'',stumps:exterior?.forest?.boxes?.length??0,
     climateView:climateNowView,climateTarget:climateView.targets()};
   cv._cam.climateView=climateNowView;
   perfMark('overlay', overlayT0);
@@ -2005,8 +2088,9 @@ const campCodes={
   ...CONSTRUCTION_CODES,
   ACCEPTED:'已答应', DECLINED:'已拒绝', NO_REQUEST:'该请求已经结束', REQUESTER_GONE:'提出请求的居民已离开',
   NO_FOOD:'当前餐桌没有食物可分', NO_WOOD:'背包里没有可借出的木料', CAMP_INVALID:'营地已回收，请从菜单返回主营地',
-  ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'树苗还在长',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
+  ANIMAL_WAIT:'让动物休息半天再喂。',ANIMAL_NEEDS_FOOD:'篮子需要浆果、水果或蔬菜。',ANIMAL_TRUSTED:'它已经信任你了。',ANIMAL_AFRAID:'动物受惊了，暂时无法收集产物。',ROAD_COOLDOWN:'小路刚改过，四天后才能再改。',ROAD_UNCHANGED:'小路已经处于这个状态。',HOME_LOCKED:'房门上锁，需要钥匙、授权或住户邀请。',NO_AUTHORITY:'只有住户或房主有权这样做。',NO_FACILITY:'设施尚未完工或已失效。',OUT_OF_REACH:'距离太远，请再靠近一点',NO_ANIMAL:'这只动物已不在这里',NO_PLANT:'这株植物已不在这里',RESIDENT_OUT_OF_REACH:'距离太远，请再靠近一点',RESIDENT_GONE:'对方已不在这里',NO_TREE:'这里没有可砍的树',TREE_GROWING:'这棵树砍过了，等它再生',BAD_ITEM:'不能放入这种物品',NO_CONTAINER:'需走近容器',CONTAINER_FULL:'容器已满',NO_PRODUCE:'尚无可收集的产物',
   NO_MATURE:'作物尚未成熟',BUCKET_FULL:'背包已装三份水',WATER_FULL:'水分已满',NOT_HOME:'需要在居所内',SLEEP_BUSY:'正在睡觉',CAMP_ENDED:'这一局已结束',
+  BLOCKED:'隔着墙/河砍不到，换个角度',
   FORAGE_COOLDOWN:'稍后再采',NO_WILD_FOOD:'这里的野生浆果已采空',BAD_PLOT:'这里没有可用菜畦'};
 let campBusy=false, campPose=null, campCart=null;
 
@@ -2727,7 +2811,7 @@ async function survInteract() {
   }
   const here=localSurvSite(world,walker);
   if (world.timber && ui.tool==='axe') {
-    toast('到伐木林靠近成熟的树，再按 F。');
+    toast('走到树旁（拿斧头）再按 F；砍倒的树桩要等再生。');
     return;
   }
   const ctx=here && contextAction({...s,loc:{...s.loc,p1:here}});
@@ -4438,7 +4522,7 @@ function outdoorEntities(world,w,people,animals) {
     id:p.id,kind:'work',target:p.id,room:p.record.loc,rect:p.lot,gate:p.gate,phase:p.phase,operable:p.phase!=='complete'||integrity.get(p.id)<1,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
     reach:CONSTRUCTION_REACH,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
   }));
-  return [...doors,...facilities,...timber,...plants,...fields,...works,...wildLots,...houseWorks,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
+  return [...doors,...facilities,...timber,...(world.forestTargets??[]),...plants,...fields,...works,...wildLots,...houseWorks,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       labelHeight:p.y+actorLabelHeight(p.stage),tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.kind==='bird'?'scenery':a.wild?'wildAnimal':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
@@ -4502,12 +4586,14 @@ function pointedEntity(cv,ev) {
       }
     }
     for (const b of [...view.stage.boxes,...(world.life3d?.boxes??[]),...(world.homes3d?.boxes??[]),...(world.regional?.boxes??[]),...view.work]) {
-      if (view.covered.has(b.occluder)) continue;
+      if (view.covered.has(b.occluder) || view.hidden?.has(b.occluder)) continue;
       const [tag,id,type]=b.occluder?.split(':')??[];
       const e=ids.get(b.occluder)??(tag==='site'||tag==='roof'||tag==='work'&&type==='house'?
         (['yard','garden','hall'].includes(id)&&b.y===0&&b.h<=.22?null:ids.get('door:'+id)):
         tag==='work'?(ids.get(b.occluder)?.tool===ui.tool ? ids.get(b.occluder) :
           ids.get('door:facility:'+id+':'+type)??ids.get(b.occluder)):
+        // 场景树：forestTargets 的 id 就是渲染 occluder（tree:tx:tz），所以能直接命中
+        // “可砍的树”实体；不在清单里（未实现/旧路径）才退回 scenery 标签。
         tag==='tree'?{id:b.occluder,kind:'scenery',at:[Number(id)+.5,Number(type)+.5],name:'树'}:null);
       surfaces.push([b,e??null]);
     }
@@ -4717,7 +4803,7 @@ function sceneGuidance(view,w,player,hover,right) {
   }
   const world=view.exterior;
   if (!world) return hints;
-  const nearby=outdoorEntities(world,w,[],[]).filter(e=>guidedOutdoor(e) && entityGap(from,e)<14)
+  const nearby=outdoorEntities(world,w,[],[]).filter(e=>(guidedOutdoor(e)||e.kind==='timber'&&ui.tool==='axe') && entityGap(from,e)<14)
     .sort((a,b)=>entityGap(from,a)-entityGap(from,b));
   for (const e of nearby.filter(e=>e.kind==='lot' && outdoorSight(view,e,from)).slice(0,4)) {
     if (e.id!==selected?.id && e.id!==hover?.id) hints.push({kind:'outline',rect:e.rect,dashed:true});
