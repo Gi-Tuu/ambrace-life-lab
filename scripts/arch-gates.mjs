@@ -21,6 +21,7 @@ export const RULES = [
   { id: 'ARCH-POS-01', title: '位置字段只能由白名单模块整字段写入' },
   { id: 'ARCH-CLOCK-01', title: '正式模块不得把 world.t 当可写事实（派生时钟唯一）' },
   { id: 'ARCH-RESEARCH-01', title: '研究态旧行为只能是显式策略/legacy 配置行，不得复活第二套时钟或空间' },
+  { id: 'ARCH-IMPORT-01', title: '运行路径不得 import *.test.mjs / test-support/*（测试排除不能掩盖运行路径）' },
 ];
 
 // 运行路径 = 会随应用/服务端一起加载的目录 + 入口。测试、文档、证据、实验目录整体排除。
@@ -88,10 +89,14 @@ const RETIRED_2D = [
 // 旧超时码白名单：只允许研究态策略模块里的那一个常量定义。
 // 正式路径（world.simClock 打开）已在 resident-time/survplay-actions 的连续分支直接返回，
 // 不再产生这个 code；host/host-world/survplay 编排层也不得 import research-policy.mjs。
+// 白名单口径（P2-3 收紧）：path + 行内容精确匹配 + 允许出现次数；line 只作提示，不参与判定。
+// 因此无关插入导致行号漂移不会假红；同一内容多写一处（复制违规行）会超过 count 而红。
 const TIME_WAIT_LEGACY = [
   {
     path: 'life/research-policy.mjs',
-    re: /export const LEGACY_TIME_CODE = 'TIME_WAIT';/,
+    line: 19,
+    match: "export const LEGACY_TIME_CODE = 'TIME_WAIT';",
+    count: 1,
     why: '研究态旧时间策略（!world.simClock）的唯一声明点；正式路径必须为 0',
   },
 ];
@@ -114,10 +119,9 @@ const SPACE_LEGACY = [
 ];
 
 // ── ARCH-RESEARCH-01 ─────────────────────────────────────────────────────────
-// 研究态旧行为只允许两种形态：
-//   1) life/research-policy.mjs 的显式策略声明（tick 语义、4 动作 cap、TIME_WAIT、100 点池）；
-//   2) life/space.mjs 的 LEGACY_RESEARCH_UNITS_PER_TICK 配置行（12/10/40）。
-// 已退役的 research-time/research-space 模块不得复活；60/1440/12/10 也不得在别处另写一份。
+// 研究态旧行为只允许一种形态：life/research-policy.mjs 的显式策略声明
+// （tick 语义、4 动作 cap / 2 链、TIME_WAIT、100 点池、12/10/40 速度行）。
+// 已退役的 research-time/research-space 模块不得复活；60/1440/12/10/40/4/2 也不得在别处另写一份。
 const RESEARCH_RETIRED = [
   {
     re: /(?:from\s*|import\s*\(\s*)['"][^'"]*research-(?:time|space)\.mjs['"]/,
@@ -139,6 +143,37 @@ const RESEARCH_RETIRED = [
     re: /\bPLAYER_UNITS_PER_TICK\s*=\s*10\b/,
     why: '研究态 10/刻是 space.mjs 的 legacy speed-budget 行，不得复制第二套预算',
   },
+  // P2-4：12/10/40、4 cap、2 chain、per-tick think 的数值/语义都只在 research-policy 声明。
+  {
+    re: /\bresident\s*:\s*12\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态 12/刻只能由 research-policy 的 RESEARCH_SPEED_UNITS_PER_TICK 声明',
+  },
+  {
+    re: /\bplayer\s*:\s*10\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态 10/刻只能由 research-policy 的 RESEARCH_SPEED_UNITS_PER_TICK 声明',
+  },
+  {
+    re: /\bplayerSyncInCamp\s*:\s*40\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态村内 40/刻只能由 research-policy 的 RESEARCH_SPEED_UNITS_PER_TICK 声明',
+  },
+  {
+    re: /\b[A-Z_]*RESIDENT_ACTION_CAP\s*=\s*4\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态居民 4 动作 cap 只能在 research-policy 声明',
+  },
+  {
+    re: /\b[A-Z_]*CHAIN_MAX\s*=\s*2\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态 2 次链式决策只能在 research-policy 声明',
+  },
+  {
+    re: /\bthink\s*:\s*true\b/,
+    allowPath: 'life/research-policy.mjs',
+    why: '研究态 per-tick think 只能在 research-policy 的 RESEARCH_TICK_POLICY 声明',
+  },
 ];
 
 // ── ARCH-CLOCK-01 ────────────────────────────────────────────────────────────
@@ -156,19 +191,45 @@ const CLOCK_WRITE = /\b(?:world|w|sp\.world)\.t\s*=(?!=)/;
 // 唯一事实是 w.pos；loc/occupancy/playerPos/residentTravel/districtTravel 都是派生索引。
 // 正则按任务口径锚定整字段直接赋值（`w.loc =`），不会误报 `t.loc` 施工任务或 `w.loc.p1 =`。
 const POS_WRITE = /\b(?:w|world|s|fresh|state)\.(?:loc|occupancy|playerPos|residentTravel|districtTravel)\s*=(?!=)/;
-const POS_ALLOW = new Map([
-  ['life/actor-pos.mjs', { why: '唯一位置写入口：pos 与派生索引在同一事务里同步' }],
-  ['life/survplay-save.mjs', { why: '旧档迁移：没有 pos 的历史存档按 loc/playerPos 补齐' }],
-  ['life/host-world.mjs', { why: '研究/城镇快照恢复：不是 survival 存档，也没有 w.pos' }],
-  ['life/camp-instances.mjs', { why: 'forkCamp 的 survival 夹具：离线构造玩家位置' }],
-  ['life/build-efficiency.mjs', { why: '离线消融夹具：直接构造 occupancy' }],
+// 逐行 allowlist：每一条都写明 path、精确行内容、允许次数与原因；line 只作阅读提示。
+// 换行/缩进变化不会误红；内容改一个字、复制同一违规行、或换到另一个文件都会红。
+const POS_ALLOW = [
+  { path: 'life/actor-pos.mjs', line: 212, count: 1,
+    match: 'w.occupancy = ok',
+    why: '唯一位置写入口：pos 与派生索引在同一事务里同步' },
+  { path: 'life/actor-pos.mjs', line: 216, count: 1,
+    match: 'w.occupancy = expected;',
+    why: '唯一位置写入口：pos 与派生索引在同一事务里同步' },
+  { path: 'life/actor-pos.mjs', line: 251, count: 1,
+    match: 'if (residentTravel && typeof residentTravel === \'object\') w.residentTravel = structuredClone(residentTravel);',
+    why: '唯一位置写入口：pos 与派生索引在同一事务里同步' },
+  { path: 'life/survplay-save.mjs', line: 111, count: 1,
+    match: 'sp.world.loc = { ...sp.world.loc, ...(raw.loc ?? {}) };',
+    why: '旧档迁移：没有 pos 的历史存档按 loc/playerPos 补齐' },
+  { path: 'life/host-world.mjs', line: 736, count: 1,
+    match: 'pack.world.occupancy = {};',
+    why: '研究/城镇快照恢复：不是 survival 存档，也没有 w.pos' },
+  { path: 'life/host-world.mjs', line: 762, count: 1,
+    match: 'pack.world.occupancy = occUsable',
+    why: '研究/城镇快照恢复：不是 survival 存档，也没有 w.pos' },
+  { path: 'life/camp-instances.mjs', line: 399, count: 1,
+    match: "fresh.loc = { ...(fresh.loc ?? {}), p1: 'hall' };",
+    why: 'forkCamp 的 survival 夹具：离线构造玩家位置' },
+  { path: 'life/camp-instances.mjs', line: 400, count: 1,
+    match: "fresh.occupancy = { ...(fresh.occupancy ?? {}), hall: [...new Set([...(fresh.occupancy?.hall ?? []), 'p1'])] };",
+    why: 'forkCamp 的 survival 夹具：离线构造玩家位置' },
+  { path: 'life/build-efficiency.mjs', line: 14, count: 1,
+    match: 'w.occupancy = { yard: keep.slice() };',
+    why: '离线消融夹具：直接构造 occupancy' },
   // m3-planner 的 `s` 是 planner 的动作对象（ActionState.loc），不是世界/居民位置。
-  // 只对 `s.loc =` 放行；同一文件若出现 w/world/fresh/state 的位置写入仍然红。
-  ['life/m3-planner.mjs', {
-    why: 's 是 planner 的 ActionState（动作目标地点），不是世界/居民位置',
-    only: /\bs\.loc\s*=(?!=)/,
-  }],
-]);
+  // 只放行这两条精确内容；同一文件若出现 w/world/fresh/state 的位置写入仍然红。
+  { path: 'life/m3-planner.mjs', line: 35, count: 1,
+    match: "else if(a.kind==='move_to'){s.loc=a.to;s.companions={};}",
+    why: 's 是 planner 的 ActionState（动作目标地点），不是世界/居民位置' },
+  { path: 'life/m3-planner.mjs', line: 38, count: 1,
+    match: "else if(a.kind==='look_out'){s.loc='watch';s.companions={};s.social=clamp(s.social+.12);}",
+    why: 's 是 planner 的 ActionState（动作目标地点），不是世界/居民位置' },
+];
 
 function snippet(line) {
   const text = line.trim();
@@ -192,6 +253,19 @@ export function archGateReport({ root = ROOT, files } = {}) {
     : readRuntimeFiles(root);
   const problems = [];
   const allowed = [];
+  const allowUsed = new Map();
+
+  // 命中一条逐行白名单：只有前 count 次算放行，多出来的重复行必须红。
+  const hitAllow = (entry, rule, path, lineNo, line) => {
+    const used = (allowUsed.get(entry) ?? 0) + 1;
+    allowUsed.set(entry, used);
+    if (used <= entry.count) {
+      allowed.push({ rule, path, line: lineNo, why: entry.why });
+      return;
+    }
+    problems.push(problem(rule, path, lineNo, line,
+      `白名单 ${entry.path} 只允许 ${entry.count} 处（内容 \`${entry.match}\`），第 ${used} 处必须显式说明`));
+  };
 
   for (const { path, text } of sources) {
     const lines = text.split('\n');
@@ -202,9 +276,9 @@ export function archGateReport({ root = ROOT, files } = {}) {
       for (const rule of RETIRED_2D) {
         if (!rule.re.test(line)) continue;
         if (rule.allow) {
-          const entry = TIME_WAIT_LEGACY.find((item) => item.path === path && item.re.test(line));
+          const entry = TIME_WAIT_LEGACY.find((item) => item.path === path && item.match === line.trim());
           if (entry) {
-            allowed.push({ rule: 'ARCH-2D-01', path, line: lineNo, why: entry.why });
+            hitAllow(entry, 'ARCH-2D-01', path, lineNo, line);
             continue;
           }
         }
@@ -223,13 +297,27 @@ export function archGateReport({ root = ROOT, files } = {}) {
 
       for (const rule of RESEARCH_RETIRED) {
         if (!rule.re.test(line)) continue;
+        if (rule.allowPath === path) continue;
         problems.push(problem('ARCH-RESEARCH-01', path, lineNo, line, rule.why));
       }
 
+      // 运行路径 import 测试文件/测试 oracle：被测文件本身从扫描里排除，但不能因此成为
+      // “运行路径偷偷依赖测试代码”的绕过面。
+      for (const m of line.matchAll(/(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g)) {
+        const target = m[1];
+        // legacy-space-oracle 已有更具体的 ARCH-RESEARCH-01 规则，避免同一行报两次。
+        if (target.includes('legacy-space-oracle.mjs')) continue;
+        if (/\.(?:test|spec)\.(?:mjs|js|cjs)$/.test(target) || /(?:^|\/)test-support\//.test(target)) {
+          problems.push(problem('ARCH-IMPORT-01', path, lineNo, line,
+            `运行路径不得 import 测试文件/测试 oracle（命中 \`${target}\`）`));
+        }
+      }
+
       if (POS_WRITE.test(line)) {
-        const entry = POS_ALLOW.get(path);
-        if (entry && (!entry.only || entry.only.test(line))) {
-          allowed.push({ rule: 'ARCH-POS-01', path, line: lineNo, why: entry.why });
+        const text = line.trim();
+        const entry = POS_ALLOW.find((item) => item.path === path && item.match === text);
+        if (entry) {
+          hitAllow(entry, 'ARCH-POS-01', path, lineNo, line);
         } else {
           problems.push(problem('ARCH-POS-01', path, lineNo, line, '位置字段只能由 actor-pos.mjs 等白名单模块整字段写入（w.pos 是唯一事实）'));
         }

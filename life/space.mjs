@@ -56,16 +56,10 @@ export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
 
 // ── 研究态 legacy 速度行（唯一配置，不是第二套空间）─────────────────────────
 // 研究态/旧时间模型没有连续路径与 space 几何，但仍是一种“每刻走多少单位”的预算；
-// 把它作为同一张每刻预算表的 legacy 行，刻数仍由上面的 travelTicksAt 公式推导。
+// 数值与 researchTravelTicks 已收口到 life/research-policy.mjs（唯一策略模块）。
+// space.mjs 是浏览器也 import 的纯几何模块，不能反向依赖服务端策略（否则 /life/ 模块 404）。
 // 旧空间实现（地面谓词/体半径像素栅格/房间像素行走）已迁到 test-support/legacy-space-oracle.mjs，
 // 运行路径 0 import；ARCH-SPACE-01 / ARCH-RESEARCH-01 静态钉死。
-export const LEGACY_RESEARCH_UNITS_PER_TICK = Object.freeze({
-  resident: 12,
-  player: 10,
-  playerSyncInCamp: 40,
-});
-export const researchTravelTicks = (distance, min = 2) =>
-  travelTicksAt(distance, LEGACY_RESEARCH_UNITS_PER_TICK.resident, min);
 // tickMs 只决定“一刻的真实时长”；游戏分钟→真实时间的换算必须与宿主一致。
 export const unitsForRealMs = (ms, tickMs = 7500, sprint = false) => {
   const minutes = GAME_MINUTES_PER_TICK * (Number.isFinite(ms) ? ms : 0) /

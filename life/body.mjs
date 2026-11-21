@@ -21,7 +21,8 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
-import { GAME_RESIDENT_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks, travelTicksAt, unitsPerTick } from './space.mjs';
+import { GAME_RESIDENT_UNITS_PER_TICK, travelTicksAt, unitsPerTick } from './space.mjs';
+import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './research-policy.mjs';
 import { advanceTravelPos, beginTravel, clearTravel, defaultActorPos, isInteriorLoc, isRoomSpace, moveActor, noteArrival, placeActor, posOf, roomOfSpace, roomSpaceId, setPlayerRoom, spawnActor, travelStartWorld, WORLD_SPACE } from './actor-pos.mjs';
 import { routeLength, worldRoute } from '../shared/asset-collision.mjs';
 

@@ -20,7 +20,8 @@ import { constructionAccess, constructionAccessEnabled, constructionSpace, recor
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseAction } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK, roomContains } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
+import { LEGACY_RESEARCH_UNITS_PER_TICK } from './research-policy.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId, WORLD_SPACE } from './actor-pos.mjs';
 

@@ -29,6 +29,7 @@ import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
 import { Organism } from './agent.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
+import { legacyPerTickThink } from './research-policy.mjs';
 import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
 import { createActionDomain } from './survplay-actions.mjs';
 import { createSaveDomain } from './survplay-save.mjs';
@@ -380,7 +381,8 @@ async function tickLegacy(sp, { now, onResidentAction }) {
   const w = sp.world;
   w.t += 1;
   advancePlayerBusy(sp);
-  return worldTick(sp, { now, onResidentAction, think: true });
+  // 研究态整刻语义（per-tick think）只在 research-policy 声明一次。
+  return worldTick(sp, { now, onResidentAction, think: legacyPerTickThink() });
 }
 
 async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {

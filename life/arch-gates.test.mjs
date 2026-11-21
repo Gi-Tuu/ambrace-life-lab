@@ -7,12 +7,12 @@ import { archGateReport, RULES, ROOT } from '../scripts/arch-gates.mjs';
 const run = (entries) => archGateReport({ files: entries });
 const file = (path, text) => [path, text];
 
-test('ARCH-GATE-00 当前仓库六条闸门全绿（基线不假红）', () => {
+test('ARCH-GATE-00 当前仓库七条闸门全绿（基线不假红）', () => {
   const report = archGateReport({ root: ROOT });
   assert.deepEqual(report.problems, []);
   assert.ok(report.scanned > 100, `扫描文件数太少：${report.scanned}`);
   assert.ok(report.allowed.length > 0, '白名单一条都没命中，说明规则口径可能已漂移');
-  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-SPACE-01', 'ARCH-POS-01', 'ARCH-CLOCK-01', 'ARCH-RESEARCH-01']);
+  assert.deepEqual(RULES.map((r) => r.id), ['ARCH-2D-01', 'ARCH-STEP-01', 'ARCH-SPACE-01', 'ARCH-POS-01', 'ARCH-CLOCK-01', 'ARCH-RESEARCH-01', 'ARCH-IMPORT-01']);
 });
 
 test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
@@ -126,17 +126,57 @@ test('ARCH-POS-01 位置字段只允许白名单整字段写入', () => {
     assert.equal(problems.length, 1, `${line.trim()} 应当红`);
     assert.match(problems[0], /\[ARCH-POS-01\]/);
   }
-  // 白名单文件整字段写入放行；测试文件不参与。
-  assert.deepEqual(run([file('life/actor-pos.mjs', '  w.occupancy = next;\n')]).problems, []);
-  assert.deepEqual(run([file('life/camp-instances.mjs', '  fresh.loc = { ...x };\n')]).problems, []);
+  // 白名单只放行精确行内容；测试文件不参与。
+  assert.deepEqual(run([file('life/actor-pos.mjs', '  w.occupancy = ok\n')]).problems, []);
+  assert.deepEqual(run([file('life/camp-instances.mjs', "  fresh.loc = { ...(fresh.loc ?? {}), p1: 'hall' };\n")]).problems, []);
   assert.deepEqual(run([file('life/rogue.test.mjs', '  w.playerPos = {};\n')]).problems, []);
   // 施工任务的 t.loc、以及派生索引的局部字段，不是“整字段写位置”，不得误报。
   assert.deepEqual(run([file('life/rogue.mjs', "  if (t.loc === 'yard') return;\n")]).problems, []);
   assert.deepEqual(run([file('life/rogue.mjs', '  w.loc.p1 = "hall";\n')]).problems, []);
-  // m3-planner 的 s 是 ActionState，只放行 s.loc；同文件的 w 位置写入仍红。
-  assert.deepEqual(run([file('life/m3-planner.mjs', "  else s.loc='watch';\n")]).problems, []);
+  // m3-planner 的 s 是 ActionState，只放行精确行；同文件的 w 位置写入仍红。
+  assert.deepEqual(run([file('life/m3-planner.mjs', "  else if(a.kind==='move_to'){s.loc=a.to;s.companions={};}\n")]).problems, []);
   const plannerRogue = run([file('life/m3-planner.mjs', '  w.playerPos = pos;\n')]);
   assert.equal(plannerRogue.problems.length, 1);
+});
+
+test('ARCH-POS-01 白名单按内容+次数：换行仍绿、复制违规行/换文件/改内容即红', () => {
+  const allowedLine = '  w.occupancy = ok\n';
+  // 行号漂移（前面插 200 行）不影响判定；line 字段只是提示。
+  const shifted = `${'\n'.repeat(200)}${allowedLine}`;
+  const shiftedReport = run([file('life/actor-pos.mjs', shifted)]);
+  assert.deepEqual(shiftedReport.problems, []);
+  assert.equal(shiftedReport.allowed.length, 1);
+  assert.equal(shiftedReport.allowed[0].line, 201, 'allowed 报告实际行号，而不是死绑配置行号');
+  // 同一违规行复制第二处：第二处必须红。
+  const duplicated = run([file('life/actor-pos.mjs', `${allowedLine}${allowedLine}`)]);
+  assert.equal(duplicated.allowed.length, 1);
+  assert.equal(duplicated.problems.length, 1);
+  assert.match(duplicated.problems[0], /\[ARCH-POS-01\].*只允许 1 处/);
+  // 换到另一个文件必须红。
+  assert.equal(run([file('life/rogue.mjs', allowedLine)]).problems.length, 1);
+  // 内容改一个字（换成 playerPos）必须红。
+  assert.equal(run([file('life/actor-pos.mjs', '  w.playerPos = ok\n')]).problems.length, 1);
+});
+
+test('ARCH-IMPORT-01 运行路径 import *.test.mjs / test-support/* 即红；测试文件本身仍排除', () => {
+  // 用拼接构造 fixture 文本：既避免测试源码本身被 static check 当成真实 import，也保持被测内容等价。
+  const importFrom = (target) => `import${' { x }'}${' from '}${JSON.stringify(target)};\n`;
+  const dynamicImport = (target) => `const m = await ${'import'}(${JSON.stringify(target)});\n`;
+  const cases = [
+    [importFrom('./helper.test.mjs'), /helper\.test\.mjs/],
+    [importFrom('../test-support/fixtures.mjs'), /test-support/],
+    [importFrom('./fixtures.spec.js'), /fixtures\.spec\.js/],
+    [dynamicImport('./helper.test.mjs'), /helper\.test\.mjs/],
+  ];
+  for (const [text, re] of cases) {
+    const report = run([file('life/runtime.mjs', text)]);
+    assert.equal(report.problems.length, 1, `${text.trim()} 应红：${JSON.stringify(report.problems)}`);
+    assert.match(report.problems[0], /\[ARCH-IMPORT-01\]/);
+    assert.ok(re.test(report.problems[0]), report.problems[0]);
+  }
+  // 测试文件自身被排除；但运行路径 import 它就红（上面第一条已证明）。
+  assert.deepEqual(run([file('life/helper.test.mjs', importFrom('../test-support/legacy-space-oracle.mjs'))]).problems, []);
+  assert.deepEqual(run([file('life/runtime.mjs', importFrom('./helper.mjs'))]).problems, []);
 });
 
 test('ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时钟/空间常量逐条变红', () => {
@@ -148,6 +188,12 @@ test('ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时�
     ['export const DAY_MINUTES = 1440;\n', /DAY_MINUTES/],
     ['export const RESIDENT_UNITS_PER_TICK = 12;\n', /RESIDENT_UNITS_PER_TICK/],
     ['export const PLAYER_UNITS_PER_TICK = 10;\n', /PLAYER_UNITS_PER_TICK/],
+    ['const units = { resident: 12 };\n', /resident/],
+    ['const units = { player: 10 };\n', /player/],
+    ['const units = { playerSyncInCamp: 40 };\n', /playerSyncInCamp/],
+    ['const RESEARCH_RESIDENT_ACTION_CAP = 4;\n', /RESIDENT_ACTION_CAP/],
+    ['const RESEARCH_RESIDENT_CHAIN_MAX = 2;\n', /CHAIN_MAX/],
+    ['return worldTick(sp, { think: true });\n', /think:\s*true/],
   ];
   for (const [text, re] of cases) {
     const report = run([file('life/rogue.mjs', text)]);
@@ -155,10 +201,14 @@ test('ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时�
     assert.match(report.problems[0], /\[ARCH-RESEARCH-01\]/);
     assert.ok(re.test(report.problems[0]), report.problems[0]);
   }
-  // 显式策略/legacy 配置行是唯一两处合法形态；从常量派生、测试 oracle 路径都不误伤。
+  // 数值只在 policy 声明；space.mjs 只保留兼容 re-export，从常量派生/测试 oracle 路径都不误伤。
   assert.deepEqual(run([
-    file('life/research-policy.mjs', 'export const RESEARCH_TICK_MINUTES = GAME_MINUTES_PER_HOUR;\n'),
-    file('life/space.mjs', 'export const LEGACY_RESEARCH_UNITS_PER_TICK = Object.freeze({ resident: 12 });\n'),
+    file('life/research-policy.mjs', [
+      'export const RESEARCH_TICK_MINUTES = GAME_MINUTES_PER_HOUR;',
+      'export const RESEARCH_SPEED_UNITS_PER_TICK = Object.freeze({ resident: 12, player: 10, playerSyncInCamp: 40 });',
+      'export const RESEARCH_TICK_POLICY = Object.freeze({ perTickThink: true });',
+    ].join('\n') + '\n'),
+    file('life/space.mjs', 'export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick(\'walk\');\n'),
     file('test-support/legacy-space-oracle.mjs', "export const x = 1;\n"),
   ]).problems, []);
   // 测试文件不参与运行路径扫描，但运行路径 import 测试 oracle 仍然红。

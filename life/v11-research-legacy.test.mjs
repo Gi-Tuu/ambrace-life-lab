@@ -16,12 +16,13 @@ import { fileURLToPath } from 'node:url';
 import { createSurvPlay, dumpSurv, tickSurvPlay, playerTimeMax, playerTimeLeft } from './survplay.mjs';
 import { createSimClock, GAME_MINUTES_PER_HOUR, GAME_MINUTES_PER_DAY, worldMinutes } from './sim-clock.mjs';
 import { startMove, RESIDENT_UNITS_PER_TICK, PLAYER_UNITS_PER_TICK } from './body.mjs';
-import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './space.mjs';
+import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './research-policy.mjs';
 import { CHAIN_MAX, DAY_MINUTES, TICK_ACTION_CAP, TICK_MINUTES } from './resident-time.mjs';
 import {
   RESEARCH_DAY_MINUTES, RESEARCH_PLAYER_BUDGET, RESEARCH_RESIDENT_ACTION_CAP,
-  RESEARCH_RESIDENT_CHAIN_MAX, RESEARCH_TICK_MINUTES,
-  legacyPlayerTimeLeft, legacyRefundPlayerTime, legacySpendPlayerTime,
+  RESEARCH_RESIDENT_CHAIN_MAX, RESEARCH_SPEED_UNITS_PER_TICK, RESEARCH_TICK_MINUTES,
+  RESEARCH_TICK_POLICY, legacyPerTickThink, legacyPlayerTimeLeft, legacyRefundPlayerTime,
+  legacySpendPlayerTime,
 } from './research-policy.mjs';
 import { FORMAL_OPTIONS } from './balance-probe.mjs';
 import { GAME_OPTIONS } from './long-run.mjs';
@@ -39,7 +40,7 @@ const BASELINES = Object.freeze({
   D: { label: 'research-independent', seed: 7, options: { independentWorld: true, actTimeModel: true, residentialDecisions: true, unifiedCooperation: true, gameRules: false }, ticks: 24, bytes: 58875, md5: '41f75f8e5cd3c9472274584a608e3842' },
 });
 
-test('V11-RESEARCH-01 研究策略常量只留一份：60/1440 从 sim-clock 派生，12/10 在 space 的 legacy 行', () => {
+test('V11-RESEARCH-01 研究策略常量只留一份：60/1440/12/10/40/4/2/think 都在 research-policy', () => {
   assert.equal(GAME_MINUTES_PER_HOUR, 60);
   assert.equal(GAME_MINUTES_PER_DAY, 1440);
   assert.equal(RESEARCH_TICK_MINUTES, GAME_MINUTES_PER_HOUR);
@@ -48,9 +49,18 @@ test('V11-RESEARCH-01 研究策略常量只留一份：60/1440 从 sim-clock 派
   assert.equal(DAY_MINUTES, RESEARCH_DAY_MINUTES);
   assert.equal(TICK_ACTION_CAP, RESEARCH_RESIDENT_ACTION_CAP);
   assert.equal(CHAIN_MAX, RESEARCH_RESIDENT_CHAIN_MAX);
-  assert.deepEqual(LEGACY_RESEARCH_UNITS_PER_TICK, { resident: 12, player: 10, playerSyncInCamp: 40 });
-  assert.equal(RESIDENT_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK.resident);
-  assert.equal(PLAYER_UNITS_PER_TICK, LEGACY_RESEARCH_UNITS_PER_TICK.player);
+  assert.deepEqual(RESEARCH_SPEED_UNITS_PER_TICK, { resident: 12, player: 10, playerSyncInCamp: 40 });
+  assert.deepEqual(LEGACY_RESEARCH_UNITS_PER_TICK, RESEARCH_SPEED_UNITS_PER_TICK);
+  assert.equal(RESIDENT_UNITS_PER_TICK, RESEARCH_SPEED_UNITS_PER_TICK.resident);
+  assert.equal(PLAYER_UNITS_PER_TICK, RESEARCH_SPEED_UNITS_PER_TICK.player);
+  assert.equal(RESEARCH_TICK_POLICY.minutes, RESEARCH_TICK_MINUTES);
+  assert.equal(RESEARCH_TICK_POLICY.perTickThink, true);
+  assert.equal(RESEARCH_TICK_POLICY.bodyPerTick, true);
+  assert.equal(RESEARCH_TICK_POLICY.residentActionCap, 4);
+  assert.equal(RESEARCH_TICK_POLICY.residentChainMax, 2);
+  assert.equal(RESEARCH_TICK_POLICY.speedUnitsPerTick, RESEARCH_SPEED_UNITS_PER_TICK);
+  assert.equal(RESEARCH_TICK_POLICY.legacyTimeCode, 'TIME_WAIT');
+  assert.equal(legacyPerTickThink(), true);
   // 旧模块退役：life/ 运行时只剩 research-policy 的策略声明 + test-support oracle。
   const life = readdirSync(LIFE);
   assert.equal(life.includes('research-time.mjs'), false, 'research-time.mjs 必须已退役');
@@ -130,7 +140,7 @@ test('V11-RESEARCH-06 正式连续钟不被适配层劫持：simClock 存在时�
   assert.equal(w.survival.p1BudgetTick, undefined, '正式连续路径不得写研究态 100 点池字段');
 });
 
-test('V11-RESEARCH-07 运行时只允许三个共享模块 import 研究策略；测试 oracle 运行路径 0 import', () => {
+test('V11-RESEARCH-07 运行时只允许六个共享模块 import 研究策略；测试 oracle 运行路径 0 import', () => {
   const importers = [];
   for (const name of readdirSync(LIFE).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))) {
     const text = readFileSync(LIFE + name, 'utf8');
@@ -138,6 +148,6 @@ test('V11-RESEARCH-07 运行时只允许三个共享模块 import 研究策略�
     assert.equal(/(?:from\s*|import\s*\(\s*)['"][^'"]*legacy-space-oracle\.mjs['"]/.test(text), false,
       `${name} 不得 import 测试 oracle`);
   }
-  assert.deepEqual(importers.sort(), ['agent.mjs', 'resident-time.mjs', 'survplay-actions.mjs'],
-    '研究策略只许被这三个共享模块的 !simClock 分支使用');
+  assert.deepEqual(importers.sort(), ['agent.mjs', 'body.mjs', 'resident-time.mjs', 'survplay-actions.mjs', 'survplay-camp.mjs', 'survplay.mjs'],
+    '研究策略只许被这些共享模块的 !simClock 分支/legacy 行使用');
 });
