@@ -25,6 +25,7 @@ import { GAME_RESIDENT_UNITS_PER_TICK, travelTicksAt, unitsPerTick } from './spa
 import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './research-policy.mjs';
 import { advanceTravelPos, beginTravel, clearTravel, defaultActorPos, isInteriorLoc, isRoomSpace, moveActor, noteArrival, placeActor, posOf, roomOfSpace, roomSpaceId, setPlayerRoom, spawnActor, travelStartWorld, WORLD_SPACE } from './actor-pos.mjs';
 import { routeLength, worldRoute } from '../shared/asset-collision.mjs';
+import { roomEntryPosition } from './room-walk.mjs';
 
 export const LOCS = { home: '居所', hall: '走廊', watch: '瞭台', store: '公仓' };
 
@@ -380,8 +381,10 @@ export function settleTravel(w, id, row) {
   }
   if (!homeEntry(w, id, row.to).ok) { clearTravel(w, id); return false; }
   const space = roomSpaceOf;
+  // 1.2 B：居民进房落在门内可站的一点（与门外门点同一扇门），随后由室内走动带去兴趣点；
+  // 玩家室内位置仍由 portal/客户端自己管（这里不改）。
   const pos = isInteriorLoc(w, row.to) && id !== 'p1'
-    ? defaultActorPos(w, id, row.to, { roomSpace: space, index: (w.occupancy?.[row.to] ?? []).length })
+    ? (roomEntryPosition(w, row.to, id) ?? defaultActorPos(w, id, row.to, { roomSpace: space, index: (w.occupancy?.[row.to] ?? []).length }))
     : { x: (row.destination ?? row.cursor ?? [0, 0])[0], z: (row.destination ?? row.cursor ?? [0, 0])[1], space: WORLD_SPACE };
   moveActor(w, id, row.to, { pos });
   // constructionArrivals 读取的是 residentTravel.at（到点后仍是目的地工点）。

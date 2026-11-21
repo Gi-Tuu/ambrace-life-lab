@@ -29,6 +29,7 @@ import { stepEcosystem, initEcoPop, ECO } from './ecology.mjs';
 import { addStanding, restoreSources, sourceView } from './source-produce.mjs';
 import { restoreFarmPlots } from './farmland.mjs';
 import { Organism } from './agent.mjs';
+import { stepRoomWalk } from './room-walk.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
 import { legacyPerTickThink } from './research-policy.mjs';
 import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
@@ -429,6 +430,9 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
         }
       }
     }
+    // 1.2 B：居民室内自由移动。只挪 w.pos（loc/占用/动作/需求都不动），每分钟一步。
+    // 研究态没有 pos ⇒ 本调用是空操作；玩家不在室内走动的范围内。
+    if (w.survival?.actTimeModel === true) stepRoomWalk(w, minute);
     // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
     if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;
