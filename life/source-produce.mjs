@@ -1,4 +1,5 @@
 import { ANIMAL_ITEMS, BERRY_PATCHES, campBeds, campPen, campSite } from '../shared/camp-interaction.mjs';
+import { campAnimalSlot, campLivestock } from '../shared/camp-livestock.mjs';
 import { DAY_TICKS } from './clock.mjs';
 import { noteRes } from './resource-ledger.mjs';
 
@@ -61,14 +62,18 @@ export function sourceView(w) {
   const garden = campSite('garden', layout);
   const bed = campBeds(garden, w.mapSeed ?? 0, w.layoutVersion ?? 0)[0];
   const pen = campPen(campSite('yard', layout));
-  const animalAt = (slot) => pen ? {
-    x: pen.x + pen.gate + 0.6 + (slot % 3) * 0.25,
-    z: pen.z + pen.d - 0.8 - Math.floor(slot / 3) * 0.25,
-  } : null;
+  // 1.6：拾取点必须与场景里的动物、圈舍门洞同一套坐标（campAnimalSlots）。
+  // 旧实现让鸡/牛/羊共用一个 pen.gate 点，扩大圈舍后会“点到看不见的动物”。
+  let farm = null;
+  if (pen) farm = campLivestock(campSite('yard', layout), s.livestock);
+  const animalAt = (item, slot) => {
+    const kind = item === 'egg' ? 'chickens' : item === 'milk' ? 'cows' : item === 'wool' ? 'sheep' : null;
+    return kind && farm ? (farm.slots[kind]?.[((slot % farm.slots[kind].length) + farm.slots[kind].length) % farm.slots[kind].length] ?? null) : null;
+  };
   return Object.fromEntries(Object.keys(GROUPS).map(item => [item, sources(w, item).map(row => ({
     ...row, afraid:(s.frightenedAnimals?.[row.id]??0)>w.t, ready: s.standing[item][row.id] ?? 0,
     ...(item === 'fruit' && bed ? { x: bed.x + 1 + row.slot % 6 * 2.95, z: bed.z + 9.5 + Math.floor(row.slot / 6) * 3 } : {}),
-    ...(item !== 'fruit' && animalAt(row.slot) ? animalAt(row.slot) : {}),
+    ...(item !== 'fruit' && animalAt(item, row.slot) ? animalAt(item, row.slot) : {}),
   }))]));
 }
 

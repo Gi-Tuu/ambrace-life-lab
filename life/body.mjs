@@ -21,6 +21,7 @@ import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecas
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
+import { LIVESTOCK_CAPACITY, expandLabel } from '../shared/camp-livestock.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
 import { GAME_MINUTES_PER_TICK, GAME_RESIDENT_UNITS_PER_TICK, realSpeed, travelTicksAt, unitsPerRealTick, unitsPerTick } from './space.mjs';
 import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './research-policy.mjs';
@@ -650,8 +651,8 @@ export function affordancesFor(world, agentId) {
         out.push({ id: `exchange:${kind}`, kind: 'exchange', type: kind, label: `兑换·${PRODUCE_LABEL[kind]}`, cost: SURV_COST.exchange, impulse: 0.05, serves: { energy: 0.12 } });
     // 扩建只在材料富余时出现：留够一份建筑料，避免把木石吃光拖垮建房（P2-7 实测）。
     for (const [type, cost] of Object.entries(EXPAND))
-      if ((s0.livestock?.[type] ?? 0) < LIVESTOCK_CAP && (s0.inv?.wood ?? 0) >= cost.wood + 4 && (s0.inv?.stone ?? 0) >= cost.stone + 3)
-        out.push({ id: `expand:${type}`, kind: 'expand', type, label: `扩建·${EXPAND_LABEL[type]}`, cost: SURV_COST.expand, impulse: 0.05, serves: { stimulation: 0.15 } });
+      if ((s0.livestock?.[type] ?? 0) < (LIVESTOCK_CAPACITY[type] ?? LIVESTOCK_CAP) && (s0.inv?.wood ?? 0) >= cost.wood + 4 && (s0.inv?.stone ?? 0) >= cost.stone + 3)
+        out.push({ id: `expand:${type}`, kind: 'expand', type, label: expandLabel(s0.livestock, type), cost: SURV_COST.expand, impulse: 0.05, serves: { stimulation: 0.15 } });
     const bag0 = (world.pinv ?? {})[agentId] ?? { wood: 0, stone: 0 };
     const poolW = bag0.wood + world.survival.inv.wood, poolS = bag0.stone + world.survival.inv.stone;
     const site = world.survival.sites.find((s) => s.loc === here);

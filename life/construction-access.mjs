@@ -29,7 +29,10 @@ function sceneGeometry(w) {
   const layout = w.campLayout ?? null;
   let g = sceneCache.get(w);
   const wildSig = wildClaimSignature(w);
-  if (g && g.layout === layout && g.districts === w.districts && g.wildSig === wildSig) return g;
+  // 1.6 A：圈舍结构由 livestock 数量派生；数量变化必须重建 stage（碰撞/门洞/屋舍一起变）。
+  const livestockSig = JSON.stringify(w.survival?.livestock ?? null);
+  if (g && g.layout === layout && g.districts === w.districts && g.wildSig === wildSig &&
+      g.livestockSig === livestockSig) return g;
   const landmarks = Object.fromEntries(['home','hall','store','yard','workshop','garden','watch','well']
     .map(loc => [loc,campSite(loc,layout)]));
   const liveSites = campSitesOf({ rooms:w.locs, districts:w.districts, layout, peripheralHomes:w.peripheralHomes });
@@ -40,8 +43,9 @@ function sceneGeometry(w) {
     districts:w.districts, peripheralHomes:w.peripheralHomes,
     households:w.survival?.households, homeRoads:w.survival?.homeRoads,
     wildPlots: wildPlotView(w),
+    livestock: w.survival?.livestock ?? null,
   });
-  g = { layout, districts:w.districts, wildSig, landmarks, sites, content, stage };
+  g = { layout, districts:w.districts, wildSig, livestockSig, landmarks, sites, content, stage };
   sceneCache.set(w,g);
   return g;
 }
@@ -66,8 +70,9 @@ export function sceneSpace(w) {
   const wildSig = wildClaimSignature(w);
   const cuts = activeForestCuts(w.survival?.campTrees, w.t ?? 0);
   const forestSig = cuts.join(',');
+  const livestockSig = JSON.stringify(w.survival?.livestock ?? null);
   if (hit && hit.layout === layout && hit.districts === w.districts && hit.wildSig === wildSig &&
-      hit.forestSig === forestSig) return hit.space;
+      hit.forestSig === forestSig && hit.livestockSig === livestockSig) return hit.space;
   const g = sceneGeometry(w);
   // 地形链只有一条：营地内与野外都由 campSceneContent 生成的同一份 content.landscape 回答。
   const terrain = g.content.landscape;
@@ -79,7 +84,7 @@ export function sceneSpace(w) {
     wild: wildSurface(terrain, { crossing:camp.crossing }),
     terrain,
   });
-  spaceCache.set(w, { layout, districts: w.districts, wildSig, forestSig, space });
+  spaceCache.set(w, { layout, districts: w.districts, wildSig, forestSig, livestockSig, space });
   return space;
 }
 

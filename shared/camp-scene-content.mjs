@@ -83,7 +83,7 @@ export function staticCampSites(sites, districts = null, peripheralHomes = null)
 export function campSceneContent({
   mapSeed = 0, layoutVersion = 0, layout = null, camp = false, timber = false,
   sites = {}, districts = null, peripheralHomes = null, households = false,
-  homeRoads = {}, ecoSources = null, wildPlots = null,
+  homeRoads = {}, ecoSources = null, wildPlots = null, livestock = null,
 } = {}) {
   const campOn = Boolean(camp);
   const hasTimber = Boolean(timber);
@@ -97,6 +97,52 @@ export function campSceneContent({
 
   const bridges = [], rocks = [];
   const trees = [];
+  // 1.6 A：圈舍几何在道路/植被之前定下来——道路要绕开它，树要避开它，山丘要压平它。
+  const pen = penLayout(sites);
+
+  // 1.6 A：既有土路不得穿过扩大后的圈舍。对每条原始折线，若线段命中院落，
+  // 改走院落的最近外侧（正交绕行，南北/东西四选一），再按普通路段落桶。
+  // 只使用确定性的距离比较，不消费 rng，客户端/服务端逐位一致。
+  const penHitPad = 0.15;
+  const penPx = pen ? { x: pen.x * TILE, z: pen.z * TILE, w: pen.w * TILE, d: pen.d * TILE } : null;
+  const inPenRect = (x, z, pad = 0) => penPx && x >= penPx.x - pad && x <= penPx.x + penPx.w + pad &&
+    z >= penPx.z - pad && z <= penPx.z + penPx.d + pad;
+  const segmentHitsPen = (a, b) => {
+    if (!penPx) return false;
+    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 4));
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      if (inPenRect(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, penHitPad * TILE)) return true;
+    }
+    return false;
+  };
+  const pathClearOfPen = (path) => {
+    for (let i = 0; i < path.length - 1; i += 1) if (segmentHitsPen(path[i], path[i + 1])) return false;
+    return true;
+  };
+  const detourAroundPen = (a, b) => {
+    if (!penPx || !segmentHitsPen(a, b)) return null;
+    const pad = 0.75 * TILE, x0 = penPx.x - pad, x1 = penPx.x + penPx.w + pad;
+    const z0 = penPx.z - pad, z1 = penPx.z + penPx.d + pad;
+    const cx = (v) => Math.min(x1, Math.max(x0, v));
+    const cz = (v) => Math.min(z1, Math.max(z0, v));
+    const sides = [
+      [[cx(a[0]), z0], [cx(b[0]), z0]],
+      [[cx(a[0]), z1], [cx(b[0]), z1]],
+      [[x0, cz(a[1])], [x0, cz(b[1])]],
+      [[x1, cz(a[1])], [x1, cz(b[1])]],
+    ];
+    let best = null, bestLen = Infinity;
+    for (const [entry, exit] of sides) {
+      const path = [[a[0], a[1]], entry, exit, [b[0], b[1]]]
+        .filter((p, i, arr) => i === 0 || Math.hypot(p[0] - arr[i - 1][0], p[1] - arr[i - 1][1]) > 1e-9);
+      if (!pathClearOfPen(path)) continue;
+      let len = 0;
+      for (let i = 0; i < path.length - 1; i += 1) len += Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
+      if (len < bestLen) { bestLen = len; best = path; }
+    }
+    return best;
+  };
 
   // 缓弯土路：共享入口与桥位，曲线只用于烘焙，不改变引擎地点关系。
   // binSize 只影响"一个查询要扫多少段"：段按 bbox+40px 落桶，任何 ≤40px 的段必然落在查询点所在桶里，
@@ -155,6 +201,13 @@ export function campSceneContent({
     if (!routeSites[u] || !routeSites[v]) continue;
     const points = [routeSites[u], ...mids, routeSites[v]].map((p) => p.map((n) => n * TILE + 8));
     for (let j = 0; j < points.length - 1; j++) {
+      const hidden = homeRoads?.[v]?.present === false;
+      // 1.6 A：圈舍占地区段直接走外侧绕行，避免道路画进圈舍/动物活动区。
+      const detour = detourAroundPen(points[j], points[j + 1]);
+      if (detour) {
+        for (let k = 0; k < detour.length - 1; k += 1) addSegment(detour[k], detour[k + 1], hidden);
+        continue;
+      }
       const p0 = points[Math.max(0, j - 1)], p1 = points[j], p2 = points[j + 1], p3 = points[Math.min(points.length - 1, j + 2)];
       const steps = Math.max(1, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 8)); let prev = p1;
       for (let i = 1; i <= steps; i++) {
@@ -163,7 +216,7 @@ export function campSceneContent({
           const z0 = p0[axis], z1 = p1[axis], z2 = p2[axis], z3 = p3[axis];
           return 0.5 * (2 * z1 + (-z0 + z2) * t + (2 * z0 - 5 * z1 + 4 * z2 - z3) * t * t + (-z0 + 3 * z1 - 3 * z2 + z3) * t * t * t);
         });
-        addSegment(prev, pt, homeRoads?.[v]?.present === false); prev = pt;
+        addSegment(prev, pt, hidden); prev = pt;
       }
     }
   }
@@ -193,7 +246,6 @@ export function campSceneContent({
   // beds 保留为空数组：原实现把它传给 terrainKinds，但实际苗床来自 land；逐位保持语义。
   const beds = [];
   const land = campBeds(sites.garden, mapSeed, layoutVersion);
-  const pen = penLayout(sites);
   const onFarm = (x, z, pad = 0) => land.some((b) => x >= b.x - pad && x < b.x + b.w + pad && z >= b.z - pad && z < b.z + b.d + pad);
   const inPen = (tx, tz) => pen && tx + .5 >= pen.x - 1 && tx + .5 <= pen.x + pen.w + 1 &&
     tz + .5 >= pen.z - 1 && tz + .5 <= pen.z + pen.d + 1;
@@ -294,6 +346,7 @@ export function campSceneBundle(spec = {}) {
     tw: TOWN_SIZE.width, th: TOWN_SIZE.depth, sites: spec.sites ?? {},
     trees: content.trees, grass: [], hills: content.landscape ? [] : content.hills,
     height: content.landscape?.height, layoutSeed: spec.layout ? (spec.mapSeed ?? 0) : null,
+    livestock: spec.livestock ?? null,
   }, content.bridges, content.rocks);
   return { content, stage };
 }

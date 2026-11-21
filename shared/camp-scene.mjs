@@ -3,6 +3,7 @@ import { reliefFaces, floorHeight, campHash, hash2 } from './camp-terrain.mjs';
 import { homeLot as layoutHomeLot, constructionLot, residentialSite, TIMBER_GROVE } from './camp-layout.mjs';
 import { facilityGate, facilityId } from './camp-facility.mjs';
 import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from './camp-interaction.mjs';
+import { LIVESTOCK_CAPACITY, PEN_T, campLivestock } from './camp-livestock.mjs';
 import { orchardAppearance, orchardWeather } from './camp-orchard-look.mjs';
 import { itemBoxes } from './camp-items.mjs';
 import { ROOM_DOOR_PX } from './room-layout.mjs';
@@ -516,26 +517,122 @@ function crops3d(s, world) {
 export function penLayout(sites) {
   return campPen(sites.yard);
 }
-function livestockPen(s, sites) {
-  const p=penLayout(sites);
-  if (!p) return;
-  const {x,z,w,d,gate,opening}=p, t=.14;
-  const rails=[[x,z,w,t],[x,z+t,t,d-t],[x+w-t,z+t,t,d-t],
-    [x+t,z+d-t,gate-t,t],[x+gate+opening,z+d-t,w-gate-opening-t,t]];
-  rails.forEach((r,i) => s.group(`pen:${i}`,() => rail(s,...r,0)));
-  for (const gx of [x+gate-t,x+gate+opening]) s.box(gx,0,z+d-t,t,.91,t,LIGHT,true);
-  s.group('pen:shelter',() => {
-    s.box(x+5.13,0,z+.45,1.5,1.02,1.35,WOOD,true);
-    timberGable(roofAdapter(s),x+5.08,1.02,z+.4,1.6,1.45,'#AB5236',false,true);
-    s.box(x+5.53,.1,z+1.8,.5,.66,.06,'#1D2B53');
-  });
-  s.box(x+.6,.0,z+d-1.0,2.2,.3,.55,WOOD);
-  s.box(x+.68,.26,z+d-.94,2.04,.05,.43,'#D8A667');
-  s.box(x+3.4,.0,z+d-1.1,1.0,.55,.8,'#D8A667');
-  s.box(x+3.4,.22,z+d-1.1,1.0,.07,.8,'#B58A4C');
-  s.box(x+3.4,.44,z+d-1.1,1.0,.07,.8,'#B58A4C');
-  worldItem(s, 'bucket', x+4.7, z+d-.9, .6, 0);
+// 1.6 A：三种牲畜各有真实圈舍，尺寸从旧 7×6.4 扩到 12.6×10.8（4 个 6×4.85 分区 + 1.2 走道）。
+// 围栏/门洞来自 camp-livestock；这里只画材质与屋舍。结构层数与 livestock 数量同源：
+//   0 = 空场；>0 = 真实屋舍，且每多一只/头加一段 bay（栏位/隔板/草料），所以扩容立即可见。
+function livestockPen(s, sites, stock) {
+  const farm=campLivestock(sites?.yard, stock);
+  if (!farm) return;
+  const {pens, fences, doors, levels}=farm;
+  for (const b of Object.values(pens)) s.box(b.x+.02,.008,b.z+.02,b.w-.04,.018,b.d-.04,'#8C6648');
+  fences.forEach((f,i)=>s.group(f.id||`pen:${i}`,()=>rail(s,f.x,f.z,f.w,f.d,0,true)));
+  for (const r of Object.values(doors)) {
+    for (const [dx,dz] of [[0,0],[r.w,0],[0,r.d],[r.w,r.d]])
+      s.box(r.x+dx-.035,0,r.z+dz-.035,.07,.98,.07,LIGHT);
+  }
+  chickenCoop(s,pens.chickens,levels.chickens);
+  cowBarn(s,pens.cows,levels.cows);
+  sheepFold(s,pens.sheep,levels.sheep);
+  fodderBay(s,pens.fodder);
 }
+
+function chickenCoop(s, pen, level) {
+  const {x,z,w,d}=pen;
+  s.group('livestock:chickens', () => {
+  s.box(x+.42,0,z+d-.78,1.7,.3,.5,WOOD,true);
+  s.box(x+.5,.3,z+d-.72,1.54,.05,.38,'#D8A667');
+  s.box(x+w-1.6,0,z+d-.74,.62,.24,.46,'#458996',true);
+  s.box(x+w-1.55,.24,z+d-.69,.52,.03,.36,'#2F6066');
+  if (!level) {
+    s.box(x+.3,0,z+.24,w-.6,.06,1.72,'#8D6A3D');
+    for (const [px,pz] of [[x+.32,z+.26],[x+w-.46,z+.26],[x+.32,z+1.82],[x+w-.46,z+1.82]]) s.box(px,0,pz,.14,.9,.14,DARK,true);
+    return;
+  }
+  const hw=Math.min(5.2,1.9+level*.42), hd=1.75, hx=x+.3, hz=z+.22;
+  s.box(hx-.06,0,hz-.06,hw+.12,.09,hd+.12,'#8D6A3D');
+  s.box(hx,0,hz,hw,1.22,PEN_T,DARK,true);
+  s.box(hx,0,hz,PEN_T,1.1,hd,DARK,true);
+  s.box(hx+hw-PEN_T,0,hz,PEN_T,1.1,hd,DARK,true);
+  const door=.8, left=(hw-door)/2;
+  s.box(hx,0,hz+hd-PEN_T,left,1.0,PEN_T,DARK,true);
+  s.box(hx+left+door,0,hz+hd-PEN_T,hw-left-door,1.0,PEN_T,DARK,true);
+  s.box(hx,1.0,hz+hd-PEN_T,hw,.22,PEN_T,WOOD);
+  for (let i=0;i<level;i++) {
+    const nx=hx+.24+i*.55;
+    if (nx+.42<=hx+hw) s.box(nx,.52,hz+hd+.02,.4,.36,.2,LIGHT);
+  }
+  s.box(hx+.35,.62,hz+hd+.26,Math.min(hw-.7,1.7),.07,.1,LIGHT);
+  s.group('livestock:chickens:roof',()=>{
+    timberGable(roofAdapter(s),hx-.12,1.22,hz-.12,hw+.24,hd+.24,'#AB5236',false,true);
+    s.box(hx-.18,1.18,hz+hd+.02,hw+.36,.1,.18,DARK);
+  });
+  for (let i=0;i<level;i++)
+    s.box(x+w-1.15+(i%3)*.3,0,z+1.95+Math.floor(i/3)*.28,.26,.22,.3,'#D8A667');
+  });
+}
+
+function cowBarn(s, pen, level) {
+  const {x,z,w,d}=pen;
+  s.group('livestock:cows', () => {
+  const bx=x+.35, bz=z+.3, bw=w-.7, bd=Math.min(3.0,d-.5);
+  s.box(bx,0,bz,bw,.08,bd,'#8D6A3D');
+  s.box(bx,0,bz,bw,1.35,PEN_T,DARK,true);
+  s.box(bx,0,bz,PEN_T,1.5,bd,DARK,true);
+  s.box(bx+bw-PEN_T,0,bz,PEN_T,1.5,bd,DARK,true);
+  const openW=1.6, railW=(bw-openW)/2;
+  rail(s,bx,bz+bd-PEN_T,railW,PEN_T,0,true);
+  rail(s,bx+railW+openW,bz+bd-PEN_T,railW,PEN_T,0,true);
+  for (const px of [bx+.12,bx+bw-.28]) s.box(px,0,bz+.05,.16,1.5,.16,DARK,true);
+  s.group('livestock:cows:roof',()=>{
+    timberGable(roofAdapter(s),bx,1.5,bz-.05,bw,bd+.1,'#72513B',false,true);
+    s.box(bx-.1,1.46,bz+bd-.02,bw+.2,.09,.16,DARK);
+  });
+  for (let i=0;i<level;i++) {
+    const sx=bx+.5+i*(bw-.9)/Math.max(1,LIVESTOCK_CAPACITY.cows-.2);
+    if (sx+.1<bx+bw-.2) s.box(sx,0,bz+.2,.1,.9,.72,DARK,true);
+    s.box(bx+.35+((i%3)*.45),0,bz+.95+Math.floor(i/3)*.38,.38,.3,.4,'#D8A667');
+  }
+  s.box(x+w-1.05,0,z+2.55,.42,.3,1.75,WOOD,true);
+  s.box(x+w-1.0,.3,z+2.62,.34,.05,1.6,'#D8A667');
+  s.box(x+4.7,0,z+d-.78,.6,.24,.46,'#458996',true);
+  worldItem(s,'bucket',x+4.62,z+d-1.15,.6,0);
+  });
+}
+
+function sheepFold(s, pen, level) {
+  const {x,z,w,d}=pen;
+  s.group('livestock:sheep', () => {
+  const sx=x+w-2.35, sz=z+.3, sw=2.0, sd=2.15;
+  s.box(sx,0,sz,sw,1.15,PEN_T,DARK,true);
+  s.box(sx,0,sz,PEN_T,1.05,sd,DARK,true);
+  s.box(sx,0,sz+sd-PEN_T,sw,1.0,PEN_T,DARK,true);
+  s.box(sx,0,sz+sd*.45,.8,1.0,PEN_T,WOOD,true);
+  s.group('livestock:sheep:roof',()=>{
+    timberGable(roofAdapter(s),sx-.1,1.15,sz-.08,sw+.2,sd+.16,'#3F7036',false,true);
+  });
+  for (let i=0;i<level;i++) {
+    const hx=sx-1.15+(i%3)*.36, hz=sz+.35+Math.floor(i/3)*.42;
+    s.box(hx,0,hz,.3,.42,.34,'#D8A667');
+    s.box(hx-.03,.42,hz-.02,.36,.05,.38,'#B58A4C');
+  }
+  s.box(x+.55,0,z+d-.78,1.7,.28,.5,WOOD,true);
+  s.box(x+.63,.28,z+d-.72,1.54,.05,.38,'#D8A667');
+  s.box(x+w-1.55,0,z+d-.76,.6,.24,.46,'#458996',true);
+  if (!level) s.box(sx-1.3,.02,z+.4,.5,.24,.4,'#D8A667');
+  });
+}
+
+function fodderBay(s, pen) {
+  const {x,z,w,d}=pen;
+  for (let i=0;i<5;i++) s.box(x+.5+(i%3)*.55,0,z+.55+Math.floor(i/3)*.6,.46,.34,.46,i%2?'#D8A667':'#C9955D');
+  s.box(x+1.9,0,z+.55,.12,1.15,.12,DARK,true);
+  s.box(x+1.15,1.0,z+.55,1.55,.09,.1,WOOD);
+  s.box(x+.5,0,z+d-.8,1.4,.5,.55,WOOD,true);
+  s.box(x+.58,.5,z+d-.74,1.24,.05,.43,'#D8A667');
+  s.box(x+w-1.45,0,z+d-.8,.62,.24,.46,'#458996',true);
+  worldItem(s,'bucket',x+w-1.55,z+d-1.25,.58,0);
+}
+
 const CHICKEN_FORM = {
   juvenile: {radius:.23, stepRate:14, stride:.046},
   adult: {radius:.38, stepRate:10, stride:.08},
@@ -589,26 +686,31 @@ function chicken3d(b, stage, dark) {
 }
 
 function livestock3d(s, world) {
-  const pen=penLayout(world.sites);
-  if (!pen) return;
   const stock=world.livestock ?? {};
+  const farm=campLivestock(world.sites?.yard, stock);
+  if (!farm) return;
   const specs=[
-    ['chickens',stock.chickens??3,ANIMAL_LIMITS.chickens,.38,1.11,2.82,.98],
-    ['cows',stock.cows??2,ANIMAL_LIMITS.cows,.59,1.16,1.06,1.43],
-    ['sheep',stock.sheep??2,ANIMAL_LIMITS.sheep,.52,2.97,4.91,1.29],
+    ['chickens',stock.chickens??3,ANIMAL_LIMITS.chickens,.38],
+    ['cows',stock.cows??2,ANIMAL_LIMITS.cows,.59],
+    ['sheep',stock.sheep??2,ANIMAL_LIMITS.sheep,.52],
   ];
-  for (const [kind,count,limit,r,x,z,spacing] of specs) {
+  for (const [kind,count,limit,r] of specs) {
+    // 生态来源（ecoSources）与场景动物/拾取点共用同一批 slot；没有生态账时按数量补。
     const herd=world.ecoSources?.[ANIMAL_ITEMS[kind]] ??
       Array.from({length:Math.min(count,limit)},(_,slot)=>({id:`${kind}:${slot}`,slot,mature:true}));
     for (const [i, animal] of herd.entries()) {
-      const px=pen.x+x+(animal.slot%limit)*spacing, pz=pen.z+z+(i%2)*.11+Math.floor(i/limit)%3*.34;
+      if (i>=limit) break;
+      const slotIndex=Number.isInteger(animal.slot) ? animal.slot : i;
+      const point=farm.slots[kind][((slotIndex%limit)+limit)%limit];
+      if (!point) continue;
+      const px=point.x, pz=point.z;
       const boxes=[], isChicken=kind==='chickens';
       const stage=isChicken ? animal.stage ?? (animal.mature===false?'juvenile':'adult') : undefined;
       const form=CHICKEN_FORM[stage];
       const size=isChicken || animal.mature ? 1 : .65;
       s.animals.push({id:animal.id,afraid:animal.afraid,ready:animal.ready,x:px,z:pz,r:form?.radius??r*size,kind,boxes,speed:isChicken?1.0:.63,
         ...(form ? {stage, stepRate:form.stepRate, stride:form.stride} : {}),
-        habitat:{x:pen.x+.18,z:pen.z+.18,w:pen.w-.36,d:pen.d-.36}});
+        habitat:{...farm.habitats[kind]}});
       const b=(x,y,z,w,h,d,color,fx)=>boxes.push({x:x*size,y:y*size,z:z*size,w:w*size,h:h*size,d:d*size,color,fx});
       if (isChicken) {
         chicken3d(b,stage,animal.slot%2===1);
@@ -687,7 +789,7 @@ export function outdoorStage(world, bridges, rocks) {
     });
   }
   grass3d(s,world.height?world.grass.map(([x,z])=>[x,z,world.height(x,z)]):world.grass);
-  livestockPen(s, world.sites);
+  livestockPen(s, world.sites, world.livestock);
   return s;
 }
 

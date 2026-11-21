@@ -1,5 +1,6 @@
 import { campTerrain } from './camp-terrain.mjs';
 import { residentialSite } from './camp-layout.mjs';
+import { campPen, LIVESTOCK_CAPACITY } from './camp-livestock.mjs';
 
 export const CAMP_SITES = Object.freeze({
   home:[22,24], hall:[29,24], store:[36,24], yard:[20,34],
@@ -8,7 +9,9 @@ export const CAMP_SITES = Object.freeze({
 export const campSite = (room, layout) => layout?.sites[room] ?? CAMP_SITES[room] ?? residentialSite(room);
 export const ANIMAL_ITEMS = Object.freeze({ chickens:'egg', cows:'milk', sheep:'wool' });
 export const BERRY_PATCHES = Object.freeze({ yard:2, garden:2, watch:1, well:1 });
-export const ANIMAL_LIMITS = Object.freeze({ chickens:4, cows:3, sheep:3 });
+// 1.6：可见/可交互上限必须与圈舍容量同源，不能再出现“圈舍养得下、UI 只认 4 只”。
+export const ANIMAL_LIMITS = LIVESTOCK_CAPACITY;
+export { campPen };
 export const CAMP_TOOLS = Object.freeze({ berry:'basket',fruit:'basket',crop:'basket',egg:'basket',wool:'shears',milk:'bucket',water:'bucket' });
 export const REACH = Object.freeze({ resident:1.6, timber:1.55, plant:1.35, animal:1.6, plot:.55 });
 export const pointIn = (p,w,d) => Array.isArray(p) && p.length===2 && p.every(Number.isFinite) &&
@@ -32,10 +35,6 @@ export function campEntrance(room, at, peripheralHomes) {
   if (room==='well') return {x:x+.4,z:z-1.3,w:2.2,d:1.5};
   if (room==='yard'||room==='garden') return {x:x+.72,z:z-1.2,w:2.4,d:1.5};
   return {x:x-1.15,z:sz-1.14,w:2.3,d:1.2};
-}
-
-export function campPen(at) {
-  return at ? {x:at[0]-9,z:at[1]-4,w:7,d:6.4,gate:2.75,opening:1.5} : null;
 }
 
 export function campBeds(at, seed=0, version=0) {

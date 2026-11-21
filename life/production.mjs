@@ -11,6 +11,7 @@ import { residentStage } from './households.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
 import { regrowForestCuts } from './forest.mjs';
+import { expandLabel, LIVESTOCK_CAPACITY } from '../shared/camp-livestock.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -363,17 +364,21 @@ export function doExpand(world, id, type) {
   const s = world.survival, cost = EXPAND[type];
   if (!s || !cost) return { ok: false, code: 'NO_TYPE' };
   s.livestock ??= { ...DEFAULT_LIVESTOCK };
-  if ((s.livestock[type] ?? 0) >= LIVESTOCK_CAP) return { ok: false, code: 'LIVESTOCK_FULL' };
+  // 1.6：容量与圈舍物理规模同源（鸡舍 12 / 牛棚 4 / 羊圈 6），不再是每个品种一刀切 12。
+  const cap = LIVESTOCK_CAPACITY[type] ?? LIVESTOCK_CAP;
+  if ((s.livestock[type] ?? 0) >= cap) return { ok: false, code: 'LIVESTOCK_FULL', capacity: cap };
   // 与候选侧同一条裁决：材料必须富余（留一份建筑料），不能挤掉建房。
   if ((s.inv?.wood ?? 0) < cost.wood + 4 || (s.inv?.stone ?? 0) < cost.stone + 3) return { ok: false, code: 'NO_MATERIAL' };
+  const prior = s.livestock[type] ?? 0;
   s.inv.wood -= cost.wood; s.inv.stone -= cost.stone;
   world.observeProduction?.('materialSpent', 'expandWood', cost.wood);
   world.observeProduction?.('materialSpent', 'expandStone', cost.stone);
-  s.livestock[type] = (s.livestock[type] ?? 0) + 1;
+  s.livestock[type] = prior + 1;
   if (s.ecosystem && s.ecoPop && (type === 'chickens' || type === 'orchards')) {
     const prefix = type === 'chickens' ? 'ch' : 'or';
     s.ecoPop[type].push({ id: `${prefix}${++s.ecoSeq[prefix]}`, born: world.t, health: 1 }); // P1-5 扩建个体从幼体成长
   }
   restoreSources(world);
-  return { ok: true, code: 'OK', label: EXPAND_LABEL[type] };
+  // UI/闸门共用同一句：第一次是“建”，之后是“扩”；label 与 scene 的 bay 数都由数量派生。
+  return { ok: true, code: 'OK', label: expandLabel(s.livestock, type), action: prior > 0 ? 'expand' : 'build', level: s.livestock[type], capacity: cap };
 }
