@@ -6,6 +6,7 @@ import { ANIMAL_ITEMS, ANIMAL_LIMITS, campEntrance, campPen, campPlants } from '
 import { orchardAppearance, orchardWeather } from './camp-orchard-look.mjs';
 import { itemBoxes } from './camp-items.mjs';
 import { ROOM_DOOR_PX } from './room-layout.mjs';
+import { forestCutsOf } from './camp-forest.mjs';
 
 const WOOD = '#BA8752', DARK = '#72513B', LIGHT = '#D8A667';
 
@@ -1045,6 +1046,23 @@ export function roomStage(site, props, front, width, depth, style) {
     const x=Math.min(...bounds.map(b=>b.x)), z=Math.min(...bounds.map(b=>b.z));
     const w=Math.max(...bounds.map(b=>b.x+b.w))-x, d=Math.max(...bounds.map(b=>b.z+b.d))-z;
     s.interactables.push({id,kind,x,z,w,d,boxes});
+  }
+  return s;
+}
+
+// 森林树桩：被砍倒的 world.trees 留下的矮桩（非 solid，脚可以踩过去）。
+// 只画“还在树桩期”的条目；条目不在了 = 树已再生，outdoorStage 的原树 range 恢复显示。
+// height 由调用方给（森林树可能在丘陵上，不能假设 y=0）。
+export function forestStage(forest, height = null) {
+  const s=stage(0,0);
+  for (const cut of forestCutsOf(forest)) {
+    const ground=height ? (height(cut.x,cut.z)??0) : 0;
+    s.group(`stump:${cut.tx}:${cut.tz}`,()=>{
+      s.box(cut.x-.17,ground,cut.z-.16,.34,.16,.32,'#72513B');
+      s.box(cut.x-.13,ground+.16,cut.z-.12,.26,.024,.24,'#C29662');
+      s.box(cut.x+.19,ground+.012,cut.z-.06,.12,.02,.1,'#8D6A3D');
+      s.box(cut.x-.28,ground+.012,cut.z+.11,.09,.018,.07,'#5B4434');
+    });
   }
   return s;
 }

@@ -228,9 +228,10 @@ function nearColliders(index, colliders, x, z, radius = 0) {
  * @param {number} [spec.raised]      campTerrain 的 raised（营地= true）
  * @param {Array}  [spec.bridges]     campBridgeBounds 结果数组；缺省按 layout.crossZ ±1
  * @param {Array}  [spec.extraSolids] 额外 AABB
+ * @param {Set|Array} [spec.excludeOccluders] 不参与碰撞的 occluder（被砍倒的森林树）
  */
 export function campSurface({ mapSeed = 0, layoutVersion = 0, layout = null, stage = null,
-  terrain = null, raised = true, bridges = null, extraSolids = [] } = {}) {
+  terrain = null, raised = true, bridges = null, extraSolids = [], excludeOccluders = null } = {}) {
   const { riverCenter, riverHalfWidth } = campTerrain(mapSeed, raised, layoutVersion);
   // 桥带是画出来的那份（content.bridges），不是按 crossZ 再推一次：
   // 旧写法在 layout=null（默认存档）时 bridgeList=[]、crossing 兜底 24，桥只画在 mesh 里、
@@ -270,7 +271,11 @@ export function campSurface({ mapSeed = 0, layoutVersion = 0, layout = null, sta
 
   const boxes = stage?.boxes ?? [];
   const colliders = [];
-  for (const b of boxes) { const c = toCollider(b); if (c) colliders.push(c); }
+  const skip = excludeOccluders ? new Set(excludeOccluders) : null;
+  for (const b of boxes) {
+    if (skip?.has(b.occluder)) continue;
+    const c = toCollider(b); if (c) colliders.push(c);
+  }
   for (const b of extraSolids) { const c = toCollider({ ...b, solid: true }, 'extra'); if (c) colliders.push(c); }
   const index = indexColliders(colliders);
   const portals = [

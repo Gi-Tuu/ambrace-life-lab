@@ -9,6 +9,7 @@ import { constructionFootprint, constructionGate, entrancePoints, workPoints, cl
 import { campSurface, createSpace, roomSurface, wildSurface } from './space.mjs';
 import { campSceneBundle, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
 import { wildClaimSignature, wildHouseSolids, wildPlotView } from '../shared/wild-plots.mjs';
+import { activeForestCuts, forestOccluderId } from '../shared/camp-forest.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
@@ -48,43 +49,64 @@ function sceneGeometry(w) {
 // 只读空间查询（含无 campLayout 的世界）：与客户端 world.space 同一份 stage + 同一条地形高度链。
 // 按世界缓存：playerReach 每次上报都会问它，不能每次重建 wildLandscape。
 const spaceCache = new WeakMap();
+// 森林砍伐是增量状态（campTrees 里的 forest: id）：space 必须把“还在树桩期”的树从
+// colliders 里排除，且缓存键要带上这份集合，砍/再生后才会重建（不重建 stage）。
+export function sceneTrees(w) {
+  if (!w?.survival) return null;
+  const g = sceneGeometry(w);
+  return g.treeIds ??= new Set(g.content.trees.map(([tx, tz]) => `${tx}:${tz}`));
+}
+export function activeForestOccluders(w) {
+  return new Set(activeForestCuts(w?.survival?.campTrees, w?.t ?? 0).map(forestOccluderId));
+}
 export function sceneSpace(w) {
   if (!w?.survival) return null;
   const hit = spaceCache.get(w);
   const layout = w.campLayout ?? null;
   const wildSig = wildClaimSignature(w);
-  if (hit && hit.layout === layout && hit.districts === w.districts && hit.wildSig === wildSig) return hit.space;
+  const cuts = activeForestCuts(w.survival?.campTrees, w.t ?? 0);
+  const forestSig = cuts.join(',');
+  if (hit && hit.layout === layout && hit.districts === w.districts && hit.wildSig === wildSig &&
+      hit.forestSig === forestSig) return hit.space;
   const g = sceneGeometry(w);
   // 地形链只有一条：营地内与野外都由 campSceneContent 生成的同一份 content.landscape 回答。
   const terrain = g.content.landscape;
   // 桥带与 crossing 同源：都用 content.bridges（画出来的那份）。默认存档 layout=null 时
   // 旧写法桥上不可走；这里显式传入，wild 的 crossing 也从 camp 派生，不再各写 `?? 24`。
-  const camp = campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain, bridges:g.content.bridges, extraSolids: wildHouseSolids(w) });
+  const camp = campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain, bridges:g.content.bridges, extraSolids: wildHouseSolids(w), excludeOccluders: activeForestOccluders(w) });
   const space = createSpace({
     camp,
     wild: wildSurface(terrain, { crossing:camp.crossing }),
     terrain,
   });
-  spaceCache.set(w, { layout, districts: w.districts, wildSig, space });
+  spaceCache.set(w, { layout, districts: w.districts, wildSig, forestSig, space });
   return space;
 }
 
 function mapFor(w) {
   const layout = w.campLayout;
   const s = w.survival;
+  const forestSig = activeForestOccluders(w);
   let map = cache.get(w);
   if (!map || map.layout !== layout || map.districts !== w.districts) {
     const g = sceneGeometry(w);
     const { landmarks, stage } = g;
     map = { layout,districts:w.districts,anchor:[landmarks.hall[0]+.5,landmarks.hall[1]+2.7],
-      fixed:stage.boxes.filter(b=>b.solid), entries:Object.values(stage.entrances), results:new Map() };
+      fixedAll:stage.boxes.filter(b=>b.solid), entries:Object.values(stage.entrances), results:new Map() };
     cache.set(w,map);
+  }
+  // 被砍倒的树不再挡施工：固定实体按森林状态过滤（结果缓存键也带这份集合）。
+  const fixedKey = [...forestSig].join(',');
+  if (map.fixedKey !== fixedKey) {
+    map.fixedKey = fixedKey;
+    map.fixed = map.fixedAll.filter(b=>!forestSig.has(b.occluder));
+    map.results.clear();
   }
   const houseRooms = [...new Set([...Object.keys(s.households?.deeds??{}),...Object.keys(s.households?.projects??{})])];
   const records = [...s.sites,...s.buildings,...houseRooms.map(loc=>siteRecord(w,loc,'house'))]
     .map(b=>siteRecord(w,b.loc,b.type,b.lot)).filter(b=>b.lot);
   const regrowth = s.campTrees ?? {};
-  const signature = JSON.stringify([records,layout.grove.map(tree=>(regrowth[tree.id]??0)>w.t)]);
+  const signature = JSON.stringify([records,layout.grove.map(tree=>(regrowth[tree.id]??0)>w.t),fixedKey]);
   if (map.signature !== signature) {
     map.signature = signature;
     map.records = records;

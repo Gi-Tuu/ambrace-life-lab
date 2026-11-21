@@ -9,6 +9,8 @@ import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../shared/camp-layout.mjs';
 import { doForage, doGather, takeFoodKind } from './production.mjs';
+import { FOREST_CHOP_WOOD, chopBlocked, forestRegrowTicks, forestTree } from './forest.mjs';
+import { activeForestCuts, isForestTreeId, parseForestTreeId } from '../shared/camp-forest.mjs';
 import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
@@ -39,6 +41,19 @@ export function campTimberView(world) {
     const regrowAt=cut[tree.id]??0;
     return [tree.id,{stage:regrowAt>world.t?'sapling':'mature',regrowAt}];
   }));
+}
+// 森林（camp-scene 的 world.trees）只有“还在树桩期”的条目；条目消失 = 已再生、树回到场景。
+// key 用 forest:tx:tz 命名空间，与 grove 的 campTimberView 共用 survival.campTrees 但互不干扰。
+export function campForestView(world) {
+  const cut=world.survival?.campTrees, ids=activeForestCuts(cut, world.t);
+  if (!ids.length) return {};
+  const out={};
+  for (const id of ids) {
+    const at=parseForestTreeId(id);
+    if (!at) continue;
+    out[id]={stage:'stump', regrowAt:Number(cut[id])||0, at:[at.x,at.z]};
+  }
+  return out;
 }
 export function campSleepTicks(world) {
   if (!playerHome(world,world.loc.p1) || world.survival.settlementLife && world.loc.p1!=='home' && world.campPlayerRoom!==world.loc.p1) return fail('NOT_HOME');
@@ -88,6 +103,14 @@ function outdoorSource(world, body) {
   }
   if (!pointIn(from,WORLD_TW,WORLD_TH)) return fail('OUT_OF_REACH');
   if (kind==='camp_chop') {
+    // 森林树（world.trees）：同一张图上营地内/外同一套规则——距离 + 水/岸 + 硬实体隔挡。
+    if (isForestTreeId(target)) {
+      const tree=forestTree(world,target);
+      if (!tree) return fail('NO_TREE');
+      const blocked=chopBlocked(world,from,tree);
+      if (blocked) return fail(blocked);
+      return {site:world.loc.p1,tree};
+    }
     const tree=(layout?.grove??TIMBER_GROVE).find(t=>t.id===target);
     if (!tree) return fail('NO_TREE');
     return distanceTo(from,[tree.x,tree.z])<=REACH.timber ? {site:tree.site} : fail('OUT_OF_REACH');
@@ -192,6 +215,25 @@ export function campAction(world,body) {
     return ok();
   }
   if (kind==='camp_chop') {
+    if (isForestTreeId(target)) {
+      // 森林树：位置/隔挡必须来自真实脚点（没有 from 的旧调用不放行，避免绕过距离门）。
+      const tree=forestTree(world,target);
+      if (!tree) return fail('NO_TREE');
+      if (!Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');
+      const blocked=chopBlocked(world,body.from,tree);
+      if (blocked) return fail(blocked);
+      const trees=(s.campTrees??={});
+      if ((trees[target]??0)>world.t) return fail('TREE_GROWING');
+      // 产出走与采集同一本资源账：个人包 +2，gross/personal 分开记，不碰 grove 的 resStock。
+      bag.wood=(bag.wood??0)+FOREST_CHOP_WOOD;
+      noteRes(world,'gross','wood',FOREST_CHOP_WOOD);
+      noteRes(world,'personal','wood',FOREST_CHOP_WOOD);
+      world.observeProduction?.('gather','wood',FOREST_CHOP_WOOD);
+      noteWorkMotion(world,'p1','chop',{at:[tree.x,tree.z]});
+      trees[target]=world.t+forestRegrowTicks(world);
+      pay(world,SURV_COST.gather); // 与 grove 砍伐/居民 gather 同一价
+      return {...ok(),res:'wood',amount:FOREST_CHOP_WOOD};
+    }
     const tree=(world.campLayout?.grove??TIMBER_GROVE).find(t=>t.id===target);
     if (!tree || tree.site!==site) return fail('NO_TREE');
     const trees=(s.campTrees??={});

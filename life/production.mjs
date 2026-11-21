@@ -10,6 +10,7 @@ import { dayOf, seasonOf } from './clock.mjs';
 import { residentStage } from './households.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
+import { regrowForestCuts } from './forest.mjs';
 
 export const BUILDINGS = Object.freeze({
   shelter: { label: '住所', cost: { wood: 4, stone: 2 }, labor: 6, desc: '降低饥饿压力' },
@@ -146,6 +147,9 @@ export function regenResources(world) {
         trees[tree.id] = 0;
       }
     }
+    // 场景森林（forest:tx:tz）：到期直接删条目（不占 resStock，砍时已直接记个人包）⇒
+    // 客户端/服务端看到“条目消失”= 树回来了。grove 的 0/回补语义一行未改。
+    regrowForestCuts(world);
   }
 }
 // §15 P2-C 集体劳动：coop 采集归公仓（个人包→公仓），供合作阶段检查与奠基消耗

@@ -19,7 +19,7 @@ import { converse } from './intent.mjs';
 import { chatRound } from './resident-chatter.mjs';
 import { maybeResidentRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
 import { residentInjury, settleResidentInjuries } from './resident-injury.mjs';
-import { campTimberView } from './camp-play.mjs';
+import { campForestView, campTimberView } from './camp-play.mjs';
 import { RESIDENT_HOMES, generateCampLayout } from '../shared/camp-layout.mjs';
 import { weatherFor, dayOf, DAY_TICKS, survivalPhaseOf, seasonOf, SEASONS, SEASON_DAYS } from './clock.mjs';
 import { effectiveMods, buildingsFor, initFoodStore, produceYield, DEFAULT_LIVESTOCK, PRODUCE_CAP, PRODUCE_KINDS, WILD_BERRIES, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP } from './production.mjs';
@@ -855,7 +855,7 @@ export function survView(sp) {
     farmLife: Boolean(s.farmLife),
     plots: s.plots.map((p) => ({ id: p.id, bed: p.bed, growth: p.growth >= 1 ? 1 : Math.min(.99, Number(p.growth.toFixed(2))), moisture: p.moisture ?? 0 })),
     inv: s.inv, pinv: w.pinv ?? {}, sites: s.sites, buildings: s.buildings,
-    camp:{containers:s.campContainers??{},mealsEaten:s.mealsEaten??0,timber:campTimberView(w)},
+    camp:{containers:s.campContainers??{},mealsEaten:s.mealsEaten??0,timber:campTimberView(w),forest:campForestView(w)},
     housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans, exits: s.coop.exits ?? 0 },
