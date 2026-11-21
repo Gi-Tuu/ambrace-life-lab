@@ -1,0 +1,39 @@
+✔ GHOST-01 玩家死亡 → 幽魂观察，不是终局；镜头锚点/占位/忙碌动作都被收口 (29.4729ms)
+✖ GHOST-02 幽魂动作全被拒：采集/建造/吃/睡/交易/移动实体/player_sync 都不写世界 (18.0174ms)
+✔ GHOST-03 死亡后 10 游戏分世界仍推进，居民仍行动（含跨整点世界重结算） (31.1656ms)
+✔ GHOST-04 幽魂与灭绝都随存档往返；旧档缺 ghost 字段可按死亡事实补齐 (39.1367ms)
+✔ GHOST-05 只有聚落灭绝才 ended/extinct；灭绝终局读档持久 (22.045ms)
+✔ GHOST-06 玩家活着时聚落灭绝仍可正常行动（幽魂不是“灭绝后才能动”的反向门） (11.5528ms)
+✔ GHOST-07 研究/对照态保持 1.2 原语义：玩家死亡＝failed/endReason player，不写 ghost 字段 (0.8719ms)
+✔ GHOST-08 ghostView 只读：不消费 RNG、不改世界状态 (11.4287ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 292.9891
+
+✖ failing tests:
+
+test at life\v13-ghost.test.mjs:66:1
+✖ GHOST-02 幽魂动作全被拒：采集/建造/吃/睡/交易/移动实体/player_sync 都不写世界 (18.0174ms)
+  AssertionError [ERR_ASSERTION]: build 在幽魂态必须被拒：{"ok":true,"code":"BUSY_START","remainMin":30,"endMin":270,"why":"已排入时间轴，约 30 游戏分钟后完成"}
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v13-ghost.test.mjs:76:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

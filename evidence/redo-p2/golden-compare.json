@@ -1,7 +1,7 @@
 [
   {
     "against": "evidence/redo-p0/p3-final.json",
-    "label": "p2-fixes",
+    "label": "v13-ghost",
     "same": 45,
     "total": 45,
     "diffs": []

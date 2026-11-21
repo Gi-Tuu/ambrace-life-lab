@@ -38,7 +38,7 @@ serve.mjs                  HTTP：静态资源 / /world /act /ctl /healthz / 写
 
 ### `survplay.mjs` 为什么拆
 
-拆前 1342 行。拆后 `survplay.mjs` 只留 `createSurvPlay`、`tickSurvPlay`、`survView`、生命/繁衍/死亡收尸，约 620 行；动作、营地入口、存档各自成模块。依赖方向是单向的：
+拆前 1342 行。拆后 `survplay.mjs` 只留 `createSurvPlay`、`tickSurvPlay`、`survView`、生命/繁衍，约 870 行；动作、营地入口、存档各自成模块，死亡收尸与幽魂状态在 `life/death.mjs`。依赖方向是单向的：
 
 ```
 survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs

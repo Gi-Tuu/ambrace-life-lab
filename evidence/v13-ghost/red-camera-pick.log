@@ -1,0 +1,5 @@
+[v13-ghost] FAIL Error: 点居民没有跟随：期望 a1，实测 {"x":33.226222410027006,"z":22.48706156421906,"span":21.95944584684938,"follow":null,"enteredAt":2885.1000000089407}
+    at assert (file:///E:/Competition/AMBRACElife/scripts/v13-ghost-browser.mjs:28:54)
+    at file:///E:/Competition/AMBRACElife/scripts/v13-ghost-browser.mjs:129:3
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[v13-ghost] wrote E:\Competition\AMBRACElife\evidence\v13-ghost

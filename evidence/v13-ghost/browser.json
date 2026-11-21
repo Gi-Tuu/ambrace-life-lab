@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-11-21T10:31:34.319Z",
+  "ok": true,
+  "result": "睡梦中死→幽魂（世界继续/动作全拒/镜头平移缩放跟随/刷新仍在观察）→ 聚落灭绝唯一终局（持久）",
+  "ghost": {
+    "banner": "你已化为幽魂，聚落仍在继续：居民照常生活、繁衍、建房、经历灾害。WASD 平移镜头 · 滚轮缩放 · 点居民跟随 · 世界全景看聚落。",
+    "hud": {
+      "player": "幽魂观察WASD 平移 · 滚轮缩放 · 点居民跟随",
+      "hotbar": "none"
+    },
+    "actions": [
+      {
+        "kind": "gather",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "camp_eat",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "camp_sleep",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "exchange",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "build",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "move",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      },
+      {
+        "kind": "player_sync",
+        "ok": false,
+        "code": "PLAYER_DEAD"
+      }
+    ],
+    "camera": {
+      "panned": 8.399,
+      "zoomed": true,
+      "follow": "a1"
+    },
+    "world": {
+      "beforeMinutes": 57780.00433333333,
+      "afterMinutes": 57900.0095,
+      "beforeActions": 3994,
+      "afterActions": 4050
+    }
+  },
+  "reloadGhost": {
+    "active": true,
+    "ended": false
+  },
+  "extinction": {
+    "ended": true,
+    "endReason": "extinct",
+    "settlement": "extinct",
+    "t": 984,
+    "persisted": {
+      "ended": true,
+      "endReason": "extinct"
+    }
+  }
+}

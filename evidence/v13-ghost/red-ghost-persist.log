@@ -1,0 +1,29 @@
+✔ GHOST-01 玩家死亡 → 幽魂观察，不是终局；镜头锚点/占位/忙碌动作都被收口 (29.4147ms)
+✔ GHOST-02 幽魂动作全被拒：采集/建造/吃/睡/交易/移动实体/player_sync 都不写世界 (17.8126ms)
+✔ GHOST-03 死亡后 10 游戏分世界仍推进，居民仍行动（含跨整点世界重结算） (29.8597ms)
+✖ GHOST-04 幽魂与灭绝都随存档往返；旧档缺 ghost 字段可按死亡事实补齐 (37.8126ms)
+✔ GHOST-05 只有聚落灭绝才 ended/extinct；灭绝终局读档持久 (21.611ms)
+✔ GHOST-06 玩家活着时聚落灭绝仍可正常行动（幽魂不是“灭绝后才能动”的反向门） (12.137ms)
+✔ GHOST-07 研究/对照态保持 1.2 原语义：玩家死亡＝failed/endReason player，不写 ghost 字段 (0.8786ms)
+✔ GHOST-08 ghostView 只读：不消费 RNG、不改世界状态 (9.7887ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 288.8475
+
+✖ failing tests:
+
+test at life\v13-ghost.test.mjs:110:1
+✖ GHOST-04 幽魂与灭绝都随存档往返；旧档缺 ghost 字段可按死亡事实补齐 (37.8126ms)
+  TypeError: Cannot read properties of undefined (reading 'active')
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v13-ghost.test.mjs:129:44)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)

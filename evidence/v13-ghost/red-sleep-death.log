@@ -1,0 +1,30 @@
+✖ V13-GHOST-HOST 睡梦中饿死→睡眠当刻中断（转幽魂），世界继续 tick；观察可暂停/倍速；重启后仍在观察 (157.3881ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 312.2544
+
+✖ failing tests:
+
+test at life\v13-ghost-host.test.mjs:27:1
+✖ V13-GHOST-HOST 睡梦中饿死→睡眠当刻中断（转幽魂），世界继续 tick；观察可暂停/倍速；重启后仍在观察 (157.3881ms)
+  AssertionError [ERR_ASSERTION]: 睡眠结果应显式报告“睡梦中死亡→中断”
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v13-ghost-host.test.mjs:45:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
