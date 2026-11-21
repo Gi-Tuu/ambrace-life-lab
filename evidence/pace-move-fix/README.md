@@ -9,14 +9,15 @@
 
 | 闸门 | 结果 | 证据 |
 |---|---|---|
-| 全量测试 | **1214/1214 pass**，212 文件 | `full-test.log` |
+| 全量测试 | **1215/1215 pass**，212 文件 | `full-test.log` |
 | 静态检查 | PASS：语法 499 文件 · 测试 212 · 架构闸门 353 文件/12 白名单 | `check.log` |
-| 真实 1s 步行 | **3.10 tile / 3.061 tile/s**（≥2.5 闸门） | `browser.json`、`browser.log`、`walk-1s.png` |
-| 真实 1s 冲刺 | **5.70 tile / 5.391 tile/s**（≥4.5 闸门） | `browser.json`、`sprint-1s.png` |
-| 室内 WASD 1s | **3.10 tile / 2.982 tile/s**（室外/室内同一手感） | `browser.json`、`indoor-1s.png` |
-| 居民 10s | 服务端位置 **+36.0**、客户端行走 **+17.3**（≥10/≥15） | `browser.json`、`resident-10s.png` |
-| 断线重连 | 重载后 1s **3.10 tile / 2.878 tile/s**，与服务端权威位置差 **0.5** | `browser.json`、`browser.log` |
-| quickstart | PASS：`walkMoved=2.15`、**3.071 tile/s**、采集/吃/睡/死亡后世界继续 | `quickstart-console.log`、`../score/quickstart-browser.log` |
+| 真实 1s 步行 | **3.00 tile / 2.943 tile/s**（≥2.5 闸门） | `browser.json`、`browser.log`、`walk-1s.png` |
+| 真实 1s 冲刺 | **5.61 tile / 5.308 tile/s**（≥4.5 闸门） | `browser.json`、`sprint-1s.png` |
+| 室内 WASD 1s | **3.15 tile / 3.017 tile/s**（室外/室内同一手感） | `browser.json`、`indoor-1s.png` |
+| 室内居民 10s | 2 游戏分内每个 0.25 子步可站/不重叠，位移≥5 tile 或 ≥2 兴趣点，A/B 逐位一致 | `full-test.log`（V12-ROOM-07） |
+| 居民 10s | 服务端位置 **+36.0**、客户端行走 **+18.7**（≥10/≥15） | `browser.json`、`resident-10s.png` |
+| 断线重连 | 重载后 1s **3.20 tile / 3.092 tile/s**，与服务端权威位置差 **0.85** | `browser.json`、`browser.log` |
+| quickstart | PASS：`walkMoved=2.10`、**3.000 tile/s**、采集/吃/睡/死亡后世界继续 | `quickstart-console.log`、`../score/quickstart-browser.log` |
 | 60s 时间 | 1.004 现实分 → **10.022 游戏分（1:9.979）**；HUD 60s +10.102；暂停冻结；rate2 6s +2.003 | `pace-console.log`、`pace-1to10.json` |
 | golden | **45/45，diffs 0**（vs `p3-final`） | `golden-compare.json`、`golden/` |
 | 22k parity | 2×11000 点 terrain/walk/height/portal/bridge **全 0**；quickstart 探针 700ms 走 2.2 tile | `parity*.json`、`parity.log` |

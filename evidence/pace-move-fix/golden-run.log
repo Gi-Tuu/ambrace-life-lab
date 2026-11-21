@@ -1,19 +1,19 @@
 ✔ pace-move-fix 金样已写入 evidence/redo-p0/pace-move-fix.json
 {
   "survival": {
-    "first3d": 713.2999999970198,
+    "first3d": 779.2999999970198,
     "longtasks": [
       [
-        145,
-        571
+        229,
+        553
       ],
       [
-        717,
-        63
+        783,
+        59
       ],
       [
-        806,
-        436
+        872,
+        398
       ]
     ],
     "resources": {
@@ -24,36 +24,36 @@
       "pngCount": 20,
       "slowest": [
         [
-          "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
-          30
-        ],
-        [
-          "/shared/camp-scene-content.mjs",
-          26
-        ],
-        [
-          "/web/app.css",
-          26
-        ],
-        [
-          "/life/space.mjs",
-          25
+          "/shared/camp-physics.mjs",
+          131
         ],
         [
           "/shared/room-layout.mjs",
-          21
+          131
         ],
         [
-          "/shared/camp-physics.mjs",
-          20
+          "/web/collision.mjs",
+          130
         ],
         [
           "/shared/asset-collision.mjs",
-          20
+          130
+        ],
+        [
+          "/web/net.mjs",
+          129
         ],
         [
           "/web/time-view.mjs",
-          19
+          129
+        ],
+        [
+          "/web/walk.mjs",
+          128
+        ],
+        [
+          "/web/player-move.mjs",
+          128
         ]
       ]
     }
@@ -63,7 +63,7 @@
     "rendererB": "3d"
   },
   "title": {
-    "first3d": 587.3999999910593,
+    "first3d": 483.79999999701977,
     "resources": {
       "count": 72,
       "transferBytes": 80780,
@@ -72,36 +72,36 @@
       "pngCount": 20,
       "slowest": [
         [
-          "/shared/room-layout.mjs",
-          19
-        ],
-        [
           "/shared/camp-ao.mjs",
-          19
-        ],
-        [
-          "/web/collision.mjs",
-          18
-        ],
-        [
-          "/shared/asset-collision.mjs",
-          18
+          15
         ],
         [
           "/shared/camp-physics.mjs",
-          18
+          14
         ],
         [
-          "/web/net.mjs",
-          17
+          "/shared/room-layout.mjs",
+          14
+        ],
+        [
+          "/shared/camp-items.mjs",
+          14
         ],
         [
           "/web/player-move.mjs",
-          17
+          13
+        ],
+        [
+          "/web/net.mjs",
+          13
         ],
         [
           "/web/time-view.mjs",
-          17
+          13
+        ],
+        [
+          "/web/collision.mjs",
+          13
         ]
       ]
     }

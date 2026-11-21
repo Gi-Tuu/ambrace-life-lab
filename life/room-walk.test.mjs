@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createSurvPlay, tickSurvPlay, survView } from './survplay.mjs';
-import { stepRoomWalk, roomPois } from './room-walk.mjs';
+import { stepRoomWalk, roomPois, roomStepBudget, ROOM_WALK_SUBSTEP } from './room-walk.mjs';
 import { roomSpaceOf, roomDoorPoint } from './construction-access.mjs';
 import { settleTravel, startMove, advanceTravels } from './body.mjs';
 import { registerWildClaim } from '../shared/wild-plots.mjs';
@@ -177,5 +177,58 @@ test('V12-ROOM-06 研究态/旧时间模型不变：没有 pos，步进是空操
   const solid = space.colliders.find((c) => c.w >= .6 && c.d >= .6) ?? space.colliders[0];
   assert.equal(space.walkable(solid.x + solid.w / 2, solid.z + solid.d / 2, 0), false, '家具内部必须不可站');
   assert.equal(stepRoomWalk(w, 1) >= 0, true);
-  assert.ok(Math.abs(WALK_UNITS_PER_GAME_MINUTE - 0.375) < 1e-12, '步长口径仍来自 space.mjs');
+  // 2026-11-21 位移修复：步长不再 0.375（旧 125ms/游戏分的标定）；室内也按真实 3 tile/s，
+  // 正式 6000ms/游戏分 ⇒ 每游戏分钟 18 tile、0.25 tile 一子步。
+  assert.equal(roomStepBudget(w), 18);
+  assert.equal(ROOM_WALK_SUBSTEP, 0.25);
+  assert.ok(Math.abs(WALK_UNITS_PER_GAME_MINUTE - 0.375) < 1e-12, '游戏分钟预算表本身仍在（只服务动作/旅行语义）');
+});
+
+test('V12-ROOM-07 真实 10 秒室内位移、每子步可站、不穿墙、A/B 一致', () => {
+  // 10 现实秒 ≈ 2 游戏分（1:10）；室内预算 18 tile/分、0.25 tile 一子步。
+  const A = indoor(), B = indoor();
+  const locA = JSON.stringify(A.w.loc), occA = JSON.stringify(A.w.occupancy);
+  const samples = [];
+  const posSnapshot = () => Object.fromEntries(IDS.map((id) => [id, { ...A.w.pos[id] }]));
+  const same = (a, b) => IDS.every((id) =>
+    a[id].x === b[id].x && a[id].z === b[id].z && a[id].space === b[id].space);
+  for (const next of [A, B]) assert.equal(roomStepBudget(next.w), 18, '正式/夹具都按 1:10 的 18 tile/游戏分');
+
+  for (let minute = 1; minute <= 2; minute += 1) {
+    stepRoomWalk(A.w, minute, { onStep: (row) => samples.push(row) });
+    stepRoomWalk(B.w, minute);
+    assert.ok(same(posSnapshot(), Object.fromEntries(IDS.map((id) => [id, { ...B.w.pos[id] }]))),
+      `第 ${minute} 分 A/B 室内位置必须逐位一致`);
+  }
+
+  // 子步：每个落点都必须站得住、在房间内、步长 ≤0.25，且同一时刻与同屋其他人不重叠。
+  const path = Object.fromEntries(IDS.map((id) => [id, 0]));
+  const visitedKinds = new Set();
+  const pois = roomPois(A.w, 'home');
+  let prev = null;
+  for (const row of samples) {
+    const space = roomSpaceOf(A.w, row.room);
+    assert.equal(space.walkable(row.x, row.z, CAMP_BODY_RADIUS), true, `${row.id} 子步站到墙/家具里`);
+    assert.ok(row.x > 0 && row.x < 16 && row.z > 0 && row.z <= 12, `${row.id} 子步离开 16×12 房间`);
+    assert.ok(row.step > 0 && row.step <= ROOM_WALK_SUBSTEP + 1e-9, `子步步长必须 ≤${ROOM_WALK_SUBSTEP}（实测 ${row.step}）`);
+    if (prev && prev.id === row.id) {
+      const d = Math.hypot(row.x - prev.x, row.z - prev.z);
+      path[row.id] += d;
+      assert.ok(d <= ROOM_WALK_SUBSTEP + 1e-9, `子步位移 ${d} 超过 0.25`);
+    }
+    if (prev && prev.id !== row.id) prev = null;
+    prev = row;
+    for (const [p, q] of [['a1', 'a2'], ['a1', 'a3'], ['a2', 'a3']]) {
+      const d = Math.hypot(A.w.pos[p].x - A.w.pos[q].x, A.w.pos[p].z - A.w.pos[q].z);
+      assert.ok(d >= CAMP_BODY_RADIUS * 2 - 1e-6, `${row.id} 子步导致 ${p}/${q} 重叠：${d}`);
+    }
+    for (const poi of pois) if (Math.hypot(poi.x - row.x, poi.z - row.z) < 0.4) visitedKinds.add(poi.kind);
+  }
+  // 10 秒窗口：至少一名居民走 ≥5 tile，或这间屋访问到 ≥2 种兴趣点（按房间实际可达）。
+  const maxPath = Math.max(...IDS.map((id) => path[id]));
+  assert.ok(maxPath >= 5 || visitedKinds.size >= 2,
+    `10 秒室内位移必须明显（路径 ${IDS.map((id) => `${id}:${path[id].toFixed(2)}`)}，兴趣点 ${[...visitedKinds]}）`);
+  // 只写 pos：loc/占用不动。
+  assert.equal(JSON.stringify(A.w.loc), locA);
+  assert.equal(JSON.stringify(A.w.occupancy), occA);
 });

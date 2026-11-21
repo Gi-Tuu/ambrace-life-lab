@@ -2,21 +2,21 @@
   "ok": true,
   "pace": "1 real min = 10 game min; 1 game min = 6000ms（本脚本只验位移，时间由 pace-1to10 采）",
   "walk": {
-    "movedTiles": 3.1,
-    "tilesPerSecond": 3.061,
+    "movedTiles": 3,
+    "tilesPerSecond": 2.943,
     "direction": "down",
-    "heldMs": 1012.6
+    "heldMs": 1019.4
   },
   "sprint": {
-    "movedTiles": 5.7,
-    "tilesPerSecond": 5.391,
+    "movedTiles": 5.612,
+    "tilesPerSecond": 5.308,
     "direction": "forward",
-    "heldMs": 1057.3
+    "heldMs": 1057.4
   },
   "indoor": {
     "room": "hall",
-    "movedTiles": 3.1,
-    "tilesPerSecond": 2.982
+    "movedTiles": 3.15,
+    "tilesPerSecond": 3.017
   },
   "resident": {
     "id": "a1",
@@ -24,12 +24,12 @@
     "to": "district-northwest",
     "length": 61.924,
     "serverMoved10s": 36,
-    "walkerMoved10s": 17.288
+    "walkerMoved10s": 18.694
   },
   "reconnect": {
-    "movedTiles": 3.1,
-    "tilesPerSecond": 2.878,
-    "gapToServer": 0.5
+    "movedTiles": 3.2,
+    "tilesPerSecond": 3.092,
+    "gapToServer": 0.85
   },
   "pageErrors": []
 }

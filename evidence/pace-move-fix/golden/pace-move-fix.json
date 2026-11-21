@@ -1,8 +1,8 @@
 {
   "label": "pace-move-fix",
-  "at": "2026-11-21T09:49:56.822Z",
+  "at": "2026-11-21T10:01:18.556Z",
   "node": "v24.18.0",
-  "port": 9432,
+  "port": 9344,
   "scenarios": {
     "survival": {
       "rendererA": "3d",
@@ -87,19 +87,19 @@
         }
       },
       "debugB": null,
-      "first3d": 713.2999999970198,
+      "first3d": 779.2999999970198,
       "longtasks": [
         [
-          145,
-          571
+          229,
+          553
         ],
         [
-          717,
-          63
+          783,
+          59
         ],
         [
-          806,
-          436
+          872,
+          398
         ]
       ],
       "menuDisabled": {
@@ -115,36 +115,36 @@
         "pngCount": 20,
         "slowest": [
           [
-            "/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2",
-            30
-          ],
-          [
-            "/shared/camp-scene-content.mjs",
-            26
-          ],
-          [
-            "/web/app.css",
-            26
-          ],
-          [
-            "/life/space.mjs",
-            25
+            "/shared/camp-physics.mjs",
+            131
           ],
           [
             "/shared/room-layout.mjs",
-            21
+            131
           ],
           [
-            "/shared/camp-physics.mjs",
-            20
+            "/web/collision.mjs",
+            130
           ],
           [
             "/shared/asset-collision.mjs",
-            20
+            130
+          ],
+          [
+            "/web/net.mjs",
+            129
           ],
           [
             "/web/time-view.mjs",
-            19
+            129
+          ],
+          [
+            "/web/walk.mjs",
+            128
+          ],
+          [
+            "/web/player-move.mjs",
+            128
           ]
         ]
       },
@@ -172,7 +172,7 @@
           },
           {
             "mapSeed": 7,
-            "buildWorldMs": 289.2,
+            "buildWorldMs": 271.8,
             "walk": "f62d80b2ce4ff7954e8706dfc88cab8eaca6cde0d4d2c0ca0ed0825e0ab8e109",
             "movementWalk": "0ca0a841ee193cbae05e5039215080133796b4140b9921d981181d6c629e1b6b",
             "terrainWalk3d": "c1a5751c2ab604e874d37b6f1584c7a0a5bca05a9962336ad12ae5c5f5f1fb4c",
@@ -192,7 +192,7 @@
           },
           {
             "mapSeed": 123456,
-            "buildWorldMs": 251.7,
+            "buildWorldMs": 260.3,
             "walk": "72b5cc3280f47adb6d104333b061bff9a171a00006a07feef4218ae4152a1267",
             "movementWalk": "99652a4a2d271311144a4ae01aa3d7b262e609c8697cc319d5571fe3bd36c17d",
             "terrainWalk3d": "f5d799fabaa1d51435061387e0a235ec2d4c50e9a8d3e85ac385bcc0bacf9644",
@@ -212,7 +212,7 @@
           },
           {
             "mapSeed": 654321,
-            "buildWorldMs": 228.9,
+            "buildWorldMs": 224.8,
             "walk": "8d506427fc82300a7cb40616d4c601c796fad6339bb0981d811bef4a5687f23d",
             "movementWalk": "bc465b0d24c37ff264da0384a1e6b7198bb4e6bc356e973412168afb05b85a46",
             "terrainWalk3d": "edd9e0092a5371157fe8d8a8df00e3ba893f35af4e171656e594c9cfa1f344d2",
@@ -395,35 +395,35 @@
           "wet": 0.65
         }
       },
-      "first3d": 786.3999999910593,
+      "first3d": 520.1000000089407,
       "longtasks": [
         [
-          110,
-          682
+          71,
+          461
         ],
         [
-          792,
-          512
+          533,
+          410
         ],
         [
-          1313,
-          94
+          951,
+          80
         ],
         [
-          1437,
-          64
+          1055,
+          54
         ],
         [
-          1528,
-          1083
+          1122,
+          878
         ],
         [
-          2627,
-          66
+          2013,
+          61
         ],
         [
-          2840,
-          59
+          2800,
+          52
         ]
       ],
       "menuDisabled": {
@@ -439,36 +439,36 @@
         "pngCount": 20,
         "slowest": [
           [
-            "/shared/room-layout.mjs",
-            21
-          ],
-          [
             "/shared/camp-physics.mjs",
-            20
+            16
           ],
           [
             "/shared/asset-collision.mjs",
-            20
+            16
           ],
           [
-            "/web/player-move.mjs",
-            18
+            "/shared/room-layout.mjs",
+            16
           ],
           [
             "/web/net.mjs",
-            18
+            15
           ],
           [
             "/web/time-view.mjs",
-            18
+            15
           ],
           [
             "/web/collision.mjs",
-            18
+            15
           ],
           [
-            "/web/walk.mjs",
-            17
+            "/shared/camp-ao.mjs",
+            15
+          ],
+          [
+            "/shared/camp-items.mjs",
+            15
           ]
         ]
       },
@@ -477,11 +477,11 @@
     },
     "title": {
       "rendererTitle": "3d",
-      "first3d": 587.3999999910593,
+      "first3d": 483.79999999701977,
       "longtasks": [
         [
-          106,
-          483
+          87,
+          398
         ]
       ],
       "resources": {
@@ -492,36 +492,36 @@
         "pngCount": 20,
         "slowest": [
           [
-            "/shared/room-layout.mjs",
-            19
-          ],
-          [
             "/shared/camp-ao.mjs",
-            19
-          ],
-          [
-            "/web/collision.mjs",
-            18
-          ],
-          [
-            "/shared/asset-collision.mjs",
-            18
+            15
           ],
           [
             "/shared/camp-physics.mjs",
-            18
+            14
           ],
           [
-            "/web/net.mjs",
-            17
+            "/shared/room-layout.mjs",
+            14
+          ],
+          [
+            "/shared/camp-items.mjs",
+            14
           ],
           [
             "/web/player-move.mjs",
-            17
+            13
+          ],
+          [
+            "/web/net.mjs",
+            13
           ],
           [
             "/web/time-view.mjs",
-            17
+            13
+          ],
+          [
+            "/web/collision.mjs",
+            13
           ]
         ]
       },

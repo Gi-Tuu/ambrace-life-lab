@@ -15,8 +15,9 @@ import { HOUSING_PLOTS } from '../shared/camp-layout.mjs';
 import { ROOM_DOOR_WORLD, roomPropsPx } from '../shared/room-layout.mjs';
 import { isAlive } from './viability.mjs';
 import { roomSpaceOf } from './construction-access.mjs';
+import { DEFAULT_MS_PER_GAME_MINUTE } from './sim-clock.mjs';
 import { isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId } from './actor-pos.mjs';
-import { WALK_UNITS_PER_GAME_MINUTE } from './space.mjs';
+import { realSpeed } from './space.mjs';
 
 // 家具在世界单位里的近似外框（只用来找“家具外的可站点”，不作为碰撞来源）。
 const PROP_SIZE = Object.freeze({
@@ -30,7 +31,20 @@ const PROP_SIZE = Object.freeze({
 const INTEREST = new Set(['bed', 'table', 'hearth', 'bench', 'shelf', 'workbench', 'anvil', 'furnace', 'telescope', 'well', 'planter', 'grain']);
 const SEPARATION = CAMP_BODY_RADIUS * 2 + .02;
 const NEED2 = (CAMP_BODY_RADIUS * 2) ** 2;
-const STEP = WALK_UNITS_PER_GAME_MINUTE;
+// 2026-11-21 位移修复：室内自由走动也按真实速度 3 tile/s，不再按“0.375 单位/游戏分钟”
+// （那是旧 125ms/游戏分钟的标定；1:10 下真实只有 0.0625 tile/s，玩家看是“进房不动”）。
+// 每游戏分钟的真实预算 = 3 tile/s × 本世界一刻的毫秒数：正式 6000ms/游戏分 ⇒ 18 tile。
+// 预算内按 SUBSTEP=0.25 tile 细分，逐步问 roomSurface.walkable：不会一步跨房/穿家具。
+// 无 simClock 的夹具/研究态没有真实钟，按同一条 1:10 默认（6000ms）换算，行为与正式一致。
+const SUBSTEP = 0.25;
+const MAX_SUBSTEPS = 256;
+const msPerGameMinuteOf = (world) => {
+  const per = Number(world?.simClock?.msPerGameMinute);
+  return Number.isFinite(per) && per > 0 ? per : DEFAULT_MS_PER_GAME_MINUTE;
+};
+export const roomStepBudget = (world) =>
+  realSpeed('walk') * msPerGameMinuteOf(world) / 1000;
+export { SUBSTEP as ROOM_WALK_SUBSTEP };
 
 // 室内避让的严格版 separates：不重叠的身体距离是硬约束（不“挤过去”）；
 // 已经重叠时只允许把距离拉开的步子（用于自愈/多人同点入场）。
@@ -135,8 +149,10 @@ function chooseTarget(world, id, room, pois, neighbors, current, from, offset = 
 /**
  * 居民室内移动的每分钟一步。返回本分钟实际移动的人数（测试/观测用）。
  * 只写 w.pos；不碰 loc/occupancy/动作。
+ * @param {{onStep?: (row:{id:string,room:string,x:number,z:number,step:number})=>void}} [hooks]
+ *   onStep 只读观测（每个 0.25 tile 子步落点回调一次），给闸门证明“每子步都问过 walkable”。
  */
-export function stepRoomWalk(world, minute = 0) {
+export function stepRoomWalk(world, minute = 0, { onStep = null } = {}) {
   const s = world?.survival;
   if (!world?.pos || s?.actTimeModel !== true) return 0;
   const groups = new Map();
@@ -149,6 +165,7 @@ export function stepRoomWalk(world, minute = 0) {
   }
   let moved = 0;
   const actors = walkState(world);
+  const budget = roomStepBudget(world);
   for (const [room, ids] of groups) {
     const space = roomSpaceOf(world, room);
     if (!space) continue;
@@ -168,50 +185,59 @@ export function stepRoomWalk(world, minute = 0) {
         st.poi = chooseTarget(world, id, room, pois, neighbors, Number.isInteger(st.last) ? st.last : -1, [pos.x, pos.z], st.visits);
       }
       const target = pois[st.poi];
-      const dx = target.x - pos.x, dz = target.z - pos.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist <= STEP + 1e-9) {
-        if (!space.walkable(target.x, target.z, CAMP_BODY_RADIUS) ||
-            !roomSeparates([pos.x, pos.z], [target.x, target.z], neighbors)) {
-          st.poi = chooseTarget(world, id, room, pois, neighbors, st.poi, [pos.x, pos.z]);
-          st.stuck = 0;
-          continue;
+      let remain = budget;
+      let movedThis = false;
+      let arrived = false;
+      let guard = 0;
+      // 预算内细分子步：每一步都问同一份 roomSurface 与多人避让，绝不整段跨房。
+      while (remain > 1e-9 && guard < MAX_SUBSTEPS) {
+        guard += 1;
+        const dx = target.x - pos.x, dz = target.z - pos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= 1e-9) { arrived = true; break; }
+        const move = Math.min(remain, SUBSTEP, dist);
+        const ux = dx / dist, uz = dz / dist;
+        // 先试对角线；被家具/墙挡住时退到单轴。单轴步长必须按到目标的剩余轴距截断，
+        // 否则会在目标旁“左右横跳”把 18 tile 预算烧光却永远到不了（实测 a2 卡在桌边 0.6）。
+        const candidates = [
+          [ux * move, uz * move],
+          [Math.sign(dx) * Math.min(Math.abs(dx), move), 0],
+          [0, Math.sign(dz) * Math.min(Math.abs(dz), move)],
+        ];
+        let next = null;
+        for (const [ddx, ddz] of candidates) {
+          if (Math.hypot(ddx, ddz) < 1e-9) continue;
+          const nx = pos.x + ddx, nz = pos.z + ddz;
+          if (!space.walkable(nx, nz, CAMP_BODY_RADIUS)) continue;
+          if (!roomSeparates([pos.x, pos.z], [nx, nz], neighbors)) continue;
+          next = [nx, nz];
+          break;
         }
-        if (dist > 1e-6) {
-          placeActor(world, id, { x: target.x, z: target.z, space: roomSpaceId(room) });
-          moved += 1;
+        if (!next) {
+          // 本分钟被墙/家具/别人挡住：先停；连续两分钟受阻才换兴趣点。
+          st.stuck += 1;
+          if (st.stuck >= 2) {
+            st.poi = chooseTarget(world, id, room, pois, neighbors, st.poi, [pos.x, pos.z]);
+            st.stuck = 0;
+          }
+          break;
         }
-        // 到了就停 0–1 游戏分钟再换兴趣点（约 0–6 现实秒），避免整屋不停打转，
-        // 又保证任意 10 现实秒窗口里至少能看到一次位置变化。
+        pos.x = next[0];
+        pos.z = next[1];
+        placeActor(world, id, { x: pos.x, z: pos.z, space: roomSpaceId(room) });
+        onStep?.({ id, room, x: pos.x, z: pos.z, step: move, target: { x: target.x, z: target.z } });
+        remain -= move;
+        movedThis = true;
+        if (move >= dist - 1e-9) { arrived = true; break; }
+      }
+      if (arrived) {
+        // 到了就停 0–1 游戏分钟再换兴趣点（约 0–6 现实秒），避免整屋不停打转。
         st.idleUntil = minute + (hash2(minute, st.poi, (world.mapSeed ?? 0) + 7) > .45 ? 1 : 0);
         st.last = st.poi;
         st.poi = -1;
         st.stuck = 0;
-        continue;
       }
-      const ux = dx / dist, uz = dz / dist;
-      const tries = [[ux, uz], [ux, 0], [0, uz]];
-      let next = null;
-      for (const [mx, mz] of tries) {
-        const len = Math.hypot(mx, mz);
-        if (len < 1e-9) continue;
-        const nx = pos.x + mx / len * STEP, nz = pos.z + mz / len * STEP;
-        if (!space.walkable(nx, nz, CAMP_BODY_RADIUS)) continue;
-        if (!roomSeparates([pos.x, pos.z], [nx, nz], neighbors)) continue;
-        next = [nx, nz];
-        break;
-      }
-      if (!next) {
-        st.stuck += 1;
-        if (st.stuck >= 2) {
-          st.poi = chooseTarget(world, id, room, pois, neighbors, st.poi, [pos.x, pos.z]);
-          st.stuck = 0;
-        }
-        continue;
-      }
-      placeActor(world, id, { x: next[0], z: next[1], space: roomSpaceId(room) });
-      moved += 1;
-      st.stuck = 0;
+      if (movedThis) moved += 1;
     }
   }
   return moved;
