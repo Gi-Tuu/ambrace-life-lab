@@ -6,12 +6,17 @@ FROM node:22-alpine
 
 WORKDIR /app
 # 游戏态规则层（成本×2 / 分类粮仓 / 烧柴照明）只写在镜像里，研究路径默认关。
+# BRAIN_RELAY_PENDING：大脑中继的在途队列深度（serve.mjs 读它，默认 8）。提到 16 是因为
+# 对话车道（玩家自由输入 + 话题按钮）会往同一个队列里加请求，而审议/居民互聊也在里面；
+# 队列满时引擎拿到 RELAY_BUSY 直接退模板。平台变量表里没有这个键，所以镜像 ENV 说得出话
+# （已列出的 TTL/超时那类只能平台侧改：容器运行时 env 优先于镜像 ENV）。
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=7860 \
     GAME_MODE=game \
     GAME_RULES=1 \
     GAME_MS_PER_MINUTE=6000 \
+    BRAIN_RELAY_PENDING=16 \
     TICK_MS=360000 \
     DATA_DIR=/data
 
