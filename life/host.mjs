@@ -9,6 +9,7 @@ import { classifySay } from './speech.mjs';
 import { tell } from './gossip.mjs';
 import { phaseOf, scheduledLoc } from './clock.mjs';
 import { prepareSay, finishSay } from './dialogue.mjs';
+import { prepareFreeSay, finishFreeSay } from './resident-dialogue.mjs';
 import { createSurvPlay, setSurvivalDeliberator, survView, dumpSurv, settleSurvival } from './survplay.mjs';
 import { observerActive as observerActiveBase, modelChannel, breakerOpenAt, budgetTick, pickProviderKey } from './host-budget.mjs';
 import { DIMS } from './traits.mjs';
@@ -103,7 +104,7 @@ model = createModelDomain({ S, CFG, C, observerActive });
 replay = createReplayDomain({ S, CFG, C, world });
 const {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-  modelBrain, modelTalk, modelConfigured, buildDeliberationPrompt, deliberationPrompt,
+  modelBrain, modelTalk, modelChat, modelConfigured, buildDeliberationPrompt, deliberationPrompt,
 } = model;
 const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison, controlComparison } = replay;
 const {
@@ -136,6 +137,11 @@ async function actSurvivalFast(body, campKey) {
   // 对话：prepare（锁内）→ 模型（锁外）→ finish（锁内）。模型等待期间普通输入仍可推进；
   // 同一段对话并发句子由 prepare 的 pendingSay 闸门拒绝（SAY_PENDING），不会重复调模型。
   if (body.kind === 'talk_say') return actTalkSayFast(survSel, body, now);
+  // 1.5 自由输入：prepare（短锁）→ 模型（锁外）→ finish（短锁）。不每句落盘；
+  // 关闭对话或下一次 tick 才把 survival 写进档。
+  if (body.kind === 'camp_talk_say' && typeof body.text === 'string' && body.text.trim()) {
+    return actFreeTalkFast(survSel, body, now);
+  }
   return queueAct(async () => {
     const result = await actInSurvival(survSel, body, modelTalk, now);
     if (result.ok || result.settled) return { ...result, ...await persistAfterAction(survSel) };
@@ -158,6 +164,20 @@ async function actTalkSayFast(sp, body, now) {
   const settledNow = settleSurvival(sp);
   const out = settledNow ? { ...result, settled: true } : result;
   return { ...out, ...await persistAfterAction(sp) };
+}
+
+async function actFreeTalkFast(sp, body, now) {
+  const prep = await queueAct(() => prepareFreeSay(sp.world, body, now));
+  let result = prep;
+  if (prep?.pending) {
+    const pending = prep.pending;
+    let line = null;
+    if (pending.canAsk) {
+      try { line = await modelChat({ world: sp.world, prompt: pending.prompt }); } catch { line = null; }
+    }
+    result = await queueAct(() => finishFreeSay(sp.world, pending, line, now));
+  }
+  return result;
 }
 
 function continuousCamp(campKey) {
@@ -490,8 +510,9 @@ export const host = {
         // log 15→0），而日志里一个字都不写。用户点一下"内心：真实模型"就丢掉整段可见历史。
         // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
         configure({ brain: body.brain });
-        if (S.surv) setSurvivalDeliberator(S.surv, survivalOptions().deliberator);
-    if (S.camps) for (const entry of S.camps.live.values()) setSurvivalDeliberator(entry.sp, survivalOptions().deliberator);
+        const opts = survivalOptions();
+        if (S.surv) setSurvivalDeliberator(S.surv, opts.deliberator, opts.chatModel);
+    if (S.camps) for (const entry of S.camps.live.values()) setSurvivalDeliberator(entry.sp, opts.deliberator, opts.chatModel);
         for (const key of ['A', 'B']) {
           for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
           S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });

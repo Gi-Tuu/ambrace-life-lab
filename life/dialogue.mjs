@@ -6,8 +6,8 @@ import { isAlive } from './viability.mjs';
 import { speechLine, classifySay } from './speech.mjs';
 import { startMove } from './body.mjs';
 import { residentContact } from './camp-play.mjs';
-
-const BUSY = new Set(['work', 'build', 'gather', 'harvest', 'plant', 'repair', 'camp_chop', 'camp_collect']);
+import { engagementOf, BUSY } from './resident-engagement.mjs';
+export { engagementOf } from './resident-engagement.mjs';
 const INSULT = /滚|闭嘴|废物|蠢|傻|去死|没用|垃圾|讨厌你|烦人/;
 const hash = (s) => {
   let h = 2166136261;
@@ -16,18 +16,9 @@ const hash = (s) => {
 };
 
 const trustOf = (npc) => npc.relations?.get?.('p1')?.trust ?? 30;
-const energyOf = (npc) => npc.drives?.v?.energy ?? 0.7;
-const socialOf = (npc) => npc.drives?.v?.social ?? 0.5;
 
 // 打开的这一刻就决定"愿不愿意谈"：忙且累会拒绝，社交已满足会敷衍，信任低会冷淡。
-export function engagementOf(world, npc) {
-  const trust = trustOf(npc), energy = energyOf(npc), social = socialOf(npc);
-  const busy = BUSY.has(npc.last?.kind ?? '');
-  const arche = npc.traits?.archetype ?? '谨慎';
-  if ((busy && energy < 0.35) || social > 0.78) return 'refuse';
-  if (trust < 20 || (arche === '孤僻' && trust < 45)) return 'reluctant';
-  return 'open';
-}
+// 实现在 resident-engagement.mjs；这里保留旧导出名。
 
 export function talkInRange(world, talk) {
   return Boolean(talk) && isAlive(world.agents.p1) && isAlive(world.agents[talk.target]) &&

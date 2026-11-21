@@ -216,8 +216,69 @@ async function modelTalk({ npc, world, history, text, trust }) {
   return null;
 }
 
+// 1.5 自由对话/居民互聊：只负责"把一句话说自然"。
+// 与 modelTalk 共用 provider 循环、观众判据、每日预算与 breaker；不预扣 gate，
+// 因为这两条路都由短锁外的调用方驱动，失败一律返回 null 让调用方退模板。
+async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag = 'CHAT' } = {}) {
+  if (!CFG.providers.length) { budget.attempt(`${tag}:NO_PROVIDER`); return null; }
+  if (!CFG.keys.some(Boolean)) { budget.attempt(`${tag}:NO_KEY`); return null; }
+  if (CFG.brain !== 'model') { budget.attempt(`${tag}:BRAIN_LOCAL`); return null; }
+  budgetTick(S.model, new Date().toISOString().slice(0, 10));
+  const campKey = world?.campKey ?? 'MAIN';
+  const lastVisitor = campKey === 'MAIN' ? S.viewers.survival : S.campViewers[campKey];
+  if (!observerActive(lastVisitor, Date.now())) return null;
+  if (!continuousWorld() && PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
+  S.asksThisTick = (S.asksThisTick ?? 0) + 1;
+  const note = (msg) => budget.attempt(`${tag}:${msg}`);
+  let refusal = null;
+  for (let i = 0; i < CFG.providers.length; i++) {
+    const mdl = CFG.models[i] || CFG.model;
+    const key = providerKey(i);
+    if (!mdl) { note('NO_MODEL'); continue; }
+    if (!key) { note('NO_KEY'); continue; }
+    const free = isFreeProvider(CFG.providers[i]);
+    const lane = modelChannel({
+      watched: true, free,
+      moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0,
+      moneyBudget: BUDGET, nodeBudget: NODE_BUDGET, breakerOpen: breakerOpenAt(S.breaker),
+    });
+    if (!lane.go) { refusal = lane.why; note(`LANE:${lane.why}`); continue; }
+    const ac = new AbortController();
+    const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
+    if (waitMs <= 0) return null;
+    const to = setTimeout(() => ac.abort(), waitMs);
+    try {
+      const res = await postChat(CFG.providers[i], key, {
+        model: mdl, temperature, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens,
+      }, mdl, ac);
+      if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); continue; }
+      const j = await res.json();
+      budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
+      budget.see(free, true);
+      const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').trim();
+      if (line) return [...line].slice(0, 240).join('');
+    } catch (e) {
+      note(String(e?.message ?? e).slice(0, 40));
+      budget.see(free, false);
+    } finally {
+      clearTimeout(to);
+    }
+  }
+  if (refusal) note(`LANE:${refusal}`);
+  return null;
+}
+
+function modelChat({ world, prompt } = {}) {
+  return askLine({ world, prompt, maxTokens: 140, temperature: 0.9, tag: 'CHAT' });
+}
+
+function modelChatter({ world, prompt } = {}) {
+  return askLine({ world, prompt, maxTokens: 80, temperature: 0.85, tag: 'CHATTER' });
+}
+
   return {
     configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-    modelBrain, modelTalk, modelConfigured, buildDeliberationPrompt, deliberationPrompt, budget,
+    modelBrain, modelTalk, modelChat, modelChatter, modelConfigured,
+    buildDeliberationPrompt, deliberationPrompt, budget,
   };
 }

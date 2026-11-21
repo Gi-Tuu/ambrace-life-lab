@@ -39,7 +39,11 @@ function dumpSurv(sp) {
   }]));
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
   const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
-  return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival: w.survival, log: sp.log,
+  // 1.5：pending 是"这一句还在等模型"的瞬态占位，绝不入档；会话/历史/摘要照常随 survival 走。
+  const survival = w.survival?.residentDialogue?.pending
+    ? { ...w.survival, residentDialogue: { ...w.survival.residentDialogue, pending: null } }
+    : w.survival;
+  return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival, log: sp.log,
     // P2c：位置唯一事实只在正式游戏入档（研究态 dumpSurv 逐位不变）。
     ...(w.survival?.actTimeModel === true && w.pos ? { pos: w.pos } : {}),
     // P1：连续时钟只随正式游戏入档；研究态没有 simClock ⇒ 哈希逐位不变。
@@ -127,6 +131,13 @@ function loadSurv(raw,seed=7,options) {
     // occupancy 是派生索引：读档先按 loc 重建，随即用存档顺序（若自洽）恢复顺序。
     rebuildOccupancy(sp.world);
     sp.world.survival = { ...sp.world.survival, ...raw.survival, coop: { ...sp.world.survival.coop, ...(raw.survival.coop ?? {}) } };
+    // 1.5：pending 从不入档；旧档/人为塞入的值读回后一律清掉，避免"永远在等一句不会回来的话"。
+    if (sp.world.survival.residentDialogue) {
+      const dialogue = sp.world.survival.residentDialogue;
+      dialogue.pending = null;
+      if (!Array.isArray(dialogue.history)) dialogue.history = [];
+      if (typeof dialogue.summary !== 'string') dialogue.summary = '';
+    }
     // 证据优先：坏 rules/survival 的 false 不能把已经证明存在的分城区吞掉。
     if (settlementEvidence && !sp.world.survival.settlementLife) sp.world.survival.settlementLife = true;
     restoreSettlementEvents(w.survival);

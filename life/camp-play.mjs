@@ -2,8 +2,9 @@ import { findRegionEntity, regionPoint, regionReady } from '../shared/camp-regio
 import { recordResidentHit } from './resident-injury.mjs';
 import { householdAccess } from './home-access.mjs';
 import { sourceView, takeProduce } from './source-produce.mjs';
-import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, nearResident, pointIn, segmentGap } from '../shared/camp-interaction.mjs';
-import { worldSite, WORLD_TW, WORLD_TH } from './geometry.mjs';
+import { ANIMAL_ITEMS, ANIMAL_LIMITS, CAMP_TOOLS, HEAVY_CAMP_TOOLS, REACH, campPen, campPlants, campSite, distanceTo, distanceToRect, pointIn } from '../shared/camp-interaction.mjs';
+import { WORLD_TW, WORLD_TH } from './geometry.mjs';
+import { residentContact } from './camp-contact.mjs';
 import { speechLine } from './speech.mjs';
 import { DAY_TICKS, dayOf } from './clock.mjs';
 import { TIMBER_GROVE } from '../shared/camp-layout.mjs';
@@ -16,9 +17,7 @@ import { markResidentAttention } from './resident-attention.mjs';
 import { closeResidentDialogue, openResidentDialogue, sayInResidentDialogue } from './resident-dialogue.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
-import { roomContains } from './space.mjs';
 // P4：房间区域只有显式世界单位（16×12）判定；旧的隐式 16.01/12.01 回退开关已退役。
-const roomPoint = (p) => roomContains(p[0],p[1]);
 const STORAGE = Object.freeze({
   home:['4'], store:['0','1','2','3','4','5'], workshop:['3','4'],
   watch:['1','3'], garden:['0'], well:['2','3'], yard:['0','1','2'],
@@ -48,31 +47,8 @@ export function campSleepTicks(world) {
   return {...ok(),ticks:Math.min(24,hour>=12?DAY_TICKS-hour:4)};
 }
 
-// Browser positions describe the current presentation. Room membership and the
-// resident's current/recent world destinations are checked against server state.
-export function residentContact(world, {target,room,from,to}) {
-  if (typeof target!=='string' || target==='p1' || !Object.hasOwn(world.agents,target)) return 'NO_RESIDENT';
-  if (!isAlive(world.agents[target])) return 'RESIDENT_GONE';
-  if (!nearResident(from,to)) return 'RESIDENT_OUT_OF_REACH';
-  const site=world.loc[target];
-  if (room!==null) {
-    return !world.survival.districtTravel?.[target] && room===site && room===world.loc.p1 && roomPoint(from) && roomPoint(to)
-      ? null : 'RESIDENT_OUT_OF_REACH';
-  }
-  if (!regionPoint(from) || !regionPoint(to) || world.campPlayerRoom) {
-    return 'RESIDENT_OUT_OF_REACH';
-  }
-  const at=worldSite(world,site);
-  if (!at) return 'RESIDENT_OUT_OF_REACH';
-  const destination=at.map(n=>n+.5);
-  if (distanceTo(to,destination)<=2.5) return null; // outdoor slots surround the logical anchor
-  const trip=world.survival.districtTravel?.[target];
-  const end=trip && worldSite(world,trip.to);
-  if (end && segmentGap(to,destination,end.map(n=>n+.5))<=14) return null;
-  const travel=world.residentTravel?.[target], start=worldSite(world,travel?.from);
-  if (start && travel.to===site && world.t-travel.t<=4 && segmentGap(to,start.map(n=>n+.5),destination)<=6) return null;
-  return 'RESIDENT_OUT_OF_REACH';
-}
+// residentContact 的唯一实现在 life/camp-contact.mjs；这里 re-export 保持旧调用面。
+export { residentContact };
 
 function interactWithResident(world,body) {
   const {target,tool}=body, failure=residentContact(world,body);
