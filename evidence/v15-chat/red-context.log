@@ -1,0 +1,27 @@
+✖ V15-01 自由文本多轮：历史/摘要进 prompt，上下文可引用；0 时间/体力/位置/任务 (21.8834ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 185.6304
+
+✖ failing tests:
+
+test at life\v15-chat.test.mjs:34:1
+✖ V15-01 自由文本多轮：历史/摘要进 prompt，上下文可引用；0 时间/体力/位置/任务 (21.8834ms)
+  AssertionError [ERR_ASSERTION]: prompt 必须带上上一轮居民台词
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v15-chat.test.mjs:55:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

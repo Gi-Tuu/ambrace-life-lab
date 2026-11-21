@@ -1,0 +1,4 @@
+FAIL Error: 自由输入框没有显示
+    at assert (file:///E:/Competition/AMBRACElife/scripts/v15-chat-browser.mjs:62:54)
+    at file:///E:/Competition/AMBRACElife/scripts/v15-chat-browser.mjs:97:3
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

@@ -1,0 +1,30 @@
+✖ V15-09 节点日预算用完后自由对话退模板，不再发模型请求 (97.036ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 244.8829
+
+✖ failing tests:
+
+test at life\v15-chat-budget.test.mjs:27:1
+✖ V15-09 节点日预算用完后自由对话退模板，不再发模型请求 (97.036ms)
+  AssertionError [ERR_ASSERTION]: 预算用完后必须模板回退
+  + actual - expected
+  
+  + 'model'
+  - 'template'
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v15-chat-budget.test.mjs:56:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'model',
+    expected: 'template',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

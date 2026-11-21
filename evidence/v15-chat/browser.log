@@ -1,0 +1,9 @@
+2026-11-21T12:16:28.294Z server.started {"at":"2026-11-21T12:16:28.294Z","kind":"server.started","port":9352,"upstream":53633}
+2026-11-21T12:16:30.908Z resident.place {"at":"2026-11-21T12:16:30.908Z","kind":"resident.place","ok":true,"p":{"x":28.45,"y":24},"target":{"x":28,"y":24,"src":"walker"}}
+2026-11-21T12:16:33.346Z dialogue.panel {"at":"2026-11-21T12:16:33.346Z","kind":"dialogue.panel","open":true,"title":"和 岑 交谈","topics":["今天怎么样","在忙什么","聚落怎么样","需要帮忙吗"],"rowHidden":false,"inputHidden":false,"pendingHidden":true,"note":"直接输入，或点下面的快捷话题；对话不占游戏时间，也不会打断居民手上的活。"}
+2026-11-21T12:16:33.539Z dialogue.thinking {"at":"2026-11-21T12:16:33.539Z","kind":"dialogue.thinking","hidden":false,"text":"对方正在想…","sendDisabled":true}
+2026-11-21T12:16:34.291Z dialogue.first {"at":"2026-11-21T12:16:34.291Z","kind":"dialogue.first","log":"抬头看见是你，神色松下来：「是你啊，坐会儿？」你：今天怎么样？刚在地里忙完，手上还带着土。"}
+2026-11-21T12:16:35.179Z dialogue.second {"at":"2026-11-21T12:16:35.179Z","kind":"dialogue.second","log":"抬头看见是你，神色松下来：「是你啊，坐会儿？」你：今天怎么样？刚在地里忙完，手上还带着土。你：你刚才说你去哪儿了？刚从地里回来，你不是听见了？","promptHasFirstLine":true,"promptHasFirstPlayer":true}
+2026-11-21T12:16:35.369Z dialogue.topic {"at":"2026-11-21T12:16:35.369Z","kind":"dialogue.topic","beforeTopic":71,"after":78,"topics":4}
+2026-11-21T12:16:35.394Z dialogue.clock {"at":"2026-11-21T12:16:35.394Z","kind":"dialogue.clock","t0":57600.447316666665,"t1":57601.189483333335}
+2026-11-21T12:16:35.696Z dialogue.closed {"at":"2026-11-21T12:16:35.696Z","kind":"dialogue.closed","open":false,"talk":null,"running":true,"pending":true}
