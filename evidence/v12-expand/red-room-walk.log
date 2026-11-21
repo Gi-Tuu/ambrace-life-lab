@@ -1,0 +1,30 @@
+✔ V12-ROOM-01 10 秒内位置变化：2 游戏分（1:10 下 ≈10 现实秒）内每个居民都移动且每一步可站 (27.1788ms)
+✔ V12-ROOM-02 长时间走动：始终不穿模、多人保持身体分离、访问 ≥2 个兴趣点 (22.1769ms)
+✔ V12-ROOM-03 只写 w.pos：loc/占用/动作轨迹/需求都不变（玩家在室内也不动） (14.1283ms)
+✔ V12-ROOM-04 进出门连续：进房落在门内可站点；出房切到同一扇门的世界点后逐刻连续 (233.7231ms)
+✖ V12-ROOM-05 生产路径接电：连续钟每游戏分推进室内位置（tickSurvPlay） (14.9862ms)
+✔ V12-ROOM-06 研究态/旧时间模型不变：没有 pos，步进是空操作；可走性闸门有牙（家具内不可站） (14.9805ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 464.4336
+
+✖ failing tests:
+
+test at life\room-walk.test.mjs:146:1
+✖ V12-ROOM-05 生产路径接电：连续钟每游戏分推进室内位置（tickSurvPlay） (14.9862ms)
+  AssertionError [ERR_ASSERTION]: 连续钟推进 3 游戏分后必须至少有一名室内居民移动
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/room-walk.test.mjs:167:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

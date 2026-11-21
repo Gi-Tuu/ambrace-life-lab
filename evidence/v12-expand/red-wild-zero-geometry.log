@@ -1,0 +1,41 @@
+✔ V12-EXP-01 确定性 / 数量 4–8 / 地形筛选：不压河、不压树、不压地标、坡度可建、接入路逐点可走 (158.3223ms)
+✖ V12-EXP-02 未认领零几何：服务端空间与场景内容在认领前逐位不变；认领后才出现 pad/道路 (144.5614ms)
+✔ V12-EXP-03 玩家认领是服务端原子动作：距离/材料/重复/非荒野/可站全部先拒绝，成功后一次写三处 (76.0231ms)
+✔ V12-EXP-04 河中/压树地块必须被施工可达性拒绝（负向对照） (50.7843ms)
+✔ V12-EXP-05 玩家建房：3 次施工完工 → 门/碰撞/入住/存档往返；A/B 同种子逐位一致 (363.8902ms)
+✔ V12-EXP-06 居民 AI：固定地块住满后认领荒野地块，施工完工后居住（聚落继续扩大） (133.9173ms)
+✔ V12-EXP-08 生产主档（layout 0，内置种子档同形）也能扩建：地块可站/可达/可建、存档往返 (135.6364ms)
+✔ V12-EXP-07 世界可达性：每个地块门都能从村口沿既有 space 走到（服务端权威） (286.9656ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1513.2805
+
+✖ failing tests:
+
+test at life\wild-expansion.test.mjs:81:1
+✖ V12-EXP-02 未认领零几何：服务端空间与场景内容在认领前逐位不变；认领后才出现 pad/道路 (144.5614ms)
+  AssertionError [ERR_ASSERTION]: heightAt 差异 -20,78
+  + actual - expected
+  
+  + 1.0435171127319336
+  - 3.4269163608551025
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/wild-expansion.test.mjs:94:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1.0435171127319336,
+    expected: 3.4269163608551025,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

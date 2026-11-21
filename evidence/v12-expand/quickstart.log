@@ -1,0 +1,2 @@
+[quickstart] PASS {"ok":true,"result":"起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续","hud":{"date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1今日剩余1439 分","place":"走廊 · 户外"},"walkMoved":0.073,"gather":{"stone0":0,"stone1":2},"eat":{"energy":0.598,"store0":17,"store1":16},"sleep":{"ticks":4,"t0":966,"t1":970},"death":{"beforeDeathT":970,"tAfterDeath":972,"banner":"你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。"}}
+[quickstart] wrote E:\Competition\AMBRACElife\evidence\score\quickstart-browser.log
