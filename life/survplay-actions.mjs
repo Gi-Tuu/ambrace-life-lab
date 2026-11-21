@@ -19,7 +19,9 @@ import { RESEARCH_PLAYER_BUDGET, RESEARCH_TICK_MINUTES, RESEARCH_DAY_MINUTES, le
 export function createActionDomain({ settleSurvival }) {
 const P1_TICK_MINUTES = RESEARCH_TICK_MINUTES; // 研究策略：60 分/刻（与 resident-time 同源）
 const P1_DAY_MINUTES = RESEARCH_DAY_MINUTES; // 连续路径：只保留日统计，不再拒绝操作
-const CONTINUOUS_LONG = new Set(CONTINUOUS_LONG_ACTIONS);
+// 1.2 A：玩家在自己的宅基地上施工是“连续动作”（每次 15 游戏分，到点才落进度）。
+// 居民仍按他们的日节拍结算 house_work（CONTINUOUS_LONG_ACTIONS 不动，避免改居民轨迹/基线）。
+const PLAYER_LONG = new Set([...CONTINUOUS_LONG_ACTIONS, 'house_work']);
 function legacyPlayerTime(w, kind) {
   if (!w.independentWorld) return 0;
   if (kind.startsWith('family_')) return 10;
@@ -92,7 +94,7 @@ function survAct(sp, body) {
         // P1 连续路径：没有"本刻池"这个拒绝条件。短动作立即结算；长动作占用 [startMin,endMin)。
         const nowMin = simMinuteNow(w);
         clock.tick.n = (clock.tick.n ?? 0) + 1;
-        if (!CONTINUOUS_LONG.has(kind)) {
+        if (!PLAYER_LONG.has(kind)) {
           clock.tick.usedMin += cost.minutes;
           clock.usedMin += cost.minutes;
           spentMinutes = cost.minutes;
