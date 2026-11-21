@@ -285,6 +285,9 @@ export function buildFreeTalkPrompt(world, npc, session, text, intent = null) {
     `聚落：公仓 ${state.store} 份存粮，${state.residents} 口人${state.crisis ? '，正在缺粮' : '。'}`,
     state.last ? `最近的事：${eventLine(world, state.last)}` : '',
     session.summary ? `你们之前聊过：${session.summary}` : '',
+    session.engage === 'refuse'
+      ? '你现在不想搭理对方，只肯冷冷丢一句；态度已经定了，不要解释原因，也不要改变态度。'
+      : '',
     prior.length ? '最近的对话（旧→新）：' : '',
     ...prior.map((h) => `${h.who === 'p1' ? '对方' : npc.name}：${h.text}`),
     `对方刚说：「${text}」`,
@@ -384,7 +387,9 @@ export function prepareFreeSay(world, body, now = Date.now()) {
     : null;
   const pending = {
     token, target: npc.id, npc, session, text, intent, contact, now,
-    canAsk: session.engage !== 'refuse',
+    // G：拒答也让模型说一句。态度与关系后果仍由服务端算——applyFreeRelationship 的
+    // refuse 早退（0/0）一行不改，模型只负责把已定的冷淡说成人话。
+    canAsk: true,
     prompt: buildFreeTalkPrompt(world, npc, session, text, intent),
   };
   session.pending = { token, at: now };
