@@ -109,7 +109,7 @@ const {
 const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison, controlComparison } = replay;
 const {
   viewers, writeQueue, start, stop, flushWrites, save, saveWorld, saveMain, saveCampEntry,
-  campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
+  campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, guestCampView, campOwnerHash,
   claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, manualTick,
   catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, serialize,
   makePack, freshPacks, packsFrom, buildPacks, queueAct, v12Fixture,
@@ -119,7 +119,7 @@ const {
 export {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
   buildDeliberationPrompt, deliberationPrompt, flushWrites, survivalOptions,
-  sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
+  sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, guestCampView, campOwnerHash,
   claimCamp, openCamp, backToMainCamp,
 };
 
@@ -209,6 +209,7 @@ export const host = {
   stop() { return stop(); },
   status: () => ({ t: S.packs?.A.world.t ?? 0, campT: S.surv?.world.t ?? null, rate: (S.mainSurv ?? S.surv)?.world?.simClock?.rate ?? S.rate ?? 1, clock: statusClock(), campDay: S.surv?.world.survival?.day ?? null, settlement: S.surv?.world.survival?.settlement ?? null, running: S.running, brain: CFG.brain, savedAt: S.savedAt, missed: S.missed, modelCalls: S.model.calls, moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0, nodeBudget: NODE_BUDGET, unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 }, watching: observerActive(S.lastVisitor, Date.now()), saveError: S.saveError ?? S.campSaveErrors?.values().next().value ?? null, tickError: S.tickError, campTickSkipped: S.campTickSkipped ?? 0, masks: S.masks }),
   listCamps,
+  guestCampView,
   campOwnerHash,
   claimCamp,
   sweepCamps,

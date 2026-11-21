@@ -219,6 +219,36 @@ function listCamps() {
   return listSaves(S.dir, Date.now());
 }
 
+// A′：访客只读投影。**独立白名单构造**，绝不复用 survView 再删字段——
+// 否则 survView 以后新增的字段会自动跟着泄漏。
+// 只允许：营地名字、day、人口数、settlement 状态、最近 3 条事件摘要（kind 文案）。
+// 显式不给：inv / pinv / relations / converseLog / talk / dialogue / locs / loc /
+// playerPos / sites / buildings 明细，也不带任何 agent id。
+const GUEST_EVENT_LIMIT = 3;
+function guestCampView(campKey) {
+  const key = String(campKey ?? '');
+  if (!/^[0-9a-f]{32}$/.test(key)) return null;
+  if (!validCampKey(key)) return null;
+  const sp = campSurv(key);
+  if (!sp) return null;
+  const w = sp.world;
+  const s = w.survival ?? {};
+  const name = readIndex(S.dir).entries.find((e) => e.key === key)?.name
+    ?? readOwnerSidecar(S.dir, key)?.name ?? key;
+  // day 与 settlement 必须与 owner 视图同刻一致：这里用与 survView 完全相同的两个定义
+  // （dayOf(w.t) / 同一段终局判定），而不是另算一份读数。
+  return {
+    guest: true,
+    camp: { key, name },
+    day: dayOf(w.t),
+    population: Object.values(w.agents).filter((a) => !a.dead && !a.isPlayer).length,
+    settlement: w.independentWorld
+      ? (s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active')
+      : null,
+    events: (s.eventJournal?.rows ?? []).slice(-GUEST_EVENT_LIMIT).map((row) => ({ kind: String(row.kind ?? '') })),
+  };
+}
+
 // SEC3-02 / DATA5-05：营地归属。索引是主视图，ownerHash 同时写侧车；索引丢了从侧车恢复。
 function campOwnerHash(key) {
   const entry = readIndex(S.dir).entries.find((e) => e.key === key);
@@ -1068,7 +1098,7 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     viewers, writeQueue, start, stop, flushWrites, save, saveWorld, saveMain, saveCampEntry,
     serialize, applyInto, loadArchive, readArchive, quarantine, buildPacks, makePack, freshPacks, packsFrom,
     catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, takePendingFlush,
-    campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
+    campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, guestCampView, campOwnerHash,
     claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, queueAct, manualTick, autoTick,
     v12Fixture,
     scheduleTickSave, takeTickSave, onSignal,

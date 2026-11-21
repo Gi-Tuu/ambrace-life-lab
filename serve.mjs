@@ -499,9 +499,15 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   }
   if (req.method === 'GET' && p === '/world') {
     // SEC5-02：非 MAIN 营地读路径必须 owner；不再“带了 cookie 才检查”。
-    // 但“营地已经不在了”（平台重建清空 /data，名字档随之消失）不能继续报 403：那是“别人的营地”
-    // 的语气，客户端只会当成网络故障无限重试成白屏。410 给它一个出口。
-    if (campKey && campKey !== 'MAIN' && !ownerAllows(req, campKey)) return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+    // A′（2026-11-22）：owner 不成立时不再 403，改为**只读白名单投影**（只有名字/day/人口/
+    // settlement/最近 3 条事件 kind）；写路由 /act、/saves/open 的 owner 门一行都不松。
+    // 非法/未登记 key 仍走既有回落：不产生投影，保持原 403 语义（SAV-05 / SA11）。
+    const namedCamp = campKey && campKey !== 'MAIN';
+    if (namedCamp && !ownerAllows(req, campKey)) {
+      const guest = host.guestCampView(campKey);
+      if (guest) return json(res, 200, guest);
+      return json(res, 403, { error: 'CAMP_NOT_OWNER' });
+    }
     try { return json(res,200,await host.readWorld(viewMode,campKey || undefined)); }
     catch (error) {
       if (error.code === 'CAMP_UNAVAILABLE') return json(res,503,{error:error.code});

@@ -3559,7 +3559,7 @@ function table(a, b) {
   return row('决策数', a.stat.决策, b.stat.决策) + row('高冲动路径', a.stat.高冲动, b.stat.高冲动) + row('越轨（拿别人份额）', a.stat.越轨, b.stat.越轨) + row('被规则驳回', a.stat.驳回, b.stat.驳回) + row('后果被发现', a.stat.发现, b.stat.发现) + row('M3 承诺决策', m3Of(a), m3Of(b)) + row('M4 耦合动作', cplOf(a), cplOf(b)) + row('不可逆损失（累计）', lostOf(a), lostOf(b)) + row('推理调用（事件/被问）', costOf(a), costOf(b)) + `<tr><td>模型调用 / token</td><td colspan="2">本地替身 · 0 次外部调用</td></tr>`;
 }
 
-const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true, masks: null, layer: null };
+const S = { brain: 'local', model: { calls: 0, tokens: 0 }, running: true, masks: null, layer: null, guest: false };
 
 const MAP_GRID={width:WORLD_W,height:WORLD_H,cell:COLLISION_CELL,legacy:[96*TILE,64*TILE]};
 const ROOM_LABELS = { ...LOCS, workshop: '工坊', garden: '菜园', well: '井台', yard: '院子' };
@@ -3777,6 +3777,44 @@ function syncReplayPanel(pair){
   }
 }
 
+// A′：访客只读态。服务器只给白名单摘要（名字/day/人口/settlement/最近 3 条事件 kind），
+// 这里不再渲染世界，也不留任何会 403 的入口：继续生存、新开一局、对照、工具栏、背包。
+// owner 路径不经过这里，行为逐字不变。
+const SETTLEMENT_ZH = { active: '存续', crisis: '危机', recovering: '恢复中', extinct: '已终结' };
+function renderGuestView(g) {
+  S.guest = true;
+  S.playing = false;
+  S.soloSurv = false;
+  S.survivalView = null;
+  ui.menu = true;
+  document.body.classList.add('menu-mode');
+  document.body.classList.remove('play-mode', 'surv-mode');
+  $('startMenu').hidden = false;
+  $('worldMain').hidden = true;
+  $('startSurvival').hidden = true;
+  $('startNew').hidden = true;
+  $('startCompare').hidden = true;
+  $('hotbar').hidden = true;
+  $('hudGauges').hidden = true;
+  closeBackpack();
+  const message = '你在看别人的村子，不能操作；要用这台浏览器玩，请换个名字新开一段';
+  const recent = (g.events ?? []).map((e) => e.kind).filter(Boolean);
+  $('startStatus').textContent = recent.length ? `${message}\n最近：${recent.join(' · ')}` : message;
+  const settle = SETTLEMENT_ZH[g.settlement] ?? '';
+  $('campCurrent').textContent = `你在看「${g.camp?.name ?? ''}」的村子 · 第 ${Number(g.day ?? 0) + 1} 天 · 人口 ${g.population ?? 0}${settle ? ` · ${settle}` : ''}`;
+  $('playNoticeText').textContent = message;
+  $('playNotice').hidden = false;
+}
+function clearGuestView() {
+  if (!S.guest) return;
+  S.guest = false;
+  $('startSurvival').hidden = false;
+  $('startNew').hidden = false;
+  $('startCompare').hidden = false;
+  $('hotbar').hidden = false;
+  $('hudGauges').hidden = false;
+}
+
 async function refresh() {
   const id=++refreshIssued, mode=refreshMode(), camp=campKeyNow;
   const path='/world?mode='+mode;
@@ -3785,6 +3823,9 @@ async function refresh() {
     const j=await postJson(path);
     if (!current()) return;
     refreshApplied=id;
+    // A′：owner 不成立时服务器返回访客投影。只展示摘要，绝不进入可操作路径。
+    if (j.guest === true) { renderGuestView(j); return; }
+    clearGuestView();
     showPersistNotice(j,path);
     const pair=j.comparison;
     const selected=ui.compare?pair?.A:j.survival;

@@ -67,7 +67,7 @@ test('SA10 query 路由：?camp=A 与 ?camp=B 各在自己的世界，不带则�
   }
 });
 
-test('SA11 非法/未登记 camp：无 owner 403；带 owner 仍回落主营地、不回显输入', async () => {
+test('SA11 非法/未登记 camp：无 owner 仍 403；带 owner 仍回落主营地、不回显输入（A′ 后已登记营地改访客投影）', async () => {
   const { child, base } = await boot();
   try {
     const rOpen = await post(base, '/saves/open', { name: '甲' });
@@ -90,8 +90,12 @@ test('SA11 非法/未登记 camp：无 owner 403；带 owner 仍回落主营地�
       assert.equal(r.camp?.key, bad);
       assert.notEqual(r.survival, null, '仍要给出可看的世界');
     }
+    // A′（2026-11-22）：已登记营地无 owner 不再 403，改为访客只读投影；写路由的 403 由 SA15 钉。
     const noOwner = await fetch(base + '/world?camp=' + a.key);
-    assert.equal(noOwner.status, 403, '无 cookie 不得读已登记营地');
+    assert.equal(noOwner.status, 200, '无 cookie 读已登记营地 = 200 访客投影');
+    const guestView = await noOwner.json();
+    assert.equal(guestView.guest, true, '必须显式标记访客投影');
+    assert.ok(!Object.hasOwn(guestView, 'survival'), '访客投影不得含 survival');
     const ok = await (await fetch(base + '/world?camp=' + a.key, { headers: { cookie: 'camp_owner=' + ownerA } })).json();
     assert.equal(ok.camp?.key, a.key, '合法已登记 key + owner 仍然正常');
     assert.notEqual(ok.survival, null);
@@ -104,7 +108,7 @@ test('SA11 非法/未登记 camp：无 owner 403；带 owner 仍回落主营地�
 
 // SA12 读路径本身的回归：安全上下文里建档签发的 owner cookie，下一次带它读必须回到自己的营地；
 // 不带则 403（SEC5-02）。cookie 的 SameSite 属性由 SA13 钉——这条是手工带 cookie 头，验不了属性。
-test('SA12 安全上下文里建档签发的 owner cookie，下一次读必须 200（无 cookie 仍 403）', async () => {
+test('SA12 安全上下文里建档签发的 owner cookie，下一次读必须 200（无 cookie 走访客投影）', async () => {
   const { child, base } = await boot();
   const H = { 'content-type': 'application/json', 'x-forwarded-proto': 'https' };
   try {
@@ -119,8 +123,8 @@ test('SA12 安全上下文里建档签发的 owner cookie，下一次读必须 2
     assert.equal(withOwner.camp?.key, opened.key, '带着 owner cookie 必须读回自己的营地');
     assert.notEqual(withOwner.survival, null, '读到的应是该营地的世界，而不是回落主营地');
     const anonymous = await fetch(base + '/world?camp=' + opened.key);
-    assert.equal(anonymous.status, 403, 'SEC5-02：不带 owner cookie 仍不得读别人的营地');
-    assert.equal((await anonymous.json()).error, 'CAMP_NOT_OWNER');
+    assert.equal(anonymous.status, 200, 'A′：无 owner cookie 读已登记营地走访客投影');
+    assert.equal((await anonymous.json()).guest, true, '匿名读只能拿到访客投影标记');
   } finally {
     child.kill();
     await new Promise((r) => setTimeout(r, 300));
