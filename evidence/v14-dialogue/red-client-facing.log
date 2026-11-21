@@ -1,0 +1,4 @@
+FAIL Error: 朝向不对：undefined != right
+    at assert (file:///E:/Competition/AMBRACElife/scripts/v14-dialogue-browser.mjs:29:54)
+    at file:///E:/Competition/AMBRACElife/scripts/v14-dialogue-browser.mjs:70:3
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

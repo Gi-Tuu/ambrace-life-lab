@@ -2,12 +2,12 @@
   "algorithm": "md5",
   "mode": "rerun",
   "note": "默认/--rerun 模式真跑 life/run.mjs 五面；历史 log 不参与通过。",
-  "generatedAt": "2026-11-21T10:29:05.015Z",
-  "durationMs": 35151,
+  "generatedAt": "2026-11-21T11:37:02.814Z",
+  "durationMs": 34586,
   "faces": {
     "report": {
       "source": "life/run.mjs --report",
-      "durationMs": 8110,
+      "durationMs": 8976,
       "rawBytes": 1875,
       "rawMd5": "19a2803182a5a63ae944120dd0a528bc",
       "crlfBytes": 1886,
@@ -18,7 +18,7 @@
     },
     "sweep": {
       "source": "life/run.mjs --sweep",
-      "durationMs": 14176,
+      "durationMs": 12914,
       "rawBytes": 2838,
       "rawMd5": "22f76c48897713ddcee9bae8f767e31b",
       "crlfBytes": 2850,
@@ -29,7 +29,7 @@
     },
     "viab": {
       "source": "life/run.mjs --viab",
-      "durationMs": 3066,
+      "durationMs": 2859,
       "rawBytes": 4504,
       "rawMd5": "86da5c0a4a0e26b082fbfb54fd6c1736",
       "crlfBytes": 4526,
@@ -40,7 +40,7 @@
     },
     "recover": {
       "source": "life/run.mjs --recover",
-      "durationMs": 4915,
+      "durationMs": 4895,
       "rawBytes": 12107,
       "rawMd5": "feac239b364b8a771042d3996529181e",
       "crlfBytes": 12150,
@@ -51,7 +51,7 @@
     },
     "metab": {
       "source": "life/run.mjs --metab",
-      "durationMs": 4879,
+      "durationMs": 4936,
       "rawBytes": 13324,
       "rawMd5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
       "crlfBytes": 13357,

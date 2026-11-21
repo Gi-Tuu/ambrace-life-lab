@@ -1,0 +1,7 @@
+2026-11-21T11:38:25.107Z server.started {"at":"2026-11-21T11:38:25.107Z","kind":"server.started","port":9344}
+2026-11-21T11:38:27.613Z resident.place {"at":"2026-11-21T11:38:27.613Z","kind":"resident.place","ok":true,"p":{"x":28.45,"y":24},"target":{"x":28,"y":24,"src":"walker"},"loc":"hall"}
+2026-11-21T11:38:27.832Z dialogue.bubble {"at":"2026-11-21T11:38:27.832Z","kind":"dialogue.bubble","bubble":{"hidden":false,"visibility":"visible","name":"岑","line":"抬头看见是你，神色松下来：「是你啊，坐会儿？」","box":{"x":236,"y":524,"w":196,"h":66}},"frame":{"t":960,"acts":["a1:talk","c2:idle","p1:discussion"],"attention":["a1:right"],"focus":[29.249912232959996,22]},"t0":57600.43786666667}
+2026-11-21T11:38:27.832Z dialogue.facing {"at":"2026-11-21T11:38:27.832Z","kind":"dialogue.facing","dir":"right","expected":"right"}
+2026-11-21T11:38:29.999Z dialogue.panel {"at":"2026-11-21T11:38:29.999Z","kind":"dialogue.panel","open":true,"title":"和 岑 交谈","topics":["今天怎么样","在忙什么","聚落怎么样","需要帮忙吗"],"rowHidden":true,"log":"抬头看见是你，神色松下来：「是你啊，坐会儿？」"}
+2026-11-21T11:38:30.629Z dialogue.rounds {"at":"2026-11-21T11:38:30.629Z","kind":"dialogue.rounds","turns":[{"n":3,"my":"你：今天怎么样","npc":"今天下雨，鞋底全是泥，活干得不利索。","open":true},{"n":5,"my":"你：在忙什么","npc":"刚把手上的活收了个尾，正想歇口气。","open":true}],"round":{"local":true,"turns":4},"t1":57600.84928333333,"t2":57600.93938333333}
+2026-11-21T11:38:30.913Z dialogue.closed {"at":"2026-11-21T11:38:30.913Z","kind":"dialogue.closed","open":false,"talk":null,"running":true}
