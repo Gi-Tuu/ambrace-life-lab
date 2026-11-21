@@ -1,10 +1,15 @@
 {
   "algorithm": "md5",
-  "generatedAt": "2026-11-20T17:39:54.740Z",
+  "mode": "rerun",
+  "note": "默认/--rerun 模式真跑 life/run.mjs 五面；历史 log 不参与通过。",
+  "generatedAt": "2026-11-21T03:32:11.187Z",
+  "durationMs": 34016,
   "faces": {
     "report": {
-      "rawBytes": 1886,
-      "rawMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "source": "life/run.mjs --report",
+      "durationMs": 8573,
+      "rawBytes": 1875,
+      "rawMd5": "19a2803182a5a63ae944120dd0a528bc",
       "crlfBytes": 1886,
       "crlfMd5": "de764430c8bc88cd8dbbc24512621e4f",
       "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
@@ -12,8 +17,10 @@
       "match": true
     },
     "sweep": {
-      "rawBytes": 2850,
-      "rawMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "source": "life/run.mjs --sweep",
+      "durationMs": 13049,
+      "rawBytes": 2838,
+      "rawMd5": "22f76c48897713ddcee9bae8f767e31b",
       "crlfBytes": 2850,
       "crlfMd5": "aadd4895e84ae657d5a1e22c132228b1",
       "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
@@ -21,8 +28,10 @@
       "match": true
     },
     "viab": {
-      "rawBytes": 4526,
-      "rawMd5": "b923787830eb26c3853ecf959987cf9d",
+      "source": "life/run.mjs --viab",
+      "durationMs": 2682,
+      "rawBytes": 4504,
+      "rawMd5": "86da5c0a4a0e26b082fbfb54fd6c1736",
       "crlfBytes": 4526,
       "crlfMd5": "b923787830eb26c3853ecf959987cf9d",
       "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
@@ -30,8 +39,10 @@
       "match": true
     },
     "recover": {
-      "rawBytes": 12150,
-      "rawMd5": "fe198109386d048356f2fa69312e5183",
+      "source": "life/run.mjs --recover",
+      "durationMs": 4863,
+      "rawBytes": 12107,
+      "rawMd5": "feac239b364b8a771042d3996529181e",
       "crlfBytes": 12150,
       "crlfMd5": "fe198109386d048356f2fa69312e5183",
       "expectedMd5": "fe198109386d048356f2fa69312e5183",
@@ -39,8 +50,10 @@
       "match": true
     },
     "metab": {
-      "rawBytes": 13357,
-      "rawMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "source": "life/run.mjs --metab",
+      "durationMs": 4844,
+      "rawBytes": 13324,
+      "rawMd5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
       "crlfBytes": 13357,
       "crlfMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
       "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",

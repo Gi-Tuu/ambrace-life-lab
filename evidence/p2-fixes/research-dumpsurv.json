@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-11-21T03:29:40.089Z",
+  "allMatch": true,
+  "faces": {
+    "A": {
+      "label": "research-base",
+      "seed": 7,
+      "ticks": 12,
+      "bytes": 40405,
+      "md5": "62ccc1af1b9d45d34d145aedc468b539",
+      "expectedBytes": 40405,
+      "expectedMd5": "62ccc1af1b9d45d34d145aedc468b539",
+      "match": true
+    },
+    "B": {
+      "label": "research-gameopts",
+      "seed": 13,
+      "ticks": 24,
+      "bytes": 54778,
+      "md5": "052b65f18591b7308bc9f20dbf6684da",
+      "expectedBytes": 54778,
+      "expectedMd5": "052b65f18591b7308bc9f20dbf6684da",
+      "match": true
+    },
+    "C": {
+      "label": "legacy-formal",
+      "seed": 7,
+      "ticks": 24,
+      "bytes": 54953,
+      "md5": "8622d4070400cfbc6a76a86f04c0ae46",
+      "expectedBytes": 54953,
+      "expectedMd5": "8622d4070400cfbc6a76a86f04c0ae46",
+      "match": true
+    },
+    "D": {
+      "label": "research-independent",
+      "seed": 7,
+      "ticks": 24,
+      "bytes": 58875,
+      "md5": "41f75f8e5cd3c9472274584a608e3842",
+      "expectedBytes": 58875,
+      "expectedMd5": "41f75f8e5cd3c9472274584a608e3842",
+      "match": true
+    }
+  }
+}

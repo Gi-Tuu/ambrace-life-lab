@@ -1,0 +1,43 @@
+✔ ARCH-GATE-00 当前仓库七条闸门全绿（基线不假红） (454.0836ms)
+✔ ARCH-2D-01 退役 2D 符号逐条能变红 (0.5678ms)
+✔ ARCH-2D-01 TIME_WAIT 只放行研究态隔离模块，正式路径 0 (0.2242ms)
+✔ ARCH-CLOCK-01 正式模块写 world.t 即红，存档/研究夹具不误报 (0.1437ms)
+✔ ARCH-2D-01 测试/文档/证据/实验目录不计入运行路径 (0.1107ms)
+✔ ARCH-STEP-01 peripheralStepCap 已退役：任何运行路径出现即红 (0.148ms)
+✔ ARCH-SPACE-01 旧空间开关/包装/房间像素行走逐条能变红，测试与 docs 不误报 (0.2285ms)
+✔ ARCH-POS-01 位置字段只允许白名单整字段写入 (0.2077ms)
+✖ ARCH-POS-01 白名单按内容+次数：换行仍绿、复制违规行/换文件/改内容即红 (0.989ms)
+✔ ARCH-IMPORT-01 运行路径 import *.test.mjs / test-support/* 即红；测试文件本身仍排除 (0.2786ms)
+✔ ARCH-RESEARCH-01 研究态只许显式策略/legacy 配置：第二套时钟/空间常量逐条变红 (0.303ms)
+✔ 每条问题都带 file:line + 规则名，便于直接定位 (0.1199ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 11
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 518.878
+
+✖ failing tests:
+
+test at life\arch-gates.test.mjs:142:1
+✖ ARCH-POS-01 白名单按内容+次数：换行仍绿、复制违规行/换文件/改内容即红 (0.989ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/arch-gates.test.mjs:152:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

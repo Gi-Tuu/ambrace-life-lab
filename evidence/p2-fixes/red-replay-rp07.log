@@ -1,0 +1,45 @@
+✔ RP-01 窗口：保留最近 N 帧，范围裁剪并报告 coverage (1.1459ms)
+✔ RP-02 修订号不符：range/point/record 都返回 REPLAY_STALE，不混入旧时间轴 (0.5692ms)
+✔ RP-03 缺帧：事件详情仍可读，历史画面标记不可用 (0.2271ms)
+✔ RP-04 同刻多动作顺序稳定：事件按记录顺序返回 (0.1817ms)
+✔ RP-05 空历史/无对照：可解释，不抛异常 (0.0974ms)
+✔ RP-06 单侧暂停：缺场景侧显式 null，不借相邻分钟/另一侧场景 (0.1706ms)
+✖ RP-07 相邻分钟不冒充：tick 1 的 B 侧不得拿 62 分场景 (0.7226ms)
+✔ 同一刻保留最新场景及已有事件；旧帧不借用新场景 (0.2307ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56.7539
+
+✖ failing tests:
+
+test at life\replay-history.test.mjs:85:1
+✖ RP-07 相邻分钟不冒充：tick 1 的 B 侧不得拿 62 分场景 (0.7226ms)
+  AssertionError [ERR_ASSERTION]: 相邻分钟场景不得冒充请求分钟
+  + actual - expected
+  
+  + {
+  +   mapSeed: 13,
+  +   t: 1,
+  +   weather: 'rain'
+  + }
+  - null
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/replay-history.test.mjs:95:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { mapSeed: 13, t: 1, weather: 'rain' },
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

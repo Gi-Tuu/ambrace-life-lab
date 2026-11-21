@@ -1,0 +1,39 @@
+✔ CLOCK-01 默认 7.5s/60min：125ms 一游戏分钟，t 是派生的整 60 分 (0.6176ms)
+✔ CLOCK-02 advance 显式推进：测试/离线补时不依赖真实时间 (0.1273ms)
+✔ CLOCK-03 暂停期间世界冻结，恢复后不欠不补 (0.5373ms)
+✔ CLOCK-04 rate 是倍速：同一段真实时间走双倍游戏分钟，换挡不跳变 (0.1741ms)
+✖ CLOCK-06 rate=0 是冻结：不除零/NaN，startMinutes 不归零 (0.5151ms)
+✔ CLOCK-07 setGameMinutes/pause/resume 边界：不欠不补，且 t 与 nowTick 同源 (0.1777ms)
+✔ CLOCK-08 state() 可 JSON 往返，不含 NaN/Infinity 内部值 (0.5287ms)
+✔ CLOCK-05 真实毫秒令牌桶：容量、补充与耗尽 (0.1496ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57.678
+
+✖ failing tests:
+
+test at life\sim-clock.test.mjs:56:1
+✖ CLOCK-06 rate=0 是冻结：不除零/NaN，startMinutes 不归零 (0.5151ms)
+  AssertionError [ERR_ASSERTION]: GAME_SPEED=0 必须停在 startMinutes，而不是公式乘 0 归零
+  
+  0 !== 720
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/sim-clock.test.mjs:59:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 720,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

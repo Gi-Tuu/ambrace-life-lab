@@ -22,6 +22,7 @@
     "art": "node scripts/art-hashes.mjs",
     "art:catalog": "node scripts/art-catalog.mjs",
     "art:check": "node scripts/art-hashes.mjs --check",
+    "research:md5": "node evidence/v11-research/run-research-md5.mjs --rerun",
     "check": "npm run lint && npm run art:check && npm test",
     "actions": "node scripts/gen-actions.mjs",
     "serve": "node serve.mjs",

@@ -57,7 +57,10 @@ test('V11-OFFLINE-01 停机 60 真实分：正式世界按同一 rate 补 432 �
     `实际补进 ${applied.appliedMinutes} 游戏分（期望 432，允许读档真实耗时带来的 <4 分）`);
   assert.equal(applied.applied, 7, '432 游戏分 = 7 个完整刻');
   assert.equal(after.t - before.t, 7, `世界刻 2 → ${after.t}；停机 60 真实分必须推进 7 刻`);
-  assert.ok(Math.abs((after.gameMinutes - before.gameMinutes) - applied.appliedMinutes) <= 0.01,
+  // 读档/起服本身有真实耗时（TICK_MS=1000000、rate=2 ⇒ 1 游戏分≈8.3s），
+  // before 快照到 savedAt/start 之间的毫秒差会带进世界分钟。容差 0.2 游戏分（≈1.7s 真实时间）
+  // 只吸收这段读数噪声，不会放过“少补/多补一整刻”的语义错误（那至少差 60 分）。
+  assert.ok(Math.abs((after.gameMinutes - before.gameMinutes) - applied.appliedMinutes) <= 0.2,
     `读档后世界分钟 ${after.gameMinutes} 与补时读数 ${applied.appliedMinutes} 对不上`);
 
   // 不重复补：自动调度在 TICK_MS=1000000 下要到几分钟后才叫醒；期间世界不得再跳。

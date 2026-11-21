@@ -27,6 +27,8 @@ jobs:
         run: npm run lint
       - name: Art fingerprints
         run: npm run art:check
+      - name: Research five-face md5 (true rerun)
+        run: npm run research:md5
       - name: Full tests
         run: npm test
       - name: Save round-trip

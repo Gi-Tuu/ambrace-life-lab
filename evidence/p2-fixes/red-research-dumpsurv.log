@@ -1,0 +1,53 @@
+✖ V11-RESEARCH-01 研究策略常量只留一份：60/1440/12/10/40/4/2/think 都在 research-policy (1.279ms)
+✔ V11-RESEARCH-02 研究态 tick 语义：每 tick +1 刻 = 60 游戏分，不创建 simClock/minuteMetab/space (4.6207ms)
+✔ V11-RESEARCH-03 旧时间池适配：玩家每刻 100 点，居民 60/1440/4/2 由策略常量提供 (12.4377ms)
+✔ V11-RESEARCH-04 居民研究态旅行：同一 travelTicks 公式 + 12/刻，且没有 space 路径 (10.5659ms)
+✖ V11-RESEARCH-05 四组研究态 dumpSurv 逐位基线（md5/字节） (1.3621ms)
+✔ V11-RESEARCH-06 正式连续钟不被适配层劫持：simClock 存在时仍按分钟推进 (24.4459ms)
+✔ V11-RESEARCH-07 运行时只允许六个共享模块 import 研究策略；测试 oracle 运行路径 0 import (15.4949ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 195.5608
+
+✖ failing tests:
+
+test at life\v11-research-legacy.test.mjs:43:1
+✖ V11-RESEARCH-01 研究策略常量只留一份：60/1440/12/10/40/4/2/think 都在 research-policy (1.279ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v11-research-legacy.test.mjs:63:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at life\v11-research-legacy.test.mjs:121:1
+✖ V11-RESEARCH-05 四组研究态 dumpSurv 逐位基线（md5/字节） (1.3621ms)
+  AssertionError [ERR_ASSERTION]: A research-base 字节数变了
+  
+  14089 !== 40405
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v11-research-legacy.test.mjs:126:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 14089,
+    expected: 40405,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

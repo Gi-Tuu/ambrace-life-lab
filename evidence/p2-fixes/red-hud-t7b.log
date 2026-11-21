@@ -1,0 +1,42 @@
+✔ T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 125ms/游戏分） (0.6131ms)
+✔ T2 暂停/零倍速不漂移 (0.0962ms)
+✔ T3 倍速严格按 rate 缩放 (0.0915ms)
+✖ T10 HUD 锚点只读服务端 clock：不抖动、缺失回退 125、暂停/零倍速冻结 (0.9272ms)
+✔ T4 离线/掉轮询时外推封顶 5s，不无限漂 (0.0999ms)
+✔ T5 busy 进度按分钟插值，只显示不提前结算 (0.0989ms)
+✔ T6 今日剩余与时刻格式可读、跨日归零 (0.0814ms)
+✔ T7 前端复用 /world 的同一时钟字段，rAF 只改显示 (0.72ms)
+✔ T8 玩家 timeLeft 在连续世界是日统计、不是配额，HUD 不得把它当资源 (0.1857ms)
+✔ T9 /healthz 只投影最小时钟（同一 simClock，不暴露 anchor/路径/密钥） (0.182ms)
+✔ T10 真 HTTP：/world 与 /healthz 暴露同一世界分钟，暂停/倍速可见 (2226.7147ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 10
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2285.8751
+
+✖ failing tests:
+
+test at life\frontend-time-ui.test.mjs:54:1
+✖ T10 HUD 锚点只读服务端 clock：不抖动、缺失回退 125、暂停/零倍速冻结 (0.9272ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  136 !== 125
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/frontend-time-ui.test.mjs:67:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 136,
+    expected: 125,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

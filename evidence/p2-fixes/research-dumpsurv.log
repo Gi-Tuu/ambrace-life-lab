@@ -1,0 +1,5 @@
+A research-base: 40405B 62ccc1af1b9d45d34d145aedc468b539 · expected 40405B 62ccc1af1b9d45d34d145aedc468b539 · match
+B research-gameopts: 54778B 052b65f18591b7308bc9f20dbf6684da · expected 54778B 052b65f18591b7308bc9f20dbf6684da · match
+C legacy-formal: 54953B 8622d4070400cfbc6a76a86f04c0ae46 · expected 54953B 8622d4070400cfbc6a76a86f04c0ae46 · match
+D research-independent: 58875B 41f75f8e5cd3c9472274584a608e3842 · expected 58875B 41f75f8e5cd3c9472274584a608e3842 · match
+四组 dumpSurv 逐位相同：true

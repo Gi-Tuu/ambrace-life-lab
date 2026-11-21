@@ -1,0 +1,18 @@
+✖ V11-CMP-10 暂停 A 100 拍后回放：A 缺场景=null、B 正常，不跨分钟兜底 (1227.7484ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1367.3099
+
+✖ failing tests:
+
+test at life\v11-compare.test.mjs:340:1
+✖ V11-CMP-10 暂停 A 100 拍后回放：A 缺场景=null、B 正常，不跨分钟兜底 (1227.7484ms)
+  TypeError: Cannot read properties of null (reading 'A')
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v11-compare.test.mjs:362:30)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
