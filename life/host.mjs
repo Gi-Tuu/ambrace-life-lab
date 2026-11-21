@@ -3,7 +3,7 @@
 // 这里只保留 HTTP 面需要的请求整形（snapshot/act/ctl）与原导出，避免主路径继续膨胀。
 import { CURRENT_LAYOUT } from '../shared/layout-version.mjs';
 import { randomInt } from 'node:crypto';
-import { LOCS, workUsedToday, hail, move } from './body.mjs';
+import { LOCS, workUsedToday, hail, move, startMove } from './body.mjs';
 import { worldSite } from './geometry.mjs';
 import { classifySay } from './speech.mjs';
 import { tell } from './gossip.mjs';
@@ -384,6 +384,27 @@ export const host = {
             id: a.id, loc: w.loc[a.id] ?? null, action: a.trace?.at(-1)?.kind ?? null, ok: a.trace?.at(-1)?.ok ?? null,
           })),
         };
+      }
+      if (body.action === 'pace_move_fixture') {
+        // 2026-11-21 位移修复的浏览器夹具（仅 V73_TEST=1）：让一名居民立刻出发去别的区，
+        // 供 evidence/pace-move-fix 用真实 /world 位置量“居民 10 秒真实位移”。
+        // 只调用真实 startMove（不做任何位置写入），与游戏内居民出行同一条代码路径。
+        if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+        const sp = S.mainSurv ?? S.surv;
+        if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+        const w = sp.world, id = String(body.resident ?? 'a1');
+        const from = w.loc?.[id] ?? null;
+        const to = Object.keys(w.districts ?? {}).find((loc) => loc !== from) ?? null;
+        if (!w.agents?.[id] || !to) return { ok: false, code: 'NO_DISTRICT' };
+        startMove(w, id, to);
+        const row = w.survival?.districtTravel?.[id] ?? null;
+        return { ok: Boolean(row), id, from, to, length: row?.length ?? null,
+          arriveMin: row?.arriveMin ?? null, arrive: row?.arrive ?? null, path: row?.path?.length ?? 0,
+          // 诊断字段：确认被 tick 的世界就是被改的世界（证据脚本会落盘）。
+          t: w.t, campKey: w.campKey ?? null, clockMinutes: w.simClock?.nowMinutes?.() ?? null,
+          mainIsSurv: S.mainSurv === S.surv, tickError: S.tickError ?? null,
+          loc: w.loc?.[id] ?? null, pos: w.pos?.[id] ?? null,
+          travel: row ? { arriveMin: row.arriveMin, arrive: row.arrive, length: row.length, index: row.index ?? 0, cursor: row.cursor ?? null } : null };
       }
       if (body.action === 'quickstart_death') {
         // 浏览器验收夹具（仅 V73_TEST=1）：把玩家存续归零，验证“个人死亡后世界继续”的页面路径。

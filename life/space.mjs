@@ -25,10 +25,12 @@ export const TILE = 16;
 export const PIXELS_PER_UNIT = 16;
 export const CAMP_UNITS = Object.freeze({ width: TOWN_SIZE.width, depth: TOWN_SIZE.depth });
 
-// ── 时间/速度：正式游戏唯一口径（单位/游戏分钟）─────────────────────────────
-// 正式默认 1 游戏分钟 = 6000ms（1:10，一天 144 现实分钟），即一刻 60 分 = 360000ms。
-// 因此正式游戏基础步行速度 = 0.375 单位/游戏分钟；冲刺 ×1.75。现实耗时随 1:10 变长是预期。
-// 服务端 playerReach 的每刻预算、客户端每帧步长、居民 startMove 全部由这两个函数派生。
+// ── 时间/速度：两种刻度，一条位移真相 ────────────────────────────────────────
+// 动作/睡眠/体力/旅行时长的“游戏分钟”刻度（1 游戏分 = 6000ms，1:10）保持不变：
+// 本文件下半段（WALK_UNITS_PER_GAME_MINUTE / unitsForGameMinutes / speedBudget）只服务这套语义。
+// 但**位移**（玩家键盘、居民连续路径、服务端 playerReach）必须按真实时间——2026-11-21 的
+// “1:10 把移动拖慢 48 倍”就是拿 0.375 单位/游戏分 × 360000ms/刻 换算出来的。
+// 位移唯一真相在下面的 REAL 区块；它不读 tickMs，也不读 simClock。
 export const GAME_MINUTES_PER_TICK = 60;
 export const WALK_UNITS_PER_GAME_MINUTE = 3 / 8;
 export const SPRINT_FACTOR = 1.75;
@@ -37,7 +39,7 @@ export const GAME_PLAYER_UNITS_PER_TICK = GAME_BASE_UNITS_PER_TICK * SPRINT_FACT
 export const unitsForGameMinutes = (minutes) => WALK_UNITS_PER_GAME_MINUTE * minutes;
 export const unitsForTick = (sprint = false) =>
   unitsForGameMinutes(GAME_MINUTES_PER_TICK) * (sprint ? SPRINT_FACTOR : 1);
-// P2b：唯一“每游戏分钟多少单位”的预算表。玩家移动上报、居民旅行、客户端步长全部从这里派生。
+// P2b：唯一“每游戏分钟多少单位”的预算表（动作/旅行语义，不是位移真相）。
 export const SPEED_BUDGET_UNITS_PER_GAME_MINUTE = Object.freeze({
   walk: WALK_UNITS_PER_GAME_MINUTE,
   sprint: WALK_UNITS_PER_GAME_MINUTE * SPRINT_FACTOR,
@@ -50,9 +52,46 @@ export const travelTicksAt = (distance, perTick, min = 2) =>
   Math.max(min, Math.ceil(Math.max(0, distance) / perTick) + 1);
 export const travelTicks = (distance, kind = 'sprint', min = 2) =>
   travelTicksAt(distance, unitsPerTick(kind), min);
-// 正式游戏居民与玩家共用同一预算表：居民按 walk（22.5/刻）出行；玩家移动上报可冲刺
-// （sprint 39.375/刻）。两者都由 speedBudget/unitsPerTick 派生，不再有独立常数 12。
+// 游戏分钟刻度的兼容读法（动作/旅行时长、研究态夹具）；位移预算见 unitsPerRealTick。
 export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
+
+// ── 位移：按真实时间，与 simClock 节奏解耦（1.1.2 手感）────────────────────
+// 步行 3 单位/真实秒（≈1.1.2 的 6fps × 0.5 tile），冲刺 ×1.75 = 5.25。
+// 客户端每帧步长、居民连续路径、服务端 playerReach 全部只从这里派生：
+//   · 现实 1 秒 = 3 tile（冲刺 5.25），与 1:10 的 6000ms/游戏分无关；
+//   · 世界时间变慢/倍速/暂停都不改变“按真实毫秒走多远”。
+export const WALK_UNITS_PER_REAL_SECOND = 3;
+export const SPRINT_UNITS_PER_REAL_SECOND = WALK_UNITS_PER_REAL_SECOND * SPRINT_FACTOR;
+export const REAL_SPEED_UNITS_PER_SECOND = Object.freeze({
+  walk: WALK_UNITS_PER_REAL_SECOND,
+  sprint: SPRINT_UNITS_PER_REAL_SECOND,
+});
+export const realSpeed = (kind = 'walk') =>
+  kind === 'sprint' ? SPRINT_UNITS_PER_REAL_SECOND : WALK_UNITS_PER_REAL_SECOND;
+// 一刻的名义真实毫秒（正式 60 游戏分 × 6000ms = 360000ms）；只做缺字段兜底。
+export const DEFAULT_TICK_MS = 360000;
+// 真实毫秒 ⇒ 位移（不再收 tickMs；旧三参签名正是 48× 事故的入口，已删除）。
+export const unitsForRealMs = (ms, sprint = false) =>
+  (Number.isFinite(ms) ? Math.max(0, ms) : 0) / 1000 *
+  (sprint ? SPRINT_UNITS_PER_REAL_SECOND : WALK_UNITS_PER_REAL_SECOND);
+// 一刻的真实毫秒：调用方必须传与当前世界 clock 同源的 msPerGameMinute（正式 6000）。
+export const tickRealMs = (msPerGameMinute) => {
+  const per = Number(msPerGameMinute);
+  return GAME_MINUTES_PER_TICK *
+    (Number.isFinite(per) && per > 0 ? per : DEFAULT_TICK_MS / GAME_MINUTES_PER_TICK);
+};
+// 位移的服务端每刻预算：真实速度 × 一刻真实秒数（正式 walk 1080、sprint 1890）。
+// 这是“这个游戏分钟刻度下，一现实刻最多走多远”的换算，不是新的游戏分钟预算表。
+export const unitsPerRealTick = (kind = 'walk', msPerGameMinute) =>
+  realSpeed(kind) * tickRealMs(msPerGameMinute) / 1000;
+// 服务端 playerReach 的位置额度（正式连续世界）：真实经过毫秒 × 真实速度 × 1.5 + 1 tile。
+// 1.5 是网络/轮询抖动余量（客户端每 2 tile 一报，900ms 轮询+往返可达数百 ms）；
+// +1 tile 是首步/状态被服务端清空后的地板。超额度仍 TELEPORT，负控见 pace-move 测试。
+export const SYNC_REAL_SLACK_RATIO = 1.5;
+export const SYNC_REAL_SLACK_UNITS = 1;
+export const reachAllowanceForRealMs = (ms, kind = 'walk') =>
+  realSpeed(kind) * (Number.isFinite(ms) ? Math.max(0, ms) : 0) / 1000 * SYNC_REAL_SLACK_RATIO +
+  SYNC_REAL_SLACK_UNITS;
 
 // ── 研究态 legacy 速度行（唯一配置，不是第二套空间）─────────────────────────
 // 研究态/旧时间模型没有连续路径与 space 几何，但仍是一种“每刻走多少单位”的预算；
@@ -60,14 +99,6 @@ export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
 // space.mjs 是浏览器也 import 的纯几何模块，不能反向依赖服务端策略（否则 /life/ 模块 404）。
 // 旧空间实现（地面谓词/体半径像素栅格/房间像素行走）已迁到 test-support/legacy-space-oracle.mjs，
 // 运行路径 0 import；ARCH-SPACE-01 / ARCH-RESEARCH-01 静态钉死。
-// tickMs 只决定“一刻的真实时长”；正式默认 60 游戏分/刻 × 6000ms = 360000ms。
-// 调用方必须传与当前世界 clock 同源的 tickMs；默认值只是正式口径兜底，不是第二套时间源。
-export const DEFAULT_TICK_MS = 360000;
-export const unitsForRealMs = (ms, tickMs = DEFAULT_TICK_MS, sprint = false) => {
-  const minutes = GAME_MINUTES_PER_TICK * (Number.isFinite(ms) ? ms : 0) /
-    Math.max(1, Number.isFinite(tickMs) ? tickMs : DEFAULT_TICK_MS);
-  return unitsForGameMinutes(minutes) * (sprint ? SPRINT_FACTOR : 1);
-};
 
 // ── 房间：显式 16×12 世界单位（原服务端 pointIn(from,16.01,12.01) 的等价物）─────────
 // P2c：房间几何与门都在 shared/room-layout.mjs；这里只把 roomStage 的实体 AABB 包成

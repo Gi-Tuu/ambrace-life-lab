@@ -667,22 +667,13 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
 
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
-// P4：每帧步长只由 space.mjs 的“单位/游戏分钟”换算；旧的“村外 10/刻”钳制已随回退分支删除。
-// 1:10 节奏后“一刻”= 60 游戏分 = 360000ms；正式连续世界优先读服务端 clock.msPerGameMinute，
-// 不再把 TICK_MS=7500 当成正式节奏（研究态/冻结世界才回落到 view.tickMs）。
-// 冻结世界（测试 TICK_MS > 1000s/刻）只在玩家步长上按名义 7.5s 刻换算，避免表现层不动；
-// 日光/旅行仍保留 S.tickMs 原读数（与金样历史行为一致）。
-function movementTickMs(snapshot) {
-  const raw = tickMsFromView(snapshot, S.tickMs);
-  return raw > 1_000_000 ? 7500 : raw;
-}
-function playerGameStep(snapshot, dt) {
-  return unitsForRealMs(dt * 1000, movementTickMs(snapshot), keys.has('sprint'));
-}
-function playerStepCap(snapshot, dt) {
-  const tickMs = movementTickMs(snapshot);
-  const ups = snapshot?.playerUnitsPerTick ?? 10;
-  return ups * 1000 / tickMs * dt;
+// 位移按真实时间（2026-11-21 修复）：玩家/居民每帧走多远只由真实 dt 决定，space.mjs 的
+// WALK/SPRINT_UNITS_PER_REAL_SECOND（3 / 5.25 tile/s）是唯一口径；1:10 的 6000ms/游戏分
+// 只管动作/睡眠/旅行的“游戏分钟”语义。旧的 movementTickMs（60×6000=360000ms/刻）已从
+// 位移路径删除——它曾把 3 tile/s 换成分母 360000 的 0.0625 tile/s（整段慢 48×）。
+// 日光/旅行读数仍保留 S.tickMs 原值（与金样历史行为一致）。
+function playerRealStep(dt) {
+  return unitsForRealMs(dt * 1000, keys.has('sprint'));
 }
 const SYNC_DIST = 2, SYNC_MS = 1200;
 let playerSyncInFlight = false;
@@ -774,13 +765,9 @@ function ensureWalker(cvId, who, world, slots) {
       if (gate) s.path=routeForWalker(world,s,[gate.x+gate.w/2-.5,gate.z+gate.d*.7-.5])??[];
     }
     s.pi=0;
-    if (!travel) { delete s.tripSpeed; return; }
-    let prior=[s.x,s.y], length=0;
-    for (const p of s.path) {
-      length+=distanceTo(p,prior);
-      prior=p;
-    }
-    s.tripSpeed=length/Math.max(1,travel.arrive-snapshot.t)/tickMsFromView(snapshot, S.tickMs)/.8;
+    // 居民旅行视觉步速只由真实时间决定（见 animate 里的 mstep=3 tile/s）；
+    // 旧 tripSpeed 用 tickMsFromView 除 360000ms/刻，已随“位移按真实毫秒”删除。
+    delete s.tripSpeed;
   };
   if (!auth) return null;
   const k = walkKey(cvId, who);
@@ -4746,7 +4733,7 @@ loadAssets();
     const mdx = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
     const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
     ACT.motionTime=reduced.matches?0:elapsed;
-    const mstep=SPEED*ACT.fps*dt, playerStep=mstep*(keys.has('sprint')?1.75:1);
+    const mstep=SPEED*ACT.fps*dt, playerStep=playerRealStep(dt);
     if (guidance && now>guidance.until) { guidance=null; forceRepaint=true; }
     const walking=mdx||mdy||Boolean(roomRoute)||Object.values(WALK).some(walker=>walker.pi<walker.path?.length||walker.moving);
     S.moving=walking;
@@ -4823,18 +4810,16 @@ loadAssets();
       if (campRenderer) {
         const world=campWorlds.get(cvId);
         if (!world) continue;
-        const trip=snapshot.districtTravel?.[who];
-        const rate=trip?Math.min(mstep*1.35,Math.max(mstep,(walker.tripSpeed??0)*dt*1000)):mstep; // 限速：tripSpeed 在快 tick 下会放大成瞬移
-        // P4：步长只由 space.mjs 的“单位/游戏分钟”换算，村内/村外同一预算（旧“村外 10/刻”已删）。
-        let step=manual&&player?playerGameStep(snapshot,dt):rate;
-        if (player && manual) step=Math.min(step, playerStepCap(snapshot,dt));
+        // 位移只有一条公式：玩家键盘按真实 dt（3 / 冲刺 5.25 tile/s），居民连续路径也按
+        // 同一真实步速（mstep=SPEED*ACT.fps*dt=3 tile/s，ACT.fps 是 6 帧/秒的精灵帧率）。
+        // 旅行不再按“到点刻数”限速：服务端旅行刻数已按真实速度推导。
+        const step=manual&&player?playerRealStep(dt):mstep;
         stepCampWalker(world,walker,cvId,snapshot,who,dx,dy,step,manual);
         if (player && cvId==='cvA') syncPlayerPos(walker, snapshot); // 要求3：节流上报＋被拒钳位
       } else if (manual) {
         const n=Math.hypot(dx,dy);
         const world=buildWorld(snapshot);
-        let step=player?playerGameStep(snapshot,dt):playerStep;
-        if (player) step=Math.min(step, playerStepCap(snapshot,dt));
+        const step=player?playerRealStep(dt):mstep;
         const [x,y]=moveMapFeet(world,walker.x,walker.y,dx/n*step,dy/n*step);
         walker.moving=x!==walker.x || y!==walker.y;
         walker.x=x; walker.y=y;

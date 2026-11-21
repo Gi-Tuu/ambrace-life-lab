@@ -57,14 +57,19 @@ try {
   const before = await h.evaluate(`(()=>{const W=window.__lifeDebug.WALK;const k=Object.keys(W).find(k=>k.endsWith(':p1'))??Object.keys(W)[0];return {key:k,x:W[k].x,y:W[k].y,menu:window.__lifeDebug.ui.menu}})()`, sid);
   note('walk.before', before);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD',key:'d',bubbles:true}))`, sid);
-  // 1:10 节奏下玩家步行按游戏分钟换算（0.375 单位/游戏分），现实 1 秒只走 0.0625 单位；
-  // 原 700ms 只有 0.044 单位。这里等到 ~1200ms（0.075 单位），仍远小于摆锤/碰撞阈值。
-  await h.wait(1200);
+  // 位移按真实时间（2026-11-21 修复）：0.5s×6fps=3 tile/s，700ms ≈ 2.1 tile（1.1.2 手感）。
+  // 旧的 1200ms/0.074 是 1:10 把位移按 6000ms/游戏分换算的事故值，不得回归。
+  const walkHeldMs = 700;
+  await h.wait(walkHeldMs);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD',key:'d',bubbles:true}))`, sid);
   const after = await h.evaluate(`(()=>{const W=window.__lifeDebug.WALK;const k=${JSON.stringify(before.key)};return {x:W[k].x,y:W[k].y}})()`, sid);
   const moved = Math.hypot(after.x - before.x, after.y - before.y);
-  note('walk', { before, after, moved: Number(moved.toFixed(3)) });
-  assert(moved > 0.05, `按 D 后角色没有移动（${moved}）`);
+  const tilesPerSecond = moved / (walkHeldMs / 1000);
+  note('walk', { before, after, heldMs: walkHeldMs, moved: Number(moved.toFixed(3)), tilesPerSecond: Number(tilesPerSecond.toFixed(3)) });
+  // ~2 tile（历史 2.1）；速度必须≈3 tile/s（2.2–3.8 吸收首帧/碰撞）。
+  assert(moved > 1.2 && moved < 3.4, `按 D 后位移必须≈2 tile（实测 ${moved.toFixed(3)}）`);
+  assert(tilesPerSecond > 2.2 && tilesPerSecond < 3.8,
+    `quickstart 步行速度必须≈3 tile/s（实测 ${tilesPerSecond.toFixed(3)}）`);
 
   // 采集：种子档里院子木料已采空；走到瞭台采石（UI 提示「镐（3）：采石（瞭台/井台）」）。
   const mv = await act({ kind: 'move', room: 'watch' });
@@ -127,6 +132,7 @@ try {
     result: '起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续',
     hud,
     walkMoved: Number(moved.toFixed(3)),
+    walkTilesPerSecond: Number(tilesPerSecond.toFixed(3)),
     gather: { stone0, stone1 },
     eat: { energy: Number(energy.toFixed(3)), store0, store1 },
     sleep: { ticks: sleep.ticks, t0, t1 },

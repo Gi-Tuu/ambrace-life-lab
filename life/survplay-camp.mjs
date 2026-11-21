@@ -20,7 +20,7 @@ import { constructionAccess, constructionAccessEnabled, constructionSpace, recor
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { houseAction, claimWildPlot, playerHouseWork } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, reachAllowanceForRealMs, roomContains } from './space.mjs';
 import { LEGACY_RESEARCH_UNITS_PER_TICK } from './research-policy.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId, WORLD_SPACE } from './actor-pos.mjs';
@@ -35,14 +35,29 @@ import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpac
 // 这样 A/B 对照那条闸门（from=[0,0] 离采集点 28.1 单位 ⇒ TELEPORT）保持原意不变。
 // inCamp 只在合法坐标上有意义；越界坐标（哨兵值）按“村外”从严处理，绝不因探测地形抛错而改变拒绝码。
 const syncBudget = (from, kind, w) => {
-  // P2：正式游戏的玩家**移动上报**按 space.mjs 的“单位/游戏分钟”单一口径（含冲刺）；
-  // 非移动动作（采集/建造…）按基础步行预算校验，伪造端点仍会被拒——冲刺是移动能力，不是动作瞬移。
+  // 无连续时钟（研究态 / 夹具 / SIM_TIME=0 的旧时间模型）仍走旧的每刻预算：
+  // 玩家移动上报用 sprint 行，非移动动作用基础步行行。研究 md5 与旧轨迹逐位不动。
   if (w?.survival?.actTimeModel === true) {
     return kind === 'player_sync' ? GAME_PLAYER_UNITS_PER_TICK : GAME_BASE_UNITS_PER_TICK;
   }
   let inside = false;
   try { inside = kind === "player_sync" && inCamp(from[0], from[1]); } catch { inside = false; }
   return inside ? LEGACY_RESEARCH_UNITS_PER_TICK.playerSyncInCamp : LEGACY_RESEARCH_UNITS_PER_TICK.player;
+};
+// 2026-11-21 位移修复：正式连续世界（有 simClock）按**真实经过毫秒**给位移额度，
+// 不再按“刻”发预算——1:10 下一秒真实位移 3 tile，而旧额度 39.375/刻（360s）会在持续
+// 行走 13s 后把正常移动判成 TELEPORT 再拉回。
+// 额度公式唯一来源是 space.mjs 的 reachAllowanceForRealMs：
+//   真实经过毫秒 × 真实速度 × 1.5 + 1 tile
+// 1.5/1 tile 的余量含义见该函数注释；超额度仍然 TELEPORT（伪造远端坐标的负控保留）。
+const SYNC_REAL_FLOOR_MS = 1000;
+const realNowMs = (w) => {
+  const n = Number(w?.simClock?.nowMs?.());
+  return Number.isFinite(n) ? n : Date.now();
+};
+const realSyncAllowance = (w, kind, st, nowMs) => {
+  const elapsedMs = st && Number.isFinite(st.atMs) ? Math.max(0, nowMs - st.atMs) : SYNC_REAL_FLOOR_MS;
+  return reachAllowanceForRealMs(elapsedMs, kind === 'player_sync' ? 'sprint' : 'walk');
 };
 // P2b：位置权威不再只校验速度。正式游戏的室外脚点必须落在 space 的可走面内（含实体半径），
 // 室内位置（campPlayerRoom + 房间 16×12 坐标）是显式房间空间，不做室外几何判定。
@@ -66,6 +81,8 @@ function commitPlayerPos(w, from) {
 export function playerReach(w, from, kind = '') {
     if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
+  // 正式连续世界（simClock）的位移额度按真实毫秒；研究态/夹具保持旧刻预算。
+  const continuous = Boolean(w.simClock);
   const last = s.playerPos;
   const first = !last || !Number.isFinite(last.x) || !Number.isFinite(last.z);
   if (first) {
@@ -76,11 +93,23 @@ export function playerReach(w, from, kind = '') {
     const d0 = Math.hypot(from[0] - at[0], from[1] - at[1]);
     if (d0 > 2 + 1e-6) return { ok: false, code: 'TELEPORT' };
     commitPlayerPos(w, from);
-    s.playerReachState = { t: w.t, allowance: syncBudget(from, kind, w), sub: 0 };
+    s.playerReachState = continuous
+      ? { atMs: realNowMs(w) }
+      : { t: w.t, allowance: syncBudget(from, kind, w), sub: 0 };
     return { ok: true };
   }
   const dist = Math.hypot(from[0] - last.x, from[1] - last.z);
-  // V7.3 §7：子刻精度——同一世界刻内的多次上报共用本刻速度额度（正式游戏 walk 22.5 / 旧路径 10），
+  if (continuous) {
+    // 真实时间预算：额度只随真实毫秒增长，与 1:10 的刻长/倍速/暂停无关。
+    const nowMs = realNowMs(w);
+    const allowance = realSyncAllowance(w, kind, s.playerReachState, nowMs);
+    if (dist > allowance + 1e-6) return { ok: false, code: 'TELEPORT' };
+    if (!geometryAllows(w, from)) return { ok: false, code: w.campPlayerRoom || dist <= 2 + 1e-6 ? 'OUT_OF_REACH' : 'TELEPORT' };
+    commitPlayerPos(w, from);
+    s.playerReachState = { atMs: nowMs };
+    return { ok: true };
+  }
+  // V7.3 §7：子刻精度——同一世界刻内的多次上报共用本刻速度额度（旧路径 walk 22.5 / 研究态 10），
   // 不再用 dt=0 ⇒ 允许距离 0 把正常连续行走判成瞬移；跨刻按经过刻数换一份新额度。
   const ticks = Math.max(0, w.t - (Number.isFinite(last.t) ? last.t : w.t));
   const st = s.playerReachState;

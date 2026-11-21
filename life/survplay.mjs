@@ -409,6 +409,8 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
   for (let minute = cursor + 1; minute <= to; minute += 1) {
     clock.setGameMinutes(minute);
     advancePlayerBusy(sp, minute);
+    // 位移按真实时间：居民旅行每游戏分钟推进（18 单位/分），到达按 arriveMin 判定。
+    if (w.survival?.actTimeModel === true) advanceTravels(w, { minutes: 1 });
     if (minuteBody) {
       // 身体先于 think 落地：本分钟到期的 think 读到的是“已积分到本分钟”的快照。
       // 步内不消费世界 RNG（见 life/v11-metab.test.mjs 的 RNG 闸门）。
@@ -449,7 +451,9 @@ function residentMinutePass(w, sp, atMin, { onResidentAction, explicit }) {
     const a = w.agents[id];
     if (!a || a.isPlayer || !isAlive(a)) continue;
     const travel = w.survival.districtTravel?.[id];
-    if (travel && w.t < travel.arrive) continue;
+    // 连续世界的旅行在 advanceTravels 里每分钟推进、到 arriveMin 结算；在路上（travel 仍在）
+    // 就不派发新决策。无 simClock 的旧路径语义等价（到点即清 travel）。
+    if (travel) continue;
     if (w.survival.talk?.target === id) continue;
     const advanced = advanceResidentBusy(w, id, atMin);
     if (advanced.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: advanced.code });
@@ -552,9 +556,8 @@ function drainThinkQueue(w, sp) {
 
 async function worldTick(sp, { now, onResidentAction, think }) {
   const w = sp.world;
-  // P2c：正式游戏的居民旅行在每刻按 space 路径推进；到达后才结算 loc/occupancy。
-  // 研究态/旧时间模型不调用，保持原"到点瞬移"逐位不变。
-  if (w.survival?.actTimeModel === true) advanceTravels(w);
+  // P2c：无 simClock 的正式夹具每整刻推进旅行（连续世界已在 tickSim 按分钟推进）；研究态不调用。
+  if (w.survival?.actTimeModel === true && !w.simClock) advanceTravels(w);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
   // P1：正式连续世界不再"每 60 分整清"感知——事件按 seq 由每个居民的 think 消费一次；
   // 这里只做容量上限。研究态保持旧的每刻清空，dump/轨迹逐位不变。

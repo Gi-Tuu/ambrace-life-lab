@@ -11,7 +11,7 @@ import { legacyGroundQuery } from '../test-support/legacy-space-oracle.mjs';
 import { campSite, campEntrance } from '../shared/camp-interaction.mjs';
 import { campBridgeBounds } from '../shared/camp-layout.mjs';
 import { campTerrain } from '../shared/camp-terrain.mjs';
-import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, unitsForRealMs, travelTicks, unitsPerTick } from './space.mjs';
+import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, unitsForRealMs, travelTicks, unitsPerTick, reachAllowanceForRealMs } from './space.mjs';
 
 const FORMAL = {
   gameRules: true, mapSeed: 13, layoutVersion: 2, settlementLife: true, regionalWork: true,
@@ -156,15 +156,26 @@ test('P2-08/P4 fallback 开关已退役：正式模块没有开关，旧谓词�
   assert.equal(constructionSpace(w).walkable(bankX, z, 0), false, '正式 space 岸带不可走');
 });
 
-test('P2-09 客户端速度换算与服务端预算同一函数：冲刺恰好卡在 cap 上', () => {
-  for (const tickMs of [7500, 360000]) {
-    for (const dt of [1 / 60, 0.05, 0.2]) {
-      const cap = GAME_PLAYER_UNITS_PER_TICK * 1000 / tickMs * dt;
-      const sprint = unitsForRealMs(dt * 1000, tickMs, true);
-      const normal = unitsForRealMs(dt * 1000, tickMs, false);
-      assert.ok(sprint <= cap + 1e-12, `冲刺 ${sprint} 不得超过服务端 cap ${cap}`);
-      assert.ok(normal < sprint);
-    }
+test('P2-09 客户端步长与服务端额度同源：真实速度（不再有 tickMs 隐藏上限）', () => {
+  // 2026-11-21 位移修复：旧断言用 GAME_PLAYER_UNITS_PER_TICK*1000/tickMs*dt 作 cap，
+  // 在 360000ms/刻下等出 0.109375 tile/s 的隐藏上限（正是 48× 事故）。现在客户端步长
+  // 只由真实毫秒决定，服务端额度只由真实经过毫秒决定，两者同源、同量纲。
+  assert.equal(unitsForRealMs(1000), 3);
+  assert.equal(unitsForRealMs(1000, true), 5.25);
+  for (const dt of [1 / 60, 0.05, 0.2]) {
+    const normal = unitsForRealMs(dt * 1000, false);
+    const sprint = unitsForRealMs(dt * 1000, true);
+    assert.ok(Math.abs(normal - 3 * dt) < 1e-12, `步行步长 = 3×dt（实测 ${normal}）`);
+    assert.ok(Math.abs(sprint - 5.25 * dt) < 1e-12, `冲刺步长 = 5.25×dt（实测 ${sprint}）`);
+    // 服务端 1.5× 余量 + 1 tile：任意 dt 下同窗口额度都不小于客户端一步。
+    assert.ok(reachAllowanceForRealMs(dt * 1000, 'walk') >= normal);
+    assert.ok(reachAllowanceForRealMs(dt * 1000, 'sprint') >= sprint);
   }
+  // 1 秒真实时间：额度 3×1.5+1=5.5（步行）/5.25×1.5+1=8.875（冲刺）。
+  assert.equal(reachAllowanceForRealMs(1000, 'walk'), 5.5);
+  assert.equal(reachAllowanceForRealMs(1000, 'sprint'), 8.875);
+  // 5 秒累计仍按真实速度线性增长（没有第二条按刻换算的 cap）。
+  assert.equal(unitsForRealMs(5000), 15);
+  assert.equal(reachAllowanceForRealMs(5000, 'walk'), 23.5);
 });
 

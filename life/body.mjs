@@ -15,13 +15,13 @@ import { scheduledLoc, weatherFor, dayOf, survivalPhaseOf } from './clock.mjs';
 import { noteConsumed } from './resource-ledger.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
-import { simMinuteNow } from './sim-clock.mjs';
+import { simMinuteNow, worldMinutes } from './sim-clock.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecastDisasters } from './worldstate.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
 import { takeFoodKind, BUILDINGS, buildDef, buildingsFor, gatherResource, doGather, doPlan, doBuild, doRepair, doForage, forageRule, doExchange, doExpand, EXCHANGE, EXPAND, EXPAND_LABEL, PRODUCE_LABEL, LIVESTOCK_CAP, PRODUCE_CAP } from './production.mjs';
 import { initCoop, stepCooperation, cooperationCandidate } from './cooperation.mjs';
-import { GAME_RESIDENT_UNITS_PER_TICK, travelTicksAt, unitsPerTick } from './space.mjs';
+import { GAME_MINUTES_PER_TICK, GAME_RESIDENT_UNITS_PER_TICK, realSpeed, travelTicksAt, unitsPerRealTick, unitsPerTick } from './space.mjs';
 import { LEGACY_RESEARCH_UNITS_PER_TICK, researchTravelTicks } from './research-policy.mjs';
 import { advanceTravelPos, beginTravel, clearTravel, defaultActorPos, isInteriorLoc, isRoomSpace, moveActor, noteArrival, placeActor, posOf, roomOfSpace, roomSpaceId, setPlayerRoom, spawnActor, travelStartWorld, WORLD_SPACE } from './actor-pos.mjs';
 import { routeLength, worldRoute } from '../shared/asset-collision.mjs';
@@ -307,6 +307,13 @@ export function residentRoute(world, id, to, access = null) {
   };
 }
 
+// 正式连续世界的真实位移换算：msPerGameMinute 来自该世界自己的 simClock。
+// 无 simClock（研究态/夹具/SIM_TIME=0 的旧时间模型）返回 null ⇒ 退回旧的“每刻游戏分钟预算”，逐位不变。
+function continuousMsPerMinute(world) {
+  const per = Number(world?.simClock?.msPerGameMinute);
+  return Number.isFinite(per) && per > 0 ? per : null;
+}
+
 export function startMove(world,id,to) {
   const from=world.loc[id];
   if (from===to) return;
@@ -321,22 +328,38 @@ export function startMove(world,id,to) {
   // P2b 的口径保留：正式游戏按 space 的速度预算；研究态/旧档保持 12/刻逐位不变。
   // P2B_RESIDENT_LEGACY=1 只用于证据归因（金样/长程 A/B），正常游戏不要设置。
   const formal = world.survival?.actTimeModel === true && process.env.P2B_RESIDENT_LEGACY !== '1';
-  // 居民按同一 speedBudget 的 walk 档出行（冲刺是同一张表里的显式倍率，不是第二套预算）。
+  // 居民按同一速度表的 walk 档出行（冲刺是同一张表里的显式倍率，不是第二套预算）。
   const kind = process.env.P2B_RESIDENT_SPEED === 'sprint' ? 'sprint' : 'walk';
   if (formal) {
     const trip = residentRoute(world, id, to, access);
     const start = worldSite(world, from), end = worldSite(world, to);
     const straight = start && end ? Math.hypot(end[0]-start[0],end[1]-start[1]) : 0;
     const length = trip?.length ?? access?.distance ?? straight;
-    // 逐段推进的实际到达刻：走完路径所需刻数 +1 到点缓冲（与 P2b/旧 travelTicks 同口径，
-    // 避免把居民整体出行时间缩短一截而改写长程轨迹）。
-    const ticks = travelTicksAt(length, unitsPerTick(kind));
     const path = trip?.route ?? [];
-    beginTravel(world, id, {
-      from, to, arrive: world.t + ticks, kind, length,
-      ...(trip ? { start: trip.start, path, index: 0, cursor: { x: trip.start[0], z: trip.start[1] }, destination: trip.destination } : {}),
-      ...(access?.destination && { at: access.destination }),
-    });
+    const per = continuousMsPerMinute(world);
+    if (per) {
+      // 1:10 位移修复：到达时刻由**真实步速**推导——走完 length 要 length/3 真实秒，
+      // 再换算成游戏分钟（200 单位 ≈ 67s ≈ 11 游戏分），不再让一段路等 6 刻=36 现实分钟。
+      // arriveMin 是权威结算时刻；arrive（整刻）只作兼容读法。以整游戏分钟为锚，A/B 两个
+      // 世界同一分钟 ⇒ 数值逐位相同，不因几毫秒墙钟差在分钟边界上分叉。
+      const travelMin = (length / realSpeed(kind)) * 1000 / per;
+      beginTravel(world, id, {
+        from, to, kind, length,
+        ...(trip ? { start: trip.start, path, index: 0, cursor: { x: trip.start[0], z: trip.start[1] }, destination: trip.destination } : {}),
+        arriveMin: simMinuteNow(world) + travelMin,
+        arrive: world.t + Math.max(1, Math.ceil(travelMin / GAME_MINUTES_PER_TICK)),
+        ...(access?.destination && { at: access.destination }),
+      });
+    } else {
+      // 无 simClock 的旧正式夹具：键顺序与旧实现逐字一致（dumpSurv/研究 md5 逐位不变）。
+      // 逐段推进的实际到达刻：走完路径所需刻数 +1 到点缓冲（P2b/旧 travelTicks 同口径）。
+      const ticks = travelTicksAt(length, unitsPerTick(kind));
+      beginTravel(world, id, {
+        from, to, arrive: world.t + ticks, kind, length,
+        ...(trip ? { start: trip.start, path, index: 0, cursor: { x: trip.start[0], z: trip.start[1] }, destination: trip.destination } : {}),
+        ...(access?.destination && { at: access.destination }),
+      });
+    }
     // 从室内出发：位置在出门那一刻切到世界空间（loc 仍留到到达时结算）。
     if (trip && trip.fromRoom) placeActor(world, id, { x: trip.start[0], z: trip.start[1], space: WORLD_SPACE });
     return;
@@ -347,25 +370,35 @@ export function startMove(world,id,to) {
   beginTravel(world, id, {from,to,arrive:world.t+ticks, ...(access?.destination && {at:access.destination})});
 }
 
-// 正式游戏：每刻沿路径推进所有旅行。到达时一次性结算 loc/occupancy 与落点。
-export function advanceTravels(w) {
+// 正式游戏：沿 space 路径推进所有旅行。到达时一次性结算 loc/occupancy 与落点。
+//   · 连续世界（simClock）：tickSim 每游戏分钟调一次，位移额度=真实速度×这一分钟的真实毫秒
+//     （walk 3 tile/s ⇒ 18 单位/游戏分），到达按 arriveMin 判定——全程与真实时间同速。
+//   · 无 simClock 的夹具：每整刻调一次，额度仍是旧的 unitsPerTick（22.5），逐位不变。
+export function advanceTravels(w, { minutes = GAME_MINUTES_PER_TICK } = {}) {
   if (w.survival?.actTimeModel !== true) return 0;
   const travels = w.survival?.districtTravel;
   if (!travels) return 0;
+  const per = continuousMsPerMinute(w);
+  const nowMin = per ? worldMinutes(w) : null;
   let arrived = 0;
   for (const id of Object.keys(travels)) {
     const row = travels[id];
     if (!row) continue;
+    const due = per
+      ? (Number.isFinite(row.arriveMin) ? nowMin >= row.arriveMin : w.t >= row.arrive)
+      : w.t >= row.arrive;
     if (!Array.isArray(row.path)) {
       // 没有路径的旧/退化旅行：到点瞬移（与旧口径一致，不让居民卡死）。
-      if (w.t < row.arrive) continue;
+      if (!due) continue;
       if (settleTravel(w, id, row)) arrived += 1;
       continue;
     }
-    const budget = unitsPerTick(row.kind === 'sprint' ? 'sprint' : 'walk');
+    const kind = row.kind === 'sprint' ? 'sprint' : 'walk';
+    const budget = per
+      ? unitsPerRealTick(kind, per) * (minutes / GAME_MINUTES_PER_TICK)
+      : unitsPerTick(kind);
     const step = advanceTravelPos(w, id, row, budget);
-    // 路径走完也等到达刻（+1 到点缓冲），与 P2b 的旅行时长口径一致。
-    if (step.arrived && w.t >= row.arrive && settleTravel(w, id, row)) arrived += 1;
+    if (step.arrived && due && settleTravel(w, id, row)) arrived += 1;
   }
   return arrived;
 }

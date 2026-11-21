@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import {
   TILE, PIXELS_PER_UNIT, GAME_MINUTES_PER_TICK, WALK_UNITS_PER_GAME_MINUTE,
   SPRINT_FACTOR, GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK,
-  unitsForGameMinutes, unitsForTick, unitsForRealMs,
+  unitsForGameMinutes, unitsForTick, unitsForRealMs, unitsPerTick, unitsPerRealTick, tickRealMs,
+  WALK_UNITS_PER_REAL_SECOND, SPRINT_UNITS_PER_REAL_SECOND,
   ROOM_UNITS, roomContains, roomToWorld, worldToRoom,
   campSurface, wildSurface, createSpace,
 } from './space.mjs';
@@ -155,7 +156,7 @@ test('P2-S09 房间地板/门：显式 room 上下文拿到高度 0 与门 porta
   assert.equal(space.roomPortal('nope'), null);
 });
 
-test('P2-S08 速度：正式游戏单位/游戏分钟单一口径', () => {
+test('P2-S08 速度：位移按真实时间；游戏分钟表只服务动作/旅行语义', () => {
   assert.equal(GAME_MINUTES_PER_TICK, 60);
   assert.equal(WALK_UNITS_PER_GAME_MINUTE, 3 / 8);
   assert.equal(unitsForGameMinutes(60), GAME_BASE_UNITS_PER_TICK);
@@ -163,12 +164,22 @@ test('P2-S08 速度：正式游戏单位/游戏分钟单一口径', () => {
   assert.equal(GAME_PLAYER_UNITS_PER_TICK, 39.375);
   assert.equal(unitsForTick(false), 22.5);
   assert.equal(unitsForTick(true), 39.375);
-  // 正式默认一刻 = 60 游戏分 × 6000ms = 360000ms：步行 0.0625 单位/秒、冲刺 0.109375；
-  // 7500 只作为旧整拍对照保留（3/5.25）。默认参数必须就是正式 360000。
-  assert.equal(unitsForRealMs(1000, 7500, false), 3);
-  assert.equal(unitsForRealMs(1000, 7500, true), 5.25);
-  assert.equal(unitsForRealMs(1000, 360000, false), 0.0625);
-  assert.equal(unitsForRealMs(1000, 360000, true), 0.109375);
-  assert.equal(unitsForRealMs(1000, undefined, false), 0.0625, '省略 tickMs 必须按正式 360000，不得回到 7500');
+  // 2026-11-21 速度修复（旧断言 0.0625/0.109375 是 bug 期望）：
+  // 位移只按真实毫秒，现实 1 秒 = 3 tile（冲刺 5.25），与 6000ms/游戏分、360000ms/刻无关。
+  assert.equal(WALK_UNITS_PER_REAL_SECOND, 3);
+  assert.equal(SPRINT_UNITS_PER_REAL_SECOND, 5.25);
+  assert.equal(unitsForRealMs(1000), 3);
+  assert.equal(unitsForRealMs(1000, true), 5.25);
+  assert.equal(unitsForRealMs(500, false), 1.5);
+  assert.equal(unitsForRealMs(0), 0);
+  assert.equal(unitsForRealMs(-5), 0, '负毫秒不得倒走');
+  // 一刻真实预算只由 clock 的 msPerGameMinute 换算：正式 6000 ⇒ walk 1080 / sprint 1890；
+  // 旧 125ms 节奏下同样按“真实秒”换算（22.5/刻），顺序与单位不混。
+  assert.equal(unitsPerRealTick('walk', 6000), 1080);
+  assert.equal(unitsPerRealTick('sprint', 6000), 1890);
+  assert.equal(unitsPerRealTick('walk', 125), 22.5);
+  assert.equal(tickRealMs(6000), 360000);
+  // 游戏分钟预算仍保留给动作/旅行语义（旧研究路径 22.5/刻），没有被位移改写。
+  assert.equal(unitsPerTick('walk'), 22.5);
   assert.equal(SPRINT_FACTOR, 1.75);
 });
