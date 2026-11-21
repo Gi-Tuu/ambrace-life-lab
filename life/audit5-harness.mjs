@@ -18,7 +18,7 @@ export async function bootAudit5(env = {}, { waitMs = 30000 } = {}) {
       ...process.env,
       PORT: String(port), HOST: '127.0.0.1', BRAIN: 'local',
       DATA_DIR: dataDir, SEED_FILE: join(ROOT, 'seed', 'world.json'),
-      TICK_MS: '10000000', GAME_MODE: 'game', GAME_RULES: '1',
+      TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000', GAME_MODE: 'game', GAME_RULES: '1',
       MODEL_UNATTENDED: '0', ACT_SAVE_COALESCE_MS: '0',
       ...env,
     },

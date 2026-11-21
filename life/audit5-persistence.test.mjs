@@ -14,7 +14,7 @@ async function freshHost(t) {
   Object.assign(process.env, {
     DATA_DIR: dir,
     SEED_FILE: join(dir, 'missing-seed.json'),
-    GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000',
+    GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000',
     ACT_SAVE_COALESCE_MS: '0', BRAIN: 'local',
   });
   delete process.env.ARCH_SAVE_STALL_MS;
@@ -57,7 +57,7 @@ function runSignalProbe(script, dir) {
   writeFileSync(file, script);
   return new Promise((res) => {
     const child = spawn(process.execPath, [file], {
-      env: { ...process.env, DATA_DIR: join(dir, 'data'), SEED_FILE: join(dir, 'missing-seed.json'), GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', BRAIN: 'local' },
+      env: { ...process.env, DATA_DIR: join(dir, 'data'), SEED_FILE: join(dir, 'missing-seed.json'), GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000', BRAIN: 'local' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -138,7 +138,7 @@ test('DATA5-01 SAVE_EVERY 可配：=2 时硬退出前已落第 2 刻，不再固
   const r = spawnSync(process.execPath, [file], {
     env: {
       ...process.env, DATA_DIR: join(dir, 'data'), SEED_FILE: join(dir, 'missing-seed.json'),
-      GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', BRAIN: 'local', SAVE_EVERY: '2',
+      GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000', BRAIN: 'local', SAVE_EVERY: '2',
     },
     encoding: 'utf8', timeout: 60000,
   });

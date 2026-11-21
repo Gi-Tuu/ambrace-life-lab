@@ -157,7 +157,7 @@ test('P2-08/P4 fallback 开关已退役：正式模块没有开关，旧谓词�
 });
 
 test('P2-09 客户端速度换算与服务端预算同一函数：冲刺恰好卡在 cap 上', () => {
-  for (const tickMs of [7500, 6000]) {
+  for (const tickMs of [7500, 360000]) {
     for (const dt of [1 / 60, 0.05, 0.2]) {
       const cap = GAME_PLAYER_UNITS_PER_TICK * 1000 / tickMs * dt;
       const sprint = unitsForRealMs(dt * 1000, tickMs, true);

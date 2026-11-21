@@ -61,7 +61,7 @@ test('F15 全屏 HUD：三种视口下不重叠不越界，退出全屏回到页
   const child = spawn(process.execPath, ['serve.mjs'], {
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir, SEED_FILE: join(dir, 'none.json'),
-      BRAIN: 'local', GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '60000', MODEL_PROVIDERS: '', MODEL_KEYS: '', CHAT_TOKEN: '' },
+      BRAIN: 'local', GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '60000', GAME_MS_PER_MINUTE: '60000', MODEL_PROVIDERS: '', MODEL_KEYS: '', CHAT_TOKEN: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let socket, browser;

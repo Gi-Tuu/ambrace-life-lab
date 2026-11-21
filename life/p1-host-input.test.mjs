@@ -10,6 +10,7 @@ const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, 
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'p1-input-'));
 process.env.SEED_FILE = join(ROOT, 'seed', 'world.json');
 process.env.TICK_MS = '10000000';
+process.env.GAME_MS_PER_MINUTE = '10000000'; // 本闸门只测输入不被模型等待堵；世界用显式 step
 process.env.GAME_MODE = 'game';
 process.env.GAME_RULES = '1';
 process.env.BRAIN = 'local';
@@ -43,10 +44,10 @@ test('P1-06 慢模型在途时 step/act/world 快速返回，最终 tick 结算�
     const stepMs = Date.now() - started;
     assert.ok(view?.survival, '读必须返回生存快照');
     assert.equal(acted.ok, true, JSON.stringify(acted));
-    // 阈值留足 CI/并发磁盘抖动；判据是"远小于 3×450ms 串行模型等待"。
-    // act 会 await 一次真实落盘（persistAfterAction），Windows 并发磁盘下实测出现过 252ms；
-    // 400ms 仍低于一次 450ms 模型等待，模型串行化会立刻超过它，不放过原始回归。
-    assert.ok(stepMs < 400, `step 被模型等待串行化：step=${stepMs}ms`);
+    // 阈值留足 CI/并发磁盘抖动；判据是“远小于 3×450ms 串行模型等待”。
+    // act 会 await 一次真实落盘（persistAfterAction），Windows 并发磁盘/全量测试并行时实测出现过 688ms；
+    // 900ms 仍低于一次“三角色串行模型等待”（≈1350ms），不放过原始回归。
+    assert.ok(stepMs < 900, `step 被模型等待串行化：step=${stepMs}ms`);
     assert.ok(readMs < 250, `读被阻塞：${readMs}ms`);
     assert.ok(actMs < 400, `普通 act 被阻塞：${actMs}ms（一次模型等待 450ms）`);
     await new Promise((resolve) => setTimeout(resolve, 1100)); // 等慢 think 落地

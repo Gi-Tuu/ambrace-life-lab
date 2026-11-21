@@ -9,7 +9,8 @@ import { join } from 'node:path';
 const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'p1c-time-'));
 process.env.SEED_FILE = join(ROOT, 'seed', 'world.json');
-process.env.TICK_MS = '3600000'; // 1 游戏分钟 = 1 真实分钟：测试期间自动调度不会自己推进世界
+process.env.TICK_MS = '3600000'; // 旧整拍：仅研究/非连续路径
+process.env.GAME_MS_PER_MINUTE = '60000'; // 本文件要冻结正式钟：1 游戏分=1 真实分（旧 7.5s 刻口径不参与）
 process.env.GAME_MODE = 'game';
 process.env.GAME_RULES = '1';
 process.env.BRAIN = 'local';

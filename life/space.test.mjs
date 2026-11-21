@@ -163,10 +163,12 @@ test('P2-S08 速度：正式游戏单位/游戏分钟单一口径', () => {
   assert.equal(GAME_PLAYER_UNITS_PER_TICK, 39.375);
   assert.equal(unitsForTick(false), 22.5);
   assert.equal(unitsForTick(true), 39.375);
-  // 默认 7.5s 刻：正常 3 单位/秒、冲刺 5.25 单位/秒；6s 刻按游戏分钟换算到 3.75/6.5625。
+  // 正式默认一刻 = 60 游戏分 × 6000ms = 360000ms：步行 0.0625 单位/秒、冲刺 0.109375；
+  // 7500 只作为旧整拍对照保留（3/5.25）。默认参数必须就是正式 360000。
   assert.equal(unitsForRealMs(1000, 7500, false), 3);
   assert.equal(unitsForRealMs(1000, 7500, true), 5.25);
-  assert.equal(unitsForRealMs(1000, 6000, false), 3.75);
-  assert.equal(unitsForRealMs(1000, 6000, true), 6.5625);
+  assert.equal(unitsForRealMs(1000, 360000, false), 0.0625);
+  assert.equal(unitsForRealMs(1000, 360000, true), 0.109375);
+  assert.equal(unitsForRealMs(1000, undefined, false), 0.0625, '省略 tickMs 必须按正式 360000，不得回到 7500');
   assert.equal(SPRINT_FACTOR, 1.75);
 });

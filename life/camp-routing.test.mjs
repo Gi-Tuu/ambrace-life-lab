@@ -19,7 +19,7 @@ async function boot() {
       ...process.env,
       PORT: String(port), HOST: '127.0.0.1', BRAIN: 'local',
       DATA_DIR: dataDir, SEED_FILE: join(ROOT, 'seed', 'world.json'),
-      TICK_MS: '10000000', GAME_RULES: '1', GAME_MODE: 'game', MODEL_UNATTENDED: '0',
+      TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000', GAME_RULES: '1', GAME_MODE: 'game', MODEL_UNATTENDED: '0',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

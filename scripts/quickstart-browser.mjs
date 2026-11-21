@@ -20,7 +20,8 @@ const h = createCdpHarness({
   dataPrefix: 'quickstart-data-',
   profilePrefix: 'quickstart-chrome-',
   serverEnv: {
-    GAME_MODE: 'game', GAME_RULES: '1', BRAIN: 'local', TICK_MS: '10000000',
+    GAME_MODE: 'game', GAME_RULES: '1', BRAIN: 'local',
+    GAME_MS_PER_MINUTE: '6000', TICK_MS: '360000',
     MODEL_UNATTENDED: '0', V73_TEST: '1',
   },
 });
@@ -56,7 +57,9 @@ try {
   const before = await h.evaluate(`(()=>{const W=window.__lifeDebug.WALK;const k=Object.keys(W).find(k=>k.endsWith(':p1'))??Object.keys(W)[0];return {key:k,x:W[k].x,y:W[k].y,menu:window.__lifeDebug.ui.menu}})()`, sid);
   note('walk.before', before);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD',key:'d',bubbles:true}))`, sid);
-  await h.wait(700);
+  // 1:10 节奏下玩家步行按游戏分钟换算（0.375 单位/游戏分），现实 1 秒只走 0.0625 单位；
+  // 原 700ms 只有 0.044 单位。这里等到 ~1200ms（0.075 单位），仍远小于摆锤/碰撞阈值。
+  await h.wait(1200);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD',key:'d',bubbles:true}))`, sid);
   const after = await h.evaluate(`(()=>{const W=window.__lifeDebug.WALK;const k=${JSON.stringify(before.key)};return {x:W[k].x,y:W[k].y}})()`, sid);
   const moved = Math.hypot(after.x - before.x, after.y - before.y);

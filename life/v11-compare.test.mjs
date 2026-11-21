@@ -17,6 +17,7 @@ process.env.GAME_MODE = 'game';
 process.env.GAME_RULES = '1';
 process.env.BRAIN = 'local';
 process.env.TICK_MS = '1000000';
+process.env.GAME_MS_PER_MINUTE = '16666.666666666668'; // 冻结宿主自动钟（≈旧 1 游戏分=16.7s），显式 step 才是时序真源
 process.env.SAVE_EVERY = '1000000';
 process.env.ACT_SAVE_COALESCE_MS = '1000000';
 process.env.CATCHUP_COOLDOWN_MS = '0';
@@ -170,14 +171,15 @@ test('V11-CMP-03 单侧倍速只改该侧；独立 scheduler 按各自 rate 欠�
   assert.equal(pair.B.clock.rate, 1, 'A 倍速不得改 B');
 
   // 同一真实 60s：A 欠 2 倍分钟、B 欠 1 倍；两个 scheduler 各自只推进自己的游标。
+  // 正式默认 6000ms/游戏分 ⇒ 30s = 5 游戏分（rate=2 时 10 分）。
   let nowMs = 0;
-  const clockA = createSimClock({ now: () => nowMs, tickMs: 7500, rate: 2 });
-  const clockB = createSimClock({ now: () => nowMs, tickMs: 7500, rate: 1 });
+  const clockA = createSimClock({ now: () => nowMs, msPerGameMinute: 6000, rate: 2 });
+  const clockB = createSimClock({ now: () => nowMs, msPerGameMinute: 6000, rate: 1 });
   const schedA = createSimScheduler({ clock: clockA, cursor: () => 0, now: () => nowMs });
   const schedB = createSimScheduler({ clock: clockB, cursor: () => 0, now: () => nowMs });
   nowMs = 30000;
-  assert.equal(schedA.peek(nowMs).minutes, 480);
-  assert.equal(schedB.peek(nowMs).minutes, 240);
+  assert.equal(schedA.peek(nowMs).minutes, 10);
+  assert.equal(schedB.peek(nowMs).minutes, 5);
   assert.equal(schedA.peek(nowMs).minutes, schedB.peek(nowMs).minutes * 2);
 });
 

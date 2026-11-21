@@ -35,6 +35,7 @@ const dir = mkdtempSync(join(tmpdir(), 'say-'));
 process.env.DATA_DIR = dir;
 process.env.SEED_FILE = SEED;
 process.env.TICK_MS = '10000000';
+process.env.GAME_MS_PER_MINUTE = '10000000'; // 本文件用显式 step；冻住正式时钟避免自动推进抢戏
 process.env.BRAIN = 'model';
 process.env.MODEL_PROVIDERS = `http://127.0.0.1:${port}/v1`;
 process.env.MODEL_KEYS = 'k';

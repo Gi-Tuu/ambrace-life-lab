@@ -9,6 +9,7 @@ const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, 
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'sav05-'));
 process.env.SEED_FILE = join(ROOT, 'seed', 'world.json');
 process.env.TICK_MS = '10000000';
+process.env.GAME_MS_PER_MINUTE = '10000000'; // 冻住连续钟：本文件只测非法/无主营地边界
 process.env.BRAIN = 'local';
 process.env.GAME_MODE = 'game';
 process.env.GAME_RULES = '1';

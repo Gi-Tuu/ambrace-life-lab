@@ -4,7 +4,7 @@
 //   · 纯函数：两次 /world 之间按 rate/msPerGameMinute 外推，暂停不漂，离线封顶；
 //   · 来源契约：前端复用 survival.gameMinutes/serverNow/clock，不造第二套时间；
 //   · 接口契约：/world 与 /healthz 都从同一个 simClock 读数（healthz 只给最小投影）；
-//   · 浏览器行为由 scripts/v11-time-ui.mjs 采集截图与数值，这里不重复起 Chrome。
+//   · 浏览器行为由 scripts/pace-1to10-browser.mjs 采集截图与数值，这里不重复起 Chrome。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,63 +13,64 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  GAME_MINUTES_PER_DAY, MAX_EXTRAPOLATION_MS, FALLBACK_MS_PER_GAME_MINUTE,
+  GAME_MINUTES_PER_DAY, MAX_EXTRAPOLATION_MS, FALLBACK_MS_PER_GAME_MINUTE, FALLBACK_TICK_MS,
   interpolateGameMinutes, gameMinuteOfDay, formatGameClock,
-  gameMinutesLeftToday, busyRemainMinutes, clockReadout, clockAnchorFromView,
+  gameMinutesLeftToday, busyRemainMinutes, clockReadout, clockAnchorFromView, tickMsFromView,
 } from '../web/time-view.mjs';
 
 const APP = readFileSync('web/app.js', 'utf8');
 const HOST = readFileSync('life/host.mjs', 'utf8');
 const TIME_VIEW = readFileSync('web/time-view.mjs', 'utf8');
 
+const close = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 const anchor = (over = {}) => ({
-  gameMinutes: 360, at: 1000, rate: 1, msPerGameMinute: 125, paused: false, ...over,
+  gameMinutes: 360, at: 1000, rate: 1, msPerGameMinute: 6000, paused: false, ...over,
 });
 
-test('T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 125ms/游戏分）', () => {
+test('T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 6000ms/游戏分 = 1:10）', () => {
+  assert.equal(FALLBACK_MS_PER_GAME_MINUTE, 6000);
+  assert.equal(FALLBACK_TICK_MS, 360000);
   assert.equal(interpolateGameMinutes(anchor(), 0), 360, '同一时刻不得凭空跳分钟');
-  assert.equal(interpolateGameMinutes(anchor(), 900), 367.2, '900ms 应走 7.2 游戏分钟');
-  assert.equal(interpolateGameMinutes(anchor(), 1000), 368, '1s=8 游戏分钟');
-  const read = clockReadout(anchor(), 1000);
-  assert.equal(formatGameClock(read.minutes), '06:08');
-  assert.equal(read.minuteOfDay, 368);
-  assert.equal(read.leftToday, GAME_MINUTES_PER_DAY - 368, '今日剩余=1440-当日已过分钟');
+  assert.equal(interpolateGameMinutes(anchor(), 3000), 360.5, '3s 应走 0.5 游戏分钟');
+  assert.ok(close(interpolateGameMinutes(anchor(), 5000), 360 + 5 / 6), '5s 应走 5/6 游戏分钟');
+  assert.ok(close(interpolateGameMinutes(anchor(), 6000), 360 + 5 / 6), '显示外推封顶 5s（服务端仍是 1:10 真值）');
+  const read = clockReadout(anchor(), 5000);
+  assert.equal(formatGameClock(read.minutes), '06:00');
+  assert.equal(Math.round(read.minuteOfDay), 361);
+  assert.equal(read.leftToday, GAME_MINUTES_PER_DAY - 361, '今日剩余=1440-当日已过分钟');
 });
 
 test('T2 暂停/零倍速不漂移', () => {
-  for (const paused of [true, false]) {
-    const a = anchor({ paused });
-    const expected = paused ? 360 : 368;
-    assert.equal(interpolateGameMinutes(a, 1000), expected, `paused=${paused}`);
-  }
+  assert.equal(interpolateGameMinutes(anchor({ paused: true }), 6000), 360);
+  assert.ok(close(interpolateGameMinutes(anchor(), 1000), 360 + 1 / 6), '1s 应走 1/6 游戏分钟');
   assert.equal(interpolateGameMinutes(anchor({ rate: 0 }), 60_000), 360, 'rate=0 等同于冻结');
 });
 
 test('T3 倍速严格按 rate 缩放', () => {
-  assert.equal(interpolateGameMinutes(anchor({ rate: 2 }), 1000), 376, '2×：1s=16 游戏分钟');
-  assert.equal(interpolateGameMinutes(anchor({ rate: 0.5 }), 1000), 364, '0.5×：1s=4 游戏分钟');
-  assert.equal(interpolateGameMinutes(anchor({ rate: 4 }), 900), 388.8, '4×：900ms=28.8 分钟');
+  assert.equal(interpolateGameMinutes(anchor({ rate: 2 }), 3000), 361, '2×：3s=1 游戏分钟');
+  assert.ok(close(interpolateGameMinutes(anchor({ rate: 0.5 }), 4000), 360 + 1 / 3), '0.5×：4s=1/3 游戏分钟');
+  assert.equal(interpolateGameMinutes(anchor({ rate: 4 }), 3000), 362, '4×：3s=2 游戏分钟');
 });
 
-test('T7b HUD 锚点只读服务端 clock：不抖动、缺失回退 125、暂停/零倍速冻结', () => {
+test('T7b HUD 锚点只读服务端 clock：不抖动、缺失回退 6000、暂停/零倍速冻结', () => {
   const view = (clock, over = {}) => ({
     timeMode: 'continuous', gameMinutes: 360, serverNow: 1_000, clock, ...over,
   });
   // 相邻两次 /world 的 serverNow 差再离谱（任何历史抖动），锚点数值必须逐位相同。
-  const a = clockAnchorFromView(view({ msPerGameMinute: 125, rate: 1, paused: false }, { serverNow: 1_000 }), 10);
-  const b = clockAnchorFromView(view({ msPerGameMinute: 125, rate: 1, paused: false }, { serverNow: 9_999_999 }), 20);
+  const a = clockAnchorFromView(view({ msPerGameMinute: 6000, rate: 1, paused: false }, { serverNow: 1_000 }), 10);
+  const b = clockAnchorFromView(view({ msPerGameMinute: 6000, rate: 1, paused: false }, { serverNow: 9_999_999 }), 20);
   assert.deepEqual({ ...a, at: 0 }, { ...b, at: 0 }, 'serverNow 不得参与速度估计');
-  assert.equal(a.msPerGameMinute, 125);
+  assert.equal(a.msPerGameMinute, 6000);
   assert.equal(a.rate, 1);
-  // 服务端给了非标称速率就用它；只有 clock 缺失/字段缺失才回退 125。
+  // 服务端给了非标称速率就用它；只有 clock 缺失/字段缺失才回退 6000。
   assert.equal(clockAnchorFromView(view({ msPerGameMinute: 250, rate: 1 })).msPerGameMinute, 250);
   assert.equal(clockAnchorFromView(view(undefined)).msPerGameMinute, FALLBACK_MS_PER_GAME_MINUTE);
-  assert.equal(clockAnchorFromView(view({ rate: 1 })).msPerGameMinute, 125);
+  assert.equal(clockAnchorFromView(view({ rate: 1 })).msPerGameMinute, 6000);
   assert.equal(clockAnchorFromView(view(undefined)).rate, 1);
   // 暂停与 rate=0 都冻结；rate=0 即使 clock 缺 msPerGameMinute 也不得回退成继续走。
-  for (const clock of [{ msPerGameMinute: 125, rate: 1, paused: true }, { msPerGameMinute: 125, rate: 0 }]) {
-    const anchor = clockAnchorFromView(view(clock));
-    const read = clockReadout(anchor, 60_000);
+  for (const clock of [{ msPerGameMinute: 6000, rate: 1, paused: true }, { msPerGameMinute: 6000, rate: 0 }]) {
+    const frozen = clockAnchorFromView(view(clock));
+    const read = clockReadout(frozen, 60_000);
     assert.equal(read.minutes, 360, `clock=${JSON.stringify(clock)} 必须冻结`);
   }
   assert.equal(clockAnchorFromView(view(undefined)).paused, false);
@@ -78,8 +79,8 @@ test('T7b HUD 锚点只读服务端 clock：不抖动、缺失回退 125、暂�
 
 test('T4 离线/掉轮询时外推封顶 5s，不无限漂', () => {
   assert.equal(MAX_EXTRAPOLATION_MS, 5000);
-  assert.equal(interpolateGameMinutes(anchor(), 4000), 392, '4s 内仍按 rate 走');
-  assert.equal(interpolateGameMinutes(anchor(), 60_000), 400, '超过 5s 只算 5s（+40 分钟）');
+  assert.ok(close(interpolateGameMinutes(anchor(), 4000), 360 + 4 / 6), '4s 内仍按 rate 走');
+  assert.ok(close(interpolateGameMinutes(anchor(), 60_000), 360 + 5 / 6), '超过 5s 只算 5s（+0.833 分）');
   assert.equal(interpolateGameMinutes(anchor(), -1000), 360, '负 elapsed 不得倒流');
 });
 
@@ -125,6 +126,16 @@ test('T7 前端复用 /world 的同一时钟字段，rAF 只改显示', () => {
   assert.doesNotMatch(APP, /hudLastClockSample/, 'HUD 自估速度的样本状态必须删除');
 });
 
+test('T7c 表现层一刻长度：连续世界读 clock（60×6000），旧/冻结路径才回落 tickMs', () => {
+  assert.equal(tickMsFromView({ timeMode: 'continuous', clock: { msPerGameMinute: 6000 } }), 360000,
+    '正式 1:10 下一刻=60×6000ms，不得再假设 7500');
+  assert.equal(tickMsFromView({ timeMode: 'continuous', clock: { msPerGameMinute: 6000, rate: 2 } }), 360000,
+    '倍速不改变一刻的真实长度基数');
+  assert.equal(tickMsFromView({ tickMs: 7500 }), 7500, '研究态/旧路径保留自己的整拍');
+  assert.equal(tickMsFromView({ tickMs: 10_000_000 }), 10_000_000, '冻结世界读数原样保留；只在玩家步长处归一');
+  assert.equal(tickMsFromView(undefined), 7500);
+});
+
 test('T8 玩家 timeLeft 在连续世界是日统计、不是配额，HUD 不得把它当资源', () => {
   assert.match(APP, /今日动作已用/, '日统计必须以"已用"呈现');
   assert.doesNotMatch(APP, /今日剩余[\s\S]{0,80}timeLeft/, '不得把 timeLeft 显示成今日剩余资源');
@@ -153,7 +164,8 @@ function bootServer() {
         ...process.env,
         PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir,
         SEED_FILE: join(dir, 'no-seed.json'),
-        GAME_MODE: 'game', GAME_RULES: '1', SIM_TIME: '1', TICK_MS: '7500',
+        GAME_MODE: 'game', GAME_RULES: '1', SIM_TIME: '1',
+        GAME_MS_PER_MINUTE: '6000', TICK_MS: '360000',
         BRAIN: 'local', MODEL_PROVIDERS: '', MODEL_KEYS: '', MODEL_KEY: '', MODEL_NAME: '', CHAT_TOKEN: '',
         MODEL_UNATTENDED: '0',
       },
@@ -184,7 +196,7 @@ test('T10 真 HTTP：/world 与 /healthz 暴露同一世界分钟，暂停/倍�
     assert.equal(s.timeMode, 'continuous', '正式生存世界必须走连续时钟');
     assert.ok(Number.isFinite(s.gameMinutes), '/world 缺 gameMinutes');
     assert.ok(Number.isFinite(s.serverNow), '/world 缺 serverNow');
-    assert.ok(Number.isFinite(s.clock?.msPerGameMinute) && s.clock.msPerGameMinute > 0, '/world 缺 msPerGameMinute');
+    assert.equal(s.clock?.msPerGameMinute, 6000, '正式默认必须是 6000ms/游戏分');
     assert.equal(s.clock?.rate, 1);
     assert.equal(s.clock?.paused, false);
 
@@ -196,6 +208,15 @@ test('T10 真 HTTP：/world 与 /healthz 暴露同一世界分钟，暂停/倍�
       assert.ok(!JSON.stringify(health.world.clock).includes(leaked), `healthz clock 泄露 ${leaked}`);
     }
     assert.ok(Math.abs(health.world.clock.gameMinutes - s.gameMinutes) < 5, '两个端点读到的世界分钟应基本一致');
+
+    // 1:10：同一段真实时间在服务端走 1/6000 游戏分每毫秒（这里只取 1.2s，约 0.2 分）。
+    const before = await (await fetch(`${base}/healthz`)).json();
+    const t0 = Date.now();
+    await new Promise((r) => setTimeout(r, 1200));
+    const after = await (await fetch(`${base}/healthz`)).json();
+    const realMin = (Date.now() - t0) / 60000;
+    const gameMin = after.world.clock.gameMinutes - before.world.clock.gameMinutes;
+    assert.ok(Math.abs(gameMin / realMin - 10) < 0.6, `现实/游戏分钟比应≈1:10，实测 1:${(gameMin / realMin).toFixed(2)}`);
 
     assert.equal((await post(base, '/ctl', { action: 'pause', confirm: true })).status, 200);
     await new Promise((r) => setTimeout(r, 150));

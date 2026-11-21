@@ -18,7 +18,7 @@ const GAME = {
 
 function makeGame(seed = 7, rate = 1) {
   let nowMs = 0;
-  const clock = createSimClock({ now: () => nowMs, tickMs: 7500, rate, manual: true });
+  const clock = createSimClock({ now: () => nowMs, rate, manual: true });
   const sp = createSurvPlay(seed, { ...GAME, simTime: true, simClock: clock });
   resetSimMinuteCursor(sp.world);
   return {
@@ -128,9 +128,9 @@ test('P1b-04 异步模型等待不阻塞 tick 返回，也不串行堵住其他�
   }
 });
 
-test('P1b-05 125ms 假时钟：30 分动作在第 30 步（3.75s）完成，不等第 60 步 7.5s', async () => {
+test('P1b-05 6000ms 假时钟：30 分动作在第 30 步（180s）完成，不等第 60 步 360s', async () => {
   let nowMs = 0;
-  const clock = createSimClock({ now: () => nowMs, tickMs: 7500, manual: false });
+  const clock = createSimClock({ now: () => nowMs, manual: false });
   const sp = createSurvPlay(23, { ...GAME, simTime: true, simClock: clock });
   clock.setGameMinutes(600);
   sp.world.t = 10;
@@ -140,21 +140,21 @@ test('P1b-05 125ms 假时钟：30 分动作在第 30 步（3.75s）完成，不�
   const scheduler = createSimScheduler({ clock, cursor: () => simMinuteCursor(sp.world) });
   let completedAtStep = null;
   for (let step = 1; step <= 60; step += 1) {
-    nowMs += 125;
+    nowMs += 6000; // 新默认：1 游戏分 = 6000ms
     const due = scheduler.peek(nowMs);
     if (due.minutes > 0) await tickSurvPlay(sp); // 调度器只叫醒；欠账由时钟 elapsed 决定
     if (!sp.world.survival.actClock.p1.busy && completedAtStep === null) completedAtStep = step;
   }
-  assert.equal(completedAtStep, 30, `30 分动作应在第 30 个 125ms 步完成，实测第 ${completedAtStep} 步`);
+  assert.equal(completedAtStep, 30, `30 分动作应在第 30 个 6000ms 步完成，实测第 ${completedAtStep} 步`);
   assert.ok(Math.abs(clock.nowMinutes() - 660) < 1e-9, `60 步后应是 660 分，实测 ${clock.nowMinutes()}`);
 });
 
-test('P1b-06 离线补时与在线同 rate；cap 仍按旧刻换算成游戏分钟', () => {
+test('P1b-06 离线补时与在线同 rate；默认 1 真实分 = 10 游戏分', () => {
   let nowMs = 0;
-  const clock = createSimClock({ now: () => nowMs, tickMs: 7500, rate: 2, manual: false });
-  assert.equal(gameMinutesForRealMinutes(1, clock), 960, 'rate=2 时 1 真实分=960 游戏分');
+  const clock = createSimClock({ now: () => nowMs, rate: 2, manual: false });
+  assert.equal(gameMinutesForRealMinutes(1, clock), 20, 'rate=2 时 1 真实分=20 游戏分（默认 10 的两倍）');
   nowMs += 60_000;
-  assert.ok(Math.abs(clock.nowMinutes() - 960) < 1e-6, '在线 elapsed 与离线换算必须同 rate');
+  assert.ok(Math.abs(clock.nowMinutes() - 20) < 1e-6, '在线 elapsed 与离线换算必须同 rate');
 });
 
 test('P1b-08 居民 think 硬并发上限 2：第 3 个到期者排队，不无限发 Promise', async () => {

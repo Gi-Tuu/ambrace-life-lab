@@ -22,6 +22,7 @@ process.env.BRAIN = 'local';
 process.env.V72_TIME = '1';
 process.env.SETTLEMENT_DISCUSSIONS = '1';
 process.env.TICK_MS = '1000000';
+process.env.GAME_MS_PER_MINUTE = '1000000'; // 旧“每刻结算”时序闸门：冻住连续钟，世界只随显式 step 走
 const { host, survivalOptions } = await import('./host.mjs');
 // P1：这条闸门钉的是旧"每刻结算"的风暴/账本时序；连续时钟的行为由 p1-continuous-clock.test.mjs 覆盖。
 const options = { ...survivalOptions(), simTime: false, adoptArchivedRules: true, upgradeLegacyEventRules: true };

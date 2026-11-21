@@ -21,7 +21,8 @@ const h = createCdpHarness({
   profilePrefix: 'v11-time-chrome-',
   chrome: 'fixed',
   serverEnv: {
-    GAME_MODE: 'game', GAME_RULES: '1', SIM_TIME: '1', TICK_MS: '7500',
+    GAME_MODE: 'game', GAME_RULES: '1', SIM_TIME: '1',
+    GAME_MS_PER_MINUTE: '6000', TICK_MS: '360000',
     BRAIN: 'local', MODEL_UNATTENDED: '0', V73_TEST: '1',
   },
   waitMs: 20000,
@@ -67,16 +68,19 @@ try {
   };
 
   // ① 两次轮询之间（相隔 1.2s）HUD 必须在走，并截两张图。
+  // 1:10 节奏下 1.2s 只走 0.2 游戏分；阈值按服务端 clock.msPerGameMinute 推导，不写死 125。
   const a = await sample('A');
+  const msPerGameMinute = a.clock?.anchor?.msPerGameMinute;
+  assert(msPerGameMinute === 6000, `正式节奏必须是 6000ms/游戏分，实测 ${msPerGameMinute}`);
   await h.screenshot(sid, join(OUT, 'hud-a.png'));
   await h.wait(1200);
   const b = await sample('B');
   await h.screenshot(sid, join(OUT, 'hud-b.png'));
   assert(a.clock?.minutes != null && b.clock?.minutes != null, 'clockHud 没有世界分钟');
   const delta1 = b.clock.minutes - a.clock.minutes;
-  assert(delta1 > 5, `1.2s 内 HUD 世界分钟没有明显前进：${a.clock.minutes} -> ${b.clock.minutes}`);
-  assert(b.clock.leftToday < a.clock.leftToday, `今日剩余没有递减：${a.clock.leftToday} -> ${b.clock.leftToday}`);
-  assert(a.weather !== b.weather || a.clock.clock !== b.clock.clock, 'HUD 时刻/天气文本没有变化');
+  const expect1 = 1200 / msPerGameMinute;
+  assert(delta1 > expect1 * 0.6 && delta1 < expect1 * 1.6,
+    `1.2s 内 HUD 世界分钟应≈${expect1.toFixed(2)}：${a.clock.minutes} -> ${b.clock.minutes}`);
   assert(a.clock.anchor?.rate === 1 && a.clock.anchor?.paused === false, '正常态 anchor 不是 rate=1 未暂停');
 
   // ② 暂停：两帧之间显示分钟不得漂移。
@@ -97,7 +101,7 @@ try {
   await h.wait(4000);
   const l2 = await sample('rate1-B');
   const delta1x = l2.clock.minutes - l1.clock.minutes;
-  assert(delta1x > 5, `1× 窗口 HUD 世界分钟没有前进：${l1.clock.minutes} -> ${l2.clock.minutes}`);
+  assert(delta1x > (4000 / msPerGameMinute) * 0.5, `1× 窗口 HUD 世界分钟没有前进：${l1.clock.minutes} -> ${l2.clock.minutes}`);
 
   assert((await ctl({ action: 'rate', rate: 2 })).body?.ok !== false, '倍速设置失败');
   await h.wait(1200); // 等 rate=2 进入 anchor
@@ -107,7 +111,7 @@ try {
   await h.screenshot(sid, join(OUT, 'hud-rate2.png'));
   const delta2x = r2.clock.minutes - r1.clock.minutes;
   assert(r1.clock?.anchor?.rate === 2, '前端 anchor 未收到 rate=2');
-  assert(delta2x > 14, `rate=2 时 4s 增量过小：${delta2x}`);
+  assert(delta2x > (4000 / msPerGameMinute) * 1.2, `rate=2 时 4s 增量过小：${delta2x}`);
   const ratio = delta2x / delta1x;
   assert(ratio > 1.5 && ratio < 2.3, `倍速增量比应接近 2，实测 ${ratio.toFixed(2)}（${delta1x} vs ${delta2x}）`);
 
@@ -126,7 +130,7 @@ try {
   assert(setup.build?.code === 'BUSY_START', '未进入 busy：' + JSON.stringify(setup));
   assert(await h.waitFor(async () => await h.evaluate(`!!document.querySelector('#playerHud [data-hud="busy"]')`, sid), 10000, sid), 'HUD 未出现 busy 进度');
   const busy1 = await sample('busy-A');
-  await h.wait(1000);
+  await h.wait(1500); // 1:10 下 1s 只走 1/6 分；1.5s 足够让 toFixed(1) 的剩余分钟变化
   const busy2 = await sample('busy-B');
   await h.screenshot(sid, join(OUT, 'hud-busy.png'));
   const remain1 = Number.parseFloat(String(busy1.busy).replace(/[^\d.]/g, ''));

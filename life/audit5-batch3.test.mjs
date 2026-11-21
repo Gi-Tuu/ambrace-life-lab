@@ -99,7 +99,7 @@ test('DATA5-14 per-camp wall-time 预算：超时跳过剩余营地并显式暴�
   const dir = mkdtempSync(join(tmpdir(), 'audit5-budget-'));
   Object.assign(process.env, {
     DATA_DIR: dir, SEED_FILE: join(dir, 'missing-seed.json'),
-    GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000',
+    GAME_MODE: 'game', GAME_RULES: '1', TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000',
     ACT_SAVE_COALESCE_MS: '0', BRAIN: 'local', CAMP_TICK_BUDGET_MS: '1',
   });
   const { host, openCamp } = await import('./host.mjs');
