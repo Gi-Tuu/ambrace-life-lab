@@ -63,7 +63,9 @@ export async function run({ env = process.env } = {}) {
   const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Safari/537.36';
   const post = (path, body, ms) => fetch(api(path), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'user-agent': UA, authorization: `Bearer ${TOKEN}` },
+    // 平台网关看到 Authorization 会当成 SDK token 访问，直接 403（"请使用API专用地址"）；
+    // 我们的中继本来就用 ?relay_token= 鉴权，所以这里只带 UA，不带 Authorization。
+    headers: { 'content-type': 'application/json', 'user-agent': UA },
     body: JSON.stringify(body ?? {}),
     signal: AbortSignal.timeout(ms)
   });

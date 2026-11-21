@@ -101,4 +101,5 @@ test('R9 中继 agent 必须带浏览器 UA，否则公开实例把它当非浏�
   const src = readFileSync(resolve(process.cwd(), 'scripts', 'brain-agent.mjs'), 'utf8');
   assert.ok(src.includes("'user-agent': UA"), 'fetch 头里必须显式带 user-agent');
   assert.ok(src.includes("const UA = 'Mozilla"), 'UA 要是浏览器串，空串或 node 默认都没用');
+  assert.ok(!/authorization:s*`Bearer ${TOKEN}`/.test(src), '不要给平台请求带 Authorization：网关会当成 SDK 访问直接 403');
 });
