@@ -27,12 +27,12 @@ serve.mjs                  HTTP：静态资源 / /world /act /ctl /healthz / 写
 
 拆前 1747 行，主路径上混了五件事：世界推进、模型调用、A/B 回放、HTTP 请求整形、存档。拆后：
 
-| 文件 | 行数（2026-11-18） | 职责 | 不做什么 |
+| 文件 | 行数（2026-11-21，v1.6.0） | 职责 | 不做什么 |
 |---|---:|---|---|
-| `host.mjs` | ~460 | 组合根、`S`/`CFG` 单例、`snapshot/act/ctl` 请求整形、原导出 facade | 不直接推进世界、不拼提示词 |
-| `host-world.mjs` | ~890 | 世界创建/装载、tick、定时器、补时、存档、营地 | 不决定 HTTP 返回形状 |
-| `host-model.mjs` | ~220 | 预算域、车道、提示词、`modelBrain/modelTalk` | 不持有第二份 `S` |
-| `host-replay.mjs` | ~200 | 对照分支、回放帧、`comparison.json` | 不复制世界 |
+| `host.mjs` | ~646 | 组合根、`S`/`CFG` 单例、`snapshot/act/ctl` 请求整形、原导出 facade | 不直接推进世界、不拼提示词 |
+| `host-world.mjs` | ~1073 | 世界创建/装载、tick、定时器、补时、存档、营地 | 不决定 HTTP 返回形状 |
+| `host-model.mjs` | ~284 | 预算域、车道、提示词、`modelBrain/modelTalk` | 不持有第二份 `S` |
+| `host-replay.mjs` | ~408 | 对照分支、回放帧、`comparison.json` | 不复制世界 |
 
 `S`/`CFG` 仍只有一份，由 `host.mjs` 创建后以引用传给三个域；域模块返回工厂（`createHostWorld` / `createModelDomain` / `createReplayDomain`），不各自建单例。`model`/`replay` 用惰性 getter 注入，避免启动顺序与循环依赖。tick 串行链、异步存档、错误字段语义原样保留。
 
@@ -90,7 +90,7 @@ survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs
 - **语言层不是语义理解**：NPC 台词是状态条件化模板；玩家输入走关键词意图分类（问候/讨食/警告/指责/道歉/分享等）。
 - **真实模型质量未验证**：仓库内只有假上游测试（预算/退替身/坏 JSON），不证明供应商真实质量；`BRAIN=model` 需要自备端点。
 - **单机单进程**：`S` 是模块单例；同一 `DATA_DIR` 多进程并发写只做了索引锁与原子写，不是分布式系统。
-- **离线补时有界且重启也生效**：MAIN 重启后按 `savedAt` 的真实停机时长、同一 `simClock.rate` 走本地替身补齐；上限 `SURV_CATCHUP_CAP`（默认 120 刻 = 7200 游戏分），超长空档如实标截断，不补决策。研究态/旧时间模型仍按「1 真实分 = 1 刻」的旧口径。
+- **离线补时有界且重启也生效**：MAIN 重启后按 `savedAt` 的真实停机时长、同一 `simClock.rate` 走本地替身补齐；上限 `SURV_CATCHUP_CAP`（默认 120 刻 = 7200 游戏分），超长空档如实标截断，不补决策。研究态/无 `simClock` 的旧路径才按 `TICK_MS` 整拍补：`分钟 × 60000 / TICK_MS` 刻（`TICK_MS` 默认 7500，部署若设 1200 或 360000 会得到不同刻数，口径以实际 env 为准）。
 - **性能/内存**：trace 默认封顶 400/角色，日志与 observer 有界；长跑仍建议单独 `DATA_DIR` 并监控 RSS。
 - **`scripts/` 下探针**：部分脚本是作者侧实验装置，读历史数据/本机路径，不承诺跨机器复现；以 `npm run check` 与 `evidence/` 为准。
 - **五份研究面只在同 Node 大版本、同 seed 下逐位**；换环境属于环境差异，不是否定证据（见 EVIDENCE.md）。

@@ -1,5 +1,38 @@
 # 变更记录
 
+## 文档刷新 - 2026-11-21（对齐 v1.6.0）
+
+只改文档，**未改业务代码**。审查范围：根目录 13 个 md + `docs/` 存量 173 个 md（其中 166 个历史快照已加顶部标记）+ 本状态表 + `evidence/**` 16 份 README + `web/music/CREDITS.md`、`.github/ISSUE_TEMPLATE/bug.md`。
+
+### 更正（过期口径 → 1.6.0）
+
+- **版本**：README 的「版本 `0.1.6`」改为 **`1.6.0`（tag `v1.6.0`）**。此前 README 的版本号停在 0.1.6，与 `package.json` / `v1.6.0` tag 不一致。
+- **测试数**：`179 个测试文件 / 982 条` → **`221 个测试文件 / 1261 条`**（README 两处、EVIDENCE、CONTRIBUTING、BENCHMARK、参赛-评分冲刺、创作手记-v2 头部）。依据：`evidence/v16-livestock/full-test.log`。
+- **模块数**：`shared/` 15 个 → **22 个**（README 项目结构）。
+- **素材口径**：删掉「美术资产全部由 `scripts/` 代码定义生成，`npm run assets` 一键可复现」。现为 **20 张 PNG**（16 张地形 tile + 4 张 HUD 头像）；头像可用 `npm run actions` 重生成，地形 tile 已无生成器，全部由 `art-hashes.json` 钉 sha256。`gen-pixel-assets.mjs` / `pack-assets.mjs` / `npm run assets` 在 1.5 前已删除。
+- **时间口径**：QUICKSTART 不再教「本刻 `60/60` 用尽返回 `TIME_WAIT`」。正式路径是连续游戏钟（`GAME_MS_PER_MINUTE=6000`，1 天 1440 游戏分 = 144 现实分钟），`今日动作已用 N 分` 只是日统计；`TIME_WAIT` 只存在于研究态/旧路径（V72_TIME=0）。
+- **音频披露**：创作手记-v2 §1 与 §6 的「音乐与音效全部由仓库内代码合成 / 零第三方音频 / 唯一第三方素材是字体」改为：**音效与环境声代码合成，13 首 BGM 是 Google Flow Music（Lyria）在 Google AI Pro 权益下生成的 AI 音乐**；第三方素材为 OFL 字体 + 这 13 首 BGM。与 HEAD 的 BGM 披露和 `web/music/CREDITS.md` 对齐。
+- **3D 规格**：`paintTerrain` / `paintForestFloor` 标注为 **2026-11-19 P0 已删除**（现为 `terrainKinds()` + `regionAtlas`）；`camp-3d-scene.mjs` → **`shared/camp-scene.mjs`**；失效的 `AMBRACE-UI规格.md` 引用改为「未随仓库发布」；§12 重复条目去重；§15.3 养殖补 1.6.0 四分区圈舍。
+- **架构**：`host*.mjs` 行数表更新到 2026-11-21 实测（646 / 1073 / 284 / 408）；研究态补时不再写「1 真实分 = 1 刻」，改为代码里的 `分钟 × 60000 / TICK_MS`。
+- **覆盖率**：统一为 1.6.0 实跑值——**行 90.58% / 分支 85.84% / 函数 89.62%**（2026-11-21 23:48 本机 `npm run coverage`，111.3s，170 个模块行）。如实披露：插桩下 **1258/1261，非全绿**；红条是 `life/audit5-data.test.mjs`（6 进程写 `index.json.lock` 报 EPERM，Windows/临时目录相关）、`life/v11-offline-restart.test.mjs`（1200.1 vs 1200，浮点/墙钟）、`life/v13-ghost-host.test.mjs`（幽魂分钟整点判断）。早前一轮记录为 90.62/85.86/89.62、1259/1261、红条为 `camp-compare-entry` + `v11-offline-restart`——本轮未能复现同样两条，说明**红条随机器/时序漂移，不能当固定清单**；上一版文档把它当固定两条并据此写"2 条红"已更正。未插桩全量证据仍为 1261/1261（`evidence/v16-livestock/full-test.log`，本轮日志 `evidence/v16-livestock/coverage-2026-11-21.log`）。此前 README 与手记各写一组互相冲突的覆盖率数字（90.59/87.95/92.33 与 90.21/88.35/92.02），本次以实跑为准替换。
+- **台账/研究/设计三份文档的头标更正**：`docs/PLAN.md` 是**唯一权威台账**（各节自带日期，越往后越新），不是"历史快照"，批量加标记时被误标，已改为台账头标；`docs/life-architecture-study.md`（48 节研究全文，读数为当时）与 `docs/v2-design.md`（设计契约，仍有效）同理改为各自的头标。其余 165 个 `docs/*.md`（1 份 `创作手记.md` 另带"已被 v2 取代"一行）只保留统一的「历史快照（当时版本）」标记，正文数字与结论未改。
+- **docs 索引勘误**：`docs/README.md` 里「`PLAN.md` §39 是本次文档整理」不成立——§39 是 2026-11-09 的那次整理，本轮没有新增 `PLAN` 节；索引的「最新口径在 §37/§38」也停在旧行号（PLAN 已到 §101），已改为"以文件末尾最新节为准"。索引里"工作树干净""覆盖率 1.6.0 尚未重跑"两处状态同步更正为实际状态。
+- **README 明细**：`package.json` scripts 列表补全（`art:check` / `research:md5` / `smoke:online`）；`web/assets/` 行注明美术指纹在根目录 `art-hashes.json`；「随仓库发布的现行文档」补上 `docs/PIXEL-EDITOR-使用说明.md` 与 `docs/README.md`，并说明其余 `docs/*.md` 是带历史标记的当时版本；QUICKSTART 的失败提示示例删掉只属于旧研究态的「本刻可用时间已用完」，换成正式路径会出现的「体力不够 / 手上还有没做完的动作」。
+- **模型表 / 部署**：线上 provider 与 `MODEL_NAMES`、GX10 节点 9026 是否放行、1528 次累计调用、公开链接与演示视频**一律标「待确认」**；不再把本地 Qwen 写作「主用」，口径改为「当前公开版走 API；本地节点用于开发联调，是否切为公开后端待确认」。
+- **参赛文档定位**：`docs/参赛-评分冲刺.md` 明确标注「内部五维自评，不是官方评分细则；官方权重未核实」。
+- **像素工作台**：`docs/PIXEL-EDITOR-使用说明.md` 重写入口路径（`tools/pixel-editor/`）、素材数（20）、覆盖稿位置与 `npm run actions` 生效范围（仅头像）。
+
+### 新增
+
+- `docs/文档状态-2026-11-21.md`：逐文件状态表（现行 / 历史 / 已更新 / 无需改）、改动清单、仍待官方/Qoder 确认清单，以及残留过期词的全仓扫描命令与结果。
+- `evidence/v16-livestock/coverage-2026-11-21.log`：本轮 `npm run coverage` 原始日志（1261 条、1258 通过、3 红、111.3s、覆盖率总表），供复核 §四 的数字与红条。
+- 历史快照共 **42 个已跟踪文件**（22 份 `docs/回报-*` / `设计-*`、16 份 `evidence/*/README.md`、4 份根目录 `AMBRACE-*` 报告）+ **`docs/` 下未入库的 143 份**，**只在顶部加一行「历史快照（当时版本），现行口径见 README/CHANGELOG」**，正文当时数字与结论未改。已跟踪的 42 个可由 `git diff --numstat` 逐个证明是 `+2 -0`（标记行 + 空行），没有数字改动；未入库的 143 份没有 git 基线可比，只核对了首行与文件未被截断（这一点如实标在状态表里）。
+
+### 边界
+
+- 本次不跑业务测试的修复；仅实跑了一次 `npm run coverage` 取当前覆盖率数字。
+- 未 push、未改 `master`、未动任何 tag。`docs/` 现行文档用 `git add -f` 入库。
+
 ## [1.6.0] - 2026-11-21
 
 牲畜圈实体化与体力恢复版。

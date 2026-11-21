@@ -4,7 +4,7 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
-**版本 `0.1.6`** · 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+**版本 `1.6.0`**（tag `v1.6.0`）· 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 它不是什么
 
@@ -66,9 +66,9 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
-│  ├─ *.test.mjs          #   179 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   221 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
-├─ shared/                # 服务端与浏览器共用的纯数据/几何（无 DOM/Node 副作用，15 个模块）
+├─ shared/                # 服务端与浏览器共用的纯数据/几何（无 DOM/Node 副作用，22 个模块）
 │  ├─ camp-layout.mjs / layout-version.mjs     # 营地布局与版本（单一来源）
 │  ├─ camp-scene.mjs / camp-geometry.mjs       # 几何与场景定义（浏览器只负责渲染）
 │  └─ camp-construction-access.mjs …           # 规则/物理/物品纯函数
@@ -78,21 +78,21 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ walk.mjs            #   A* 寻路内核（纯函数，可单测）
 │  ├─ camp-lighting.mjs / camp-sun.mjs   # 受光与日照（接触阴影，纯表现）
 │  ├─ audio.mjs           #   音频引擎：状态驱动 SFX / 环境声；BGM 来源见 web/music/CREDITS.md
-│  └─ assets/             #   16 张地形 tile + 4 张 HUD 头像 + palette.json + OFL 字体 + art-hashes 指纹
+│  └─ assets/             #   16 张地形 tile + 4 张 HUD 头像 + palette.json + OFL 字体（指纹在根目录 art-hashes.json）
 ├─ tools/pixel-editor/    # 开发工具：像素工作台 + 覆盖稿/碰撞稿/素材目录（不进镜像，不在 /web/ 下）
-├─ scripts/               # 资产生成 / 打包 / 静态检查 / 测试 runner
-│  ├─ gen-actions.mjs
-│  ├─ editor-catalog.mjs / pixel-overrides.mjs
+├─ scripts/               # 头像生成 / 静态检查 / 测试 runner / 作者侧探针
+│  ├─ gen-actions.mjs         #   4 张 HUD 头像 + actions/manifest.json（npm run actions）
+│  ├─ editor-catalog.mjs / pixel-overrides.mjs   # 本地像素工作台用（不在运行时）
 │  └─ check.mjs / test.mjs
 ├─ seed/world.json        # 固定历史起点（seed=7 实跑 600 刻存档）
 ├─ evidence/              # 研究读数留底（随仓库发布，复现见 EVIDENCE.md）
 ├─ Dockerfile             # 魔搭创空间镜像（含 serve/life/web/shared/seed）
-└─ package.json           # 零第三方依赖；scripts = lint/test/check/coverage/serve
+└─ package.json           # 零第三方依赖；scripts = lint/test/coverage/check/art/art:check/actions/research:md5/smoke:online/serve
 ```
 
-美术资产全部由 `scripts/` 代码定义生成（`npm run assets` 一键可复现），色板锁 `web/assets/palette.json`；
+美术只保留 **20 张 PNG**：16 张地形 tile（3D 地面 `regionAtlas` 的唯一来源）与 4 张 HUD 头像（`npm run actions` 可重生成，应用 `pixel-overrides` 手改），色板锁 `web/assets/palette.json`，20 张全部由 `art-hashes.json` 钉 sha256。旧的 2D 资产管线（`gen-pixel-assets.mjs` / `pack-assets.mjs` / `npm run assets`）已随 2D 视口在 1.5 前删除，仓库里不再有能重画整批 2D 素材的生成器。
 前端只读 `/world` 载荷做表现，动画不读 `w.t`、不消费 rng、不写世界状态，故不污染研究读数。
-内部台账 / 交接稿在 `docs/`（`.gitignore`，不入库）。**不读 `docs/` 也能接手**：公开的模块边界、默认开关、存档位置与已知限制见根目录 [ARCHITECTURE.md](./ARCHITECTURE.md)；5 分钟真实路径见 [QUICKSTART.md](./QUICKSTART.md)。
+内部台账 / 交接稿大部分在 `docs/`（`.gitignore`，不入库）；**现行文档**（创作手记 v2、参赛评分冲刺、像素工作台说明、`docs/README.md` 索引、文档状态）用 `git add -f` 随仓库发布，其余 `docs/*.md` 是带「历史快照」标记的当时版本。**不读 `docs/` 也能接手**：公开的模块边界、默认开关、存档位置与已知限制见根目录 [ARCHITECTURE.md](./ARCHITECTURE.md)；5 分钟真实路径见 [QUICKSTART.md](./QUICKSTART.md)。
 
 ## 快速开始
 
@@ -144,8 +144,8 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 179 个测试文件 / 982 条检查（发现式点名，不会漏文件）
-npm run coverage  # 同上 + Node 内建覆盖率（行 90.59% / 分支 87.95% / 函数 92.33%，92 个被加载模块；2026-11-15 实测）
+npm test          # 221 个测试文件 / 1261 条检查（发现式点名，不会漏文件）
+npm run coverage  # 同上 + Node 内建覆盖率（2026-11-21 实跑：行 90.58% / 分支 85.84% / 函数 89.62%；插桩下 1258/1261，2–3 条时序/环境用例红，**非全绿**，见 EVIDENCE.md §四）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
 npm run check     # lint + art:check + test

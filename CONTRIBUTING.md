@@ -11,11 +11,11 @@
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 179 个测试文件 / 982 条断言（发现式，自动点名 life/*.test.mjs）
+npm test          # 221 个测试文件 / 1261 条断言（发现式，自动点名 life/*.test.mjs）
 npm run coverage  # 同上，附带 Node 内建覆盖率
 ```
 
-`npm run check` 等于 lint + test。
+`npm run check` 等于 lint + `art:check` + test（美术指纹也在这道闸门里）。
 
 ## 提交前的最小要求
 
