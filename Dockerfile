@@ -11,7 +11,13 @@ ENV NODE_ENV=production \
     PORT=7860 \
     GAME_MODE=game \
     GAME_RULES=1 \
+    GAME_MS_PER_MINUTE=6000 \
+    TICK_MS=360000 \
     DATA_DIR=/data
+
+# 时间口径（1:10）：正式连续世界由 simClock 驱动，1 游戏分钟=GAME_MS_PER_MINUTE=6000ms，
+# 现实 1 分钟=10 游戏分，1 天 1440 分=144 现实分钟。TICK_MS=360000 是同一比例的
+# 「60 游戏分/刻」值，只给仍按整拍换算的旧/研究路径与前端表现层兜底；正式调度不读 TICK_MS。
 
 # 只需要这五样：服务器、引擎、前端、共享纯数据/几何、固定历史起点
 COPY serve.mjs ./

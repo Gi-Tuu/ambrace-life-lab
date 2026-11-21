@@ -133,7 +133,8 @@ MAX_CALLS=        # 每日调用预算闸门（跨天归零）
 GAME_MODE=        # research（默认）| game（有对照观众时才推进 A/B）
 SURV_CATCHUP_CAP= # 生存离线补时上限，默认 120 刻
 BRAIN=            # local（默认，0 成本）| model
-TICK_MS=          # 每拍间隔，毫秒
+GAME_MS_PER_MINUTE= # 正式节奏：1 游戏分钟的真实毫秒，默认 6000（现实 1 分 = 10 游戏分，1 天 = 144 现实分钟）
+TICK_MS=          # 研究态/非连续旧路径的整拍间隔；正式连续世界不读它（部署游戏态可设 360000 对齐 60 分/刻）
 PRESENCE_MS=      # 无人观看多久后停调真模型。**单位是毫秒**：60 秒要写 60000
 CTL_TOKEN=        # 公开部署必设，否则任何脚本一条 JSON 就能重置世界（见 SECURITY.md）
 CHAT_TOKEN=       # 不设时 /chat 转发整体关闭（默认）

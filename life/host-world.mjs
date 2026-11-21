@@ -545,7 +545,8 @@ async function catchUpSurvival(minutes, sp = S.surv) {
   let summary;
   try {
     if (sp.world.simClock) {
-      // 单一换算源：真实分钟 × 60000 × rate / msPerGameMinute（默认 480 游戏分/真实分）。
+      // 单一换算源：真实分钟 × 60000 × rate / msPerGameMinute（正式默认 6000ms ⇒ 10 游戏分/真实分）。
+      // 研究态/非连续世界才走下面按 TICK_MS 的旧整拍补时。
       const wantMinutes = gameMinutesForRealMinutes(minutes, sp.world.simClock);
       const capMinutes = SURV_CATCHUP_CAP * 60;
       const targetMinutes = Math.min(wantMinutes, capMinutes);
@@ -875,7 +876,8 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
       // 1.1 P1-2：停机时长必须先落进 S.missed（start() 开场会把它归零），否则正式连续世界
       // 在下面走到 catchUpSurvival(0) 就什么也不补。正式世界（simClock）不跑 A/B 的 catchUp——
       // 那是研究态"1 真实分 = 1 刻"的旧口径；统一交给 catchUpSurvival，内部按同一
-      // simClock.rate / msPerGameMinute 换算，cap 仍是 SURV_CATCHUP_CAP*60（默认 120 刻=7200 游戏分）。
+      // simClock.rate / msPerGameMinute 换算（正式 6000ms ⇒ 10 游戏分/真实分），
+      // cap 仍是 SURV_CATCHUP_CAP*60（默认 120 刻=7200 游戏分）。
       // 两条分支都只补一次：正式世界只走 survival 补时，非连续世界才额外补 A/B。
       if (minutes > 1) {
         const archivedSurvival = loaded.raw.survival != null;
@@ -917,9 +919,10 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
       if (rebuilt > 0) note += `；已从存档重建营地索引 ${rebuilt} 条`;
     } catch { /* 重建失败不阻塞启动；/saves 仍可用空索引 */ }
     // BUG-3：tick 是异步的（内含 await agent.tick 与 await fetch），而 setInterval 不会等它。
-    // 一次 tick 一旦超过 TICK_MS（慢供应商 / 重试 / 三角色串行 await），下一拍就会并发进入同一个世界：
-    // 预算闸门失真、modelCalls 少记、A/B 刻数错位（实测 t=23 vs t=20），"世界状态单一写者"这个
-    // 隐含不变量同时被破坏。线上 TICK_MS=6000 而部署侧实测约 5.9 秒/刻，已经贴着边界。
+    // 一次 tick 一旦超过当前节拍（正式世界由 SimScheduler 按 6000ms/游戏分叫醒；研究态仍是
+    // TICK_MS 整拍），下一拍就会并发进入同一个世界：预算闸门失真、modelCalls 少记、A/B 刻数错位
+    // （实测 t=23 vs t=20），"世界状态单一写者"这个隐含不变量同时被破坏。正式路径的节拍不再读
+    // TICK_MS：TICK_MS 只服务研究态/非连续世界，部署是否设 360000 不影响 simClock。
   // 名字存档 TTL：启动先扫一次，之后每小时一次（unref：不拖住进程退出）。
   try { sweepCamps(); } catch { /* 清扫失败不影响世界 */ }
   if (!S.sweepTimer) {

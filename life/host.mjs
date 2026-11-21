@@ -31,6 +31,8 @@ const ROSTER = [
 ];
 const M5_ENABLED = process.env.M5_ENABLED === '1';
 const WORK_CAP = process.env.WORK_CAP === undefined || process.env.WORK_CAP === '' ? undefined : Number(process.env.WORK_CAP);
+// TICK_MS 只决定研究态/非连续世界的整拍间隔；正式连续世界的自动调度读 world.simClock
+// （GAME_MS_PER_MINUTE，默认 6000ms/游戏分），不再从这里派生 1 游戏分钟。
 const TICK_MS = Number(process.env.TICK_MS ?? 7500);
 const GAME_MODE = process.env.GAME_MODE === 'game' ? 'game' : 'research';
 const CATCHUP_CAP_MIN = Number(process.env.CATCHUP_CAP_MIN ?? 360);

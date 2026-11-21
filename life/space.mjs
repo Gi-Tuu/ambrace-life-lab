@@ -26,8 +26,8 @@ export const PIXELS_PER_UNIT = 16;
 export const CAMP_UNITS = Object.freeze({ width: TOWN_SIZE.width, depth: TOWN_SIZE.depth });
 
 // ── 时间/速度：正式游戏唯一口径（单位/游戏分钟）─────────────────────────────
-// 客户端手感基线：0.5 tile/帧 × 6fps = 3 单位/秒；默认 1 游戏分钟 = 125ms（60 分/7.5s 刻）。
-// 因此正式游戏基础步行速度 = 3 / 8 = 0.375 单位/游戏分钟；冲刺 ×1.75。
+// 正式默认 1 游戏分钟 = 6000ms（1:10，一天 144 现实分钟），即一刻 60 分 = 360000ms。
+// 因此正式游戏基础步行速度 = 0.375 单位/游戏分钟；冲刺 ×1.75。现实耗时随 1:10 变长是预期。
 // 服务端 playerReach 的每刻预算、客户端每帧步长、居民 startMove 全部由这两个函数派生。
 export const GAME_MINUTES_PER_TICK = 60;
 export const WALK_UNITS_PER_GAME_MINUTE = 3 / 8;
@@ -60,10 +60,12 @@ export const GAME_RESIDENT_UNITS_PER_TICK = unitsPerTick('walk');
 // space.mjs 是浏览器也 import 的纯几何模块，不能反向依赖服务端策略（否则 /life/ 模块 404）。
 // 旧空间实现（地面谓词/体半径像素栅格/房间像素行走）已迁到 test-support/legacy-space-oracle.mjs，
 // 运行路径 0 import；ARCH-SPACE-01 / ARCH-RESEARCH-01 静态钉死。
-// tickMs 只决定“一刻的真实时长”；游戏分钟→真实时间的换算必须与宿主一致。
-export const unitsForRealMs = (ms, tickMs = 7500, sprint = false) => {
+// tickMs 只决定“一刻的真实时长”；正式默认 60 游戏分/刻 × 6000ms = 360000ms。
+// 调用方必须传与当前世界 clock 同源的 tickMs；默认值只是正式口径兜底，不是第二套时间源。
+export const DEFAULT_TICK_MS = 360000;
+export const unitsForRealMs = (ms, tickMs = DEFAULT_TICK_MS, sprint = false) => {
   const minutes = GAME_MINUTES_PER_TICK * (Number.isFinite(ms) ? ms : 0) /
-    Math.max(1, Number.isFinite(tickMs) ? tickMs : 7500);
+    Math.max(1, Number.isFinite(tickMs) ? tickMs : DEFAULT_TICK_MS);
   return unitsForGameMinutes(minutes) * (sprint ? SPRINT_FACTOR : 1);
 };
 

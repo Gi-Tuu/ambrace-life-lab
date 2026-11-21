@@ -28,7 +28,7 @@ import { TILE, rectGap, exteriorAllows, detourAroundBodies, routeForWalker } fro
 import { postJson, persistNotices, setCampProvider } from './net.mjs';
 // 1.1：世界分钟只读显示投影（纯函数）。时间来源仍是 /world 的 gameMinutes/serverNow/clock，
 // 这里只在两次轮询之间外推显示，不回写世界、不发请求、不消费 RNG。
-import { clockAnchorFromView, clockReadout, formatGameClock, gameMinutesLeftToday, busyRemainMinutes } from './time-view.mjs';
+import { clockAnchorFromView, clockReadout, formatGameClock, gameMinutesLeftToday, busyRemainMinutes, tickMsFromView, FALLBACK_TICK_MS } from './time-view.mjs';
 
 
 import {
@@ -666,16 +666,19 @@ function stepCampWalker(world,walker,cvId,snapshot,who,dx,dz,speed,manual) {
 
 // 要求2/3（派单第三阶段）：外围步行对齐世界时＋player_sync 节流＋被拒钳位。
 // P4：每帧步长只由 space.mjs 的“单位/游戏分钟”换算；旧的“村外 10/刻”钳制已随回退分支删除。
+// 1:10 节奏后“一刻”= 60 游戏分 = 360000ms；正式连续世界优先读服务端 clock.msPerGameMinute，
+// 不再把 TICK_MS=7500 当成正式节奏（研究态/冻结世界才回落到 view.tickMs）。
+// 冻结世界（测试 TICK_MS > 1000s/刻）只在玩家步长上按名义 7.5s 刻换算，避免表现层不动；
+// 日光/旅行仍保留 S.tickMs 原读数（与金样历史行为一致）。
+function movementTickMs(snapshot) {
+  const raw = tickMsFromView(snapshot, S.tickMs);
+  return raw > 1_000_000 ? 7500 : raw;
+}
 function playerGameStep(snapshot, dt) {
-  // 表现层在“世界钟被冻住/超慢”时不能跟着冻死（金样/quickstart 用 TICK_MS=10000000）：
-  // 超过 60s/刻时按名义 7.5s 刻换算；正常 6s/7.5s 刻仍按真实 tickMs，保持单位/游戏分钟口径。
-  const raw = snapshot?.tickMs ?? S.tickMs ?? 7500;
-  const tickMs = raw > 60000 ? 7500 : raw;
-  return unitsForRealMs(dt * 1000, tickMs, keys.has('sprint'));
+  return unitsForRealMs(dt * 1000, movementTickMs(snapshot), keys.has('sprint'));
 }
 function playerStepCap(snapshot, dt) {
-  const raw = snapshot?.tickMs ?? S.tickMs ?? 7500;
-  const tickMs = raw > 60000 ? 7500 : raw;
+  const tickMs = movementTickMs(snapshot);
   const ups = snapshot?.playerUnitsPerTick ?? 10;
   return ups * 1000 / tickMs * dt;
 }
@@ -775,7 +778,7 @@ function ensureWalker(cvId, who, world, slots) {
       length+=distanceTo(p,prior);
       prior=p;
     }
-    s.tripSpeed=length/Math.max(1,travel.arrive-snapshot.t)/(S.tickMs??7500)/.8;
+    s.tripSpeed=length/Math.max(1,travel.arrive-snapshot.t)/tickMsFromView(snapshot, S.tickMs)/.8;
   };
   if (!auth) return null;
   const k = walkKey(cvId, who);
@@ -1466,9 +1469,9 @@ function drawCamp(cv,w,historical=false) {
   const climateNowView=climateView.view();
   const elapsed=!historical && S.running ? Math.max(0,performance.now()-(S.sunTickAt??performance.now())) : 0;
   // 室内判定的 solarLight 会把 direct 置 0（indoor:true），所以白天因子必须用"室外视角"再算一次。
-const daylightDirect=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
+const daylightDirect=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_MS)),w.dayTicks??24,climate.season,
   {storm:climateNowView.storm,overcast:climateNowView.overcast,indoor:false}).direct : 0;
-const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
+const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_MS)),w.dayTicks??24,climate.season,
     {storm:climateNowView.storm,overcast:climateNowView.overcast,indoor:!open}) : null;
   const light=sun?.light??(w.phase==='夜'?[.55,.62,.76]:w.phase==='暮'?[.88,.79,.70]:climate.storm?[.68,.76,.82]:[1,1,1]);
   // 风力/积雪吃连续量：端点 0.55 / 1.15 / 2.7 与旧的布尔三档逐位一致。
@@ -2966,7 +2969,8 @@ function viewGameMinutes(view) {
 // 每次轮询重锚：服务端读数永远覆盖本地的外推，避免显示越过权威状态。
 // 1.1 P2-2：锚点只读服务端 clock 的 msPerGameMinute/rate/paused；不再用相邻两次
 // serverNow/gameMinutes 差分估速（那会让 HUD 出现 87–136ms 的第二套速度读数）。
-// clock 缺失时回退 125ms；rate=0/paused 由纯函数保留为冻结语义，绝不回退成“继续走”。
+// clock 缺失时回退标称 6000ms（1 现实分 = 10 游戏分）；rate=0/paused 由纯函数保留为冻结语义，
+// 绝不回退成“继续走”。
 function setClockAnchor(view) {
   hudClockNodes = null;
   hudClockAnchor = clockAnchorFromView(view, performance.now());
@@ -3436,7 +3440,9 @@ async function refresh() {
       S.sunTickAt=performance.now();
     }
     S.running = running;
-    S.tickMs=j.tickMs;
+    // 表现层“一刻多长”以同一份服务端 clock 为准（正式 6000ms/分 ⇒ 360000ms/刻）；
+    // 无连续钟的研究态才用 j.tickMs。前端不再假设 TICK_MS=7500。
+    S.tickMs = tickMsFromView(sv ?? j.survival, j.tickMs);
     S.masks = pair?.masks ?? S.masks;
     S.viewB = B;
     syncReplayPanel(pair);

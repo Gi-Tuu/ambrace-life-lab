@@ -6,7 +6,8 @@
 // `world.t` 降级为派生整数 floor(nowMinutes / 60)，旧结算点仍可继续按刻取整。
 //
 // 口径：
-//   · 默认 1 游戏分钟 = TICK_MS/60 毫秒；TICK_MS=7500 ⇒ 125ms，和现有 7.5s/60min 观感一致。
+//   · 正式节奏：1 游戏分钟 = 6000ms（现实 1 分钟 = 10 游戏分，1 天 1440 分 = 144 现实分钟）。
+//     `GAME_MS_PER_MINUTE` 可覆盖；**不再从 TICK_MS 派生**——TICK_MS 只服务研究态/旧路径。
 //   · rate 是倍速（游戏分钟/真实分钟），默认 1；只影响世界时间，不影响 CPU 预算。
 //   · pause 记录 pausedAt，恢复时把 anchor 往后推同样时长 ⇒ 暂停期间世界不欠不补。
 //   · advance(ms) 显式推进世界（测试/离线补时/床），与真实时间无关。
@@ -15,6 +16,8 @@
 
 export const GAME_MINUTES_PER_HOUR = 60;
 export const GAME_MINUTES_PER_DAY = 1440;
+// 单源默认：6000ms/游戏分 = 1:10（现实分:游戏分）。部署可用 GAME_MS_PER_MINUTE 覆盖。
+export const DEFAULT_MS_PER_GAME_MINUTE = 6000;
 
 const finite = (value, fallback) => {
   const n = Number(value);
@@ -23,7 +26,6 @@ const finite = (value, fallback) => {
 
 export function createSimClock({
   now = Date.now,
-  tickMs = process.env.TICK_MS ?? 7500,
   msPerGameMinute = process.env.GAME_MS_PER_MINUTE,
   rate = process.env.GAME_SPEED ?? 1,
   paused = false,
@@ -31,8 +33,8 @@ export function createSimClock({
   manual = false,
 } = {}) {
   const clockNow = () => (typeof now === 'function' ? Number(now()) : Number(now));
-  const safeTickMs = Math.max(1, finite(tickMs, 7500));
-  const safeMsPerMinute = Math.max(1e-6, finite(msPerGameMinute, safeTickMs / GAME_MINUTES_PER_HOUR));
+  const requested = finite(msPerGameMinute, DEFAULT_MS_PER_GAME_MINUTE);
+  const safeMsPerMinute = Math.max(1e-6, requested > 0 ? requested : DEFAULT_MS_PER_GAME_MINUTE);
   let safeRate = Math.max(0, finite(rate, 1));
   // rate=0 是冻结语义，不是“公式乘 0 把世界归零”：世界停在 startMinutes（或最近一次
   // setGameMinutes/换挡时的分钟），既不除零也不产生 NaN。

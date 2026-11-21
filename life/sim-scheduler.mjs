@@ -1,13 +1,15 @@
 // P1b SimScheduler：把"真实毫秒"翻译成"整游戏分钟步"，作为世界推进的唯一节拍来源。
 //
 // 口径（单源换算）：
-//   1 游戏分钟 = clock.msPerGameMinute 真实毫秒（TICK_MS=7500 ⇒ 125ms）
+//   1 游戏分钟 = clock.msPerGameMinute 真实毫秒（正式默认 6000ms ⇒ 1 现实分 = 10 游戏分）
 //   世界分钟 = 真实毫秒 × rate / msPerGameMinute
-//   ⇒ 默认 1 真实分 = 60000 / 125 = 480 游戏分；rate 只做倍率（rate=2 ⇒ 960）。
+//   ⇒ 默认 1 现实分 = 60000 / 6000 = 10 游戏分；rate 只做倍率（rate=2 ⇒ 20）。
+//   TICK_MS 不参与这条换算：它只服务研究态/非连续世界的整拍节拍。
 // 离线补时用同一个函数换算，不再有第二套"真实分钟 → 刻"的算法。
 //
 // Scheduler 不持有时钟：它只读 clock（含 paused/rate），并读一个"已消费到哪一分钟"的游标
 //（正式游戏里由 survplay 的分钟游标提供）。因此暂停/倍速/读档重锚都不需要另起时钟。
+import { DEFAULT_MS_PER_GAME_MINUTE } from './sim-clock.mjs';
 
 const finite = (value, fallback) => {
   const n = Number(value);
@@ -22,7 +24,7 @@ export const DEFAULT_MAX_BACKLOG_MINUTES = 600;
 export function gameMinutesForRealMs(realMs, clock) {
   const ms = Math.max(0, finite(realMs, 0));
   if (!clock) return 0;
-  return (ms * Math.max(0, finite(clock.rate, 1))) / Math.max(1e-6, finite(clock.msPerGameMinute, 125));
+  return (ms * Math.max(0, finite(clock.rate, 1))) / Math.max(1e-6, finite(clock.msPerGameMinute, DEFAULT_MS_PER_GAME_MINUTE));
 }
 
 export function gameMinutesForRealMinutes(realMinutes, clock) {

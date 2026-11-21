@@ -14,7 +14,8 @@ export function phaseOf(t) {
 export const dayOf = (t) => Math.floor(t / DAY_TICKS);
 export const isNight = (t) => phaseOf(t) === '夜';
 
-// §14/§15 统一游戏时间：1 天=24 刻；宿主默认 TICK_MS=7500 ⇒ 3 分钟/天；四季×30 天=1.5 小时/季。
+// §14/§15 统一游戏时间：1 天=24 刻；正式连续钟默认 6000ms/游戏分 ⇒ 1 天 1440 分 = 144 现实分钟（2.4h）；
+// 四季×30 天 = 72 小时/季。TICK_MS 只服务研究态/旧路径，不再决定正式一天的时长。
 // 季节相位只作用 survival（town/lab 仍用 phaseOf，基线逐位不变）；昼夜分配随季节变化。
 export const SEASON_DAYS = 30;
 export const SEASONS = Object.freeze(['春', '夏', '秋', '冬']);
