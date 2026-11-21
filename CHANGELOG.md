@@ -1,5 +1,18 @@
 # 变更记录
 
+## [1.1.1] - 2026-11-21
+
+1.1 补丁版：收口 final-review 的 6 项 P2。
+
+- compare 单侧暂停回放缺场景显式 null，不再跨分钟/跨侧冒充；新增 CMP-10/RP-06/07。
+- HUD 时钟只读服务端 clock，删除 serverNow 差分自估；缺失才回退 125ms，暂停/rate=0 冻结。
+- 架构闸门白名单改为 path+精确内容+次数，插入无关行仍绿、复制违规行必红；新增 ARCH-IMPORT-01。
+- research-policy 单源收口 12/10/40、60/1440、4 cap/2 chain、TIME_WAIT；四组 dumpSurv 逐位不变。
+- sim-clock state().t 复用 nowTick；rate=0 不除零/NaN；补 CLOCK-06/07/08。
+- 研究五面 md5 默认真跑 life/run.mjs，历史 log 仅诊断；CI 加 research:md5。
+- 全量 1174/1174；golden 45/45；22k parity 0；quickstart PASS。
+- 边界：200 日 seed7/29 单人、seed41 灭绝，属 1.2 平衡项；Docker build 与线上 ms.show iframe 仍由 Qoder CN 验收。
+
 ## [1.1.0] - 2026-11-21
 
 1.1 功能与发布修复版。
