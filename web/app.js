@@ -985,33 +985,55 @@ function campRing(g,camera,p,ratio,color,frame=0) {
 // 悬停名牌用 8×8 象形图标表示"在做什么"，不写中文动作词：宽度比「绛 · 采集」少约 40%。
 // 动作来自载荷 a.last.kind（世界事实），前端只做归类，不猜行为。
 const SPEECH_MS = 3600;
+// 1.4：主动对话的气泡/转向/注意姿势只持续一小会儿（1.5–2.5s），且只停表现不停任务。
+const RESIDENT_ATTENTION_MS = 2000;
 let residentSpeech, speechTimer, speechAnimation, lastSpeechFrame;
+const residentFocus = new Map();
+let pendingLocalTalk = null;
+
+function attentionFocused(who, at = performance.now()) {
+  const row = residentFocus.get(who);
+  if (!row) return false;
+  if (at >= row.until) { residentFocus.delete(who); return false; }
+  return true;
+}
+
+function focusResident(target, name, line, room) {
+  residentFocus.set(target, { until: performance.now() + RESIDENT_ATTENTION_MS });
+  const walker = WALK['cvA:' + target];
+  if (walker && walker.moving) { walker.path = []; walker.pi = 0; walker.moving = false; }
+  showResidentSpeech(target, line, room, true, { ms: RESIDENT_ATTENTION_MS, name });
+}
 
 function clearResidentSpeech() {
   clearTimeout(speechTimer);
   speechAnimation?.cancel();
   residentSpeech = speechAnimation = null;
   $('residentSpeech').hidden = true;
+  const name = $('residentSpeechName');
+  if (name) { name.hidden = true; name.textContent = ''; }
 }
 
-function showResidentSpeech(target, line, room, direct = false) {
+function showResidentSpeech(target, line, room, direct = false, { ms = SPEECH_MS, name = null } = {}) {
   if (!S.playing || ui.menu || !line?.trim()) return;
   clearResidentSpeech();
   residentSpeech = {target, room, direct};
   const bubble = $('residentSpeech');
+  const nameEl = $('residentSpeechName');
+  if (nameEl) { nameEl.textContent = name ?? ''; nameEl.hidden = !name; }
   $('residentSpeechText').textContent = line;
   bubble.style.visibility = 'hidden';
   bubble.hidden = false;
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    speechAnimation = bubble.animate([{opacity:1,offset:.9},{opacity:0}], SPEECH_MS);
+    speechAnimation = bubble.animate([{opacity:1,offset:.9},{opacity:0}], ms);
   }
-  speechTimer = setTimeout(clearResidentSpeech, SPEECH_MS);
+  speechTimer = setTimeout(clearResidentSpeech, ms);
 }
 
 function paintResidentSpeech(cv, w, people, project, overview = false) {
   if (!S.playing || cv.id !== (ui.fullscreen ? 'cvFull' : 'cvA')) return;
   const bubble = $('residentSpeech'), room = ui.interior;
-  const hidden = overview || ui.surveyRoom || ui.talk;
+  const hidden = overview || ui.surveyRoom || (ui.talk && !ui.talk.local);
   if (residentSpeech && room !== residentSpeech.room) clearResidentSpeech();
   const frame = w.mapSeed + ':' + w.t;
   const inFrame = ([x,y]) => x >= 0 && x < cv.width && y >= 0 && y < cv.height;
@@ -1564,6 +1586,18 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
     if (!historical && w.camp && person.who==='p1') person.tool=ui.tool;
   }
   const player=people.find(p=>p.who==='p1');
+  // 1.4：交谈注意窗口内只覆盖表现：面向玩家、播 talk 姿势、压住工作动作；不写世界、不停任务。
+  if (!historical && !S.replay) {
+    const now=performance.now();
+    for (const person of people) {
+      person.attentionPose = person.who!=='p1' && attentionFocused(person.who, now);
+      if (!person.attentionPose) continue;
+      person.moving=false;
+      person.stroke=null;
+      person.act='talk';
+      if (player) person.direction=walkDirection(player.x-person.x,player.z-person.z,person.direction??'down');
+    }
+  }
   const motionKey=ui.compare ? `compare:${S.compareRevision}:${w.compareSide}` : outingKey(w);
   const active=historical?[]:workPlayers[playerId](motionKey,w.t,w.workMotions??noWorkMotions,performance.now()/1000);
   const impacts=stormEffects({active:open && !overview && climateNowView.storm>.02,time,
@@ -1587,7 +1621,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
     for (const clip of active) {
       const {row,phase}=clip;
       const person=people.find(q=>q.who===row.actor);
-      if (!person || person.pose || person.stage==='infant' || w.agents?.[row.actor]?.dead) continue;
+      if (!person || person.pose || person.attentionPose || person.stage==='infant' || w.agents?.[row.actor]?.dead) continue;
       const contact=clipContact(clip,person,{site,people,animals,exterior,stage,heightAt});
       if (!contact) continue;
       person.stroke=sampleWork(person,row,phase,contact);
@@ -1673,7 +1707,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
       campBadge(g,camera,[px,hit.labelHeight??baseY+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={tick:w.t,historical,ghost:Boolean(ghost),ghostCam:ghost&&ghostCam?{x:ghostCam.x,z:ghostCam.z,span:ghostCam.span,follow:ghostCam.follow}:null,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
+  cv._debug={tick:w.t,historical,ghost:Boolean(ghost),ghostCam:ghost&&ghostCam?{x:ghostCam.x,z:ghostCam.z,span:ghostCam.span,follow:ghostCam.follow}:null,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),attention:people.filter(q=>q.attentionPose).map(q=>q.who+':'+q.direction),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
     // 验收读数（DOM 断言用）：遮挡命中的全部 occluder、真正会淡出的子集、以及天气过渡层的连续量。
     covered:[...covered].sort(),occluded:fadeableCovered(covered).sort(),coverControl:coverControl??null,
     climateView:climateNowView,climateTarget:climateView.targets()};
@@ -2370,7 +2404,12 @@ async function useResident(person) {
   const rw=WALK['cvA:'+target];
   if (rw && rw.moving) { rw.path=[]; rw.pi=0; rw.moving=false; }
   // P0 对话：空手按 F = 打开对话；重工具仍保留"会击伤"的代价交互。
-  if (ui.tool==='hand') { await openTalkWith(target,person); return; }
+  // 1.4：正式世界（非 compare/回放）走轻量话题面板，不接模型；compare/研究态保留旧自由输入车道。
+  if (ui.tool==='hand') {
+    if (ui.compare) await openTalkWith(target,person);
+    else await openResidentDialogue(target,person);
+    return;
+  }
   const {room,from,to}=person, tool=ui.tool;
   campBusy=true;
   try {
@@ -2423,6 +2462,7 @@ async function openTalkWith(target,contact){
 function openTalkDialog(target, contact, r) {
     clearResidentSpeech();
     ui.talk={target,name:r.name,contact};
+    resetTalkPanelChrome();
     renderTalkAccess();
     $('talkTitle').textContent=`和 ${r.name} 交谈`;
     updateTalkPortrait();
@@ -2431,6 +2471,89 @@ function openTalkDialog(target, contact, r) {
     if (ui.compare && r.sides?.B?.line && r.sides.B.line!==r.line) addTalk('npc', 'B · '+r.sides.B.line);
     const dlg=$('talkDlg'); if(!dlg.open) dlg.showModal();
     $('talkText').value=''; $('talkText').focus(); $('talkSend').disabled=false;
+}
+// 1.4：轻量主动对话。复用同一个 #talkDlg，只把"自由输入"换成话题按钮；不开模型、不停世界。
+async function openResidentDialogue(target, contact) {
+  if (!target || campBusy) return;
+  if (typeof ghostActive === 'function' && ghostActive()) { toast('你已化为幽魂，只能观察：无法交谈。'); return; }
+  campBusy=true;
+  const room=ui.interior;
+  try {
+    const r=await playAct({kind:'camp_talk',target,...contact});
+    if (!r.ok) {
+      toast(r.code==='RESIDENT_OUT_OF_REACH'?'请再靠近一点。':
+        r.code==='BUSY'?'手上还有没做完的动作，等它完成再聊。':
+        r.code==='PLAYER_DEAD'?'你已化为幽魂，无法交谈。':
+        r.code==='TALK_UNSUPPORTED'?'对照/研究态仍走自由输入对话。':
+        r.code==='RESIDENT_GONE'?'对方已经不在了。':'现在没法交谈。');
+      return;
+    }
+    const pending={target,contact,r};
+    pendingLocalTalk=pending;
+    // 先让居民抬头、把开场白说完（气泡 2s），再打开话题面板；不在同一帧被对话框盖住。
+    focusResident(target, r.name, r.line, room);
+    setTimeout(()=>{
+      if (pendingLocalTalk!==pending) return;
+      pendingLocalTalk=null;
+      openLocalTalkPanel(target, contact, r);
+    }, RESIDENT_ATTENTION_MS);
+  } catch { toast('交谈未完成，请重试。'); }
+  finally { campBusy=false; }
+}
+function resetTalkPanelChrome() {
+  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess');
+  if (topics) { topics.hidden=true; topics.replaceChildren(); }
+  if (row) row.hidden=false;
+  if (note) note.textContent='对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。';
+  if (access) access.hidden=false;
+}
+function openLocalTalkPanel(target, contact, r) {
+  pendingLocalTalk=null;
+  clearResidentSpeech();
+  ui.talk={target,name:r.name,contact,local:true,topics:r.topics??[]};
+  $('talkTitle').textContent=`和 ${r.name} 交谈`;
+  updateTalkPortrait();
+  $('talkLog').innerHTML='';
+  addTalk('npc',r.line);
+  resetTalkPanelChrome();
+  $('talkRow').hidden=true;
+  $('talkAccess').hidden=true;
+  $('talkNote').textContent='选一个话题继续聊；多轮对话不占世界动作，也不会打断居民手上的活。';
+  $('talkTopics').hidden=false;
+  renderLocalTopics(r.topics??[]);
+  keys.clear();
+  const dlg=$('talkDlg'); if(!dlg.open) dlg.showModal();
+  $('talkClose').focus?.();
+}
+function renderLocalTopics(topics) {
+  const box=$('talkTopics'); if (!box) return;
+  box.replaceChildren();
+  for (const topic of topics) {
+    const button=document.createElement('button');
+    button.type='button'; button.dataset.topic=topic.id;
+    button.textContent=topic.label;
+    button.onclick=()=>{ void askLocalTopic(topic); };
+    box.append(button);
+  }
+}
+async function askLocalTopic(topic) {
+  const t=ui.talk; if (!t?.local || campBusy || !topic) return;
+  campBusy=true;
+  addTalk('me',`你：${topic.label}`);
+  try {
+    const r=await playAct({kind:'camp_talk_say',target:t.target,topic:topic.id,...currentTalkContact(t)});
+    if (r.ok) {
+      addTalk('npc',r.line);
+      focusResident(t.target, r.name ?? t.name, r.line, ui.interior);
+      renderLocalTopics(r.topics ?? t.topics ?? []);
+    } else {
+      addTalk('sys', r.code==='NO_DIALOGUE'?'（对话已经结束。）':
+        r.code==='BUSY'?'（你手上还有活没做完。）':
+        r.code==='BAD_TOPIC'?'（这个话题没法接。）':'（对方没有回应。）');
+      if (r.code==='NO_DIALOGUE') setTimeout(()=>closeTalkDlg(false),800);
+    }
+  } catch { addTalk('sys','（对方没有回应。）'); }
+  finally { campBusy=false; }
 }
 function updateTalkPortrait() {
   const id=ui.talk?.target;
@@ -2476,7 +2599,7 @@ function currentTalkContact(t) {
   return {room,from:[(IPOS.x+8)/TILE,(IPOS.y+16)/TILE],to:person?[person.x,person.z]:null};
 }
 async function sendTalk(){
-  const t=ui.talk, input=$('talkText'); if(!t||!input)return;
+  const t=ui.talk, input=$('talkText'); if(!t||t.local||!input)return;
   const text=input.value.trim(); if(!text)return;
   addTalk('me','你：'+text); input.value=''; $('talkSend').disabled=true;
   try{
@@ -2494,7 +2617,9 @@ async function sendTalk(){
 function closeTalkDlg(notify=true){
   const t=ui.talk; ui.talk=null;
   const d=$('talkDlg'); if(d?.open)d.close();
-  if(t && notify!==false)playAct({kind:'talk_close'}).catch(()=>{});
+  resetTalkPanelChrome();
+  if (t?.local) playAct({kind:'camp_talk_close',target:t.target}).catch(()=>{});
+  else if(t && notify!==false)playAct({kind:'talk_close'}).catch(()=>{});
 }
 
 function requestInteraction() {
@@ -3553,7 +3678,8 @@ async function refresh() {
       }
     }
     // 交谈结束（不耐烦/走开/服务端清空）：收尾，别让输入框停在死对话上。
-    if (ui.talk && !sv.talk && !B?.talk) {
+    // 1.4：本地话题面板由 camp_talk 会话驱动，不占用旧的 sv.talk 字段，不能被轮询误关。
+    if (ui.talk && !ui.talk.local && !sv.talk && !B?.talk) {
       addTalk('sys', `${ui.talk.name}结束了对话。`);
       closeTalkDlg(false);
     }
@@ -5042,6 +5168,14 @@ Object.assign(window.__lifeDebug, {
   fadeable: (ids) => fadeableCovered(ids),
   survFlash: () => survFlash,
   interact: () => survInteract(),
+  // 1.4 验收口：用当前行走器脚点打开/继续轻量对话（走真实 UI + 服务端 camp_talk）；不写世界位置。
+  openDialogue: (target = 'a1') => {
+    const npc = S.view?.agents?.[target], walker = WALK[walkKey('cvA', 'p1')], rw = WALK[walkKey('cvA', target)];
+    if (!npc || !walker) return null;
+    const to = rw ? [rw.x + .5, rw.y + .5] : npc.pos ? [npc.pos.x, npc.pos.z] : null;
+    return openResidentDialogue(target, { room: null, from: [walker.x + .5, walker.y + .5], to });
+  },
+  dialogue: () => ui.talk ? { ...ui.talk, topics: ui.talk.topics?.map((t) => ({ ...t })) } : null,
   pointedEntity,
   hallFront: () => structuredClone(hallFront),
   // P2c：室内正式移动走同一 roomSurface；这两个调试口给真实浏览器验收用（不参与游戏逻辑）。

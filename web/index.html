@@ -139,7 +139,7 @@
             <p class="firstrun-tip">自己弄饭：2 木料在<strong>工作坊或院子</strong>做一个托盘；带<strong>篮子</strong>（蛋/果/菜/羊毛）或水桶（奶/水）走到东西跟前采集；把食材放进<strong>家里桌上</strong>才算饭（最多 6 份）。一天只吃一份，<strong>饿了才吃</strong>。</p>
             <button type="button" data-firstrun="skip">关闭新手指引</button>
           </div>
-          <div id="residentSpeech" hidden><span id="residentSpeechText"></span></div>
+          <div id="residentSpeech" hidden><b id="residentSpeechName" hidden></b><span id="residentSpeechText"></span></div>
         </div>
       </div>
       <details id="grpSurv" class="grp surv-only" open>
@@ -237,11 +237,12 @@
     <button id="talkClose" type="button">走开（Esc）</button>
   </div>
   <div id="talkLog" role="log" aria-live="polite"></div>
+  <div id="talkTopics" hidden aria-label="话题"></div>
   <div id="talkRow">
     <input id="talkText" maxlength="200" placeholder="说点什么…（他们可能不理你、走开或发火）" autocomplete="off" />
     <button id="talkSend" type="button">说</button>
   </div>
-  <div class="bp-note">对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。</div>
+  <div class="bp-note" id="talkNote">对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。</div>
   <div id="talkAccess"></div>
 </dialog>
 <dialog id="campPropDialog" aria-labelledby="campPropTitle" aria-describedby="campPropText">
