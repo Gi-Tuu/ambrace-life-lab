@@ -108,7 +108,8 @@ try {
   assert(sleep?.ok && (sleep.ticks ?? 0) > 0, `睡觉没有推进刻：${JSON.stringify(sleep)}`);
   assert(t1 > t0, `睡觉后世界刻没有前进：${t0} → ${t1}`);
 
-  // 死亡：仅 V73_TEST 夹具把存续归零；页面横幅必须出现，且世界刻继续前进。
+  // 死亡：仅 V73_TEST 夹具把存续归零；1.3 起玩家死亡＝幽魂观察（不是终局）。
+  // 必须验证：世界继续推进、动作被拒、镜头可平移/缩放、HUD 切「幽魂观察」。
   const beforeDeathT = t1;
   const death = await ctl({ action: 'quickstart_death' });
   note('death.fixture', death);
@@ -116,27 +117,62 @@ try {
   await ctl({ action: 'step' });
   await ctl({ action: 'step' });
   const tAfterDeath = (await ctl({ action: 'v73_state' })).t;
-  // 轮询是 900ms 一次；固定等 1200ms 在并行负载下会偶发“服务端已死、页面还没刷新”。
-  // 这里等真实 DOM 条件，最多 10s，仍然要求横幅真的出现，不放宽产品语义。
+  const ghostState = await (async () => (await post('/ctl', { action: 'v13_state' })).body)();
+  note('ghost.state.beforeCamera', ghostState);
+  // 轮询是 900ms 一次；等真实 DOM 条件，最多 10s，仍然要求横幅真的出现，不放宽产品语义。
   let banner = '';
   const bannerShown = await h.waitFor(async () => {
-    banner = await h.evaluate(`document.querySelector('.survbanner.bad')?.textContent ?? ''`, sid);
-    return /你倒下了/.test(banner);
+    banner = await h.evaluate(`document.querySelector('.survbanner')?.textContent ?? ''`, sid);
+    return /你已化为幽魂/.test(banner);
   }, 10000, sid);
-  note('death.after', { beforeDeathT, tAfterDeath, banner, bannerShown });
   assert(tAfterDeath > beforeDeathT, `玩家死亡后世界没有继续：${beforeDeathT} → ${tAfterDeath}`);
-  assert(bannerShown, `死亡后页面没有出现“你倒下了”横幅：${banner}`);
+  assert(bannerShown, `死亡后页面没有出现“你已化为幽魂”横幅：${banner}`);
+  assert(!/你倒下了/.test(banner), `旧死亡终局横幅仍在：${banner}`);
+  assert(ghostState.ended === false && ghostState.endReason == null, `玩家死亡不得变成终局：${JSON.stringify(ghostState)}`);
+  assert(ghostState.player?.dead === true && ghostState.ghost?.active === true, `服务端没有进入幽魂态：${JSON.stringify(ghostState)}`);
+
+  const hudGhost = await h.evaluate(`(()=>({player:document.querySelector('#playerHud')?.textContent??'', panel:document.querySelector('#survPanel')?.textContent??'', body:document.body.classList.contains('ghost-mode')}))()`, sid);
+  note('ghost.hud', hudGhost);
+  assert(hudGhost.body, '死亡后页面没有进入 ghost-mode');
+  assert(/幽魂观察/.test(hudGhost.player) || /幽魂观察/.test(hudGhost.panel), `HUD 没有显示幽魂观察：${JSON.stringify(hudGhost)}`);
+  assert(!/体力/.test(hudGhost.player), `幽魂 HUD 不应再显示体力：${hudGhost.player}`);
+
+  // 动作被拒：服务端真实入口（/act）。
+  const ghostGather = await act({ kind: 'gather', tool: 'pick' });
+  note('ghost.action', ghostGather);
+  assert(ghostGather?.ok === false && ghostGather.code === 'PLAYER_DEAD', `幽魂动作没有被拒：${JSON.stringify(ghostGather)}`);
+  const ghostSync = await act({ kind: 'player_sync', from: [ghostState.player?.pos?.x ?? 60, ghostState.player?.pos?.z ?? 40] });
+  assert(ghostSync?.ok === false && ghostSync.code === 'PLAYER_DEAD', `幽魂 player_sync 没有被拒：${JSON.stringify(ghostSync)}`);
+
+  // 镜头：WASD 平移 + 滚轮缩放 + 焦点脱离玩家。只读 __lifeDebug.ghost / cv._debug。
+  const ghost0 = await h.evaluate(`(()=>{const g=window.__lifeDebug.ghost();const d=document.querySelector('#cvA')._debug;return {g,focus:d?.focus??null,span:d?.span??null,playerPos:${JSON.stringify(ghostState.player?.pos ?? null)}}})()`, sid);
+  await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD',key:'d',bubbles:true}))`, sid);
+  await h.wait(500);
+  await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD',key:'d',bubbles:true}))`, sid);
+  await h.evaluate(`(()=>{const cv=document.querySelector('#cvA');cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-240,clientX:200,clientY:160,bubbles:true,cancelable:true}));return true})()`, sid);
+  await h.wait(200);
+  const ghost1 = await h.evaluate(`(()=>{const g=window.__lifeDebug.ghost();const d=document.querySelector('#cvA')._debug;return {g,focus:d?.focus??null,span:d?.span??null}})()`, sid);
+  const panned = Math.hypot(ghost1.g.cam.x - ghost0.g.cam.x, ghost1.g.cam.z - ghost0.g.cam.z);
+  note('ghost.camera', { before: ghost0, after: ghost1, panned, zoomed: ghost1.g.span !== ghost0.g.span });
+  assert(ghost1.g.active, 'ghost() 应报告 active');
+  assert(panned > 1, `WASD 没有平移幽魂镜头（位移 ${panned}）`);
+  assert(ghost1.g.span !== ghost0.g.span, `滚轮没有缩放幽魂镜头（${ghost0.g.span} → ${ghost1.g.span}）`);
+  assert(JSON.stringify(ghost1.focus) !== JSON.stringify(ghost0.focus), '幽魂镜头焦点没有脱离死亡点');
+  const afterCameraState = await (async () => (await post('/ctl', { action: 'v13_state' })).body)();
+  assert(JSON.stringify(afterCameraState.player?.pos) === JSON.stringify(ghostState.player?.pos), '镜头操作不得移动玩家实体');
+  assert(afterCameraState.ghost?.active === true && afterCameraState.ended === false, '镜头操作不得改变幽魂/终局状态');
 
   const summary = {
     ok: true,
-    result: '起服→继续生存→走→采集→吃→睡→HUD→死亡后世界继续',
+    result: '起服→继续生存→走→采集→吃→睡→HUD→死亡后转幽魂（世界推进/动作被拒/镜头可动）',
     hud,
     walkMoved: Number(moved.toFixed(3)),
     walkTilesPerSecond: Number(tilesPerSecond.toFixed(3)),
     gather: { stone0, stone1 },
     eat: { energy: Number(energy.toFixed(3)), store0, store1 },
     sleep: { ticks: sleep.ticks, t0, t1 },
-    death: { beforeDeathT, tAfterDeath, banner },
+    death: { beforeDeathT, tAfterDeath, banner, ghost: true },
+    ghost: { hud: hudGhost, camera: { panned: Number(panned.toFixed(3)), zoomed: ghost1.g.span !== ghost0.g.span, span: ghost1.g.span }, actionCode: ghostGather?.code, syncCode: ghostSync?.code },
   };
   note('summary', summary);
   console.log('[quickstart] PASS', JSON.stringify(summary));

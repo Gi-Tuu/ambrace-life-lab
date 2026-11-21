@@ -173,6 +173,15 @@ const ui = { menu: !launch.has('room') && launch.get('full')!=='1' &&
 
 function playAct(body) {
   const compare = ui.compare;
+  // 1.3：幽魂没有可操作的身体。客户端先给即时反馈；服务端 survAct/playerReach 仍会独立拒绝
+  //（不能只靠前端闸门，调试口/旧客户端也必须被拒）。
+  // typeof 守卫：静态前端测试会只抽出 playAct 片段，运行环境没有整页的 ghostActive。
+  if (!compare && typeof ghostActive === 'function' && ghostActive()) {
+    const code = 'PLAYER_DEAD';
+    survFlash = { kind: body?.kind ?? 'action', ok: false, code };
+    toast('你已化为幽魂，无法触碰活人的世界。');
+    return Promise.resolve({ ok: false, code, error: 'GHOST' });
+  }
   const other = compare && body.from ? comparisonContact(body) : null;
   return api('/act', compare
     ? {...body, ...(other && {otherContact:other}), mode: 'compare', revision: S.compareRevision}
@@ -590,6 +599,45 @@ function sightRadius(phase) {
 let lastCam = { x: 0, y: 0, zoom: ZOOM, mode: 'view' };
 // 相机跟随平滑（be23b5e 的意图）：室外指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
 let camSmooth = null;
+// ── 1.3 幽魂观察 ────────────────────────────────────────────────────────────
+// 玩家死亡后不再是“操作/画面一起卡住”：镜头脱离身体，可自由平移/缩放/跟随居民/看聚落全景。
+// 纯表现层：只读 /world 的 ghost 锚点，不写世界、不发请求、不消费 RNG；刷新后由服务端 ghost.at 重新锚定。
+let ghostCam = null; // { x, z, span, follow, enteredAt }
+const GHOST_SPAN_MIN = 10, GHOST_SPAN_MAX = 140;
+function ghostActive() {
+  const v = S.view;
+  return Boolean(v && !ui.compare && !ui.menu && v.player?.dead);
+}
+function ghostSpanNow() {
+  return Number.isFinite(ghostCam?.span) ? ghostCam.span : 30;
+}
+// 观察控制走服务端同一套时钟：倍速只读/写 world.simClock.rate，不另起第二套速度。
+function ghostRateNow() {
+  const rate = Number(S.view?.clock?.rate);
+  return Number.isFinite(rate) && rate > 0 ? rate : 1;
+}
+// 只读投影：聚落/荒野的自由观察范围（镜头可以越过角色视野，但不能借此写世界）。
+function ghostClamp(x, z) {
+  return {
+    x: Math.max(WILDS.west - 6, Math.min(WILDS.east + 6, x)),
+    z: Math.max(WILDS.north - 6, Math.min(WILDS.south + 6, z)),
+  };
+}
+function syncGhostState(view) {
+  const on = Boolean(view && !ui.compare && !ui.menu && view.player?.dead);
+  document.body.classList.toggle('ghost-mode', on);
+  if (!on) { ghostCam = null; return; }
+  if (ghostCam) { ghostCam.span = Math.max(GHOST_SPAN_MIN, Math.min(GHOST_SPAN_MAX, ghostCam.span)); return; }
+  const at = view.ghost?.at ?? view.playerPos ?? null;
+  const point = Number.isFinite(at?.x) && Number.isFinite(at?.z)
+    ? ghostClamp(at.x, at.z)
+    : ghostClamp(WORLD_TW / 2, WORLD_TH / 2);
+  ghostCam = { x: point.x, z: point.z, span: 30, follow: null, enteredAt: performance.now() };
+  ui.overview = false;
+  ui.camRoom = null;
+  if (ui.interior) closeRoom(false, false); // 幽魂不留在 16×12 房间里；镜头回世界空间
+  keys.clear();
+}
 // 相机：默认跟随玩家所在地点（A/B 共用同一锚点，保证双世界在同一镜头下对照）；
 // 点地点条可临时把镜头移过去。clamp 到世界边界；缩放取整数倍且不超出容器。
 // 全屏＝原样放大：取景逻辑像素不变，只把整数倍放大到屏幕能容纳的最大值（不裁切、不拉伸）。
@@ -678,6 +726,7 @@ function playerRealStep(dt) {
 const SYNC_DIST = 2, SYNC_MS = 1200;
 let playerSyncInFlight = false;
 function syncPlayerPos(walker, snapshot) {
+  if (ghostActive()) return; // 1.3：幽魂不移动实体，也不上报位置（服务端第二道闸门仍会拒绝）
   if (playerSyncInFlight || !snapshot?.districts) return;
   const compare = ui.compare;
   const revision = S.compareRevision;
@@ -715,6 +764,7 @@ function applyPositionSync(walker, result) {
 // 进门/出门是 portal 迁移，服务端 playerPos 已经切到对应空间；这里只做节流同步与拒绝钳位。
 let roomSyncInFlight=false, lastRoomSync=null;
 function scheduleRoomSync() {
+  if (ghostActive()) return; // 幽魂不进房间，也不上报室内位置
   if (roomSyncInFlight) return;
   const snapshot=S.view;
   if (!snapshot || !ui.interior || snapshot.campPlayerRoom!==ui.interior) return;
@@ -1356,6 +1406,7 @@ function drawCamp(cv,w,historical=false) {
   const aspect=ui.fullscreen?Math.max(1.18,(innerWidth-12)/(innerHeight-80)):room?1.65:1.9;
   const {width,height}=campViewport(cv,aspect);
   const overview=ui.overview&&!room;
+  const ghost=!historical && !right && ghostActive();
   let stage, life, homes, exterior, visibility, sight, people=[], animals=[], residentHint, work=[], hearth, regions, extended, targetY, x,z,span;
   const playerId=cv.id==='cvFull'?'cvA':cv.id;
   if (room) {
@@ -1410,15 +1461,25 @@ function drawCamp(cv,w,historical=false) {
     if (!historical) campWorlds.set(playerId,world);
     stage=world.scene3d;life=world.life3d;homes=world.homes3d;
     const slots=slotsOf(w,world.sites);
-    if (!historical) for (const who of Object.keys(slots)) ensureWalker(playerId,who,world,slots);
+    if (!historical) for (const who of Object.keys(slots)) { if (ghost && who==='p1') continue; ensureWalker(playerId,who,world,slots); }
     const pw=historical?null:WALK[walkKey(playerId,'p1')];
     if (historical && w.playerPos && !w.agents?.p1?.dead) slots.p1=[w.playerPos.x-.5,w.playerPos.z-.5];
-    const pTile=pw?[pw.x,pw.y]:slots.p1;
+    if (ghost && slots.p1) delete slots.p1; // 幽灵不画身体，也不再占用活人槽位
+    const pTile=ghost?null:(pw?[pw.x,pw.y]:slots.p1);
     const p=pTile ||
       world.sites[w.loc?.p1] || [world.tw/2,world.th/2];
-    const focus=historical&&S.replayFocus ? S.replayFocus : [p[0]+.5,p[1]+.5];
-    x=overview?world.tw/2:focus[0];z=overview?world.th/2:focus[1]-2.5;
-    span=overview?Math.max(world.tw+5,(world.th+4)*width/height):Math.min(29,Math.max(18,width/28));
+    let focus=historical&&S.replayFocus ? S.replayFocus : [p[0]+.5,p[1]+.5];
+    if (ghost) {
+      // 1.3：镜头脱离玩家。跟随居民时取该居民当前表现位置；自由观察时取 ghostCam 焦点。
+      const followed=ghostCam?.follow ? WALK[walkKey(playerId,ghostCam.follow)] : null;
+      if (followed) focus=[followed.x+.5,followed.y+.5];
+      else if (ghostCam) focus=[ghostCam.x,ghostCam.z];
+      else focus=[w.playerPos?.x??p[0]+.5,w.playerPos?.z??p[1]+.5];
+    }
+    x=overview?world.tw/2:focus[0];
+    z=overview?world.th/2:(ghost?focus[1]:focus[1]-2.5);
+    span=overview?Math.max(world.tw+5,(world.th+4)*width/height)
+      :(ghost?ghostSpanNow():Math.min(29,Math.max(18,width/28)));
     const connected=Boolean(w.camp);
     const [playerX,playerZ]=focus;
     if (connected) {
@@ -1442,12 +1503,13 @@ function drawCamp(cv,w,historical=false) {
       ? [...(world.life3d?.animals??[]),...(exterior.regional?.animals??[])].map(a=>({...a,phase:0}))
       : drawHerd(world,playerId,time,slots,w,exterior.regional?.animals);
     if (extended) for (const animal of animals) animal.groundY=extended.height(animal.x,animal.z);
-    if (!historical && !overview && pTile && !firstFrame3d) {
+    if (!historical && !overview && !ghost && pTile && !firstFrame3d) {
       visibility=campVisibility(world,playerId,playerX,playerZ,w.phase,extended,exterior.regional,regions??[]);
       animals=animals.filter(a=>visibility.sees(a.x,a.z,(a.groundY??stage.heightAt(a.x,a.z))+(a.kind==='bird'?3.4:.65)));
     }
-    if (!historical && !overview && pTile) sight=[pTile[0]+.5,pTile[1]+.5,sightRadius(w.phase)];
+    if (!historical && !overview && !ghost && pTile) sight=[pTile[0]+.5,pTile[1]+.5,sightRadius(w.phase)];
     for(const [who,[sx,sy]] of Object.entries(slots)){
+      if (ghost && who==='p1') continue; // 幽灵不画身体
       const walker=historical?null:WALK[walkKey(playerId,who)];
       const px=walker?.x??sx, pz=walker?.y??sy;
       if (visibility && who!=='p1' && !visibility.sees(px+.5,pz+.5)) continue;
@@ -1456,8 +1518,10 @@ function drawCamp(cv,w,historical=false) {
     work=[...(historical?world.work3d??[]:animatedConstruction(world)),...world.districtResources];
   }
   // 相机跟随平滑：室外视角指数逼近；切房间/全景/回放或瞬移超过 9 格时直接落位。
-  const smoothKey=historical?'replay':overview?'overview':room?'room:'+site:'outdoor';
-  if(!camSmooth||camSmooth.key!==smoothKey||Math.hypot(x-camSmooth.x,z-camSmooth.z)>9) camSmooth={key:smoothKey,x,z};
+  // 幽魂镜头不用平滑：WASD 平移必须跟手；跟随居民时居民位置本身已是连续插值的。
+  const smoothKey=historical?'replay':overview?'overview':room?'room:'+site:ghost?'ghost':'outdoor';
+  if(ghost) camSmooth=null;
+  else if(!camSmooth||camSmooth.key!==smoothKey||Math.hypot(x-camSmooth.x,z-camSmooth.z)>9) camSmooth={key:smoothKey,x,z};
   else { const k=.28; camSmooth.x+=(x-camSmooth.x)*k; camSmooth.z+=(z-camSmooth.z)*k; x=camSmooth.x; z=camSmooth.z; }
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
   const climate=campClimate(w);
@@ -1609,7 +1673,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
       campBadge(g,camera,[px,hit.labelHeight??baseY+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
+  cv._debug={tick:w.t,historical,ghost:Boolean(ghost),ghostCam:ghost&&ghostCam?{x:ghostCam.x,z:ghostCam.z,span:ghostCam.span,follow:ghostCam.follow}:null,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
     // 验收读数（DOM 断言用）：遮挡命中的全部 occluder、真正会淡出的子集、以及天气过渡层的连续量。
     covered:[...covered].sort(),occluded:fadeableCovered(covered).sort(),coverControl:coverControl??null,
     climateView:climateNowView,climateTarget:climateView.targets()};
@@ -1874,7 +1938,7 @@ function firstRunStepOf(kind) {
 }
 function renderFirstRun() {
   const box = $('firstRun');
-  box.hidden = !S.playing || firstRunStep >= FIRST_RUN_STEPS.length;
+  box.hidden = !S.playing || ghostActive() || firstRunStep >= FIRST_RUN_STEPS.length;
   if (!box.hidden) FIRST_RUN_STEPS.forEach((step,i)=>step.classList.toggle('done',i<firstRunStep));
 }
 
@@ -2440,6 +2504,7 @@ function requestInteraction() {
 }
 
 async function survInteract() {
+  if (ghostActive()) { toast('你已化为幽魂，只能观察：无法采集、建造、交易或交谈。'); return; }
   if (S.replay!=null || campBusy) return;             // 防连点
   if (!S.playing) { toast('还没进入世界，请先从菜单点「继续生存」。'); return; }
   if (ui.surveyRoom) { returnFromSurvey(); return; }
@@ -2581,7 +2646,8 @@ const canInviteWorker=a=>!a.isPlayer && !a.dead && (a.viab??1)>0 && ['adult','el
 function updateHotbar() {
   ui.tool ??= 'hand';
   const s = S.view;
-  const ctx = S.playing && s?.loc ? contextAction(s) : null;
+  const ghost = ghostActive();
+  const ctx = !ghost && S.playing && s?.loc ? contextAction(s) : null;
   for (const el of document.querySelectorAll('#hotbar .slot[data-tool]')) {
     const t=el.dataset.tool;
     if (!el.querySelector('img')) {
@@ -2593,9 +2659,9 @@ function updateHotbar() {
       for (const node of el.childNodes) if (node.nodeType===Node.TEXT_NODE) node.textContent='';
       el.prepend(img);
     }
-    const c=S.playing && s?.loc ? contextAction(s,t) : null;
-    el.disabled=!S.campReady && ['basket','shears','bucket'].includes(t);
-    const can = !!c && c.tool === t;
+    const c=!ghost && S.playing && s?.loc ? contextAction(s,t) : null;
+    el.disabled=ghost || (!S.campReady && ['basket','shears','bucket'].includes(t));
+    const can = !ghost && !!c && c.tool === t;
     el.classList.toggle('on', ui.tool === t);
     el.setAttribute('aria-pressed', String(ui.tool === t));
     el.classList.toggle('can', can);
@@ -2614,8 +2680,9 @@ function updateHotbar() {
   }
   const hint = $('toolHint');
   // 工具栏右侧只显示当前手持工具名；具体可做什么交给 F 提示，不再重复整段键位说明。
-  if (hint) hint.textContent = `手持 · ${TOOL_ZH[ui.tool] ?? '空手'}`
-    + (ctx ? `　F ${ACT_ZH[ctx.kind]}（需${TOOL_ZH[ctx.tool]}）` : '');
+  if (hint) hint.textContent = ghost ? '幽魂观察 · 无法操作角色'
+    : `手持 · ${TOOL_ZH[ui.tool] ?? '空手'}`
+      + (ctx ? `　F ${ACT_ZH[ctx.kind]}（需${TOOL_ZH[ctx.tool]}）` : '');
 }
 function openBackpack() { roomRoute=null; keys.clear(); renderBackpack(); const d = $('backpack'); if (!d.open) d.showModal(); }
 function closeBackpack() { const d = $('backpack'); if (d.open) d.close(); }
@@ -2783,6 +2850,8 @@ const STAT_ICON = {
   place: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 1a3.5 3.5 0 0 0-3.5 3.5C2.5 7 6 11 6 11s3.5-4 3.5-6.5A3.5 3.5 0 0 0 6 1z" fill="#458996"/><circle cx="6" cy="4.5" r="1.2" fill="#FFF0CC"/></svg>',
   action: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M7 0 2 7h3l-1 5 6-7H7z" fill="#FFA300"/></svg>',
   forecast: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2 8h8v2H2z" fill="#5B574C"/><path d="M3 5a3 3 0 0 1 6 0" stroke="#83769C" stroke-width="1.2" fill="none"/></svg>',
+  // 1.3 幽魂：只观察、不操作；用眼形图标与体力/存续区分。
+  eye: '<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 6s2-3.2 5-3.2S11 6 11 6 9 9.2 6 9.2 1 6 1 6z" fill="none" stroke="#C2C3C7" stroke-width="1"/><circle cx="6" cy="6" r="1.4" fill="#C2C3C7"/></svg>',
 };
 function openCenterDlg(id, renderFn) {
   const d = $(id); if (!d) return;
@@ -3038,6 +3107,10 @@ function renderSeasonHud(view, location, outdoor) {
   $('seasonWeather').textContent=clock+' '+weather;
   const ph = $('playerHud');
   if (ph) {
+    // 1.3：幽魂不再显示体力/存续/行动额度；HUD 明确写「幽魂观察」。
+    if (!ui.compare && view.player?.dead) {
+      ph.innerHTML = `<span class="stat ghost" title="你已经死亡，只能观察世界；体力/行动不再适用">${STAT_ICON.eye ?? ''}<b>幽魂观察</b></span><span class="stat dim"><b>WASD 平移 · 滚轮缩放 · 点居民跟随</b></span>`;
+    } else {
     const busy = view.player?.busy;
     const busyLeft = busy ? busyRemainMinutes(busy, minutes, hudClockAnchor?.gameMinutes ?? viewGameMinutes(view)) : null;
     const busyText = busy ? `${esc(busy.kind)} 剩 <span data-hud="busy">${Number.isFinite(busyLeft) ? busyLeft.toFixed(1) : (busy.remainMin ?? 0)} 分</span>` : '';
@@ -3060,9 +3133,12 @@ function renderSeasonHud(view, location, outdoor) {
       btn.onclick = () => cancelBusyAction();
       ph.appendChild(btn);
     }
+    }
   }
   const pl = $('placeHud');
-  if (pl) pl.textContent = `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
+  if (pl) pl.textContent = !ui.compare && view.player?.dead
+    ? '幽魂 · 观察中'
+    : `${location ?? ''}${outdoor ? ' · 户外' : ' · 室内'}`;
 }
 function ecoButtons(s, which) {
   if (!s) return '';
@@ -3144,26 +3220,42 @@ function renderSurv(s) {
   const location=outside ? nearby?.[1].label??'外围野地' : (s.rooms??{})[here]??here;
   const outdoor = !ui.interior;
   const flash = survFlash ? `<span class="${survFlash.ok ? 'good' : 'bad'}">${esc(campLabels[survFlash.kind]??survFlash.kind)}：${esc(campCodes[survFlash.code] ?? SURV_CODE_ZH[survFlash.code] ?? survFlash.code)}${survFlash.tool ? `（需要${TOOL_ZH[survFlash.tool]}）` : ''}</span>` : '';
-  const banner = s.player?.dead ? '<div class="survbanner bad">你倒下了。营地还在，但这一局属于你结束了。点「重新开始」再来一局。</div>' : s.ended ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>` : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>` : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
+  // 1.3：先判灭绝终局，再判幽魂。玩家死亡只是观察状态，不再复用“这一局属于你结束了”的旧横幅。
+  const ghost = !ui.compare && Boolean(s.player?.dead);
+  const banner = s.ended
+    ? `<div class="survbanner bad">终局：${s.endReason === 'extinct' ? '聚落已没有存活居民，自然生态仍在变化' : s.endReason === 'sole' ? '只剩一个生命' : '再无异性对，无法繁衍'}。存活 ${s.day} 天。点「重新开始」再来一局。</div>`
+    : ghost
+      ? '<div class="survbanner ghost">你已化为幽魂，聚落仍在继续：居民照常生活、繁衍、建房、经历灾害。WASD 平移镜头 · 滚轮缩放 · 点居民跟随 · 世界全景看聚落。</div>'
+      : s.failed ? `<div class="survbanner bad">聚落陷入缺粮危机（连续 ${s.crisisDays ?? 0} 天缺口）：居民仍在生活，按目标恢复供给。</div>`
+        : s.settlement === 'recovering' ? '<div class="survbanner">危机已缓解，正在恢复：把公仓补回安全线。</div>' : '';
+  const ghostCtl = ghost ? `<span class="ghostctl" role="group" aria-label="幽魂观察控制">
+      <button type="button" data-ghost="pause" title="暂停/继续观察（复用世界暂停）">${S.running ? '暂停观察' : '继续观察'}</button>
+      <button type="button" data-ghost="rate" title="加速观察（复用世界倍速）">倍速 ×${ghostRateNow()}</button>
+      <button type="button" data-ghost="follow" title="镜头跟随一位居民">跟随居民</button>
+      <button type="button" data-ghost="overview" title="聚落全景 / 返回自由观察">${ui.overview ? '返回观察' : '聚落全景'}</button>
+    </span>` : '';
   el.innerHTML = `
     ${s.light === false ? '<div class="survbanner bad">屋里没柴了，夜里点不着火。去砍点木头（院子/树林）。</div>' : ''}
     ${banner}
     <div class="survrow stat-icons">
       <span class="stat" title="季节与日期">${STAT_ICON.calendar}<b>${esc(s.season ?? '')} ${s.dayInSeason ?? '?'} / ${s.day+1}</b></span>
       <span class="stat" title="时段与天气">${STAT_ICON.weather}<b>${esc(s.phase)} ${esc(s.weather ?? '')}</b></span>
-      <span class="stat" title="体力">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
-      <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>
-      <span class="stat" title="当前地点">${STAT_ICON.place}<b>${esc(location)}${outdoor ? '·户外' : '·室内'}</b></span>
-      ${outside ? '<span class="bad" title="村外按世界时间限速；玩家与居民共用移动预算">村外·限速</span>' : ''}
-      ${s.player?.timeLeft != null ? `<span class="stat" title="日统计：今天已用于动作的分钟，不限制行动">${STAT_ICON.action}<b>${s.player?.timeMax === 1440 ? '今日动作已用' : '本刻动作已用'} ${Math.max(0, (s.player?.timeMax ?? 0) - s.player.timeLeft)} 分</b></span>` : ''}
+      ${ghost
+        ? `<span class="stat ghost" title="已死亡：只能观察世界"><b>${STAT_ICON.eye}幽魂观察</b></span>`
+        : `<span class="stat" title="体力">${STAT_ICON.heart}<b>${s.player?.energy ?? '?'}</b></span>
+      <span class="stat" title="存续">${STAT_ICON.shield}<b class="${(s.player?.viab ?? 1) < 0.3 ? 'bad' : ''}">${s.player?.viab ?? '?'}</b></span>`}
+      <span class="stat" title="当前地点">${STAT_ICON.place}<b>${ghost ? '幽魂 · 观察中' : `${esc(location)}${outdoor ? '·户外' : '·室内'}`}</b></span>
+      ${!ghost && outside ? '<span class="bad" title="村外按世界时间限速；玩家与居民共用移动预算">村外·限速</span>' : ''}
+      ${!ghost && s.player?.timeLeft != null ? `<span class="stat" title="日统计：今天已用于动作的分钟，不限制行动">${STAT_ICON.action}<b>${s.player?.timeMax === 1440 ? '今日动作已用' : '本刻动作已用'} ${Math.max(0, (s.player?.timeMax ?? 0) - s.player.timeLeft)} 分</b></span>` : ''}
       ${(s.stormTomorrow || s.coldsnapTomorrow || s.drought || s.disasterToday)
         ? `<span class="bad" title="预警">⚠ ${[s.stormTomorrow ? '风暴' : '', s.coldsnapTomorrow ? '寒潮' : '', s.drought ? '干旱' : '', s.disasterToday ? (s.disasterToday === 'storm' ? '风暴' : '寒潮') : ''].filter(Boolean).join(' · ')}</span>`
         : `<span class="dim stat" title="明日预报">${STAT_ICON.forecast}<b>${esc(s.forecast ?? '')}${s.clearStreak ? ` 连晴${s.clearStreak}` : ''}</b></span>`}
       ${flash}
-      ${s.player?.busy ? `<span class="stat busy-on" title="进行中的动作（显示按世界分钟插值，完成仍以 /world 为准）">⏳ ${esc(s.player.busy.kind)} 剩 <span data-hud="busy">${s.player.busy.remainMin} 分</span></span><button id="btnBusyCancel" title="取消当前动作（已用分钟与体质不退还）">取消动作</button>` : ''}
-      ${s.player?.dead || s.ended ? '<button id="btnSurvReset">重新开始</button>' : ''}
+      ${!ghost && s.player?.busy ? `<span class="stat busy-on" title="进行中的动作（显示按世界分钟插值，完成仍以 /world 为准）">⏳ ${esc(s.player.busy.kind)} 剩 <span data-hud="busy">${s.player.busy.remainMin} 分</span></span><button id="btnBusyCancel" title="取消当前动作（已用分钟与体质不退还）">取消动作</button>` : ''}
+      ${ghostCtl}
+      ${s.player?.dead || s.ended ? `<button id="btnSurvReset">${ghost ? '重新开始（放弃观察）' : '重新开始'}</button>` : ''}
     </div>
-    <details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
+    ${ghost ? '' : `<details class="surveco"><summary>收成兑换 / 蓄养扩建 · 图标操作</summary>
       <div class="eco-icons">
         ${Object.keys(s.economy?.exchange ?? {}).map((k) => {
           const n = s.produce?.[k] ?? 0, label = s.economy?.produceLabel?.[k] ?? k;
@@ -3175,7 +3267,7 @@ function renderSurv(s) {
           return `<button data-sk="expand" data-type="${k}" title="扩建${label}（木${c.wood} 石${c.stone}）"${ok ? '' : ' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${c.wood}/${c.stone}</span></button>`;
         }).join('')}
       </div>
-    </details>`;
+    </details>`}`;
   el.querySelectorAll(':scope > details').forEach((d, i) => { if (openState[i]) d.open = true; });
   renderItemBar(s);
   renderSeasonHud(s, location, outdoor);
@@ -3517,6 +3609,8 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    // 1.3：进入/退出幽魂观察。只做表现层状态（镜头/输入/HUD 类），世界仍由服务端 tick。
+    syncGhostState(viewA);
     // 1.1：每次 /world 到达重锚世界分钟；插值只影响 HUD 显示，不影响服务端结算。
     setClockAnchor(viewA);
     if (ui.talk) updateTalkPortrait();
@@ -3643,12 +3737,26 @@ for(const id of ['cvA','cvB','cvFull']){
     el.style.cursor=pointedEntity(el,e)?'pointer':'';
   });
   el.addEventListener('pointerleave',()=>{campHover=null;el.style.cursor='';});
+  // 1.3 幽魂观察：滚轮缩放镜头（只改表现层 span，不写世界）。
+  el.addEventListener('wheel',(e)=>{
+    if (!ghostActive() || ui.overview) return;
+    e.preventDefault();
+    if (!ghostCam) return;
+    ghostCam.span = Math.max(GHOST_SPAN_MIN, Math.min(GHOST_SPAN_MAX, ghostSpanNow() * Math.exp(e.deltaY * 0.0012)));
+    forceRepaint = true;
+  }, { passive:false });
 }
 $('minimap').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-room]');
   if (!b) return;
   const r = b.dataset.room;
   if (ui.interior || ui.surveyRoom) return;
+  // 1.3：幽魂点地点条 = 把观察镜头移过去（不再走“走过去”的角色动作）。
+  if (ghostActive()) {
+    const at = sitesOf(S.view ?? {})[r];
+    if (at && ghostCam) { const point = ghostClamp(at[0], at[1]); ghostCam.follow = null; ghostCam.x = point.x; ghostCam.z = point.z; ui.overview = false; forceRepaint = true; }
+    return;
+  }
   walkToEntrance(r);
 
 });
@@ -3977,6 +4085,8 @@ $('housingDlg').addEventListener('click',(e)=>{
   }).catch(()=>{ toast('无法登记，请重试。'); });
 });
 $('survPanel').addEventListener('click', (e) => {
+  const ghostBtn = e.target.closest('button[data-ghost]');
+  if (ghostBtn) { runGhostControl(ghostBtn.dataset.ghost); ghostBtn.blur(); return; }
   if (e.target.closest('#btnSurvReset')) { if (ui.compare) $('btnReset').click(); else newSurvival(); return; }
   if (e.target.closest('#btnBusyCancel')) {
     playAct({ kind: 'busy_cancel' }).then((r) => {
@@ -4532,8 +4642,71 @@ function advanceOutdoorIntent(view,w,player) {
   }
 }
 
+// 1.3 幽魂镜头：点居民=跟随，点空地=把观察焦点移过去（不产生世界动作）。
+function ghostFollow(who) {
+  if (!ghostCam || !who) return;
+  ghostCam.follow = who;
+  const w = WALK[walkKey('cvA', who)];
+  if (w) { ghostCam.x = w.x + .5; ghostCam.z = w.y + .5; }
+  ui.overview = false;
+  forceRepaint = true;
+}
+function ghostFollowNearest() {
+  if (!ghostCam) return;
+  const cam = ($(ui.fullscreen ? 'cvFull' : 'cvA'))._cam;
+  const people = (cam?.people ?? []).filter(p => p.who !== 'p1');
+  if (!people.length) { toast('镜头附近还没有居民。'); return; }
+  const [cx, cz] = [ghostCam.x, ghostCam.z];
+  people.sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
+  ghostFollow(people[0].who);
+  toast(`跟随 ${S.view?.agents?.[people[0].who]?.name ?? '居民'} · 点空地回到自由观察`);
+}
+function ghostPick(cv, ev) {
+  if (!ghostCam) return;
+  // 居民优先：按屏幕距离挑最近的一个（全景/自由视角都可点）。
+  const cam = cv._cam;
+  const who = (() => {
+    if (!cam?.project3d) return null;
+    const rect = cv.getBoundingClientRect();
+    // camera.project 返回的是画布 backing 像素；点击坐标也必须换算到同一空间，
+    // 否则 VIEW_W（逻辑视口）与 backing 宽度（含 DPR/ratio）不一致时会整块偏移。
+    const u = (ev.clientX - rect.left) / rect.width * cv.width;
+    const v = (ev.clientY - rect.top) / rect.height * cv.height;
+    let best = null, bestD = 30;
+    for (const p of cam.people ?? []) {
+      if (p.who === 'p1') continue;
+      const [sx, sy] = cam.project3d.project(p.x, p.y + actorLabelHeight(p.stage), p.z);
+      const d = Math.hypot(sx - u, sy - v);
+      if (d < bestD) { bestD = d; best = p.who; }
+    }
+    return best;
+  })();
+  if (who) { ghostFollow(who); return; }
+  const projected = campPoint(cv, ev);
+  if (projected) {
+    const point = ghostClamp(projected[0], projected[1]);
+    ghostCam.follow = null;
+    ghostCam.x = point.x; ghostCam.z = point.z;
+  }
+  ui.overview = false;
+  forceRepaint = true;
+}
+function runGhostControl(action) {
+  if (!ghostActive()) return;
+  if (action === 'pause') { void ctl({ action: S.running ? 'pause' : 'resume' }); return; }
+  if (action === 'rate') {
+    const now = ghostRateNow();
+    const next = now >= 8 ? 1 : now >= 4 ? 8 : now >= 2 ? 4 : 2;
+    void ctl({ action: 'rate', rate: next });
+    return;
+  }
+  if (action === 'follow') { ghostFollowNearest(); return; }
+  if (action === 'overview') { ui.overview = !ui.overview; ui.camRoom = null; refresh(); }
+}
+
 function pickRoom(ev, cv) {
   if (S.replay!=null || $('worldMain').hidden || cv.id==='cvB' || ui.surveyRoom || campPose || !S.playing) return;
+  if (ghostActive()) { ghostPick(cv, ev); return; }
   outdoorIntent=null;
   const hit=pointedEntity(cv,ev);
   if (ui.interior) {
@@ -4641,6 +4814,7 @@ window.addEventListener('keydown', (e) => {
   if (e.isComposing || e.target.closest?.('input,textarea,select,[contenteditable]') ||
       e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.code==='KeyF' ? 'f' : e.key.toLowerCase();
+  const ghost = ghostActive();
   if (k==='enter' && e.target.closest?.('button,a[href],summary,[role="button"]')) return;
   if ($('campPropDialog').open) {
     if (k==='e' && !e.repeat) { e.preventDefault(); $('campPropDialog').close(); openBackpack(); }
@@ -4656,11 +4830,11 @@ window.addEventListener('keydown', (e) => {
     if (ui.fullscreen) { setFull(false); e.preventDefault(); }
     return;
   }
-  if (S.playing && /^[1-8]$/.test(k)) {
+  if (S.playing && !ghost && /^[1-8]$/.test(k)) {
     ui.tool = Object.keys(TOOL_ZH)[Number(k) - 1]; updateHotbar(); e.preventDefault(); return;
   }
   if (e.repeat) return;
-  if (k==='e') { e.preventDefault(); $('backpack').open?closeBackpack():openBackpack(); return; }
+  if (k==='e') { e.preventDefault(); if (ghost) { toast('你已化为幽魂，无法整理行囊。'); return; } $('backpack').open?closeBackpack():openBackpack(); return; }
   if (S.playing && (k === 'f' || k === 'enter')) { e.preventDefault(); requestInteraction(); }
 });
 window.addEventListener('keyup',e=>{
@@ -4732,6 +4906,16 @@ loadAssets();
     const changed = ACT.frame !== lastSpriteFrame; lastSpriteFrame = ACT.frame;
     const mdx = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
     const mdy = (keys.has('down') ? 1 : 0) - (keys.has('up') ? 1 : 0);
+    // 1.3 幽魂：WASD 平移观察镜头（不是走角色）。Shift 仍是加速平移；不写世界、不发请求。
+    const ghost = ghostActive();
+    if (ghost && ghostCam && !ui.overview && (mdx || mdy)) {
+      const n = Math.hypot(mdx, mdy);
+      const speed = 14 * (keys.has('sprint') ? 1.75 : 1);
+      const point = ghostClamp(ghostCam.x + mdx / n * speed * dt, ghostCam.z + mdy / n * speed * dt);
+      ghostCam.x = point.x; ghostCam.z = point.z;
+      ghostCam.follow = null;
+      forceRepaint = true;
+    }
     ACT.motionTime=reduced.matches?0:elapsed;
     const mstep=SPEED*ACT.fps*dt, playerStep=playerRealStep(dt);
     if (guidance && now>guidance.until) { guidance=null; forceRepaint=true; }
@@ -4741,7 +4925,7 @@ loadAssets();
     const repaint3d=forceRepaint || changed || walking || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24));
     // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
-    if (ui.interior) {
+    if (ui.interior && !ghost) {
       if (mdx || mdy) roomRoute=null;
       const routeMove=campPose?null:roomWaypoint();
       const [dx,dz]=routeMove??[mdx,mdy];
@@ -4795,6 +4979,8 @@ loadAssets();
       const walker = WALK[k];
       const cvId = k.slice(0, k.indexOf(':'));
       const who=k.slice(k.indexOf(':')+1), player=who==='p1', snapshot=cvId==='cvB'?S.viewB:S.view;
+      // 1.3：幽魂不再推动 p1 行走器，也不发 player_sync；居民行走器照常推进。
+      if (player && ghost) { walker.moving=false; continue; }
       if (!snapshot || (cvId==='cvB'?snapshot.campPlayerRoom:ui.interior) || ui.surveyRoom || (!ui.compare && cvId==='cvB') ||
           !Object.values(snapshot.occupancy??{}).some(ids=>ids.includes(who))) continue;
       if (cvId==='cvB' && player && WALK['cvA:p1']?.compareGoal && walker.compareGoal!==WALK['cvA:p1'].compareGoal) {
@@ -4847,6 +5033,8 @@ if (!campRenderer) showGfxUnavailable(true);
 
 Object.assign(window.__lifeDebug, {
   WALK, ui, S, IPOS,
+  // 1.3 幽魂验收口：只读镜头/状态；移动与缩放仍走真实键盘/滚轮事件。
+  ghost: () => ({ active: ghostActive(), cam: ghostCam ? { ...ghostCam } : null, span: ghostCam?.span ?? null }),
   // 遮挡白名单/天气过渡的只读验收口（纯查询，不改任何状态）。
   fadesOccluder: (id) => fadesAsOccluder(id),
   fadeable: (ids) => fadeableCovered(ids),

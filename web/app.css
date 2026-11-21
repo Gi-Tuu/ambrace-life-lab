@@ -718,3 +718,23 @@
 #replayEvents{max-height:140px;overflow:auto;margin:6px 0;padding-left:18px}
 body.replay-mode .world canvas { cursor:default; }
 body.replay-mode #tltA,body.replay-mode #titA{color:#EDC787}
+
+/* ── 1.3 幽魂观察 ─────────────────────────────────────────────────────────────
+   玩家死亡后不再“操作/画面一起卡住”：镜头脱离身体自由观察，工具栏/物品栏/背包入口收起，
+   体力与行动额度让位给“幽魂观察”和暂停/倍速/跟随/全景控制。只改表现层，不改载荷。 */
+body.ghost-mode #hotbar,
+body.ghost-mode #itemBar,
+body.ghost-mode #btnBagTop,
+body.ghost-mode #btnBagFull,
+body.ghost-mode #objHud,
+body.ghost-mode #requestBar { display:none !important; }
+body.ghost-mode .world canvas { cursor:crosshair; }
+#survPanel .survbanner.ghost { border-color:#83769C; color:#C2C3C7; background:rgba(131,118,156,.10); }
+#survPanel .ghostctl { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
+#survPanel .ghostctl button {
+  font: inherit; font-size:12px; padding:2px 7px; cursor:pointer;
+  color:var(--ink); background:var(--bg); border:1px solid var(--line);
+}
+#survPanel .ghostctl button:hover { border-color:var(--gold); color:var(--gold); }
+#playerHud .stat.ghost b { color:#C2C3C7; letter-spacing:.05em; }
+#playerHud .stat.dim b { color:var(--dim); font-weight:normal; }
