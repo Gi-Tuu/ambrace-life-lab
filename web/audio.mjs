@@ -242,8 +242,9 @@ export function scene({ season = '春', phase = '昼', weather = 'clear', settle
   if (!state.ready || state.muted) return;
   const day = phase !== '夜';
   if (dead) {
-    // 玩家倒下：曲终，只留危机心跳，世界仍在走但不再属于你。
-    fadeMusic(0);
+    // 玩家倒下：换一首送别曲（2026-11-21 素材到位后，所有者改了"只留心跳"的旧口径）。
+    startMusic('death', window?.t ?? 0);
+    fadeMusic(musicTarget({ play: true, theme: 'death' }, settlement));
     setBed('crisis', true, 0.5);
     setBed('weather', false, 0);
     setBed('daynight', false, 0);

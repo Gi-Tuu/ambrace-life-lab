@@ -9,7 +9,7 @@ import {
   renderSfx, sfxNames, renderMusicBar, musicMeta, renderAmbience, SFX_BY_CODE, SFX_BY_KIND, themeForSeason,
 } from '../web/audio-data.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
-import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS } from '../web/audio-events.mjs';
+import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS, MUSIC_LEVEL_NIGHT, MUSIC_LEVEL_DEATH, MUSIC_LEVEL_EXTINCT } from '../web/audio-events.mjs';
 import { analyze } from '../web/audio-synth.mjs';
 
 const SR = 44100;
@@ -215,10 +215,15 @@ test('A-16 场景签名只在真会换音的读数上变化', () => {
 const inVillage = { t: 100, season: '春', phase: '昼', settlement: 'active', playerPos: [60, 40], sites: [], coop: {} };
 const win = (over = {}) => musicWindow({ ...inVillage, ...over }, { now: over.t ?? inVillage.t });
 
-test('A-17 夜、灭绝、玩家倒下、走到村外都不该有 BGM；晨与暮该有', () => {
-  assert.equal(win({ phase: '夜' }).play, false, '夜里不播旋律，只留虫鸣与风');
-  assert.equal(win({ settlement: 'extinct' }).play, false, '村子没了不该有曲子');
-  assert.equal(win({ player: { dead: true } }).play, false, '玩家倒下由场景音负责');
+test('A-17 播放窗口：夜与灭绝各用自己的曲目；远征仍不放；晨暮照旧', () => {
+  // 2026-11-21：所有者补齐夜曲/灭绝曲后，明确改掉了 11-15 的"夜里不放、灭绝静默"。
+  const night = win({ phase: '夜' });
+  assert.equal(night.play, true, '夜里现在有曲（夜曲素材已到位）');
+  assert.equal(night.theme, 'spring-night', '夜间必须用季节夜曲，不能混进日曲');
+  const ex = win({ settlement: 'extinct' });
+  assert.equal(ex.play, true, '灭绝有了自己的曲目');
+  assert.equal(ex.theme, 'extinct');
+  assert.equal(win({ player: { dead: true } }).play, false, '玩家倒下不走这个窗口：audio.scene 直接切 death 曲');
   assert.equal(win({ playerPos: [190, 60] }).play, false, '远征途中不播村内主题');
   assert.equal(win({ phase: '晨' }).play, true, '晨是开工曲');
   assert.equal(win({ phase: '暮' }).play, true, '暮是收工段');
@@ -267,6 +272,10 @@ test('A-22 窗口说停，目标电平必须是 0（不是"算对了但没接线
   // 所有者裁决：BGM 整体压在音效之下，不许再回到"音乐最响"。
   assert.ok(MUSIC_LEVEL <= 0.65, `BGM 常规电平 ${MUSIC_LEVEL} 偏高（要求整体压低）`);
   assert.ok(MUSIC_LEVEL_CRISIS < MUSIC_LEVEL, '危机档必须比常规更低');
+  assert.equal(musicTarget({ play: true, theme: 'spring-night' }, 'active'), MUSIC_LEVEL_NIGHT, '夜曲必须比日曲低一档');
+  assert.equal(musicTarget({ play: true, theme: 'death' }, 'active'), MUSIC_LEVEL_DEATH);
+  assert.equal(musicTarget({ play: true, theme: 'extinct' }, 'active'), MUSIC_LEVEL_EXTINCT);
+  assert.ok(MUSIC_LEVEL_NIGHT < MUSIC_LEVEL && MUSIC_LEVEL_EXTINCT < MUSIC_LEVEL_NIGHT);
   // 接线侧的同一类错误：布尔当电平用会让"停播"永远不生效。
   const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
   assert.equal(/fadeMusic\(\s*(true|false)\s*\)/.test(wired), false,
@@ -321,12 +330,14 @@ test('A-25 三条依赖的载荷字段真的在 survView 里（防止差分对�
 import { MUSIC_TRACKS, MUSIC_BYTE_BUDGET } from '../web/music-tracks.mjs';
 import { musicStartFor, MUSIC_STINT_TICKS } from '../web/audio-events.mjs';
 
-const PLAYING_SLOTS = ['menu', 'spring', 'summer', 'autumn', 'winter', 'crisis', 'recovering'];
+const PLAYING_SLOTS = ['menu', 'spring', 'summer', 'autumn', 'winter', 'crisis', 'recovering',
+  'spring-night', 'summer-night', 'autumn-night', 'winter-night', 'death', 'extinct'];
 
 test('A-26 清单只覆盖会响的槽位，不播的不许占体积', () => {
   assert.deepEqual(Object.keys(MUSIC_TRACKS).sort(), [...PLAYING_SLOTS].sort(),
     '清单槽位必须与 musicWindow 真会播的槽位一一对应');
-  assert.equal(MUSIC_TRACKS.extinct, undefined, '灭绝按窗口规则不播，加了素材就是永远听不到的字节');
+  // 2026-11-21：灭绝改为会播（第二批素材），所以它必须在清单里；反向断言随之翻转。
+  assert.ok(MUSIC_TRACKS.extinct, '灭绝现在会播，必须有素材');
   for (const t of PLAYING_SLOTS) {
     const tr = MUSIC_TRACKS[t];
     assert.ok(Array.isArray(tr.starts) && tr.starts.length >= 1, `${t} 没有可用起播点`);

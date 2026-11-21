@@ -123,13 +123,16 @@ const busyVillage = (sv) => (sv.coop?.task?.workers?.length ?? 0) > 0 || (sv.sit
 function computeWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 0 } = {}) {
   if (!sv) return { play: false, theme: 'menu', day: true, reason: 'no-world' };
   const day = sv.phase !== '夜';
-  if (sv.player?.dead) return { play: false, theme: 'menu', day, reason: 'player-dead' };
-  if (sv.settlement === 'extinct') return { play: false, theme: 'extinct', day, reason: 'extinct' };
-  if (!day) return { play: false, theme: 'menu', day: false, reason: 'night' };
+  if (sv.player?.dead) return { play: false, theme: 'death', day, reason: 'player-dead' };
+  // 第二批素材到位后（所有者 2026-11-21）：灭绝与夜不再整段静音，各用自己的曲目；
+  // 村外与闲日白天仍不放——那是 2026-11-15 定的「挑部分时段播放」。死人不在这里播，由 audio.scene 处理。
+  if (sv.settlement === 'extinct') return { play: true, theme: 'extinct', day, reason: 'extinct' };
   if (playerDistance(sv) > far) return { play: false, theme: 'menu', day, reason: 'away' };
 
   const crisis = sv.settlement === 'crisis' || (sv.crisisDays ?? 0) > 0;
-  const theme = crisis ? 'crisis' : sv.settlement === 'recovering' ? 'recovering' : themeForSeason(sv.season);
+  const dayTheme = themeForSeason(sv.season);
+  const theme = crisis ? 'crisis' : sv.settlement === 'recovering' ? 'recovering' : (day ? dayTheme : `${dayTheme}-night`);
+  if (!day) return { play: true, theme, day: false, reason: 'night' };
   if (sv.phase === '晨') return { play: true, theme, day, reason: 'morning' };
   if (sv.phase === '暮') return { play: true, theme, day, reason: 'dusk' };
   if (!busyVillage(sv)) return { play: false, theme, day, reason: 'idle-day' };
@@ -151,9 +154,18 @@ export const windowSignature = (w) => `${w.play ? 1 : 0}|${w.theme}|${w.day ? 1 
 // 让劳动声、畜叫、风声始终在音乐之上；危机时再给心跳让路。
 export const MUSIC_LEVEL = 0.6;
 export const MUSIC_LEVEL_CRISIS = 0.45;
+// 夜曲比日曲更低（夜里环境声本该更清楚）；倒下与灭绝再压一档，让它们只是底色。
+export const MUSIC_LEVEL_NIGHT = 0.42;
+export const MUSIC_LEVEL_DEATH = 0.5;
+export const MUSIC_LEVEL_EXTINCT = 0.35;
 export const musicTarget = (win, settlement) => {
   if (!win || !win.play) return 0;
-  return win.theme === 'crisis' || settlement === 'crisis' ? MUSIC_LEVEL_CRISIS : MUSIC_LEVEL;
+  const theme = String(win.theme || '');
+  if (theme === 'crisis' || settlement === 'crisis') return MUSIC_LEVEL_CRISIS;
+  if (theme === 'death') return MUSIC_LEVEL_DEATH;
+  if (theme === 'extinct') return MUSIC_LEVEL_EXTINCT;
+  if (/-night$/.test(theme)) return MUSIC_LEVEL_NIGHT;
+  return MUSIC_LEVEL;
 };
 
 // 一截 = 6 刻播 + 6 刻歇，所以每过一整循环换一段起播点：同一首听久了也不腻。
