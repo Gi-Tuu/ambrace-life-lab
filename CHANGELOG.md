@@ -1,5 +1,17 @@
 # 变更记录
 
+## [1.5.1] - 2026-11-21
+
+树可砍 + 树后透明：营地场景里绝大多数树都能砍倒、砍倒后树桩等再生。
+
+- 遮挡：`FADE_OCCLUDERS` 纳入 `tree:` / `wildtree:`（树冠遮住玩家时半透明，alpha .28 与墙/屋顶同一条淡出通道）；`pen:`/`plot:`/`rock:`/`timber:`/`resource:`/`landmark:` 仍不淡。
+- 场景树可砍：服务端用与客户端同一份 `campSceneBundle` 内容做 ID 权威，动作/存档 id = `forest:tx:tz`（与 grove 的 `grove1..` 命名空间分开），渲染 occluder 仍是 `tree:tx:tz`；`survival.campTrees` 复用既有字段，旧档无该字段 = 全树在。
+- 砍伐规则：axe、距离 `REACH.timber`、直线采样（水/岸、墙/屋/岩/别的树/资源/地标隔挡 ⇒ `BLOCKED`）、树桩期 `TREE_GROWING`；成本沿用 `camp_chop → gather`（10 游戏分/0.03），产出 +2 木走 gross/personal 同一本账；不刷 grove 的 `resStock`。
+- 移除/再生：砍后客户端 hidden 跳过该树 mesh range（不重建 stage）、space/碰撞/像素栅格/`pathGrid` 增量更新一次（一次快照砍 N 棵只重建一次）；日界到期 30 游戏日（`survival.forestRegrowDays` 可覆盖）条目消失 ⇒ 树回场景。
+- 客户端：未砍的树进入斧头拾取/悬停高亮（cursor=pointer、hover“树”、靠近显示站位圈）；树桩用独立 `forestStage` 画在动态层，非 solid。
+- 边界：营地矩形外的流式 `wildtree:` 本轮只纳入淡出、不纳入砍伐（几何只在客户端 region 流式层，服务端没有对应 ID/存档模型）。
+- 全量 1255/1255；quickstart PASS；golden 45/45；22k parity 0；研究 md5 5/5；浏览器树后透明度像素 A/B（目标 29.8 vs 对照 0.68）+ 砍后 space/pathGrid 可走。
+
 ## [1.5.0] - 2026-11-21
 
 自由对话版：玩家与居民、居民与居民都能自然沟通。
