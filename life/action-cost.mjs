@@ -42,6 +42,7 @@ export const PLAYER_TO_SHARED = Object.freeze({
   facility_use: 'facility', coop_request: 'home',
   camp_chop: 'gather', camp_plant: 'plant', camp_water: 'water', camp_craft: 'build',
   camp_store: 'store', camp_take: 'take', camp_eat: 'eat', camp_resident: 'talk',
+  camp_talk: 'free', camp_talk_say: 'free', camp_talk_close: 'free',
   camp_sleep: 'sleep', camp_exit: 'free',
   // 居民动作名 → 共享动作（正式游戏与玩家同表；研究态不读本表）。
   move_to: 'move', look_out: 'talk', house_work: 'house_work', road_lay: 'road', road_remove: 'road',

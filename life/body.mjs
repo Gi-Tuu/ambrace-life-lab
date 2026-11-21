@@ -16,6 +16,7 @@ import { noteConsumed } from './resource-ledger.mjs';
 import { reachableOf, COUPLING_EFFECTS } from './coupling.mjs';
 import { presetOf } from './presets.mjs';
 import { simMinuteNow, worldMinutes } from './sim-clock.mjs';
+import { residentAttention } from './resident-attention.mjs';
 import { initSurvival, advanceSurvival, maturePlots, doHarvest, doPlant, forecastDisasters } from './worldstate.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionDestination, residentConstructionAccess, recordConstructionBlock, roomSpaceOf, roomDoorPoint, constructionSpace, sceneSpace } from './construction-access.mjs';
@@ -384,6 +385,8 @@ export function advanceTravels(w, { minutes = GAME_MINUTES_PER_TICK } = {}) {
   for (const id of Object.keys(travels)) {
     const row = travels[id];
     if (!row) continue;
+    // 1.4：被玩家叫住当拍不继续远行；行程本身不清、不结算到达，下一分钟自动续上。
+    if (residentAttention(w, id)) continue;
     const due = per
       ? (Number.isFinite(row.arriveMin) ? nowMin >= row.arriveMin : w.t >= row.arrive)
       : w.t >= row.arrive;

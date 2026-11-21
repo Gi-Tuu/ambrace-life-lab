@@ -12,6 +12,8 @@ import { SURV_COST, isAlive } from './body.mjs';
 import { doHarvest, doPlant } from './worldstate.mjs';
 import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { campStaticPrecheck } from './camp-precheck.mjs';
+import { markResidentAttention } from './resident-attention.mjs';
+import { closeResidentDialogue, openResidentDialogue, sayInResidentDialogue } from './resident-dialogue.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
 import { roomContains } from './space.mjs';
@@ -95,7 +97,8 @@ function interactWithResident(world,body) {
     npc.relations.meet('p1',world.t,{delta:{trust:4,familiarity:.09}});
     world.pending.push({for:target,evt:{kind:'contact',valence:.35,about:'p1',selfCaused:false,serves:'social'}});
   }
-  return {...ok(),code:'RESIDENT_TALKED',name:npc.name,line:speechLine(npc,{world,kind:'talk',actionId:'talk:p1',t:world.t})};
+  const attention=markResidentAttention(world,target,{about:'p1'});
+  return {...ok(),code:'RESIDENT_TALKED',name:npc.name,attention,line:speechLine(npc,{world,kind:'talk',actionId:'talk:p1',t:world.t})};
 }
 
 function outdoorSource(world, body) {
@@ -141,6 +144,13 @@ export function campAction(world,body) {
   // 静态前置（工具/品类）与 validateCamp 共用同一实现；位置/容器/库存仍在这里按解析后的 site 判断。
   const pre = campStaticPrecheck(world, body);
   if (pre) return pre;
+  // 1.4 主动对话：camp_talk* 是零成本轻动作，但位置/房间/存活门与 camp_resident 同一套。
+  if (kind==='camp_talk' || kind==='camp_talk_say' || kind==='camp_talk_close') {
+    if (kind==='camp_talk_close') return closeResidentDialogue(world,body);
+    const failure=residentContact(world,body);
+    if (failure) return fail(failure==='RESIDENT_GONE'?'RESIDENT_OUT_OF_REACH':failure);
+    return kind==='camp_talk' ? openResidentDialogue(world,body) : sayInResidentDialogue(world,body);
+  }
   if (kind==='camp_resident') return interactWithResident(world,body);
   const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);
   if (s.farmLife && kind==='camp_collect' && item!=='water' && !Object.hasOwn(body,'from')) return fail('OUT_OF_REACH');

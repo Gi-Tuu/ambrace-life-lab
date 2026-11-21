@@ -8,6 +8,7 @@ import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents,
 import { GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
 import { initPositions, placeActor, removeActor, travelOf, detachPlayerRoom } from './actor-pos.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
+import { expireResidentAttention, residentAttention, residentAttentionView } from './resident-attention.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { facilityOf } from '../shared/camp-facility.mjs';
 import { homeAccessView, homeEntry } from './home-access.mjs';
@@ -355,6 +356,8 @@ export async function tickSurvPlay(sp, { now, onResidentAction, advanceMinutes, 
 async function tickLegacy(sp, { now, onResidentAction }) {
   const w = sp.world;
   w.t += 1;
+  // 1.4：注意力只买"当拍"；下一拍开头统一清掉，居民继续原任务。
+  expireResidentAttention(w);
   advancePlayerBusy(sp);
   // 研究态整刻语义（per-tick think）只在 research-policy 声明一次。
   return worldTick(sp, { now, onResidentAction, think: legacyPerTickThink() });
@@ -409,6 +412,8 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
     // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
     if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;
+    // 1.4：当拍那一分钟过完就清注意力；再下一分钟居民继续原任务/行程。
+    expireResidentAttention(w);
     if (dispatched) await Promise.resolve(); // 让本地替身的 think 在下一分钟前落地；慢模型不会被等
   }
   simCursors.set(w, to);
@@ -426,6 +431,8 @@ function residentMinutePass(w, sp, atMin, { onResidentAction, explicit }) {
     // 就不派发新决策。无 simClock 的旧路径语义等价（到点即清 travel）。
     if (travel) continue;
     if (w.survival.talk?.target === id) continue;
+    // 1.4：注意力当拍不派发新决策（只停选择，不取消已有 busy/travel）。
+    if (residentAttention(w, id)) { advanceResidentBusy(w, id, atMin); continue; }
     const advanced = advanceResidentBusy(w, id, atMin);
     if (advanced.aborted) sp.log.push({ t: w.t, kind: 'residentAbort', ok: false, code: advanced.code });
     if (queueOrStartResidentThink(w, sp, a, atMin, { onResidentAction, explicit })) dispatched = true;
@@ -527,6 +534,8 @@ function drainThinkQueue(w, sp) {
 
 async function worldTick(sp, { now, onResidentAction, think }) {
   const w = sp.world;
+  // 1.4：整刻边界清一次（旧夹具直接调 worldTick 时不经过 tickLegacy）；连续世界在分钟末清。
+  if (!w.simClock) expireResidentAttention(w);
   // P2c：无 simClock 的正式夹具每整刻推进旅行（连续世界已在 tickSim 按分钟推进）；研究态不调用。
   if (w.survival?.actTimeModel === true && !w.simClock) advanceTravels(w);
   w.weather = weatherFor(w.seed ?? 7, dayOf(w.t));
@@ -631,6 +640,11 @@ async function worldTick(sp, { now, onResidentAction, think }) {
         continue;
       }
       const traceStart = onResidentAction ? a.trace.length : 0;
+      // 1.4：被叫住的当拍不做新决策；已有劳动只暂停推进，不中止。
+      if (residentAttention(w, id)) {
+        if (residentTimeModel(w)) advanceResidentBusy(w, id);
+        continue;
+      }
       // V7.2：进行中的动作推进（旧路径按刻）。
       if (residentTimeModel(w)) {
         const adv = advanceResidentBusy(w, id);
@@ -839,7 +853,7 @@ export function survView(sp) {
     housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans, exits: s.coop.exits ?? 0 },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(residentAttentionView(w, a) ? { attention: residentAttentionView(w, a) } : {}), ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
     speech: currentSpeech(w),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,

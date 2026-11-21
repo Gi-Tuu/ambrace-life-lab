@@ -6,5 +6,5 @@ export const PLAYER_TIME = Object.freeze({
   camp_chop: 75, camp_collect: 75, camp_plant: 75, camp_water: 50, camp_craft: 50,
   camp_store: 25, camp_take: 25, camp_eat: 50, camp_resident: 75, coop_request: 25, till: 75,
 });
-export const CAMP_FREE = Object.freeze(['camp_exit', 'camp_sleep']);
+export const CAMP_FREE = Object.freeze(['camp_exit', 'camp_sleep', 'camp_talk', 'camp_talk_say', 'camp_talk_close']);
 export const isCampKind = (kind) => typeof kind === 'string' && kind.startsWith('camp_');

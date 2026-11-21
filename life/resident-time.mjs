@@ -11,6 +11,7 @@ import { actuate } from './body.mjs';
 import { validate } from './rules.mjs';
 import { noteAbort, noteAction, noteRefusal } from './action-ledger.mjs';
 import { simMinuteNow } from './sim-clock.mjs';
+import { residentAttention } from './resident-attention.mjs';
 import { isLaborAction } from './households.mjs';
 import { costFor } from './action-cost.mjs';
 import {
@@ -226,8 +227,18 @@ export function advanceResidentBusy(world, id, atMin) {
   const b = clock.busy;
   if (!b) return { none: true };
   const a = world.agents?.[id];
-  const cost = laborEnergy(b.kind, world);
   if (!a || a.dead) { abortBusy(world, id, clock, 'DEAD'); return { aborted: true, code: 'DEAD' }; }
+  // 1.4：被玩家叫住的当拍只抬头/停下，不推进手中劳动，也不补跳过的分钟；
+  // busy 保留、already-banked 的进度和体力不退，下一分钟（或下一拍）自动恢复。
+  if (residentAttention(world, id)) {
+    if (world.simClock) {
+      const nowMin = Number.isFinite(atMin) ? atMin : simMinuteNow(world);
+      const fromMin = Number.isFinite(b.lastAdvanceMin) ? b.lastAdvanceMin : (b.endMin - b.remainMin);
+      if (Number.isFinite(nowMin) && nowMin > fromMin) b.lastAdvanceMin = nowMin;
+    }
+    return { paused: true, kind: b.kind, code: 'ATTENTION' };
+  }
+  const cost = laborEnergy(b.kind, world);
 
   let chunk;
   if (world.simClock) {
