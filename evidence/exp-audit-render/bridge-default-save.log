@@ -1,0 +1,30 @@
+
+==== 默认存档 world.json (mapSeed=0, layoutVersion=0) ====
+  layout.crossZ = null | space.crossing = 24
+  画出来的桥 bounds = [[39,33,46,36]]
+  space 里的 bridge portal = []
+  桥面 floor 数 = 3 [
+  { x: 39, z: 33, w: 0.85, d: 3, y: 0, end: 0.32 },
+  { x: 39.85, z: 33, w: 5.3, d: 3, y: 0.32, end: 0.32 },
+  { x: 45.15, z: 33, w: 0.85, d: 3, y: 0.32, end: 0 }
+]
+  --- 桥 z 中轴 34.50 | 河心 x=42.62 半宽=0.93 ---
+  walkable(x) 从西到东: 35:✗ 35.5:✗ 36:✗ 36.5:✗ 37:✗ 37.5:✓ 38:✓ 38.5:✓ 39:✓ 39.5:✓ 40:✓ 40.5:✓ 41:✓ 41.5:✓ 42:✗ 42.5:✗ 43:✗ 43.5:✗ 44:✓ 44.5:✓ 45:✓ 45.5:✓ 46:✓ 46.5:✓ 47:✓ 47.5:✓ 48:✓ 48.5:✓ 49:✓ 49.5:✓ 50:✓
+  桥中心 walkable = false | 桥面高度 = 0.320 | 是否 water = water
+  寻路栅格 world.walk 是否通行（bridgeCells.has）= true | 该 tile 在 terrain 分类里的 bridge = water
+  细网格 BFS 西岸->东岸 = 不可通 | 桥中心附近可走格 = 8529/10944
+
+==== 新版布局 v2 (mapSeed=7, layoutVersion=2) ====
+  layout.crossZ = 31 | space.crossing = 31
+  画出来的桥 bounds = [[44,30,51,33]]
+  space 里的 bridge portal = [{"id":"bridge:0","kind":"bridge","rect":{"x":44,"z":30,"w":7,"d":3},"a":"west-bank","b":"east-bank"}]
+  桥面 floor 数 = 3 [
+  { x: 44, z: 30, w: 0.85, d: 3, y: 0, end: 0.32 },
+  { x: 44.85, z: 30, w: 5.3, d: 3, y: 0.32, end: 0.32 },
+  { x: 50.15, z: 30, w: 0.85, d: 3, y: 0.32, end: 0 }
+]
+  --- 桥 z 中轴 31.50 | 河心 x=47.27 半宽=0.73 ---
+  walkable(x) 从西到东: 40:✓ 40.5:✓ 41:✓ 41.5:✓ 42:✓ 42.5:✓ 43:✓ 43.5:✓ 44:✓ 44.5:✓ 45:✓ 45.5:✓ 46:✓ 46.5:✓ 47:✓ 47.5:✓ 48:✓ 48.5:✓ 49:✓ 49.5:✓ 50:✓ 50.5:✓ 51:✓ 51.5:✓ 52:✓ 52.5:✓ 53:✓ 53.5:✓ 54:✓ 54.5:✓ 55:✓
+  桥中心 walkable = true | 桥面高度 = 0.320 | 是否 water = bridge
+  寻路栅格 world.walk 是否通行（bridgeCells.has）= true | 该 tile 在 terrain 分类里的 bridge = bridge
+  细网格 BFS 西岸->东岸 = 可通 | 桥中心附近可走格 = 9668/10944

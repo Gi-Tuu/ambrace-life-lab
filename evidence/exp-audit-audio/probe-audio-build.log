@@ -1,0 +1,120 @@
+# A. BGM 窗口矩阵（web/audio-events.mjs musicWindow / musicTarget 实测调用）
+CORE_CENTER=[60,40] FAR_RADIUS=70 town={"width":120,"depth":80}
+MUSIC_LEVEL 0.6 / crisis 0.45 / night 0.42 / death 0.5 / extinct 0.35
+
+case | dist | play | theme | day | reason | musicTarget | prox | sig
+村内 晨·闲 | 0.00 | true | spring | true | morning | 0.6 | 0.000 | 1|spring|1
+村内 昼·闲(无工地/无协作) | 0.00 | false | spring | true | idle-day | 0 | 0.000 | 0|spring|1
+村内 昼·忙 t=100 | 0.00 | true | spring | true | busy-day | 0.6 | 0.000 | 1|spring|1
+村内 昼·忙 t=106(同一天另一刻) | 0.00 | false | spring | true | busy-rest | 0 | 0.000 | 0|spring|1
+村内 暮 | 0.00 | true | spring | true | dusk | 0.6 | 0.000 | 1|spring|1
+村内 夜 | 0.00 | true | spring-night | false | night | 0.42 | 0.000 | 1|spring-night|0
+村内 冬·昼·忙 | 0.00 | true | winter | true | busy-day | 0.6 | 0.000 | 1|winter|1
+村内 危机·昼·忙 | 0.00 | true | crisis | true | busy-day | 0.45 | 0.000 | 1|crisis|1
+村内 恢复·昼·忙 | 0.00 | true | recovering | true | busy-day | 0.6 | 0.000 | 1|recovering|1
+村内 灭绝·昼·闲 | 0.00 | true | extinct | true | extinct | 0.35 | 0.000 | 1|extinct|1
+野外 灭绝(距核心 131.5) | 131.53 | true | extinct | true | extinct | 0.35 | 1.000 | 1|extinct|1
+野外 昼·忙(距核心 131.5) | 131.53 | false | menu | true | away | 0 | 1.000 | 0|menu|1
+野外 夜(距核心 131.5) | 131.53 | false | menu | false | away | 0 | 1.000 | 0|menu|0
+村界 距核心 44.7(营地外、仍在村内) | 44.72 | true | spring | true | busy-day | 0.6 | 0.099 | 1|spring|1
+村界 距核心恰好 70.0 | 70.00 | true | spring | true | busy-day | 0.6 | 0.500 | 1|spring|1
+玩家倒下·村内 | 0.00 | false | death | true | player-dead | 0 | 0.000 | 0|death|1
+玩家倒下·野外 | 131.53 | false | death | true | player-dead | 0 | 1.000 | 0|death|1
+
+起播点轮转（MUSIC_STINT_TICKS=12，世界刻决定，不读墙钟）:
+  spring: t=0→33 t=12→73 t=24→113
+  spring-night: t=0→32.5 t=12→83.5 t=24→32.5
+  extinct: t=0→7 t=12→61 t=24→102
+  menu: t=0→17.5 t=12→64 t=24→107
+
+# B. proximity 与床增益（复算 audio.mjs scene() 的公式，用于核对 C 段 mock 实测）
+pos | prox | rain/cold | day | night | wind(>0.15) | crisis(<0.5)
+[60,40] | 0.000 | 0.500 | 0.400 | 0.700 | - | 0.550
+[100,60] | 0.099 | 0.475 | 0.372 | 0.652 | - | 0.550
+[120,40] | 0.341 | 0.415 | 0.304 | 0.533 | 0.438 | 0.550
+[130,40] | 0.500 | 0.375 | 0.260 | 0.455 | 0.525 | -
+[150,40] | 0.817 | 0.296 | 0.171 | 0.299 | 0.700 | -
+[190,60] | 1.000 | 0.250 | 0.120 | 0.210 | 0.800 | -
+
+# C. 真实 audio.mjs 接线（mock WebAudio）：场景一次，记录音乐总线目标与真正建起的床
+（setBed 调用顺序：audio.mjs:256 weather → 257 daynight → 259 wind → 260 crisis）
+村内 昼·忙 clear :: musicBus ramps=[0.600] → 0.600 | 新建床节点 0 （无） | ctx.createBuffer 调用 0
+村内 昼·忙 rain :: musicBus ramps=[0.600] → 0.600 | 新建床节点 0 （无） | ctx.createBuffer 调用 0
+村内 昼·忙 cold :: musicBus ramps=[0.600] → 0.600 | 新建床节点 0 （无） | ctx.createBuffer 调用 0
+村内 夜 clear :: musicBus ramps=[0.420] → 0.420 | 新建床节点 0 （无） | ctx.createBuffer 调用 0
+村内 危机·昼 clear :: musicBus ramps=[0.450] → 0.450 | 新建床节点 1 [target=0.550(tc=0.8)] | ctx.createBuffer 调用 1
+村内 昼·闲(窗口关) clear :: musicBus ramps=[0.000] → 0.000 | 新建床节点 0 （无） | ctx.createBuffer 调用 0
+野外 prox=1 夜(窗口关) :: musicBus ramps=[0.000] → 0.000 | 新建床节点 1 [target=0.800(tc=0.8)] | ctx.createBuffer 调用 1
+野外 prox=1 昼 rain(窗口关) :: musicBus ramps=[0.000] → 0.000 | 新建床节点 1 [target=0.800(tc=0.8)] | ctx.createBuffer 调用 1
+野外 prox=1 倒下 :: musicBus ramps=[0.500] → 0.500 | 新建床节点 1 [target=0.500(tc=0.8)] | ctx.createBuffer 调用 1
+野外 prox=1 灭绝 :: musicBus ramps=[0.350] → 0.350 | 新建床节点 1 [target=0.800(tc=0.8)] | ctx.createBuffer 调用 1
+
+床能否发声 = renderAmbience(setBed 的 name) 是否为 null（audio.mjs:229 把槽位名直接当素材名）：
+  setBed('weather', …) → stereoBuffer('amb:weather', () => renderAmbience('weather')) → NULL ⇒ play() 返回 null ⇒ 床永远建不起来（静音）
+  setBed('daynight', …) → stereoBuffer('amb:daynight', () => renderAmbience('daynight')) → NULL ⇒ play() 返回 null ⇒ 床永远建不起来（静音）
+  setBed('wind', …) → stereoBuffer('amb:wind', () => renderAmbience('wind')) → 有素材
+  setBed('crisis', …) → stereoBuffer('amb:crisis', () => renderAmbience('crisis')) → 有素材
+  实测对照：村内 rain 场景本应建 2 层（weather=rain 0.5、daynight=day 0.4），实际新建床节点 = 0
+  实测对照：wind/crisis 槽位名与素材名相同 ⇒ 野外 prox=1 新建 1 层 wind（0.8）、危机 新建 1 层 crisis（0.55）
+
+# D. ducking / sidechain 判定（真实接线侧）
+  1) clear vs rain：musicBus 目标 ["0.600"] vs ["0.600"] → 完全相同 ⇒ 天气床不压低 BGM
+  2) clear vs cold：["0.600"] vs ["0.600"] → 完全相同 ⇒ 冷天床不压低 BGM
+  3) 昼 vs 夜：["0.600"] vs ["0.420"] → 仅由主题决定（夜曲档 0.42），与夜间床目标 0.7 无关
+  4) 危机：["0.450"] 与 crisis 床 0.55 并存，无互相引用
+  5) 源码面：musicBus.gain 的写入只出现在 unlock()/fadeMusic()；全文件出现 musicBus 相关写入点 6 处，没有任何 setBed/play 读床增益去调音乐总线（grep 无 'duck|sidechain'）
+
+  压缩器：master → DynamicsCompressor(threshold -16dB, knee 24, ratio 3, attack 4ms, release 0.22s) → destination；
+  这是混音总线压缩（电平相关、对全混音一视同仁），不是侧链 ducking：BGM 不会因雨声/音效出现而让路。
+
+# E. 响度实测：BGM ogg（13 首）vs 环境床 WAV（renderAmbience 真实渲染）
+ffmpeg 可用
+  music menu          I=-24.4LUFS peak=-9.0dBFS mean=-26.7dB | bus=0.6 → 有效 I≈-31.9LUFS 峰值≈-16.5dBFS
+  music spring        I=-24.1LUFS peak=-10.5dBFS mean=-26.5dB | bus=0.6 → 有效 I≈-31.6LUFS 峰值≈-18.0dBFS
+  music summer        I=-24.0LUFS peak=-9.8dBFS mean=-26.2dB | bus=0.6 → 有效 I≈-31.5LUFS 峰值≈-17.3dBFS
+  music autumn        I=-25.6LUFS peak=-8.8dBFS mean=-27.6dB | bus=0.6 → 有效 I≈-33.1LUFS 峰值≈-16.3dBFS
+  music winter        I=-26.5LUFS peak=-9.0dBFS mean=-28.7dB | bus=0.6 → 有效 I≈-34.0LUFS 峰值≈-16.5dBFS
+  music crisis        I=-25.2LUFS peak=-8.9dBFS mean=-27.0dB | bus=0.45 → 有效 I≈-35.2LUFS 峰值≈-18.9dBFS
+  music recovering    I=-24.3LUFS peak=-8.9dBFS mean=-26.5dB | bus=0.6 → 有效 I≈-31.8LUFS 峰值≈-16.4dBFS
+  music spring-night  I=-25.8LUFS peak=-8.9dBFS mean=-28.0dB | bus=0.42 → 有效 I≈-36.4LUFS 峰值≈-19.5dBFS
+  music summer-night  I=-24.8LUFS peak=-9.0dBFS mean=-27.1dB | bus=0.42 → 有效 I≈-35.4LUFS 峰值≈-19.6dBFS
+  music autumn-night  I=-25.6LUFS peak=-9.1dBFS mean=-27.8dB | bus=0.42 → 有效 I≈-36.2LUFS 峰值≈-19.7dBFS
+  music winter-night  I=-28.4LUFS peak=-8.8dBFS mean=-30.4dB | bus=0.42 → 有效 I≈-39.0LUFS 峰值≈-19.4dBFS
+  music death         I=-25.1LUFS peak=-8.9dBFS mean=-27.1dB | bus=0.5 → 有效 I≈-34.2LUFS 峰值≈-18.0dBFS
+  music extinct       I=-24.8LUFS peak=-8.8dBFS mean=-27.4dB | bus=0.35 → 有效 I≈-37.0LUFS 峰值≈-21.0dBFS
+  amb   day    renderPeak=0.18 rms=0.0097 | I=-34.0LUFS peak=-14.8dBFS | 床增益 村内=0.400 野外=0.120 | 因 C 段缺陷永不发声
+  amb   night  renderPeak=0.2 rms=0.0217 | I=-28.4LUFS peak=-14.0dBFS | 床增益 村内=0.700 野外=0.210 | 因 C 段缺陷永不发声
+  amb   rain   renderPeak=0.34 rms=0.0601 | I=-18.6LUFS peak=-9.3dBFS | 床增益 村内=0.500 野外=0.250 | 因 C 段缺陷永不发声
+  amb   wind   renderPeak=0.24 rms=0.0464 | I=-24.0LUFS peak=-12.4dBFS | 床增益 村内=0.250 野外=0.800 | 会发声
+  amb   cold   renderPeak=0.22 rms=0.0242 | I=-27.4LUFS peak=-13.1dBFS | 床增益 村内=0.500 野外=0.250 | 因 C 段缺陷永不发声
+  amb   crisis renderPeak=0.3 rms=0.1188 | I=-19.2LUFS peak=-10.5dBFS | 床增益 村内=0.550 野外=0.000 | 会发声
+
+相对有效电平（素材 LUFS + 20log10(增益×master 0.7)，压缩器之前）：
+  村内 昼·春 BGM vs crisis 床: BGM -31.6LUFS / 床 -27.5LUFS → Δ(BGM−床)=-4.1dB
+  村内 危机 BGM(crisis 0.45) vs crisis 床: BGM -35.2LUFS / 床 -27.5LUFS → Δ(BGM−床)=-7.7dB
+  野外 prox=1 BGM(不播) vs wind 床: BGM 不播 / 床 -29.0LUFS → Δ(BGM−床)=n/a
+  夜 BGM(spring-night 0.42) vs wind 床(prox=0 不播)/night 床(缺陷不发声): BGM -36.4LUFS / 床 -34.6LUFS → Δ(BGM−床)=-1.8dB
+  村内 昼·春 BGM vs rain 床(缺陷不发声): BGM -31.6LUFS / 床 -27.7LUFS → Δ(BGM−床)=-3.9dB
+
+# F. 住宅地块事实（shared/camp-layout.mjs / shared/camp-districts.mjs / life/households.mjs）
+HOUSING_PLOTS=9 个（Object.freeze 固定表；town={"width":120,"depth":80}）
+  house1 at=[83,43] dist(核心)=23.19
+  house2 at=[95,43] dist(核心)=35.13
+  house3 at=[83,56] dist(核心)=28.02
+  house4 at=[95,56] dist(核心)=38.48
+  house5 at=[107,43] dist(核心)=47.10
+  house6 at=[107,56] dist(核心)=49.65
+  house7 at=[83,69] dist(核心)=37.01
+  house8 at=[95,69] dist(核心)=45.45
+  house9 at=[107,69] dist(核心)=55.23
+seed=7 peripheralHomes=4：house-district-northwest,house-district-east,house-district-southwest,house-district-southeast
+  house-district-northwest at=[26,-23] dist(核心)=71.59 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-east at=[151,46] dist(核心)=91.20 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-southwest at=[21,110] dist(核心)=80.13 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-southeast at=[99,119] dist(核心)=88.10 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+seed=13 peripheralHomes=4：house-district-northwest,house-district-east,house-district-southwest,house-district-southeast
+  house-district-northwest at=[25,-25] dist(核心)=73.82 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-east at=[157,51] dist(核心)=97.62 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-southwest at=[23,105] dist(核心)=74.79 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+  house-district-southeast at=[106,120] dist(核心)=92.28 → 超出 FAR_RADIUS：该住宅所在地不播村内 BGM
+

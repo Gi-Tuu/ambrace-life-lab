@@ -1,0 +1,232 @@
+{
+ "mapSeed": 0,
+ "layoutVersion": 0,
+ "rowCount": 80,
+ "rows": [
+  {
+   "z": 0.5,
+   "riverX": 40.3,
+   "count": 22,
+   "min": 36.3,
+   "max": 44.3,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 1.5,
+   "riverX": 40.79,
+   "count": 22,
+   "min": 36.79,
+   "max": 44.79,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 2.5,
+   "riverX": 41.06,
+   "count": 22,
+   "min": 37.06,
+   "max": 45.06,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 3.5,
+   "riverX": 41.26,
+   "count": 17,
+   "min": 37.26,
+   "max": 45.26,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 4.5,
+   "riverX": 41.59,
+   "count": 19,
+   "min": 37.59,
+   "max": 44.84,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 5.5,
+   "riverX": 42.12,
+   "count": 22,
+   "min": 38.12,
+   "max": 46.12,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 6.5,
+   "riverX": 42.66,
+   "count": 20,
+   "min": 39.16,
+   "max": 46.66,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 7.5,
+   "riverX": 43,
+   "count": 22,
+   "min": 39,
+   "max": 47,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 8.5,
+   "riverX": 43.15,
+   "count": 21,
+   "min": 39.15,
+   "max": 46.9,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 9.5,
+   "riverX": 43.29,
+   "count": 19,
+   "min": 39.29,
+   "max": 47.29,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 10.5,
+   "riverX": 43.62,
+   "count": 24,
+   "min": 39.62,
+   "max": 47.62,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 11.5,
+   "riverX": 44.07,
+   "count": 24,
+   "min": 40.07,
+   "max": 48.07,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 12.5,
+   "riverX": 44.44,
+   "count": 24,
+   "min": 40.44,
+   "max": 48.44,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 13.5,
+   "riverX": 44.56,
+   "count": 20,
+   "min": 40.56,
+   "max": 48.56,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 14.5,
+   "riverX": 44.55,
+   "count": 24,
+   "min": 40.55,
+   "max": 48.55,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 15.5,
+   "riverX": 44.61,
+   "count": 20,
+   "min": 40.61,
+   "max": 48.61,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 16.5,
+   "riverX": 44.85,
+   "count": 24,
+   "min": 40.85,
+   "max": 48.85,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 17.5,
+   "riverX": 45.15,
+   "count": 20,
+   "min": 41.15,
+   "max": 49.15,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 18.5,
+   "riverX": 45.26,
+   "count": 18,
+   "min": 41.26,
+   "max": 49.26,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 19.5,
+   "riverX": 45.15,
+   "count": 22,
+   "min": 41.15,
+   "max": 49.15,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 20.5,
+   "riverX": 44.97,
+   "count": 22,
+   "min": 40.97,
+   "max": 48.97,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 21.5,
+   "riverX": 44.94,
+   "count": 22,
+   "min": 40.94,
+   "max": 48.94,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 22.5,
+   "riverX": 45.07,
+   "count": 22,
+   "min": 41.07,
+   "max": 49.07,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 23.5,
+   "riverX": 45.15,
+   "count": 18,
+   "min": 41.15,
+   "max": 49.15,
+   "reachesCenter": false,
+   "inCamp": true
+  },
+  {
+   "z": 24.5,
+   "riverX": 45,
+   "count": 17,
+   "min": 41,
+   "max": 49,
+   "reachesCenter": false,
+   "inCamp": true
+  }
+ ]
+}

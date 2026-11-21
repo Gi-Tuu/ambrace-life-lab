@@ -1,0 +1,27 @@
+✔ peripheral lots use the same cost, work phases, repair, facility, and save (62.9233ms)
+✔ resident decisions travel to peripheral sources when village supplies run dry (45.3559ms)
+✔ seeded terrain keeps peripheral pads clear and routes through the common bridge (32.6735ms)
+✔ the existing cooperation loop can select and finish an exterior site (56.9983ms)
+✔ private exterior home uses the same deed, stages, door and road rules (23.0843ms)
+✔ seed 13: a disjoint blocker seals the entrance in both core and outskirts (191.4388ms)
+✔ outskirts: valid travel, blocked progress and recovered work through normal actions (137.738ms)
+✔ private house: resident chooses a reachable peripheral plot, works there and gains a deed (159.298ms)
+✔ seed 13: distinguish a missing work position from a severed approach route (149.422ms)
+✔ an en-route resident cannot be declared on site after the entrance closes (58.5956ms)
+✔ V4-01 伪造 from 到远处必须被拒（TELEPORT），不扣预算/存续 (19.386ms)
+✔ V4-02 合法逐格步行最终可采到（速度上限设 0 则红） (15.8465ms)
+✔ V4-03 玩家同程刻数 ≥ 居民 startMove ticks（玩家速度翻倍则红） (10.4895ms)
+✔ V4-04 旧档无 playerPos ⇒ 按 loc 推定，不崩、不默认在外围（推定改直接允许则红） (22.3348ms)
+✔ V4-05 playerPos 随档：保存→重启→继续，不瞬移（不进 dump 则红） (18.3391ms)
+✔ V4-06 被拒动作退还行动预算与存续（去掉退还则红） (7.8378ms)
+✔ V4-07 lab/town 不受影响：无 districts 的世界外围校验不生效 (0.7063ms)
+✔ A09 首次同步只容出生槽小偏移；同刻多步按本刻额度，超额度仍拒（V7.3） (23.3159ms)
+✔ V4-08 村内冲刺不再被判瞬移；村外仍 10/刻；村内单步 40 单位仍拒 (14.7439ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 857.9432

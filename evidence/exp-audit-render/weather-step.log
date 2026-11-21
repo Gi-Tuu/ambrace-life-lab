@@ -1,0 +1,59 @@
+
+## 晴 → 雨（同一时刻 t 的相邻两次轮询，中间没有任何过渡帧）
+  rain: false -> true   ← 一帧内跳变
+  snow: false -> false  (不变)
+  storm: false -> false  (不变)
+  uWetness: 0 -> 0.65   ← 一帧内跳变
+  uWeather[1] 风力: 0.55 -> 1.15   ← 一帧内跳变
+  uWeather[2] 积雪: 0 -> 0  (不变)
+  uLight 平均: 0.993 -> 0.785   ← 一帧内跳变
+  sun.direct: 0.55 -> 0.435   ← 一帧内跳变
+  曝光用 daylightDirect: 0.55 -> 0.435   ← 一帧内跳变
+  雨滴条数 paintWeather: 0 -> 48   ← 一帧内跳变
+  stormEffects 水花: "无" -> "无"  (不变)
+
+## 雨 → 暴风（同一时刻 t 的相邻两次轮询，中间没有任何过渡帧）
+  rain: true -> true  (不变)
+  snow: false -> false  (不变)
+  storm: false -> true   ← 一帧内跳变
+  uWetness: 0.65 -> 0.95   ← 一帧内跳变
+  uWeather[1] 风力: 1.15 -> 2.7   ← 一帧内跳变
+  uWeather[2] 积雪: 0 -> 0  (不变)
+  uLight 平均: 0.785 -> 0.626   ← 一帧内跳变
+  sun.direct: 0.435 -> 0.347   ← 一帧内跳变
+  曝光用 daylightDirect: 0.435 -> 0.347   ← 一帧内跳变
+  雨滴条数 paintWeather: 48 -> 86   ← 一帧内跳变
+  stormEffects 水花: "无" -> "全屏生成"   ← 一帧内跳变
+
+## 雨 → 晴（同一时刻 t 的相邻两次轮询，中间没有任何过渡帧）
+  rain: true -> false   ← 一帧内跳变
+  snow: false -> false  (不变)
+  storm: false -> false  (不变)
+  uWetness: 0.65 -> 0   ← 一帧内跳变
+  uWeather[1] 风力: 1.15 -> 0.55   ← 一帧内跳变
+  uWeather[2] 积雪: 0 -> 0  (不变)
+  uLight 平均: 0.785 -> 0.993   ← 一帧内跳变
+  sun.direct: 0.435 -> 0.55   ← 一帧内跳变
+  曝光用 daylightDirect: 0.435 -> 0.55   ← 一帧内跳变
+  雨滴条数 paintWeather: 48 -> 0   ← 一帧内跳变
+  stormEffects 水花: "无" -> "无"  (不变)
+
+## 秋 → 冬（uSeason 硬切）（同一时刻 t 的相邻两次轮询，中间没有任何过渡帧）
+  rain: false -> false  (不变)
+  snow: false -> false  (不变)
+  storm: false -> false  (不变)
+  uWetness: 0 -> 0  (不变)
+  uWeather[1] 风力: 0.55 -> 0.55  (不变)
+  uWeather[2] 积雪: 0 -> 0  (不变)
+  uLight 平均: 0.993 -> 0.993  (不变)
+  sun.direct: 0.55 -> 0.55  (不变)
+  曝光用 daylightDirect: 0.55 -> 0.55  (不变)
+  雨滴条数 paintWeather: 0 -> 0  (不变)
+  stormEffects 水花: "无" -> "无"  (不变)
+
+## 服务端状态粒度
+  w.weather = weatherFor(seed, dayOf(t))：只在跨日那一刻变（life/host-world.mjs:306）
+  survival.disasterToday：每日结算时重算（life/worldstate.mjs:119-140）
+  survival.drought：clearStreak >= 3 时置位（life/worldstate.mjs:103）
+  season：SEASON_BOUNDS 日界切换（life/clock.mjs:25）
+  客户端对以上四项不做任何记忆/插值：每帧从 w 重新求值（web/camp-weather.mjs:31-36 为纯函数）。

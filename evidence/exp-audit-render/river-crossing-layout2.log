@@ -1,0 +1,25 @@
+{
+ "mapSeed": 7,
+ "layoutVersion": 2,
+ "step": 0.5,
+ "grids": [
+  240,
+  160
+ ],
+ "walkableCells": 35386,
+ "buildMs": 16,
+ "westWalkable": 13116,
+ "eastWalkable": 22270,
+ "eastReachableFromWest": "22250/22270",
+ "eastReachablePct": 99.9,
+ "componentsTouchingEast": 1,
+ "bridgeBounds": [
+  [
+   44,
+   30,
+   51,
+   33
+  ]
+ ],
+ "spaceHasBridgePortal": true
+}

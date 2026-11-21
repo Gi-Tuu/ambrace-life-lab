@@ -1,0 +1,5 @@
+v1.1.1:265 const buf = stereoBuffer(`amb:${name}`, () => renderAmbience(name));
+v1.1.1:284 setBed('weather', false, 0);
+v1.1.1:285 setBed('daynight', false, 0);
+v1.1.1:291 setBed('weather', weather === 'rain' ? 'rain' : weather === 'cold' ? 'cold' : null, 0.5 * (1 - proximity * 0.5));
+v1.1.1:292 setBed('daynight', day ? 'day' : 'night', (day ? 0.4 : 0.7) * (1 - proximity * 0.7));

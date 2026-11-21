@@ -1,0 +1,147 @@
+{
+ "mapSeed": 7,
+ "layoutVersion": 2,
+ "crossing": 31,
+ "bridgeBounds": [
+  44,
+  30,
+  51,
+  33
+ ],
+ "bridgeRowPx": [
+  496
+ ],
+ "layoutSites": {
+  "home": [
+   27,
+   24
+  ],
+  "hall": [
+   34,
+   24
+  ],
+  "store": [
+   41,
+   24
+  ],
+  "yard": [
+   20,
+   35
+  ],
+  "garden": [
+   35,
+   43
+  ],
+  "well": [
+   57,
+   31
+  ],
+  "workshop": [
+   76,
+   43
+  ],
+  "watch": [
+   75,
+   17
+  ],
+  "house1": [
+   100,
+   64
+  ],
+  "house2": [
+   109,
+   22
+  ],
+  "house3": [
+   89,
+   67
+  ],
+  "house4": [
+   101,
+   37
+  ],
+  "house5": [
+   99,
+   20
+  ],
+  "house6": [
+   109,
+   63
+  ],
+  "house7": [
+   89,
+   19
+  ],
+  "house8": [
+   112,
+   36
+  ],
+  "house9": [
+   89,
+   42
+  ]
+ }
+}
+
+桥带扫描（x=42.00..53.00 step .25, # = walkable r=0.33）
+    30 ###########.......................###########
+ 30.25 ###########.......................###########
+  30.5 #############################################
+ 30.75 #############################################
+    31 #############################################
+ 31.25 #############################################
+  31.5 #############################################
+ 31.75 #############################################
+    32 #############################################
+ 32.25 #############################################
+  32.5 #############################################
+ 32.75 ###########.......................###########
+
+中轴诊断 z=31.50
+{"x":41,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.094}
+{"x":41.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.105}
+{"x":42,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.106}
+{"x":42.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.121}
+{"x":43,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.121}
+{"x":43.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.129}
+{"x":44,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.129}
+{"x":44.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.188}
+{"x":45,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":45.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":46,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":46.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":47,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":47.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":48,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":48.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":49,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":49.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":50,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.32}
+{"x":50.5,"walkable":true,"onBridgeTile":true,"terrainAllows":true,"colliders":0,"kind":"bridge","y":0.188}
+{"x":51,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.018}
+{"x":51.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.01}
+{"x":52,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.002}
+{"x":52.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0.001}
+{"x":53,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0}
+{"x":53.5,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0}
+{"x":54,"walkable":true,"onBridgeTile":false,"terrainAllows":true,"colliders":0,"kind":"grass","y":0}
+{
+ "bfs": {
+  "step": 0.125,
+  "window": [
+   36,
+   25,
+   59,
+   38
+  ],
+  "walkableCells": 16905,
+  "westToEastReachable": true,
+  "pathPoints": 184,
+  "pathCrossesRiverAt": 47.38,
+  "riverCenterX": 47.45
+ }
+}
+
+桥中央 3 单位内 colliders:
+{"x":44.85,"z":30,"w":5.3,"d":0.13,"kind":"solid","occluder":null}
+{"x":44.85,"z":32.87,"w":5.3,"d":0.13,"kind":"solid","occluder":null}

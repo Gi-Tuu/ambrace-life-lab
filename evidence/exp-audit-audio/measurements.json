@@ -1,0 +1,483 @@
+{
+  "generatedAt": "2026-11-21T07:14:26.034Z",
+  "gitHead": "b66f88a381dee71cf1e2f52efa2722be0ef47552",
+  "gitTagAtHead": "v1.1.1-2-gb66f88a",
+  "windowMatrix": [
+    {
+      "name": "村内 晨·闲",
+      "dist": 0,
+      "play": true,
+      "theme": "spring",
+      "day": true,
+      "reason": "morning",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村内 昼·闲(无工地/无协作)",
+      "dist": 0,
+      "play": false,
+      "theme": "spring",
+      "day": true,
+      "reason": "idle-day",
+      "t": 100,
+      "level": 0
+    },
+    {
+      "name": "村内 昼·忙 t=100",
+      "dist": 0,
+      "play": true,
+      "theme": "spring",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村内 昼·忙 t=106(同一天另一刻)",
+      "dist": 0,
+      "play": false,
+      "theme": "spring",
+      "day": true,
+      "reason": "busy-rest",
+      "t": 106,
+      "level": 0
+    },
+    {
+      "name": "村内 暮",
+      "dist": 0,
+      "play": true,
+      "theme": "spring",
+      "day": true,
+      "reason": "dusk",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村内 夜",
+      "dist": 0,
+      "play": true,
+      "theme": "spring-night",
+      "day": false,
+      "reason": "night",
+      "t": 100,
+      "level": 0.42
+    },
+    {
+      "name": "村内 冬·昼·忙",
+      "dist": 0,
+      "play": true,
+      "theme": "winter",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村内 危机·昼·忙",
+      "dist": 0,
+      "play": true,
+      "theme": "crisis",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.45
+    },
+    {
+      "name": "村内 恢复·昼·忙",
+      "dist": 0,
+      "play": true,
+      "theme": "recovering",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村内 灭绝·昼·闲",
+      "dist": 0,
+      "play": true,
+      "theme": "extinct",
+      "day": true,
+      "reason": "extinct",
+      "t": 100,
+      "level": 0.35
+    },
+    {
+      "name": "野外 灭绝(距核心 131.5)",
+      "dist": 131.52946437965903,
+      "play": true,
+      "theme": "extinct",
+      "day": true,
+      "reason": "extinct",
+      "t": 100,
+      "level": 0.35
+    },
+    {
+      "name": "野外 昼·忙(距核心 131.5)",
+      "dist": 131.52946437965903,
+      "play": false,
+      "theme": "menu",
+      "day": true,
+      "reason": "away",
+      "t": 100,
+      "level": 0
+    },
+    {
+      "name": "野外 夜(距核心 131.5)",
+      "dist": 131.52946437965903,
+      "play": false,
+      "theme": "menu",
+      "day": false,
+      "reason": "away",
+      "t": 100,
+      "level": 0
+    },
+    {
+      "name": "村界 距核心 44.7(营地外、仍在村内)",
+      "dist": 44.721359549995796,
+      "play": true,
+      "theme": "spring",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "村界 距核心恰好 70.0",
+      "dist": 70,
+      "play": true,
+      "theme": "spring",
+      "day": true,
+      "reason": "busy-day",
+      "t": 100,
+      "level": 0.6
+    },
+    {
+      "name": "玩家倒下·村内",
+      "dist": 0,
+      "play": false,
+      "theme": "death",
+      "day": true,
+      "reason": "player-dead",
+      "t": 100,
+      "level": 0
+    },
+    {
+      "name": "玩家倒下·野外",
+      "dist": 131.52946437965903,
+      "play": false,
+      "theme": "death",
+      "day": true,
+      "reason": "player-dead",
+      "t": 100,
+      "level": 0
+    }
+  ],
+  "slotMaterials": {
+    "weather": {
+      "materialExists": false
+    },
+    "daynight": {
+      "materialExists": false
+    },
+    "wind": {
+      "materialExists": true
+    },
+    "crisis": {
+      "materialExists": true
+    }
+  },
+  "bedTrace": {
+    "clear": {
+      "music": [
+        "0.600"
+      ],
+      "beds": [],
+      "buffers": 0
+    },
+    "rain": {
+      "music": [
+        "0.600"
+      ],
+      "beds": [],
+      "buffers": 0
+    },
+    "cold": {
+      "music": [
+        "0.600"
+      ],
+      "beds": [],
+      "buffers": 0
+    },
+    "night": {
+      "music": [
+        "0.420"
+      ],
+      "beds": [],
+      "buffers": 0
+    },
+    "crisis": {
+      "music": [
+        "0.450"
+      ],
+      "beds": [
+        "target=0.550(tc=0.8)"
+      ],
+      "buffers": 1
+    },
+    "idle": {
+      "music": [
+        "0.000"
+      ],
+      "beds": [],
+      "buffers": 0
+    },
+    "farNight": {
+      "music": [
+        "0.000"
+      ],
+      "beds": [
+        "target=0.800(tc=0.8)"
+      ],
+      "buffers": 1
+    },
+    "farRain": {
+      "music": [
+        "0.000"
+      ],
+      "beds": [
+        "target=0.800(tc=0.8)"
+      ],
+      "buffers": 1
+    },
+    "deadFar": {
+      "music": [
+        "0.500"
+      ],
+      "beds": [
+        "target=0.500(tc=0.8)"
+      ],
+      "buffers": 1
+    },
+    "extinctFar": {
+      "music": [
+        "0.350"
+      ],
+      "beds": [
+        "target=0.800(tc=0.8)"
+      ],
+      "buffers": 1
+    }
+  },
+  "musicRows": [
+    {
+      "theme": "menu",
+      "I": -24.4,
+      "peak": -9,
+      "mean": -26.7,
+      "max": -9,
+      "bus": 0.6
+    },
+    {
+      "theme": "spring",
+      "I": -24.1,
+      "peak": -10.5,
+      "mean": -26.5,
+      "max": -10.6,
+      "bus": 0.6
+    },
+    {
+      "theme": "summer",
+      "I": -24,
+      "peak": -9.8,
+      "mean": -26.2,
+      "max": -9.8,
+      "bus": 0.6
+    },
+    {
+      "theme": "autumn",
+      "I": -25.6,
+      "peak": -8.8,
+      "mean": -27.6,
+      "max": -8.8,
+      "bus": 0.6
+    },
+    {
+      "theme": "winter",
+      "I": -26.5,
+      "peak": -9,
+      "mean": -28.7,
+      "max": -9,
+      "bus": 0.6
+    },
+    {
+      "theme": "crisis",
+      "I": -25.2,
+      "peak": -8.9,
+      "mean": -27,
+      "max": -8.9,
+      "bus": 0.45
+    },
+    {
+      "theme": "recovering",
+      "I": -24.3,
+      "peak": -8.9,
+      "mean": -26.5,
+      "max": -8.9,
+      "bus": 0.6
+    },
+    {
+      "theme": "spring-night",
+      "I": -25.8,
+      "peak": -8.9,
+      "mean": -28,
+      "max": -8.9,
+      "bus": 0.42
+    },
+    {
+      "theme": "summer-night",
+      "I": -24.8,
+      "peak": -9,
+      "mean": -27.1,
+      "max": -9,
+      "bus": 0.42
+    },
+    {
+      "theme": "autumn-night",
+      "I": -25.6,
+      "peak": -9.1,
+      "mean": -27.8,
+      "max": -9.1,
+      "bus": 0.42
+    },
+    {
+      "theme": "winter-night",
+      "I": -28.4,
+      "peak": -8.8,
+      "mean": -30.4,
+      "max": -8.8,
+      "bus": 0.42
+    },
+    {
+      "theme": "death",
+      "I": -25.1,
+      "peak": -8.9,
+      "mean": -27.1,
+      "max": -8.9,
+      "bus": 0.5
+    },
+    {
+      "theme": "extinct",
+      "I": -24.8,
+      "peak": -8.8,
+      "mean": -27.4,
+      "max": -8.8,
+      "bus": 0.35
+    }
+  ],
+  "ambRows": [
+    {
+      "name": "day",
+      "info": {
+        "seconds": 3,
+        "peak": 0.18,
+        "rms": 0.0097,
+        "clippedSamples": 0,
+        "approxCentroidHz": 3662
+      },
+      "I": -34,
+      "peak": -14.8,
+      "mean": -40.3,
+      "max": -14.9,
+      "g0": 0.4,
+      "g1": 0.12,
+      "audible": false
+    },
+    {
+      "name": "night",
+      "info": {
+        "seconds": 3.5,
+        "peak": 0.2,
+        "rms": 0.0217,
+        "clippedSamples": 0,
+        "approxCentroidHz": 1546
+      },
+      "I": -28.4,
+      "peak": -14,
+      "mean": -33.3,
+      "max": -14,
+      "g0": 0.7,
+      "g1": 0.21,
+      "audible": false
+    },
+    {
+      "name": "rain",
+      "info": {
+        "seconds": 3.2,
+        "peak": 0.34,
+        "rms": 0.0601,
+        "clippedSamples": 0,
+        "approxCentroidHz": 6375
+      },
+      "I": -18.6,
+      "peak": -9.3,
+      "mean": -24.4,
+      "max": -9.4,
+      "g0": 0.5,
+      "g1": 0.25,
+      "audible": false
+    },
+    {
+      "name": "wind",
+      "info": {
+        "seconds": 4,
+        "peak": 0.24,
+        "rms": 0.0464,
+        "clippedSamples": 0,
+        "approxCentroidHz": 1466
+      },
+      "I": -24,
+      "peak": -12.4,
+      "mean": -26.7,
+      "max": -12.4,
+      "g0": 0.25,
+      "g1": 0.8,
+      "audible": true
+    },
+    {
+      "name": "cold",
+      "info": {
+        "seconds": 3,
+        "peak": 0.22,
+        "rms": 0.0242,
+        "clippedSamples": 0,
+        "approxCentroidHz": 1253
+      },
+      "I": -27.4,
+      "peak": -13.1,
+      "mean": -32.3,
+      "max": -13.2,
+      "g0": 0.5,
+      "g1": 0.25,
+      "audible": false
+    },
+    {
+      "name": "crisis",
+      "info": {
+        "seconds": 1,
+        "peak": 0.3,
+        "rms": 0.1188,
+        "clippedSamples": 0,
+        "approxCentroidHz": 105
+      },
+      "I": -19.2,
+      "peak": -10.5,
+      "mean": -18.5,
+      "max": -10.5,
+      "g0": 0.55,
+      "g1": 0,
+      "audible": true
+    }
+  ]
+}

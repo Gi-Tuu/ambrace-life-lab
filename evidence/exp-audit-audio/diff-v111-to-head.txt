@@ -1,0 +1,206 @@
+diff --git a/web/audio-events.mjs b/web/audio-events.mjs
+index 7c710d8..9e2b590 100644
+--- a/web/audio-events.mjs
++++ b/web/audio-events.mjs
+@@ -123,13 +123,16 @@ const busyVillage = (sv) => (sv.coop?.task?.workers?.length ?? 0) > 0 || (sv.sit
+ function computeWindow(sv, { center = CORE_CENTER, far = FAR_RADIUS, now = 0 } = {}) {
+   if (!sv) return { play: false, theme: 'menu', day: true, reason: 'no-world' };
+   const day = sv.phase !== '夜';
+-  if (sv.player?.dead) return { play: false, theme: 'menu', day, reason: 'player-dead' };
+-  if (sv.settlement === 'extinct') return { play: false, theme: 'extinct', day, reason: 'extinct' };
+-  if (!day) return { play: false, theme: 'menu', day: false, reason: 'night' };
++  if (sv.player?.dead) return { play: false, theme: 'death', day, reason: 'player-dead' };
++  // 第二批素材到位后（所有者 2026-11-21）：灭绝与夜不再整段静音，各用自己的曲目；
++  // 村外与闲日白天仍不放——那是 2026-11-15 定的「挑部分时段播放」。死人不在这里播，由 audio.scene 处理。
++  if (sv.settlement === 'extinct') return { play: true, theme: 'extinct', day, reason: 'extinct' };
+   if (playerDistance(sv) > far) return { play: false, theme: 'menu', day, reason: 'away' };
+ 
+   const crisis = sv.settlement === 'crisis' || (sv.crisisDays ?? 0) > 0;
+-  const theme = crisis ? 'crisis' : sv.settlement === 'recovering' ? 'recovering' : themeForSeason(sv.season);
++  const dayTheme = themeForSeason(sv.season);
++  const theme = crisis ? 'crisis' : sv.settlement === 'recovering' ? 'recovering' : (day ? dayTheme : `${dayTheme}-night`);
++  if (!day) return { play: true, theme, day: false, reason: 'night' };
+   if (sv.phase === '晨') return { play: true, theme, day, reason: 'morning' };
+   if (sv.phase === '暮') return { play: true, theme, day, reason: 'dusk' };
+   if (!busyVillage(sv)) return { play: false, theme, day, reason: 'idle-day' };
+@@ -151,9 +154,18 @@ export const windowSignature = (w) => `${w.play ? 1 : 0}|${w.theme}|${w.day ? 1
+ // 让劳动声、畜叫、风声始终在音乐之上；危机时再给心跳让路。
+ export const MUSIC_LEVEL = 0.6;
+ export const MUSIC_LEVEL_CRISIS = 0.45;
++// 夜曲比日曲更低（夜里环境声本该更清楚）；倒下与灭绝再压一档，让它们只是底色。
++export const MUSIC_LEVEL_NIGHT = 0.42;
++export const MUSIC_LEVEL_DEATH = 0.5;
++export const MUSIC_LEVEL_EXTINCT = 0.35;
+ export const musicTarget = (win, settlement) => {
+   if (!win || !win.play) return 0;
+-  return win.theme === 'crisis' || settlement === 'crisis' ? MUSIC_LEVEL_CRISIS : MUSIC_LEVEL;
++  const theme = String(win.theme || '');
++  if (theme === 'crisis' || settlement === 'crisis') return MUSIC_LEVEL_CRISIS;
++  if (theme === 'death') return MUSIC_LEVEL_DEATH;
++  if (theme === 'extinct') return MUSIC_LEVEL_EXTINCT;
++  if (/-night$/.test(theme)) return MUSIC_LEVEL_NIGHT;
++  return MUSIC_LEVEL;
+ };
+ 
+ // 一截 = 6 刻播 + 6 刻歇，所以每过一整循环换一段起播点：同一首听久了也不腻。
+diff --git a/web/audio.mjs b/web/audio.mjs
+index 9f46d2c..86f5595 100644
+--- a/web/audio.mjs
++++ b/web/audio.mjs
+@@ -3,7 +3,7 @@
+ // 表现层约定：只读世界差分与本地 UI 事件，不写世界、不消费 rng、不进世界 tick。
+ // 采样一律来自 audio-data.mjs 的纯函数渲染 ⇒ 与 scripts/render-audio-preview.mjs 出的 WAV 逐位一致。
+ 
+-import { renderSfx, renderMusicBar, musicMeta, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
++import { renderSfx, renderAmbience, themeForSeason, SFX_BY_CODE, SFX_BY_KIND } from './audio-data.mjs';
+ import { musicTarget, musicStartFor, MUSIC_STINT_TICKS } from './audio-events.mjs';
+ import { MUSIC_TRACKS } from './music-tracks.mjs';
+ 
+@@ -11,7 +11,6 @@ const STORE_KEY = 'ambrace.audio';
+ const SR = 44100;
+ const VOICE_LIMIT = 10;          // 同时发声上限：超了直接丢，保护移动端
+ const THROTTLE_MS = 55;          // 同名音效最小间隔，避免连点成机枪
+-const LOOKAHEAD_S = 0.6;         // BGM 提前排程窗口
+ const FADE_IN = 2.5;             // 音乐淡入秒数
+ const FADE_OUT = 3.5;            // 音乐淡出秒数：比淡入长，收尾不像被掐断
+ 
+@@ -62,6 +61,7 @@ export function unlock() {
+   state.ctx = ctx; state.master = master;
+   applyGain();
+   state.ready = true;
++  loadTrack('menu');   // 开始屏放的就是它：先预取，免得解锁后的第一段是静音
+   return true;
+ }
+ 
+@@ -140,35 +140,8 @@ function musicTheme({ season, settlement }) {
+ }
+ 
+ 
+-// 一小节的缓冲：变体切换时才渲染，单节约 15–25ms，且只在换季/昼夜/聚落状态时发生。
+-function barBuffer(key, bar) {
+-  const [theme, dayFlag = 'day'] = key.split(':');
+-  return stereoBuffer(`music:${key}:${bar}`, () => renderMusicBar({ theme, day: dayFlag === 'day', bar }));
+-}
+-
+-function scheduleMusic() {
+-  const m = state.music;
+-  if (!m.playing || !state.ctx) return;
+-  const [theme, dayFlag = 'day'] = m.key.split(':');
+-  const meta = musicMeta({ theme });
+-  const now = state.ctx.currentTime;
+-  while (m.nextAt < now + LOOKAHEAD_S) {
+-    const buf = barBuffer(m.key, m.bar % meta.bars);
+-    m.bar++;
+-    if (buf) {
+-      const src = state.ctx.createBufferSource();
+-      src.buffer = buf;
+-      const g = state.ctx.createGain();
+-      g.gain.setValueAtTime(0.0001, m.nextAt);
+-      g.gain.exponentialRampToValueAtTime(0.9, m.nextAt + 0.06);
+-      src.connect(g); g.connect(state.musicBus ?? state.master);
+-      src.start(m.nextAt);
+-      src.onended = () => src.disconnect();
+-    }
+-    m.nextAt += meta.secondsPerBar;
+-  }
+-  m.timer = setTimeout(scheduleMusic, 220);
+-}
++// BGM 只放成品曲，没有合成器兜底（所有者 2026-11-19：「不要这种兜底，很破坏统一性」）。
++// 素材还没解码好时，这一截保持安静，下一截再进；静音是可接受的降级，音色不统一不是。
+ 
+ // ───────────────────────── 成品曲音源（web/music/*.ogg） ─────────────────────────
+ // 每首只在第一次要用时拉取并解码（约 2MB / 首）：菜单页不该顺带下载四季。
+@@ -178,7 +151,7 @@ function loadTrack(theme) {
+     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+     .then((b) => state.ctx.decodeAudioData(b))
+     .then((buf) => { state.tracks.set(theme, buf); state.loading.delete(theme); })
+-    .catch(() => { state.loading.delete(theme); });   // 拉不到就一直用合成版，不报错、不重试刷屏
++    .catch(() => { state.loading.delete(theme); });   // 拉不到就静音、下截再试：不回落合成器、不刷屏
+   state.loading.set(theme, p);
+ }
+ 
+@@ -204,7 +177,7 @@ function playFile(theme, offset) {
+     if (!state.music.playing || state.music.fileTheme !== theme) return;
+     state.music.tick += MUSIC_STINT_TICKS;              // 窗口还没关但曲子放完了：换下一段起播点
+     const next = musicStartFor(theme, state.music.tick);
+-    if (next === null || !playFile(theme, next)) startSynth(theme);
++    if (next !== null) playFile(theme, next);
+   };
+   src.start(state.ctx.currentTime + 0.12, Math.max(0, offset), Math.max(0, buf.duration - offset));
+   state.music.src = src;
+@@ -212,15 +185,6 @@ function playFile(theme, offset) {
+   return true;
+ }
+ 
+-function startSynth(theme) {
+-  const m = state.music;
+-  const meta = musicMeta({ theme });
+-  m.bars = meta.bars; m.bar = 0;
+-  m.nextAt = state.ctx.currentTime + 0.15;
+-  clearTimeout(m.timer);
+-  scheduleMusic();
+-}
+-
+ // tick 是世界刻：起播点序号由它算，所以同营地的两个观众听到同一段，录屏也能复现。
+ function startMusic(key, tick = 0) {
+   const m = state.music;
+@@ -229,8 +193,8 @@ function startMusic(key, tick = 0) {
+   stopMusic();
+   m.key = key; m.tick = Math.max(0, Number(tick) || 0); m.playing = true;
+   const start = musicStartFor(theme, m.tick);
+-  if (start === null) { startSynth(theme); return; }     // 灭绝等没素材的槽位：维持合成口径
+-  if (!playFile(theme, start)) { loadTrack(theme); startSynth(theme); }
++  if (start === null) { m.playing = false; return; }   // 没有素材的槽位就静音，不合成
++  if (!playFile(theme, start)) loadTrack(theme);       // 还没解码好：这一截静音，下一截再进
+ }
+ 
+ function stopMusic() {
+@@ -278,8 +242,9 @@ export function scene({ season = '春', phase = '昼', weather = 'clear', settle
+   if (!state.ready || state.muted) return;
+   const day = phase !== '夜';
+   if (dead) {
+-    // 玩家倒下：曲终，只留危机心跳，世界仍在走但不再属于你。
+-    fadeMusic(0);
++    // 玩家倒下：换一首送别曲（2026-11-21 素材到位后，所有者改了"只留心跳"的旧口径）。
++    startMusic('death', window?.t ?? 0);
++    fadeMusic(musicTarget({ play: true, theme: 'death' }, settlement));
+     setBed('crisis', true, 0.5);
+     setBed('weather', false, 0);
+     setBed('daynight', false, 0);
+diff --git a/web/music-tracks.mjs b/web/music-tracks.mjs
+index 1457fe8..1aa1f64 100644
+--- a/web/music-tracks.mjs
++++ b/web/music-tracks.mjs
+@@ -1,10 +1,10 @@
+-// BGM 成品曲清单：7 个会响的槽位，音源是 Google Flow（AI Pro 账户）生成的纯器乐曲。
+-// 提示词与逐曲依据见 docs/BGM生成提示词-2026-11-18.md；起播点由 docs/evidence/start-points.mjs
+-// 从每秒响度剖面实测算出，四条硬条件：进入后至少还剩 45 秒、该段 30 秒内起伏 ≤6dB、
+-// 低于"全曲均值 −12dB"的呼吸格 ≤3、彼此间隔 ≥40 秒。不许手填，填错由 A-27 打红。
++// BGM 成品曲清单：13 个会响的槽位，音源是 Google Flow（AI Pro 账户）生成的纯器乐曲。
++// 提示词见 docs/BGM生成提示词-2026-11-18.md（第一批）与 …-第二批-2026-11-19.md（夜曲/倒下/灭绝）；
++// 起播点由 start-points.mjs 从每秒响度剖面实测算出，四条硬条件：进入后至少还剩 45 秒、
++// 该段 30 秒内起伏 ≤6dB、低于"全曲均值 −12dB"的呼吸格 ≤3、彼此间隔 ≥40 秒。不许手填，A-27 打红。
+ //
+-// 这里只列会响的槽位：夜、村外、灭绝、玩家倒下按 audio-events.mjs 的窗口规则本就不播，
+-// 所以 extinct 没有素材——加了也是永远听不到的字节。
++// 第二批（所有者 2026-11-21）：夜曲 ×4 + 倒下 + 灭绝。它们对应三处规则改动——
++// 夜不再整段静音、玩家倒下不再只剩心跳、灭绝不再静默。村外与闲日白天仍然不放。
+ export const MUSIC_TRACKS = {
+   menu: { file: 'music/menu.ogg', seconds: 169.3, bytes: 2106832, starts: [17.5, 64, 107] },
+   spring: { file: 'music/spring.ogg', seconds: 168.6, bytes: 2151287, starts: [33, 73, 113] },
+@@ -13,7 +13,13 @@ export const MUSIC_TRACKS = {
+   winter: { file: 'music/winter.ogg', seconds: 173.2, bytes: 2105130, starts: [13, 63.5, 126.5] },
+   crisis: { file: 'music/crisis.ogg', seconds: 166.9, bytes: 1934753, starts: [5, 53.5, 94] },
+   recovering: { file: 'music/recovering.ogg', seconds: 164.5, bytes: 2033279, starts: [37.5, 96.5] },
++  'spring-night': { file: 'music/spring-night.ogg', seconds: 162.0, bytes: 1729099, starts: [32.5, 83.5] },
++  'summer-night': { file: 'music/summer-night.ogg', seconds: 174.9, bytes: 1958103, starts: [4, 53, 97.5] },
++  'autumn-night': { file: 'music/autumn-night.ogg', seconds: 176.0, bytes: 2098745, starts: [28.5, 69, 111.5] },
++  'winter-night': { file: 'music/winter-night.ogg', seconds: 172.9, bytes: 2035463, starts: [13, 56, 124.5] },
++  death: { file: 'music/death.ogg', seconds: 166.7, bytes: 1874996, starts: [9, 51.5, 100.5] },
++  extinct: { file: 'music/extinct.ogg', seconds: 161.8, bytes: 1848148, starts: [7, 61, 102] },
+ };
+ 
+-// 素材体积预算：超了就 red，防止有人继续往仓库塞整曲。
+-export const MUSIC_BYTE_BUDGET = 16 * 1024 * 1024;
++// 素材体积预算：超了就 red，防止有人继续往仓库塞整曲。13 首实测 ≈24.8MB。
++export const MUSIC_BYTE_BUDGET = 32 * 1024 * 1024;

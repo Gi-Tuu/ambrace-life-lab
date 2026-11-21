@@ -1,0 +1,47 @@
+# occluder 清单 mapSeed=7 layoutVersion=2（stage.boxes=4047）
+{"occluderPrefix":"(无 occluder)","groups":1,"boxes":45,"solid":4,"fadesWhenCovered":false}
+{"occluderPrefix":"pen:*","groups":6,"boxes":66,"solid":6,"fadesWhenCovered":false}
+{"occluderPrefix":"rock:*","groups":61,"boxes":212,"solid":61,"fadesWhenCovered":false}
+{"occluderPrefix":"roof:garden","groups":1,"boxes":30,"solid":0,"fadesWhenCovered":true}
+{"occluderPrefix":"roof:hall","groups":1,"boxes":29,"solid":0,"fadesWhenCovered":true}
+{"occluderPrefix":"roof:watch","groups":1,"boxes":29,"solid":0,"fadesWhenCovered":true}
+{"occluderPrefix":"roof:well","groups":1,"boxes":29,"solid":0,"fadesWhenCovered":true}
+{"occluderPrefix":"roof:yard","groups":1,"boxes":30,"solid":0,"fadesWhenCovered":true}
+{"occluderPrefix":"site:garden","groups":1,"boxes":17,"solid":6,"fadesWhenCovered":false}
+{"occluderPrefix":"site:hall","groups":1,"boxes":56,"solid":11,"fadesWhenCovered":false}
+{"occluderPrefix":"site:home","groups":1,"boxes":247,"solid":1,"fadesWhenCovered":false}
+{"occluderPrefix":"site:store","groups":1,"boxes":245,"solid":1,"fadesWhenCovered":false}
+{"occluderPrefix":"site:watch","groups":1,"boxes":60,"solid":8,"fadesWhenCovered":false}
+{"occluderPrefix":"site:well","groups":1,"boxes":51,"solid":1,"fadesWhenCovered":false}
+{"occluderPrefix":"site:workshop","groups":1,"boxes":373,"solid":1,"fadesWhenCovered":false}
+{"occluderPrefix":"site:yard","groups":1,"boxes":28,"solid":6,"fadesWhenCovered":false}
+{"occluderPrefix":"tree:*","groups":273,"boxes":2500,"solid":273,"fadesWhenCovered":false}
+{"label":"home 北侧(建筑背后)","player":[27.5,18.5],"covered":["site:home"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:home"]}
+{"label":"home 屋内中心","player":[27.5,21.5],"covered":["site:home"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:home"]}
+{"label":"home 建筑南侧(门口)","player":[27.5,25.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"hall 北侧(建筑背后)","player":[34.5,18.5],"covered":["roof:hall"],"fadeWithCutoutNull":["roof:hall"],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"hall 屋内中心","player":[34.5,21.5],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"hall 建筑南侧(门口)","player":[34.5,25.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"store 北侧(建筑背后)","player":[41.5,18.5],"covered":["site:store"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:store"]}
+{"label":"store 屋内中心","player":[41.5,21.5],"covered":["site:store"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:store"]}
+{"label":"store 建筑南侧(门口)","player":[41.5,25.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"yard 北侧(建筑背后)","player":[20.5,29.5],"covered":["roof:yard","site:yard"],"fadeWithCutoutNull":["roof:yard"],"fadeWithCutoutSet":[],"neverFades":["site:yard"]}
+{"label":"yard 屋内中心","player":[20.5,32.5],"covered":["roof:yard"],"fadeWithCutoutNull":["roof:yard"],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"yard 建筑南侧(门口)","player":[20.5,36.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"workshop 北侧(建筑背后)","player":[76.5,37.5],"covered":["site:workshop"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:workshop"]}
+{"label":"workshop 屋内中心","player":[76.5,40.5],"covered":["site:workshop"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:workshop"]}
+{"label":"workshop 建筑南侧(门口)","player":[76.5,44.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"garden 北侧(建筑背后)","player":[35.5,37.5],"covered":["roof:garden","site:garden"],"fadeWithCutoutNull":["roof:garden"],"fadeWithCutoutSet":[],"neverFades":["site:garden"]}
+{"label":"garden 屋内中心","player":[35.5,40.5],"covered":["roof:garden"],"fadeWithCutoutNull":["roof:garden"],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"garden 建筑南侧(门口)","player":[35.5,44.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"watch 北侧(建筑背后)","player":[75.5,11.5],"covered":["site:watch"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:watch"]}
+{"label":"watch 屋内中心","player":[75.5,14.5],"covered":["rock:75:14","site:watch"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["rock:75:14","site:watch"]}
+{"label":"watch 建筑南侧(门口)","player":[75.5,18.1],"covered":["site:watch"],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":["site:watch"]}
+{"label":"well 北侧(建筑背后)","player":[57.5,25.5],"covered":["roof:well"],"fadeWithCutoutNull":["roof:well"],"fadeWithCutoutSet":[],"neverFades":[]}
+{"label":"well 屋内中心","player":[57.5,28.5],"covered":["roof:well","site:well"],"fadeWithCutoutNull":["roof:well"],"fadeWithCutoutSet":[],"neverFades":["site:well"]}
+{"label":"well 建筑南侧(门口)","player":[57.5,32.1],"covered":[],"fadeWithCutoutNull":[],"fadeWithCutoutSet":[],"neverFades":[]}
+
+# 汇总：会被 collected 但绝不会淡出的 occluder
+["rock:75:14","site:garden","site:home","site:store","site:watch","site:well","site:workshop","site:yard"]
+# 唯一可能淡出的 occluder（前缀 roof:/room-roof:）: ["roof:garden","roof:hall","roof:watch","roof:well","roof:yard"]
+# stage 里 "site:*" 组的屋顶与墙体共用同一 occluder（house() 的 roofStage 继承当前 group）: ["site:garden","site:hall","site:home","site:store","site:watch","site:well","site:workshop","site:yard"]

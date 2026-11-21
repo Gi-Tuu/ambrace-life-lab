@@ -1,0 +1,94 @@
+{
+ "mapSeed": 0,
+ "layoutVersion": 0,
+ "rows": [
+  {
+   "room": "home",
+   "doorPoint": [
+    22.5,
+    23
+   ],
+   "walkableR": false,
+   "walkable0": true,
+   "colliders": [
+    "site:home"
+   ]
+  },
+  {
+   "room": "hall",
+   "doorPoint": [
+    29.5,
+    24.28
+   ],
+   "walkableR": true,
+   "walkable0": true,
+   "colliders": []
+  },
+  {
+   "room": "store",
+   "doorPoint": [
+    36.5,
+    23
+   ],
+   "walkableR": false,
+   "walkable0": true,
+   "colliders": [
+    "site:store"
+   ]
+  },
+  {
+   "room": "yard",
+   "doorPoint": [
+    22.42,
+    34.05
+   ],
+   "walkableR": true,
+   "walkable0": true,
+   "colliders": []
+  },
+  {
+   "room": "workshop",
+   "doorPoint": [
+    61.5,
+    28
+   ],
+   "walkableR": false,
+   "walkable0": true,
+   "colliders": [
+    "site:workshop"
+   ]
+  },
+  {
+   "room": "garden",
+   "doorPoint": [
+    33.42,
+    39.05
+   ],
+   "walkableR": true,
+   "walkable0": true,
+   "colliders": []
+  },
+  {
+   "room": "watch",
+   "doorPoint": [
+    67.5,
+    10.47
+   ],
+   "walkableR": false,
+   "walkable0": false,
+   "colliders": [
+    "rock:67:10"
+   ]
+  },
+  {
+   "room": "well",
+   "doorPoint": [
+    52,
+    33.95
+   ],
+   "walkableR": true,
+   "walkable0": true,
+   "colliders": []
+  }
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "vertex_uCutout_total": 1,
+ "vertex_uCutout_in_main": 0,
+ "fragment_uCutout_total": 0,
+ "fragment_discard_total": 0,
+ "vertex_main": [
+  "void main(){",
+  "float phase=uWeather.x*2.1+aMaterial.y;",
+  "vec3 point=aPosition;",
+  "float wind=uRegionTexture?0.:aMaterial.x;",
+  "point.x+=sin(phase)*wind*uWeather.y;",
+  "point.z+=sin(phase*.72+.8)*wind*uWeather.y*.43;",
+  "gl_Position=uProjection*uView*vec4(point,1.);",
+  "vGlow=aMaterial.z; vHeight=point.y; vRoad=aMaterial.x; vBank=aMaterial.y;",
+  "float diffuse=max(0.,dot(aNormal.xyz,uSunRay.xyz));",
+  "vPhysical=uLight*(.78+.14*max(0.,aNormal.y)+diffuse*uSunRay.w*.55)+vec3(.22,.09,.035)*uSunStrength*diffuse;",
+  "vFinish=aNormal.w; vUp=aNormal.y;",
+  "vColor=aColor; vUV=aUV; vWorld=aPosition.xz;",
+  "}"
+ ]
+}
+=> uCutout 在 VERTEX 里只声明、未使用；FRAGMENT 完全没有 cutout/discard 逻辑。 
+=> ink/挖洞从未发生：paintStage 的 cutout 分支（camp-3d-render.mjs:833-840）只是把屋顶按原色重画。

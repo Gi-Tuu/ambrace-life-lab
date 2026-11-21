@@ -1,5 +1,17 @@
 # 变更记录
 
+## [1.1.2] - 2026-11-21
+
+体验修复版：遮挡/桥/入口/天气/音频。
+
+- 遮挡：建筑墙/屋顶/连廊分件淡出，栅栏/田地/作物不淡；修复 uCutout 从未 discard 的死路径；玩家在建筑后可见。
+- 桥：默认存档桥带单源，crossing 24→34，space.walkable/height/pathGrid 一致；东岸可达 0%→100%。
+- 入口：home/store/workshop/watch 入口移出实体，8 房间 × 2 布局 camp_exit 16/16 可站；研究态 C 组因门点南移 6 字段重钉并留痕。
+- 天气：客户端 6–26s 跨fade（湿ness/风/光/雨滴），单帧增量≈0；服务端状态不变。
+- 音频：修复 weather/daynight 槽位名当素材名导致环境床从未发声；按 LUFS 平衡，雨/夜/危机可闻；BGM 聚落边界改用 CAMP_REGION（镇角 70.7 可播）；补 A-32…A-35 真实层数闸门。
+- 全量 1183/1183；golden 45/45；22k parity 0；quickstart PASS。
+- 边界：Docker build/线上 ms.show iframe 仍由 Qoder CN 验收；200 日平衡问题仍留 1.2。
+
 ## [1.1.1] - 2026-11-21
 
 1.1 补丁版：收口 final-review 的 6 项 P2。
