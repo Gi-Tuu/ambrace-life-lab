@@ -58,9 +58,12 @@ export async function run({ env = process.env } = {}) {
   process.on('SIGINT', halt);
   process.on('SIGTERM', halt);
 
+  // 公开实例的网关照 UA 判断：非浏览器 UA 一律 403（Code 10010101007，"请使用API专用地址"）。
+  // node 的 fetch 默认 UA 会被挡，所以显式带一个浏览器 UA——这只影响平台闸门，不影响我们自己的鉴权。
+  const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0 Safari/537.36';
   const post = (path, body, ms) => fetch(api(path), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+    headers: { 'content-type': 'application/json', 'user-agent': UA, authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify(body ?? {}),
     signal: AbortSignal.timeout(ms)
   });

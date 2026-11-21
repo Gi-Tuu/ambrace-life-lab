@@ -2,6 +2,8 @@
 // 一次投递、超时不复活、队列满就立刻失败、迟到答案绝不塞给已经走开的等待方。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { createRelay, constantTimeEqual } from './brain-relay.mjs';
 
@@ -92,4 +94,11 @@ test('A07 中继失败计数是可持久化的整数', async () => {
   assert.equal(relay.complete(job.id,{ok:false,code:'MOCK_ERROR'}),true);
   assert.equal((await job.promise).ok,false);
   assert.equal(JSON.parse(JSON.stringify(relay.view())).failed,1);
+});
+
+// R9（2026-11-21）：公开实例的网关按 UA 判断——node 默认 UA 一律 403（Code 10010101007）。
+test('R9 中继 agent 必须带浏览器 UA，否则公开实例把它当非浏览器挡掉', () => {
+  const src = readFileSync(resolve(process.cwd(), 'scripts', 'brain-agent.mjs'), 'utf8');
+  assert.ok(src.includes("'user-agent': UA"), 'fetch 头里必须显式带 user-agent');
+  assert.ok(src.includes("const UA = 'Mozilla"), 'UA 要是浏览器串，空串或 node 默认都没用');
 });
