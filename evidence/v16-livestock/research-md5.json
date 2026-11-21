@@ -1,0 +1,65 @@
+{
+  "algorithm": "md5",
+  "mode": "rerun",
+  "note": "默认/--rerun 模式真跑 life/run.mjs 五面；历史 log 不参与通过。",
+  "generatedAt": "2026-11-21T13:42:28.887Z",
+  "durationMs": 35744,
+  "faces": {
+    "report": {
+      "source": "life/run.mjs --report",
+      "durationMs": 8372,
+      "rawBytes": 1875,
+      "rawMd5": "19a2803182a5a63ae944120dd0a528bc",
+      "crlfBytes": 1886,
+      "crlfMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedMd5": "de764430c8bc88cd8dbbc24512621e4f",
+      "expectedBytes": 1886,
+      "match": true
+    },
+    "sweep": {
+      "source": "life/run.mjs --sweep",
+      "durationMs": 13394,
+      "rawBytes": 2838,
+      "rawMd5": "22f76c48897713ddcee9bae8f767e31b",
+      "crlfBytes": 2850,
+      "crlfMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedMd5": "aadd4895e84ae657d5a1e22c132228b1",
+      "expectedBytes": 2850,
+      "match": true
+    },
+    "viab": {
+      "source": "life/run.mjs --viab",
+      "durationMs": 2777,
+      "rawBytes": 4504,
+      "rawMd5": "86da5c0a4a0e26b082fbfb54fd6c1736",
+      "crlfBytes": 4526,
+      "crlfMd5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedMd5": "b923787830eb26c3853ecf959987cf9d",
+      "expectedBytes": 4526,
+      "match": true
+    },
+    "recover": {
+      "source": "life/run.mjs --recover",
+      "durationMs": 5945,
+      "rawBytes": 12107,
+      "rawMd5": "feac239b364b8a771042d3996529181e",
+      "crlfBytes": 12150,
+      "crlfMd5": "fe198109386d048356f2fa69312e5183",
+      "expectedMd5": "fe198109386d048356f2fa69312e5183",
+      "expectedBytes": 12150,
+      "match": true
+    },
+    "metab": {
+      "source": "life/run.mjs --metab",
+      "durationMs": 5252,
+      "rawBytes": 13324,
+      "rawMd5": "e0a23df93d8fa7c9e5db7d2ccc9a76cf",
+      "crlfBytes": 13357,
+      "crlfMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedMd5": "5ea0ae6473c4f0ff46f47b7a2463b409",
+      "expectedBytes": 13357,
+      "match": true
+    }
+  },
+  "allMatch": true
+}

@@ -1,0 +1,27 @@
+✖ V16-LIVE-01 圈舍 AABB/入口/道路/树/建筑不重叠：三种牲畜各有真实分区 (185.2415ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 332.5056
+
+✖ failing tests:
+
+test at life\v16-livestock-energy.test.mjs:40:1
+✖ V16-LIVE-01 圈舍 AABB/入口/道路/树/建筑不重叠：三种牲畜各有真实分区 (185.2415ms)
+  AssertionError [ERR_ASSERTION]: seed0/v1 道路穿过圈舍：0.46px at 15.95,45.95
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-livestock-energy.test.mjs:59:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -1,0 +1,41 @@
+{
+  "label": "host",
+  "seed": 0,
+  "version": 0,
+  "samples": 11000,
+  "client": {
+    "seed": 0,
+    "version": 0,
+    "camp": true,
+    "hashes": {
+      "walk": "cad6f477a8089d71cbdc63f6a6b88d23ed672172aea39e1cb69381e312e83e18",
+      "terrainWalk3d": "1ea7580e86703932f42a2a5c04a3fbacb97bdcb5772a358d6973b44ea002c0ce"
+    }
+  },
+  "diffs": {
+    "terrain": 0,
+    "walk": 0,
+    "height": 0,
+    "portal": 0,
+    "kind": 0
+  },
+  "walkBuckets": {
+    "client-collider": {
+      "count": 0,
+      "sample": []
+    },
+    "server-collider": {
+      "count": 0,
+      "sample": []
+    },
+    "terrain": {
+      "count": 0,
+      "sample": []
+    }
+  },
+  "terrainSamples": [],
+  "heightSamples": [],
+  "bridgeHeightDiffs": 0,
+  "portalSamples": [],
+  "portalDiffCount": 0
+}

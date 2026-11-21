@@ -142,11 +142,14 @@ const CLIENT_FN = `async (points, seed, version, layout, view) => {
     hashes: { walk: await hex(world.walk), terrainWalk3d: await hex(world.terrainWalk3d) } };
 }`;
 
-function serverSpace(seed, version) {
+function serverSpace(seed, version, livestock = null) {
   const sp = createSurvPlay(seed, {
     gameRules: true, mapSeed: seed, layoutVersion: version, settlementLife: true,
     regionalWork: true, independentWorld: true, residentialDecisions: true, unifiedCooperation: true, actTimeModel: true,
   });
+  // 1.6：圈舍几何由 livestock 数量派生；对照服务端必须与客户端同一份存栏，
+  // 否则比较的是两个世界（宿主 seed 档 12 只鸡 vs 新建世界默认 3 只）。
+  if (livestock) sp.world.survival.livestock = { ...sp.world.survival.livestock, ...livestock };
   // P2b：正式世界走 constructionSpace；无 campLayout 的宿主世界（layout 0）用同一份
   // sceneGeometry/Stage 的只读空间（sceneSpace），不再手工传 trees:[]。
   return constructionSpace(sp.world) ?? sceneSpace(sp.world);
@@ -236,8 +239,9 @@ try {
   // 例 1：宿主当前世界（通常是 seed 0 / v0，覆盖河岸与村内实体）。
   {
     const points = samplesFor(meta.mapSeed, meta.layoutVersion);
+    const hostLivestock = await evaluate(cdp, 'window.__lifeDebug.S.view.livestock ?? null', sid);
     const client = await runClient(points, meta.mapSeed, meta.layoutVersion, null);
-    const server = serverSpace(meta.mapSeed, meta.layoutVersion);
+    const server = serverSpace(meta.mapSeed, meta.layoutVersion, hostLivestock);
     cases.push(compare('host', meta.mapSeed, meta.layoutVersion, client, server, points));
   }
   // 真实按键 0.7s：确认玩家移动仍发生（P2 速度换算 + space 碰撞不能把人钉住）。
@@ -270,8 +274,7 @@ try {
     const points = samplesFor(seed, version);
     const client = await runClient(points, seed, version, layout, view);
     const server = constructionSpace(sp.world) ?? sceneSpace(sp.world);
-    cases.push(compare('seed13v2', seed, version, client, server, points));
-  }
+    cases.push(compare('seed13v2', seed, version, client, server, points));  }
 
   const summary = {
     at: new Date().toISOString(), host: meta,

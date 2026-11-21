@@ -1,0 +1,32 @@
+✖ V16-ENERGY-02 通用休息 +0.06、每时 1 次、每日 0.24、满能量/幽魂/compare/研究拒绝 (3.2022ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 142.4454
+
+✖ failing tests:
+
+test at life\v16-livestock-energy.test.mjs:168:1
+✖ V16-ENERGY-02 通用休息 +0.06、每时 1 次、每日 0.24、满能量/幽魂/compare/研究拒绝 (3.2022ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'OK'
+  - 'REST_COOLDOWN'
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-livestock-energy.test.mjs:175:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'OK',
+    expected: 'REST_COOLDOWN',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,27 @@
+✖ V16-LIVE-01 圈舍 AABB/入口/道路/树/建筑不重叠：三种牲畜各有真实分区 (64.3641ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 213.8761
+
+✖ failing tests:
+
+test at life\v16-livestock-energy.test.mjs:40:1
+✖ V16-LIVE-01 圈舍 AABB/入口/道路/树/建筑不重叠：三种牲畜各有真实分区 (64.3641ms)
+  AssertionError [ERR_ASSERTION]: 圈舍院落没有放大：{"x":11,"z":30,"w":7,"d":6.4,"gate":2.75,"opening":1.5}
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-livestock-energy.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -1,0 +1,86 @@
+{
+  "at": "2026-11-21T13:42:44.445Z",
+  "checks": {
+    "hud": {
+      "hasSleep": true,
+      "hasRest": true,
+      "hasShelter": true,
+      "hasEat": true,
+      "title": "睡觉 +0.15/游戏时（单次上限 0.9）· 休息 30 分 +0.06（每时 1 次 / 每日 0.24）· 棚下休息 +0.15/刻 · 吃饭 +0.5",
+      "rules": {
+        "text": "睡觉 +0.15/游戏时（单次上限 0.9）· 休息 30 分 +0.06（每时 1 次 / 每日 0.24）· 棚下休息 +0.15/刻 · 吃饭 +0.5",
+        "sleepPerHour": 0.15,
+        "sleepCap": 0.9,
+        "restMinutes": 30,
+        "restAmount": 0.06,
+        "restDailyCap": 0.24,
+        "shelterRest": 0.15,
+        "restState": {
+          "site": "hall",
+          "allowed": true,
+          "energyFull": false,
+          "day": null,
+          "dayGain": 0,
+          "lastMin": null,
+          "dailyCap": 0.24,
+          "restRecovery": null
+        }
+      }
+    }
+  },
+  "geometry": {
+    "livestock": {
+      "chickens": 12,
+      "cows": 2,
+      "sheep": 2,
+      "orchards": 12
+    },
+    "layout": null,
+    "ownBoxes": 170,
+    "ownSolid": 24,
+    "fenceBoxes": 105,
+    "penGroups": [
+      "livestock:chickens",
+      "livestock:chickens:roof",
+      "livestock:cows",
+      "livestock:cows:roof",
+      "livestock:sheep",
+      "livestock:sheep:roof"
+    ],
+    "fade": {
+      "roof": true,
+      "wall": true,
+      "fence": false
+    },
+    "gates": {
+      "yard": true,
+      "chickens": true,
+      "cows": true,
+      "sheep": true,
+      "fodder": true
+    }
+  },
+  "energy": {
+    "rest": {
+      "before": 0.7,
+      "after": 0.76,
+      "gain": 0.06,
+      "code": "OK",
+      "secondCode": "REST_COOLDOWN",
+      "minutes": 35
+    },
+    "sleep": {
+      "before": 0.76,
+      "after": 1,
+      "ticks": 4,
+      "recovery": {
+        "gain": 0.288,
+        "before": 0.712,
+        "after": 1,
+        "hours": 4
+      },
+      "code": "OK"
+    }
+  },
+  "ok": true
+}

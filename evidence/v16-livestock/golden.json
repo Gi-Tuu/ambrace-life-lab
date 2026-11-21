@@ -1,0 +1,599 @@
+{
+  "label": "v16-livestock",
+  "at": "2026-11-21T13:39:27.067Z",
+  "node": "v24.18.0",
+  "port": 9388,
+  "scenarios": {
+    "survival": {
+      "rendererA": "3d",
+      "rendererB": null,
+      "rendererTitle": null,
+      "debugA": {
+        "tick": 960,
+        "historical": false,
+        "ghost": false,
+        "ghostCam": null,
+        "wetness": 0.65,
+        "weatherGeometry": 0,
+        "hints": [
+          {
+            "kind": "door",
+            "rect": {
+              "x": 28.5,
+              "z": 23.15,
+              "w": 2,
+              "d": 2.25
+            }
+          },
+          {
+            "kind": "door",
+            "point": [
+              29.98,
+              24.612499999999997
+            ],
+            "label": "入口"
+          }
+        ],
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 5615,
+        "stageFxs": 9,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "attention": [],
+        "climate": {
+          "storm": false,
+          "frost": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ],
+        "covered": [],
+        "occluded": [],
+        "coverControl": null,
+        "hidden": [],
+        "hiddenCount": 0,
+        "forestKey": "",
+        "stumps": 0,
+        "climateView": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wetness": 0.65,
+          "wind": 1.15,
+          "overcast": 1
+        },
+        "climateTarget": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wet": 0.65
+        }
+      },
+      "debugB": null,
+      "first3d": 669.8999999910593,
+      "longtasks": [
+        [
+          129,
+          544
+        ],
+        [
+          674,
+          60
+        ],
+        [
+          755,
+          397
+        ]
+      ],
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      },
+      "resources": {
+        "count": 73,
+        "transferBytes": 1335432,
+        "encodedBytes": 1313532,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/shared/room-layout.mjs",
+            30
+          ],
+          [
+            "/shared/camp-ao.mjs",
+            30
+          ],
+          [
+            "/shared/camp-physics.mjs",
+            29
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            29
+          ],
+          [
+            "/shared/camp-items.mjs",
+            29
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            28
+          ],
+          [
+            "/shared/camp-livestock.mjs",
+            28
+          ],
+          [
+            "/shared/camp-forest.mjs",
+            28
+          ]
+        ]
+      },
+      "worlds": {
+        "runs": [
+          {
+            "mapSeed": 0,
+            "buildWorldMs": 0,
+            "walk": "cad6f477a8089d71cbdc63f6a6b88d23ed672172aea39e1cb69381e312e83e18",
+            "movementWalk": "5d1d314a0cdbc5b3d9b14356195bb4b59a4a3ae38fda3ec4383e12ba5d13239c",
+            "terrainWalk3d": "1ea7580e86703932f42a2a5c04a3fbacb97bdcb5772a358d6973b44ea002c0ce",
+            "assetWalk": "eb882382c71206dfd604dbe608427f0b22c4caf5392fc690938573b7a082a63c",
+            "trees": "75242e1fc33e311284ced526bee74b733375ceb36a62910c4a023a5e11c43088",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "8f8de92eb24b7caf301ddc59a8b6bc1aa65c936c7457ae187f9b4f9898930e75",
+            "grassPlots": 9,
+            "scene3d": "d117473a32d662c0b1e490a68d02a38f669cbfdc0dc748aed6ec437d16941806",
+            "counts": {
+              "blockers": 839,
+              "trees": 427,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 7,
+            "buildWorldMs": 306,
+            "walk": "1bda72fb9eab44ae50970ae57b3dfccde50361142dfff07428e109a53761e6f4",
+            "movementWalk": "0ca0a841ee193cbae05e5039215080133796b4140b9921d981181d6c629e1b6b",
+            "terrainWalk3d": "c1a5751c2ab604e874d37b6f1584c7a0a5bca05a9962336ad12ae5c5f5f1fb4c",
+            "assetWalk": "3e39e0b77ca2560de071f2e84c550458344454f426f314ac8fe9ebb99b2d69a8",
+            "trees": "781cafdb3d41c6466d21e385e61c748e557ed911d101d03be308e7df86da76e5",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "dc47e58d26bb194b2180e0eb6e6dfd985850308663d3daf96cf2759a96ebfd27",
+            "grassPlots": 9,
+            "scene3d": "ba9eddc2733702846be20b4c322f53f47820cf5988eba9798e591da0e1988f39",
+            "counts": {
+              "blockers": 702,
+              "trees": 288,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 123456,
+            "buildWorldMs": 277.6,
+            "walk": "fa1c901808747a6ed8e20b8a1aa32906e7dd3e8d4ed840bb713cf272299d2c3f",
+            "movementWalk": "99652a4a2d271311144a4ae01aa3d7b262e609c8697cc319d5571fe3bd36c17d",
+            "terrainWalk3d": "f5d799fabaa1d51435061387e0a235ec2d4c50e9a8d3e85ac385bcc0bacf9644",
+            "assetWalk": "5bbac45c4efc9a5796aad9be24ced67d6fcaf542901ab877c97629007406248c",
+            "trees": "7a6e1925f95f04171aa40e2d8755da14e892a214aa067d4cf3a75a4e76989691",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "911231428be76f5d478cdd752de71173959d990fad2a436448591d0aca55b528",
+            "grassPlots": 9,
+            "scene3d": "2d97c6882f12f10e21e20af58d6a7a87691771ff53d7035b9bafb1db6156cb38",
+            "counts": {
+              "blockers": 869,
+              "trees": 452,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          },
+          {
+            "mapSeed": 654321,
+            "buildWorldMs": 235.3,
+            "walk": "1425ae9b80ae3de19e0e8e4c447c1fcda9d9a61a82d8bea18652a1839557b26d",
+            "movementWalk": "bc465b0d24c37ff264da0384a1e6b7198bb4e6bc356e973412168afb05b85a46",
+            "terrainWalk3d": "edd9e0092a5371157fe8d8a8df00e3ba893f35af4e171656e594c9cfa1f344d2",
+            "assetWalk": "4ff448f9d4b2cfcfd7f305475d87f40703d10a373886ee82bfa14894d3606247",
+            "trees": "ee626d0f6d0e1dc2be792b7c6e5fe41bd131c67f0d733770902dc88a09081f1f",
+            "bridges": "175542044433f4390ce7b5cfae5e28e7e60ae651178d7859ddf441945e9ad671",
+            "blockers": "38666755fac4a3ed920bda75210dd8ff96d100363ba7d7d89bfd65d929bb8fdc",
+            "grassPlots": 9,
+            "scene3d": "3787fb4d18ec126861405d9e9a11f1c242745a8cac1bb617d2409c2e5d6acf78",
+            "counts": {
+              "blockers": 852,
+              "trees": 434,
+              "bridges": 1,
+              "wildlife": 8,
+              "lifeLayers": 1
+            }
+          }
+        ],
+        "kindsHash": null
+      },
+      "canvasSha": "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5"
+    },
+    "compare": {
+      "rendererA": "3d",
+      "rendererB": "3d",
+      "rendererTitle": null,
+      "debugA": {
+        "tick": 960,
+        "historical": false,
+        "ghost": false,
+        "ghostCam": null,
+        "wetness": 0.65,
+        "weatherGeometry": 0,
+        "hints": [
+          {
+            "kind": "door",
+            "rect": {
+              "x": 28.5,
+              "z": 23.15,
+              "w": 2,
+              "d": 2.25
+            }
+          },
+          {
+            "kind": "door",
+            "point": [
+              29.98,
+              24.612499999999997
+            ],
+            "label": "入口"
+          }
+        ],
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 5615,
+        "stageFxs": 9,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "attention": [],
+        "climate": {
+          "storm": false,
+          "frost": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ],
+        "covered": [],
+        "occluded": [],
+        "coverControl": null,
+        "hidden": [],
+        "hiddenCount": 0,
+        "forestKey": "",
+        "stumps": 0,
+        "climateView": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wetness": 0.65,
+          "wind": 1.15,
+          "overcast": 1
+        },
+        "climateTarget": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wet": 0.65
+        }
+      },
+      "debugB": {
+        "tick": 960,
+        "historical": false,
+        "ghost": false,
+        "ghostCam": null,
+        "wetness": 0.65,
+        "weatherGeometry": 0,
+        "hints": [
+          {
+            "kind": "door",
+            "rect": {
+              "x": 28.5,
+              "z": 23.15,
+              "w": 2,
+              "d": 2.25
+            }
+          },
+          {
+            "kind": "door",
+            "point": [
+              29.98,
+              24.612499999999997
+            ],
+            "label": "入口"
+          }
+        ],
+        "animals": [],
+        "renderer": "3d",
+        "ratio": 1,
+        "span": 24.714285714285715,
+        "people": 3,
+        "stageBoxes": 5615,
+        "stageFxs": 9,
+        "chimneys": 2,
+        "acts": [
+          "a1:repair",
+          "c2:idle",
+          "p1:discussion"
+        ],
+        "attention": [],
+        "climate": {
+          "storm": false,
+          "frost": false,
+          "drought": false,
+          "rain": true,
+          "snow": false,
+          "season": 1
+        },
+        "sun": "夜晚",
+        "focus": [
+          30.5,
+          22
+        ],
+        "hover": false,
+        "wildRegions": 35,
+        "unifiedGround": true,
+        "p1": [
+          30.5,
+          0.11586206896551676,
+          24.5
+        ],
+        "covered": [],
+        "occluded": [],
+        "coverControl": null,
+        "hidden": [],
+        "hiddenCount": 0,
+        "forestKey": "",
+        "stumps": 0,
+        "climateView": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wetness": 0.65,
+          "wind": 1.15,
+          "overcast": 1
+        },
+        "climateTarget": {
+          "rain": 1,
+          "storm": 0,
+          "snow": 0,
+          "frost": 0,
+          "wet": 0.65
+        }
+      },
+      "first3d": 560.0999999940395,
+      "longtasks": [
+        [
+          76,
+          497
+        ],
+        [
+          574,
+          435
+        ],
+        [
+          1016,
+          80
+        ],
+        [
+          1116,
+          54
+        ],
+        [
+          1204,
+          869
+        ],
+        [
+          2085,
+          53
+        ],
+        [
+          2800,
+          52
+        ]
+      ],
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      },
+      "resources": {
+        "count": 75,
+        "transferBytes": 158006,
+        "encodedBytes": 1388834,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/shared/camp-livestock.mjs",
+            16
+          ],
+          [
+            "/shared/camp-forest.mjs",
+            16
+          ],
+          [
+            "/shared/camp-physics.mjs",
+            16
+          ],
+          [
+            "/shared/room-layout.mjs",
+            16
+          ],
+          [
+            "/web/time-view.mjs",
+            15
+          ],
+          [
+            "/web/collision.mjs",
+            15
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            15
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            15
+          ]
+        ]
+      },
+      "canvasShaA": "9e062247adaeea0eaf2031d59b501f6c56c519d60945eb8281e1c20617606cd5",
+      "canvasShaB": "0013a9bab2307b5485eb98d8e0275fbf25e282cb8e381b05bad00561b8d2db2b"
+    },
+    "title": {
+      "rendererTitle": "3d",
+      "first3d": 485.29999999701977,
+      "longtasks": [
+        [
+          85,
+          402
+        ]
+      ],
+      "resources": {
+        "count": 74,
+        "transferBytes": 82418,
+        "encodedBytes": 1313546,
+        "assetCount": 23,
+        "pngCount": 20,
+        "slowest": [
+          [
+            "/shared/camp-physics.mjs",
+            17
+          ],
+          [
+            "/shared/room-layout.mjs",
+            17
+          ],
+          [
+            "/shared/camp-forest.mjs",
+            16
+          ],
+          [
+            "/shared/asset-collision.mjs",
+            16
+          ],
+          [
+            "/shared/camp-livestock.mjs",
+            16
+          ],
+          [
+            "/shared/camp-geometry.mjs",
+            16
+          ],
+          [
+            "/shared/camp-items.mjs",
+            16
+          ],
+          [
+            "/shared/camp-ao.mjs",
+            16
+          ]
+        ]
+      },
+      "canvasSha": "acd61c0e50a70ac78cfe1746712540e9063a633dcdd0189604811567b2d08092",
+      "menuDisabled": {
+        "survival": false,
+        "newGame": false,
+        "compare": false
+      }
+    }
+  },
+  "cache": {
+    "/web/app.js": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"b99db82a3dec419837d559e1dcf72170\"",
+      "contentEncoding": "gzip",
+      "bytes": 307181,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/manifest.json": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"9f82a3ad583ad23058b93934062e7956\"",
+      "contentEncoding": "gzip",
+      "bytes": 1143,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/web/assets/terrain_grass0.png": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"bfb1bb7cdc6c159e4a4e62f29407aa13\"",
+      "contentEncoding": null,
+      "bytes": 286,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "/shared/camp-layout.mjs": {
+      "status": 200,
+      "cacheControl": "no-cache, must-revalidate",
+      "etag": "\"f4ae7ece9300da9ff8c1b455a38e2163\"",
+      "contentEncoding": "gzip",
+      "bytes": 5925,
+      "revalidateStatus": 304,
+      "revalidateBytes": 0
+    },
+    "immutableProbe": {
+      "status": 200,
+      "cacheControl": "public, max-age=31536000, immutable"
+    }
+  }
+}
