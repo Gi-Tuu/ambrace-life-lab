@@ -475,17 +475,25 @@ async function actInSurvival(sp, body, ask, now) {
   return settled ? {...result, settled: true} : result;
 }
 async function sleepSurvival(sp) {
+  // 1.3：幽魂不能睡；与 /act 的动作闸门同码（PLAYER_DEAD），不要落到“这一局结束”的旧语义。
+  if (sp.world?.independentWorld && sp.world?.survival?.playerDead) return { ok: false, code: 'PLAYER_DEAD', error: 'GHOST' };
   const result=campSleepTicks(sp.world);
   if (!result.ok) return result;
   const w=sp.world, start=worldTick(w);
   // P1c：睡眠不再是"内嵌等整拍"的旧链，而是在短锁内显式按 60 游戏分推进同一个连续时钟。
   // 其它输入是否要等这段睡眠见 docs/回报-债务-时间-2026-11-20.md（一次睡眠是短锁内的原子事务）。
-  while (worldTick(w)-start<result.ticks && !w.survival.playerDead &&
-    (w.independentWorld || !w.survival.ended && !w.survival.failed))
+  // 1.3：睡梦中死亡 → 当刻结束这次睡眠（转幽魂观察），世界继续走正常的自动拍；
+  // 绝不能因为 playerDead 冻结世界，也不能让死前开始的睡眠把剩下的时长继续算完。
+  let died = false;
+  while (worldTick(w)-start<result.ticks &&
+    (w.independentWorld || !w.survival.ended && !w.survival.failed)) {
     await tickSurvPlay(sp, w.simClock ? { minutes: 60 } : undefined);
+    if (w.independentWorld && w.survival.playerDead) { died = true; break; }
+  }
   const ticks=worldTick(w)-start;
   sp.log.push({t:w.t,kind:'camp_sleep',ok:true,code:'OK'});
-  return {ok:true,code:'OK',ticks,persisted:await saveWorld(sp)};
+  const persisted=await saveWorld(sp);
+  return {ok:true,code:'OK',ticks,persisted,...(died?{ghost:true}:{})};
 }
 function enqueueTick(auto = false) {
   return queueWorldWrite(async () => {

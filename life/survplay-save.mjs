@@ -13,15 +13,13 @@ import { SURV } from './worldstate.mjs';
 import { LEGACY_EVENT_RULES } from './rng.mjs';
 import { adoptTravels, migratePositions, rebuildOccupancy, removeActor, setLocOnly, setPlayerRoom } from './actor-pos.mjs';
 import { generateWildPlots, restoreWildExpansion, wildExpansionEnabled } from '../shared/wild-plots.mjs';
+import { restoreGhost } from './ghost.mjs';
+import { worldSite } from './geometry.mjs';
+import { DEATHS_CAP, trimDeaths } from './death.mjs';
 
 export function createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit = 200, resetSimCursor = null }) {
   const SURV_LOG_LIMIT = logLimit;
-const DEATHS_CAP = 200;
-function trimDeaths(deaths, cap = DEATHS_CAP) {
-  if (!Array.isArray(deaths)) return deaths;
-  if (deaths.length > cap) deaths.splice(0, deaths.length - cap);
-  return deaths;
-}
+// DATA5-13 的 DEATHS_CAP/trimDeaths 在 life/death.mjs 单源声明；这里只 re-export 保持旧接口。
 
 // 持久化（additive）：只 dump 生存世界事实，读回时 tolerant。
 function dumpSurv(sp) {
@@ -175,6 +173,7 @@ function loadSurv(raw,seed=7,options) {
     }
     if (w.independentWorld) {
       const s = w.survival;
+      // 旧档兼容：1.2 之前玩家死亡被写成 failed/endReason='player'；1.3 起这不代表终局。
       if (s.endReason === 'player') { s.playerDead = true; s.failed = false; }
       s.ended = false;
       s.endReason = null;
@@ -218,9 +217,20 @@ function loadSurv(raw,seed=7,options) {
     }
     if (w.independentWorld) {
       const s = w.survival;
-      s.ended = livingResidents(w).length === 0;
+      // 1.3 结局唯一：正式世界只有聚落灭绝（无存活居民）才是终局；玩家死亡是幽魂观察。
+      // 灭绝是可持久事实（存档里的 ended/extinct 不因读档被抹掉），旧档按存活集合重算。
+      const persistedExtinct = raw.survival?.ended === true
+        && (raw.survival?.endReason === 'extinct' || livingResidents(w).length === 0);
+      s.ended = persistedExtinct || livingResidents(w).length === 0;
       s.endReason = s.ended ? 'extinct' : null;
       s.failed = !s.ended && s.starveDays >= SURV.starveDaysToFail;
+      // ghost 状态随档：旧档没有 ghost 字段时，按 p1 的死亡事实补齐；活人读档则显式失活。
+      if (s.playerDead || w.agents?.p1?.dead) {
+        const site = worldSite(w, w.loc?.p1);
+        restoreGhost(w, { at: site ? { x: site[0], z: site[1] } : null });
+      } else if (s.ghost) {
+        s.ghost = { ...s.ghost, active: false };
+      }
     }
     // P0-1：死者读档后仍移出占位（与死亡时一致），不被感知/交谈/组队。
     for (const a of Object.values(sp.world.agents)) {

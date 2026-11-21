@@ -6,7 +6,7 @@ import { initWildExpansion, wildExpansionEnabled, wildPlotView } from '../shared
 // 2026-11-18 拆分：动作预算在 survplay-actions，营地动作入口在 survplay-camp，存档在 survplay-save。
 import { makeWorld, spawn, move, scanSecrets, actuate, isAlive, livingResidents, PLAYER_UNITS_PER_TICK, advanceTravels } from './body.mjs';
 import { GAME_PLAYER_UNITS_PER_TICK } from './space.mjs';
-import { initPositions, placeActor, removeActor, travelOf, clearTravel, detachPlayerRoom } from './actor-pos.mjs';
+import { initPositions, placeActor, removeActor, travelOf, detachPlayerRoom } from './actor-pos.mjs';
 import { residentTimeModel, advanceResidentBusy, residentCanChain, residentBusy, CHAIN_MAX } from './resident-time.mjs';
 import { resLedgerView } from './resource-ledger.mjs';
 import { facilityOf } from '../shared/camp-facility.mjs';
@@ -32,11 +32,13 @@ import { Organism } from './agent.mjs';
 import { stepRoomWalk } from './room-walk.mjs';
 import { hashSeed, survivalRoll, LEGACY_EVENT_RULES, CURRENT_EVENT_RULES } from './rng.mjs';
 import { legacyPerTickThink } from './research-policy.mjs';
-import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds, settleMarriages, settleHousing } from './households.mjs';
+import { ADULT_DAYS, ELDER_DAYS_GAME, ELDER_DAYS_PLAYER, INFANT_DAYS, elderDaysFor, RESIDENT_CAP, makeHouseholds, residentStage, ageDays, stepHouseholds, stepRelationships, birthHomeStatus, restoreHouseholds } from './households.mjs';
 import { createActionDomain } from './survplay-actions.mjs';
 import { createSaveDomain } from './survplay-save.mjs';
 import { createSimClock, createTokenBucket, bindDerivedTick } from './sim-clock.mjs';
 import { bodyClockEnabled, stepBodyMinute, stepBodyHour, ELDER_DECAY_PER_HOUR } from './body-clock.mjs';
+import { ghostView } from './ghost.mjs';
+import { reapDeaths, DEATHS_CAP, trimDeaths } from './death.mjs';
 
 const SURV_TRACE_LIMIT = 2000;
 import { workMotionView } from './work-motion.mjs';
@@ -264,38 +266,7 @@ function forageRound(w) {
   }
 }
 
-// P0-1 统一收尸：存续归零的角色标记死亡、记录原因/时间、移出占位（不再被感知/交谈/组队）。
-// 死亡不可逆：dead 一旦置位，决策环/配给/繁衍/施工/床位全部排除；历史保留可查询。
-// 玩家死亡另触发终局（与聚落饿垮分开）。每拍末调用一次，覆盖代谢/动作/饥饿/伤害所有致死路径。
-function reapDeaths(w, log) {
-  const s = w.survival;
-  let changed = false;
-  for (const a of Object.values(w.agents)) {
-    if (a.dead || !a.viab || a.viab.v > 0) continue;
-    if (s.districtTravel) clearTravel(w,a.id);
-    changed = true;
-    a.dead = true;
-    const cause = a.hurtBy ?? '衰竭';
-    a.death = { t: w.t, day: dayOf(w.t), cause };
-    (s.deaths ??= []).push({ id: a.id, name: a.name, t: w.t, day: dayOf(w.t), cause });
-    s.deathTotal = (s.deathTotal ?? 0) + 1;
-    trimDeaths(s.deaths);
-    removeActor(w, a.id);
-    log.push({ t: w.t, kind: 'death', ok: true, code: `${a.name}死亡（${cause}）` });
-    if (a.isPlayer) {
-      s.playerDead = true;
-      detachPlayerRoom(w);
-      if (!w.independentWorld) { s.failed = true; s.endReason = 'player'; }
-      s.talk = null;
-    }
-  }
-  if (changed) {
-    settleMarriages(w);
-    settleHousing(w, log);
-  }
-  return changed;
-}
-
+// P0-1 统一收尸与 1.3 幽魂状态在 life/death.mjs（survplay 只做世界推进/视图，行数闸门 <900）。
 export function settleSurvival(sp) {
   const w = sp.world;
   const recovered=settleResidentInjuries(w);
@@ -325,7 +296,7 @@ export function settleSurvival(sp) {
 const actionDomain = createActionDomain({ settleSurvival });
 const { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTimeMax } = actionDomain;
 const saveDomain = createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit: SURV_LOG_LIMIT, resetSimCursor: resetSimMinuteCursor });
-const { DEATHS_CAP, trimDeaths, dumpSurv, loadSurv } = saveDomain;
+const { dumpSurv, loadSurv } = saveDomain;
 export { survAct, cancelPlayerBusy, advancePlayerBusy, playerTimeLeft, playerTimeMax, DEATHS_CAP, trimDeaths, dumpSurv, loadSurv };
 export { playerReach } from './survplay-camp.mjs';
 
@@ -843,6 +814,8 @@ function currentSpeech(w) {
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
+  // 1.3：幽魂观察（正式世界）。只读投影给客户端镜头/HUD，不参与裁决；研究/对照态不下发。
+  const ghost = ghostView(w);
   return {
     workMotions: workMotionView(w),
     t: w.t, dayTicks:DAY_TICKS, playerUnitsPerTick: s.actTimeModel === true ? GAME_PLAYER_UNITS_PER_TICK : PLAYER_UNITS_PER_TICK, regionHarvest:s.regionHarvest??{}, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, layout: w.campLayout, phase: survivalPhaseOf(w.t), weather: w.weather,
@@ -872,10 +845,13 @@ export function survView(sp) {
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,
       ...(w.independentWorld ? {
         result: playerDead ? 'dead' : s.playerMilestone ? 'milestone' : 'alive',
+        // 1.3：死亡后不再有“行动/体力”入口；客户端据 ghost.observing 切「幽魂观察」。
+        ghost: ghost.active,
+        observing: ghost.observing,
         // V7.3 第三批：把进行中的 busy 暴露给 UI，供「取消」按钮显示；研究态不输出。
         busy: (() => { const b = w.survival?.actClock?.p1?.busy; return b ? { id: b.id, kind: b.kind, remainMin: Number((b.remainMin ?? 0).toFixed(1)), totalMin: b.totalMin, ...(Number.isFinite(b.endMin) ? { startMin: b.startMin, endMin: b.endMin } : {}) } : null; })(),
       } : {}) },
-    ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
+    ...(w.independentWorld ? { settlement: s.ended ? 'extinct' : (s.failed || s.starveDays > 0) ? 'crisis' : s.wasCrisis ? 'recovering' : 'active', ghost, crisisGoals: crisisGoals(w), crisisDays: s.starveDays ?? 0, nature: { evolving: true } } : {}),
     ...(w.gameRules ? { resources: resLedgerView(w) } : {}),
     failed: s.failed, won: s.won, ended: !!s.ended, endReason: s.endReason ?? null, births: s.births ?? 0, deaths: (s.deaths ?? []).slice(-14), history: s.history.slice(-14),
     ...forecastDisasters(w),

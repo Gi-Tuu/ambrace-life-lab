@@ -146,7 +146,7 @@ export function rebuildIndexFromSaves(dataDir) {
       name: side?.name ?? key,
       day: Math.floor((Number.isFinite(raw.t) ? raw.t : 0) / 24),
       population: Math.max(0, minds.filter((x) => x && !x.dead).length - (raw.minds?.p1 ? 1 : 0)),
-      status: raw.survival?.playerDead ? 'ended' : 'active',
+      status: raw.survival?.ended ? 'extinct' : raw.survival?.playerDead ? 'ghost' : 'active',
       lastSeenAt,
       ...(side?.ownerHash ? { ownerHash: side.ownerHash } : {}),
     });
@@ -501,7 +501,7 @@ export class CampInstances {
         key, name,
         day: Math.floor((w.t ?? 0) / (w.dayTicks ?? 24)),
         population: Object.values(w.agents).filter(a => !a.dead && !a.isPlayer).length,
-        status: w.survival?.playerDead ? 'ended' : 'active',
+        status: w.survival?.ended ? 'extinct' : w.survival?.playerDead ? 'ghost' : 'active',
         lastSeenAt,
       });
     } finally {

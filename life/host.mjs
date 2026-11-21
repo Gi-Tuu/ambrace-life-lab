@@ -346,7 +346,7 @@ export const host = {
     }
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
-      const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death', 'v12_state', 'v12_fixture'];
+      const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death', 'v13_state', 'v13_fixture', 'v12_state', 'v12_fixture'];
       // 1.2 浏览器验收夹具（V73_TEST=1 才生效；实装在 host-world，位置/占用的唯一写入口仍受静态闸门约束）。
       if (body.action === 'v12_state' || body.action === 'v12_fixture') return v12Fixture(body);
       // V7.3 第三批浏览器夹具：只在 V73_TEST=1 下暴露的受控接口（不进入生产默认路径）。
@@ -414,6 +414,46 @@ export const host = {
         sp.world.agents.p1.viab.v = 0;
         settleSurvival(sp);
         return { ok: true, dead: Boolean(sp.world.agents.p1.dead), t: sp.world.t };
+      }
+      // 1.3 幽魂验收夹具（仅 V73_TEST=1）：只读状态 + 两个受控场景（睡梦中饿死 / 聚落灭绝）。
+      if (body.action === 'v13_state') {
+        if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+        const sp = S.mainSurv ?? S.surv;
+        if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+        const w = sp.world, view = survView(sp);
+        return {
+          ok: true, t: w.t,
+          clockMinutes: w.simClock?.nowMinutes?.() ?? null,
+          rate: w.simClock?.rate ?? null,
+          paused: w.simClock?.paused ?? null,
+          running: S.running,
+          population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length,
+          residentActions: Object.fromEntries(Object.entries(w.agents).filter(([id]) => id !== 'p1')
+            .map(([id, a]) => [id, a.counters?.actions ?? 0])),
+          player: { dead: Boolean(w.agents.p1?.dead), viab: w.agents.p1?.viab?.v ?? null, pos: w.pos?.p1 ?? null, loc: w.loc?.p1 ?? null },
+          ghost: view.ghost ?? null,
+          settlement: view.settlement ?? null,
+          ended: view.ended, endReason: view.endReason,
+          log: (sp.log ?? []).slice(-6),
+        };
+      }
+      if (body.action === 'v13_fixture') {
+        if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+        const sp = S.mainSurv ?? S.surv;
+        if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+        const w = sp.world, s = w.survival, op = String(body.op ?? '');
+        if (op === 'starve') {
+          const v = Number(body.v ?? 0.0015);
+          w.agents.p1.viab.v = Math.max(0, Math.min(Number.isFinite(v) ? v : 0.0015, 0.5));
+          w.agents.p1.viab.reserve = 0;
+          return { ok: true, op, viab: w.agents.p1.viab.v, t: w.t, clockMinutes: w.simClock?.nowMinutes?.() ?? null, loc: w.loc.p1 };
+        }
+        if (op === 'kill_residents') {
+          for (const a of Object.values(w.agents)) if (!a.isPlayer) a.viab.v = 0;
+          settleSurvival(sp);
+          return { ok: true, op, population: Object.values(w.agents).filter((a) => !a.isPlayer && !a.dead).length, playerDead: Boolean(s.playerDead), ghost: Boolean(s.ghost?.active) };
+        }
+        return { ok: false, code: 'BAD_OP', op };
       }
       if (body.action === 'pause' || body.action === 'resume') {
         const key = body.mode === 'compare' ? 'compareRunning' : 'running';

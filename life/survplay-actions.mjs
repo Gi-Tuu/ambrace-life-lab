@@ -66,6 +66,19 @@ function chargePlayerEnergy(w, energy) {
 
 function survAct(sp, body) {
   const w = sp.world, kind = String(body?.kind ?? '');
+  // 1.3 幽魂闸门（第一道，先于预算/长动作/player_sync）：
+  // 正式世界里玩家死亡后只剩观察权，不能写 w.pos.p1，也不能把死前排进时间轴的长动作做完。
+  // 研究/对照态（!independentWorld）保持 1.2 原语义（由 survActInner 返回 CAMP_ENDED）。
+  if (w.independentWorld && w.survival && (w.survival.playerDead === true || !isAlive(w.agents?.p1))) {
+    if (kind !== 'busy_cancel') {
+      sp.log.push({ t: w.t, kind: kind || 'unknown', ok: false, code: 'PLAYER_DEAD' });
+      if (sp.log.length > 40) sp.log.shift();
+      return {
+        ok: false, code: 'PLAYER_DEAD', error: 'GHOST',
+        why: '你已化为幽魂，只能观察世界', playerPos: w.survival.playerPos ?? null,
+      };
+    }
+  }
   // V7.3.2：player_sync 是技术同步，不是劳动：不扣分钟/体力、不占本刻额度、不取消 busy。
   if (kind === 'player_sync') {
     const reach = playerReach(w, body.from, 'player_sync');

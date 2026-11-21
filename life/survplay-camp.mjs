@@ -79,6 +79,11 @@ function commitPlayerPos(w, from) {
   placeActor(w, 'p1', { x: from[0], z: from[1], space }, { mirror: true });
 }
 export function playerReach(w, from, kind = '') {
+    // 1.3 第二道闸门：幽魂不能移动实体。即使有调用方绕过 survAct 的顶部闸门，
+    // 位置写入口仍然拒绝；研究/对照态（!independentWorld）不受这条影响。
+    if (w.independentWorld && w.survival && (w.survival.playerDead === true || !isAlive(w.agents?.p1))) {
+      return { ok: false, code: 'PLAYER_DEAD' };
+    }
     if (!regionPoint(from)) return { ok: false, code: 'OUT_OF_REACH' };
   const s = w.survival;
   // 正式连续世界（simClock）的位移额度按真实毫秒；研究态/夹具保持旧刻预算。
