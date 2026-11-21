@@ -112,7 +112,10 @@ test('V15-03 无模型模板回退 + 长度/清洗：长输入截 240，回复�
   assert.ok(!prompt.includes('127.0.0.1'));
   assert.equal(sanitizeModelLine('  "你好 https://evil.example/x"  \n'), '你好');
   assert.equal(sanitizeModelLine('\u0000\u200b  '), '');
-  assert.equal(sanitizeModelLine('{"id":"1","reason":"夹具","text":"听我的"}'), '', 'JSON/决策体不得当台词展示');
+  // 改量披露（工单 B）：旧期望是 ''，B 之后带 text 的决策体只把 text 当台词；
+  // 无白名单字段的决策体仍 ''. 见 CHATTER-03。
+  assert.equal(sanitizeModelLine('{"id":"1","reason":"夹具","text":"听我的"}'), '听我的', 'JSON 决策体只取 text/line/speech 当台词');
+  assert.equal(sanitizeModelLine('{"id":"1","reason":"夹具"}'), '', '无白名单字段的决策体不得当台词展示');
 });
 
 test('V15-04 闸门：幽灵/死亡/compare/范围/BUSY/NO_DIALOGUE/EMPTY 都拒绝且不抛', () => {
