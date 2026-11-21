@@ -358,6 +358,8 @@
   #talkTopics button:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
   #talkRow[hidden] { display:none; }
   #talkRow { display:flex; gap:6px; }
+  #talkPending { color:var(--gold); margin:4px 0; }
+  #talkPending[hidden] { display:none; }
   #talkText { flex:1; min-height:36px; padding:4px 8px; font:inherit; font-size:12px; color:var(--ink);
     background:var(--sunken); border:2px solid var(--line); }
   #talkDlg button { font:inherit; color:var(--ink); background:var(--sunken); border:2px solid var(--line); padding:4px 10px; cursor:pointer; }

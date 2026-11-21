@@ -2501,11 +2501,16 @@ async function openResidentDialogue(target, contact) {
   finally { campBusy=false; }
 }
 function resetTalkPanelChrome() {
-  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess');
+  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess'), pending=$('talkPending');
   if (topics) { topics.hidden=true; topics.replaceChildren(); }
   if (row) row.hidden=false;
+  if (pending) pending.hidden=true;
   if (note) note.textContent='对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。';
   if (access) access.hidden=false;
+}
+function setTalkPending(on) {
+  const pending=$('talkPending');
+  if (pending) pending.hidden=!on;
 }
 function openLocalTalkPanel(target, contact, r) {
   pendingLocalTalk=null;
@@ -2516,14 +2521,18 @@ function openLocalTalkPanel(target, contact, r) {
   $('talkLog').innerHTML='';
   addTalk('npc',r.line);
   resetTalkPanelChrome();
-  $('talkRow').hidden=true;
+  // 1.5：自由输入框与快捷话题同时存在；话题只是引导，不再是唯一入口。
+  $('talkRow').hidden=false;
   $('talkAccess').hidden=true;
-  $('talkNote').textContent='选一个话题继续聊；多轮对话不占世界动作，也不会打断居民手上的活。';
+  $('talkNote').textContent='直接输入，或点下面的快捷话题；对话不占游戏时间，也不会打断居民手上的活。';
   $('talkTopics').hidden=false;
   renderLocalTopics(r.topics??[]);
+  setTalkPending(false);
   keys.clear();
   const dlg=$('talkDlg'); if(!dlg.open) dlg.showModal();
-  $('talkClose').focus?.();
+  $('talkText').value='';
+  $('talkSend').disabled=false;
+  $('talkText').focus();
 }
 function renderLocalTopics(topics) {
   const box=$('talkTopics'); if (!box) return;
@@ -2598,8 +2607,45 @@ function currentTalkContact(t) {
   const person=roomCrowd(S.view,room).find(p=>p.who===t.target);
   return {room,from:[(IPOS.x+8)/TILE,(IPOS.y+16)/TILE],to:person?[person.x,person.z]:null};
 }
+async function sendLocalTalk() {
+  const t=ui.talk, input=$('talkText');
+  if(!t?.local || !input || campBusy) return;
+  const text=input.value.trim();
+  if(!text) return;
+  campBusy=true;
+  addTalk('me','你：'+text);
+  input.value='';
+  $('talkSend').disabled=true;
+  setTalkPending(true);
+  try{
+    const r=await playAct({kind:'camp_talk_say',target:t.target,text,...currentTalkContact(t)});
+    if (ui.talk!==t) return;
+    if(r.ok){
+      addTalk('npc',r.line);
+      focusResident(t.target, r.name ?? t.name, r.line, ui.interior);
+      renderLocalTopics(r.topics ?? t.topics ?? []);
+    } else {
+      addTalk('sys', r.code==='SAY_PENDING'?'（上一句话还在等回应。）':
+        r.code==='NO_DIALOGUE'?'（对话已经结束。）':
+        r.code==='BUSY'?'（你手上还有活没做完。）':
+        r.code==='EMPTY_TEXT'?'（说点什么再发送。）':
+        r.code==='RESIDENT_OUT_OF_REACH'||r.code==='NOT_TOGETHER'?'（对方已经不在身边。）':
+        '（对方没有回应。）');
+      if(r.code==='NO_DIALOGUE') setTimeout(()=>closeTalkDlg(false),800);
+    }
+  }catch{ if(ui.talk===t) addTalk('sys','（对方没有回应。）'); }
+  finally{
+    if(ui.talk===t){
+      $('talkSend').disabled=false;
+      setTalkPending(false);
+      if($('talkDlg').open) input.focus();
+    }
+    campBusy=false;
+  }
+}
 async function sendTalk(){
-  const t=ui.talk, input=$('talkText'); if(!t||t.local||!input)return;
+  const t=ui.talk, input=$('talkText'); if(!t||!input)return;
+  if(t.local) return sendLocalTalk();
   const text=input.value.trim(); if(!text)return;
   addTalk('me','你：'+text); input.value=''; $('talkSend').disabled=true;
   try{
@@ -2616,6 +2662,7 @@ async function sendTalk(){
 }
 function closeTalkDlg(notify=true){
   const t=ui.talk; ui.talk=null;
+  setTalkPending(false);
   const d=$('talkDlg'); if(d?.open)d.close();
   resetTalkPanelChrome();
   if (t?.local) playAct({kind:'camp_talk_close',target:t.target}).catch(()=>{});

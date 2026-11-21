@@ -75,7 +75,7 @@ try {
   note('dialogue.panel', panel);
   assert(panel.open, '话题面板没有打开');
   assert(panel.topics.length === 4, `话题数不是 4：${JSON.stringify(panel.topics)}`);
-  assert(panel.rowHidden === true, '轻量面板仍显示自由输入框');
+  assert(panel.rowHidden === false, '1.5 起轻量面板应同时显示自由输入框');
   assert(panel.log.length > 0, '面板没有开场白');
   await h.screenshot(sid, join(OUT, 'dialogue-panel.png'));
 
