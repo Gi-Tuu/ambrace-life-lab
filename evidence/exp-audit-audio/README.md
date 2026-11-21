@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # evidence/exp-audit-audio — 音频/建造体验审计证据（2026-11-21，只读）
 
 被审仓库：`E:\Competition\AMBRACElife`，实际 HEAD `b66f88a`（`git describe` = `v1.1.1-2-gb66f88a`；

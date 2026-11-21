@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # V7.4.1 evidence
 - experiment-v741-30d.json：seeds 7/13/29 × m3 on/off ×30 日，6 组；含 M3 规划器事件（仅真实状态）、关系来源分解、互动后重复选择、移动 3/6/12 刻窗口、元数据、非扰动哈希、agentErrors。
 - v741-check.log：npm run check（895/895）。

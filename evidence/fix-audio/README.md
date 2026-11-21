@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # evidence/fix-audio — 环境床 / BGM 平衡 / BGM 边界修复证据（2026-11-21）
 
 - 被修仓库：`E:\Competition\AMBRACElife`，`main` @ `b66f88a`；`master` @ `e5016d6` 未动。

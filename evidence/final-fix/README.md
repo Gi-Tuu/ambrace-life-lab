@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # evidence/final-fix —— 审查修复证据（1.1，main @ 3643f14）
 
 - 基线：`main` @ `caad92b`（审查对象）；对照 `master` @ `4f2577b`（v1.0.0，**未动**）。

@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # V7.3.3 证据说明
 
 - `fair-sched-cap{1,2,6,8}-v733.json`：FAIR on/off × seeds 7/13/29 × 30 日，cap 1/2/6/8；字段含 HEAD、ticks、popPeak/popAvg、peakEligible、underfundedTicks、granted、wait、两类空闲、人口/存粮/劳动。

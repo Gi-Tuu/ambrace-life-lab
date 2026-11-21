@@ -1,3 +1,5 @@
+> 历史快照（当时版本），现行口径见 README/CHANGELOG。
+
 # evidence/final-review —— 1.1 发布前独立审查证据（只读）
 
 审查对象：`main` @ `caad92b`；对照 `master` @ `4f2577b`（tag `v1.0.0`）。
