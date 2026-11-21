@@ -1,0 +1,84 @@
+# 0. 环境
+node v24.18.0 · ffmpeg 可用 · git b66f88a
+master=0.7 · MUSIC_LEVEL=0.6 · duck=0.7943 (-2.00dB)
+
+# A. 修复前（审计 b66f88a）：weather/daynight 槽把槽位名当素材名 ⇒ renderAmbience(null)
+  clear      层=0 buffers=0 （静音）
+  rain       层=0 buffers=0 （静音）
+  cold       层=0 buffers=0 （静音）
+  night      层=0 buffers=0 （静音）
+  crisis     层=1 buffers=1 [target=0.550(tc=0.8)]
+  idle       层=0 buffers=0 （静音）
+  farNight   层=1 buffers=1 [target=0.800(tc=0.8)]
+  farRain    层=1 buffers=1 [target=0.800(tc=0.8)]
+  deadFar    层=1 buffers=1 [target=0.500(tc=0.8)]
+  extinctFar 层=1 buffers=1 [target=0.800(tc=0.8)]
+
+# B. 环境床：素材响度 / 修复前增益 / 修复后 LUFS 归一 + 显式 ducking
+material | 素材 I / peak | 旧增益(prox0) | 旧有效 LUFS | 新增益(prox0) | 新有效 LUFS | 旧→新
+  rain   | -18.6LUFS / -9.3dBFS | 0.5000 | -27.7 | 0.1288 | -39.5 | -11.8dB
+  wind   | -24.0LUFS / -12.4dBFS | 0.2500 | -39.1 | 0.5069 | -33.0 | 6.1dB
+  cold   | -27.4LUFS / -13.1dBFS | 0.5000 | -36.5 | 0.3547 | -39.5 | -3.0dB
+  day    | -34.0LUFS / -14.8dBFS | 0.4000 | -45.1 | 0.7584 | -39.5 | 5.6dB
+  night  | -28.4LUFS / -14.0dBFS | 0.7000 | -34.6 | 0.3758 | -40.0 | -5.4dB
+  crisis | -19.2LUFS / -10.5dBFS | 0.5500 | -27.5 | 0.4120 | -30.0 | -2.5dB
+  （旧有效电平是“若该床发声”的假设值；审计实测 rain/cold/day/night 从未建层。）
+
+# C. BGM 有效电平：无天气床 / 雨天（ducking 只压常规日曲）
+theme | 素材 I / peak | bus | 无天气 I | 雨天 I | 雨天 peak
+  menu          | -24.4LUFS / -9.0dBFS | 0.60 | -31.9 | -33.9 | -18.5
+  spring        | -24.1LUFS / -10.5dBFS | 0.60 | -31.6 | -33.6 | -20.0
+  summer        | -24.0LUFS / -9.8dBFS | 0.60 | -31.5 | -33.5 | -19.3
+  autumn        | -25.6LUFS / -8.8dBFS | 0.60 | -33.1 | -35.1 | -18.3
+  winter        | -26.5LUFS / -9.0dBFS | 0.60 | -34.0 | -36.0 | -18.5
+  crisis        | -25.2LUFS / -8.9dBFS | 0.45 | -35.2 | -35.2 | -18.9
+  recovering    | -24.3LUFS / -8.9dBFS | 0.60 | -31.8 | -33.8 | -18.4
+  spring-night  | -25.8LUFS / -8.9dBFS | 0.42 | -36.4 | -36.4 | -19.5
+  summer-night  | -24.8LUFS / -9.0dBFS | 0.42 | -35.4 | -35.4 | -19.6
+  autumn-night  | -25.6LUFS / -9.1dBFS | 0.42 | -36.2 | -36.2 | -19.7
+  winter-night  | -28.4LUFS / -8.8dBFS | 0.42 | -39.0 | -39.0 | -19.4
+  death         | -25.1LUFS / -8.9dBFS | 0.50 | -34.2 | -34.2 | -18.0
+  extinct       | -24.8LUFS / -8.8dBFS | 0.35 | -37.0 | -37.0 | -21.0
+
+# D. 同场景相对电平（修复后；Δ=BGM−床，负值=床更响）
+  村内 昼·春 BGM vs rain 床: BGM -33.6LUFS / 床 -39.5LUFS → Δ=5.9dB
+  村内 昼·春 BGM vs day 床: BGM -31.6LUFS / 床 -39.5LUFS → Δ=7.9dB
+  村内 夜·春 BGM vs night 床: BGM -36.4LUFS / 床 -40.0LUFS → Δ=3.6dB
+  村内 危机 BGM vs crisis 床: BGM -35.2LUFS / 床 -30.0LUFS → Δ=-5.2dB
+  村内 危机 BGM vs rain 床: BGM -35.2LUFS / 床 -39.5LUFS → Δ=4.3dB
+  村外 prox=1 BGM(不播) vs wind 床: BGM 不播 / 床 -33.0LUFS → Δ=n/a
+
+# E. 真实接线（mock WebAudio；AudioBuffer 为真实渲染采样，层数为实际 loop 源）
+  村内 昼 clear           层=1 [daynight:day@0.758] buffers=[amb:day] music=0.600
+  村内 昼 rain            层=2 [weather:rain@0.129, daynight:day@0.758] buffers=[amb:rain,amb:day] music=0.477
+  村内 昼 cold            层=2 [weather:cold@0.355, daynight:day@0.758] buffers=[amb:cold,amb:day] music=0.477
+  村内 昼 干旱              层=2 [weather:wind@0.507, daynight:day@0.758] buffers=[amb:wind,amb:day] music=0.477
+  村内 夜 clear           层=1 [daynight:night@0.376] buffers=[amb:night] music=0.420
+  村内 危机 rain           层=3 [weather:rain@0.129, daynight:day@0.758, crisis:crisis@0.412] buffers=[amb:rain,amb:day,amb:crisis] music=0.450
+  村外 prox=1 rain       层=3 [weather:rain@0.064, daynight:day@0.228, wind:wind@0.507] buffers=[amb:rain,amb:day,amb:wind] music=0.000
+  野外 prox=1 倒下         层=1 [crisis:crisis@0.412] buffers=[amb:crisis] music=0.500
+  镇角 (119,79) 忙        层=2 [daynight:day@0.487, wind:wind@0.346] buffers=[amb:day,amb:wind] music=0.600
+  对照：clear=1 层；rain/cold/干旱=2 层；night=1 层；crisis rain=3 层；倒下只留 crisis；镇角在镇内正常建层。
+
+# F. BGM 边界（聚落矩形 120×80，不再用半径 70）
+  村中心                  | 距核心 0.0 | inCamp=true | play=true | spring        | busy-day     | level=0.60
+  镇角 (119,79)          | 距核心 70.7 | inCamp=true | play=true | spring        | busy-day     | level=0.60
+  x=120 镇外             | 距核心 60.0 | inCamp=false | play=false | menu          | away         | level=0.00
+  x=130 距核心70但镇外       | 距核心 70.0 | inCamp=false | play=false | menu          | away         | level=0.00
+  村外 夜                 | 距核心 70.0 | inCamp=false | play=false | menu          | away         | level=0.00
+  村外 晨                 | 距核心 70.0 | inCamp=false | play=false | menu          | away         | level=0.00
+  村外 灭绝                | 距核心 70.0 | inCamp=false | play=true | extinct       | extinct      | level=0.35
+  村外 倒下                | 距核心 70.0 | inCamp=false | play=false | death         | player-dead  | level=0.00
+  村内 夜                 | 距核心 0.0 | inCamp=true | play=true | spring-night  | night        | level=0.42
+  村内 夜+危机              | 距核心 0.0 | inCamp=true | play=true | crisis        | night        | level=0.45
+  村内 夜+恢复              | 距核心 0.0 | inCamp=true | play=true | recovering    | night        | level=0.60
+  村内 恢复·昼·忙            | 距核心 0.0 | inCamp=true | play=true | recovering    | busy-day     | level=0.60
+  菜单：musicTarget({theme:menu})=0.6，不读位置；app.js 有 ui.menu 守卫（A-34 钉住）。
+
+# G. 峰值余量（最响 BGM 峰值 + 最响床峰值 + 最响单条 SFX@0.8，经 master 0.7）
+  最响 SFX：chop peak=0.5000（A-02 上限 0.62）→ 0.2800
+  最响 BGM：autumn peak=-8.8dBFS · bus=0.60 · duck 后有效=0.500 → 0.1271
+  最响床：day → 0.0956
+  三者峰值相加=0.5026（-5.97dBFS）→ 余量 5.97dB；不削顶
+  注：总线还有 DynamicsCompressor(-16dB, knee24, ratio3, attack4ms, release0.22s)，总和越阈值时整体轻压；这里给的是压缩器之前的保守峰值和。
+

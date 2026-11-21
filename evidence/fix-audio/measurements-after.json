@@ -1,0 +1,1134 @@
+{
+  "generatedAt": "2026-11-21T07:31:26.528Z",
+  "gitHead": "b66f88a381dee71cf1e2f52efa2722be0ef47552",
+  "master": 0.7,
+  "musicDuck": 0.7943282347242815,
+  "before": {
+    "bedTrace": {
+      "clear": {
+        "music": [
+          "0.600"
+        ],
+        "beds": [],
+        "buffers": 0
+      },
+      "rain": {
+        "music": [
+          "0.600"
+        ],
+        "beds": [],
+        "buffers": 0
+      },
+      "cold": {
+        "music": [
+          "0.600"
+        ],
+        "beds": [],
+        "buffers": 0
+      },
+      "night": {
+        "music": [
+          "0.420"
+        ],
+        "beds": [],
+        "buffers": 0
+      },
+      "crisis": {
+        "music": [
+          "0.450"
+        ],
+        "beds": [
+          "target=0.550(tc=0.8)"
+        ],
+        "buffers": 1
+      },
+      "idle": {
+        "music": [
+          "0.000"
+        ],
+        "beds": [],
+        "buffers": 0
+      },
+      "farNight": {
+        "music": [
+          "0.000"
+        ],
+        "beds": [
+          "target=0.800(tc=0.8)"
+        ],
+        "buffers": 1
+      },
+      "farRain": {
+        "music": [
+          "0.000"
+        ],
+        "beds": [
+          "target=0.800(tc=0.8)"
+        ],
+        "buffers": 1
+      },
+      "deadFar": {
+        "music": [
+          "0.500"
+        ],
+        "beds": [
+          "target=0.500(tc=0.8)"
+        ],
+        "buffers": 1
+      },
+      "extinctFar": {
+        "music": [
+          "0.350"
+        ],
+        "beds": [
+          "target=0.800(tc=0.8)"
+        ],
+        "buffers": 1
+      }
+    },
+    "slotMaterials": {
+      "weather": {
+        "materialExists": false
+      },
+      "daynight": {
+        "materialExists": false
+      },
+      "wind": {
+        "materialExists": true
+      },
+      "crisis": {
+        "materialExists": true
+      }
+    },
+    "ambRows": [
+      {
+        "name": "day",
+        "info": {
+          "seconds": 3,
+          "peak": 0.18,
+          "rms": 0.0097,
+          "clippedSamples": 0,
+          "approxCentroidHz": 3662
+        },
+        "I": -34,
+        "peak": -14.8,
+        "mean": -40.3,
+        "max": -14.9,
+        "g0": 0.4,
+        "g1": 0.12,
+        "audible": false
+      },
+      {
+        "name": "night",
+        "info": {
+          "seconds": 3.5,
+          "peak": 0.2,
+          "rms": 0.0217,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1546
+        },
+        "I": -28.4,
+        "peak": -14,
+        "mean": -33.3,
+        "max": -14,
+        "g0": 0.7,
+        "g1": 0.21,
+        "audible": false
+      },
+      {
+        "name": "rain",
+        "info": {
+          "seconds": 3.2,
+          "peak": 0.34,
+          "rms": 0.0601,
+          "clippedSamples": 0,
+          "approxCentroidHz": 6375
+        },
+        "I": -18.6,
+        "peak": -9.3,
+        "mean": -24.4,
+        "max": -9.4,
+        "g0": 0.5,
+        "g1": 0.25,
+        "audible": false
+      },
+      {
+        "name": "wind",
+        "info": {
+          "seconds": 4,
+          "peak": 0.24,
+          "rms": 0.0464,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1466
+        },
+        "I": -24,
+        "peak": -12.4,
+        "mean": -26.7,
+        "max": -12.4,
+        "g0": 0.25,
+        "g1": 0.8,
+        "audible": true
+      },
+      {
+        "name": "cold",
+        "info": {
+          "seconds": 3,
+          "peak": 0.22,
+          "rms": 0.0242,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1253
+        },
+        "I": -27.4,
+        "peak": -13.1,
+        "mean": -32.3,
+        "max": -13.2,
+        "g0": 0.5,
+        "g1": 0.25,
+        "audible": false
+      },
+      {
+        "name": "crisis",
+        "info": {
+          "seconds": 1,
+          "peak": 0.3,
+          "rms": 0.1188,
+          "clippedSamples": 0,
+          "approxCentroidHz": 105
+        },
+        "I": -19.2,
+        "peak": -10.5,
+        "mean": -18.5,
+        "max": -10.5,
+        "g0": 0.55,
+        "g1": 0,
+        "audible": true
+      }
+    ],
+    "musicRows": [
+      {
+        "theme": "menu",
+        "I": -24.4,
+        "peak": -9,
+        "mean": -26.7,
+        "max": -9,
+        "bus": 0.6
+      },
+      {
+        "theme": "spring",
+        "I": -24.1,
+        "peak": -10.5,
+        "mean": -26.5,
+        "max": -10.6,
+        "bus": 0.6
+      },
+      {
+        "theme": "summer",
+        "I": -24,
+        "peak": -9.8,
+        "mean": -26.2,
+        "max": -9.8,
+        "bus": 0.6
+      },
+      {
+        "theme": "autumn",
+        "I": -25.6,
+        "peak": -8.8,
+        "mean": -27.6,
+        "max": -8.8,
+        "bus": 0.6
+      },
+      {
+        "theme": "winter",
+        "I": -26.5,
+        "peak": -9,
+        "mean": -28.7,
+        "max": -9,
+        "bus": 0.6
+      },
+      {
+        "theme": "crisis",
+        "I": -25.2,
+        "peak": -8.9,
+        "mean": -27,
+        "max": -8.9,
+        "bus": 0.45
+      },
+      {
+        "theme": "recovering",
+        "I": -24.3,
+        "peak": -8.9,
+        "mean": -26.5,
+        "max": -8.9,
+        "bus": 0.6
+      },
+      {
+        "theme": "spring-night",
+        "I": -25.8,
+        "peak": -8.9,
+        "mean": -28,
+        "max": -8.9,
+        "bus": 0.42
+      },
+      {
+        "theme": "summer-night",
+        "I": -24.8,
+        "peak": -9,
+        "mean": -27.1,
+        "max": -9,
+        "bus": 0.42
+      },
+      {
+        "theme": "autumn-night",
+        "I": -25.6,
+        "peak": -9.1,
+        "mean": -27.8,
+        "max": -9.1,
+        "bus": 0.42
+      },
+      {
+        "theme": "winter-night",
+        "I": -28.4,
+        "peak": -8.8,
+        "mean": -30.4,
+        "max": -8.8,
+        "bus": 0.42
+      },
+      {
+        "theme": "death",
+        "I": -25.1,
+        "peak": -8.9,
+        "mean": -27.1,
+        "max": -8.9,
+        "bus": 0.5
+      },
+      {
+        "theme": "extinct",
+        "I": -24.8,
+        "peak": -8.8,
+        "mean": -27.4,
+        "max": -8.8,
+        "bus": 0.35
+      }
+    ]
+  },
+  "after": {
+    "bedSlots": {
+      "weather": [
+        "rain",
+        "wind",
+        "cold"
+      ],
+      "daynight": [
+        "day",
+        "night"
+      ],
+      "wind": [
+        "wind"
+      ],
+      "crisis": [
+        "crisis"
+      ]
+    },
+    "ambienceLufs": {
+      "rain": -18.6,
+      "wind": -24,
+      "cold": -27.4,
+      "day": -34,
+      "night": -28.4,
+      "crisis": -19.2
+    },
+    "bedTargetLufs": {
+      "rain": -39.5,
+      "wind": -33,
+      "cold": -39.5,
+      "day": -39.5,
+      "night": -40,
+      "crisis": -30
+    },
+    "bedGain": {
+      "rain": 0.12879587680085103,
+      "wind": 0.5068762703336793,
+      "cold": 0.35473330075651,
+      "day": 0.758406348901412,
+      "night": 0.3757525702707688,
+      "crisis": 0.412004500446658
+    },
+    "materialRows": [
+      {
+        "name": "rain",
+        "info": {
+          "seconds": 3.2,
+          "peak": 0.34,
+          "rms": 0.0601,
+          "clippedSamples": 0,
+          "approxCentroidHz": 6375
+        },
+        "I": -18.6,
+        "peak": -9.3,
+        "mean": -24.4,
+        "max": -9.4
+      },
+      {
+        "name": "wind",
+        "info": {
+          "seconds": 4,
+          "peak": 0.24,
+          "rms": 0.0464,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1466
+        },
+        "I": -24,
+        "peak": -12.4,
+        "mean": -26.7,
+        "max": -12.4
+      },
+      {
+        "name": "cold",
+        "info": {
+          "seconds": 3,
+          "peak": 0.22,
+          "rms": 0.0242,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1253
+        },
+        "I": -27.4,
+        "peak": -13.1,
+        "mean": -32.3,
+        "max": -13.2
+      },
+      {
+        "name": "day",
+        "info": {
+          "seconds": 3,
+          "peak": 0.18,
+          "rms": 0.0097,
+          "clippedSamples": 0,
+          "approxCentroidHz": 3662
+        },
+        "I": -34,
+        "peak": -14.8,
+        "mean": -40.3,
+        "max": -14.9
+      },
+      {
+        "name": "night",
+        "info": {
+          "seconds": 3.5,
+          "peak": 0.2,
+          "rms": 0.0217,
+          "clippedSamples": 0,
+          "approxCentroidHz": 1546
+        },
+        "I": -28.4,
+        "peak": -14,
+        "mean": -33.3,
+        "max": -14
+      },
+      {
+        "name": "crisis",
+        "info": {
+          "seconds": 1,
+          "peak": 0.3,
+          "rms": 0.1188,
+          "clippedSamples": 0,
+          "approxCentroidHz": 105
+        },
+        "I": -19.2,
+        "peak": -10.5,
+        "mean": -18.5,
+        "max": -10.5
+      }
+    ],
+    "musicRows": [
+      {
+        "theme": "menu",
+        "I": -24.4,
+        "peak": -9,
+        "mean": -26.7,
+        "max": -9,
+        "bus": 0.6
+      },
+      {
+        "theme": "spring",
+        "I": -24.1,
+        "peak": -10.5,
+        "mean": -26.5,
+        "max": -10.6,
+        "bus": 0.6
+      },
+      {
+        "theme": "summer",
+        "I": -24,
+        "peak": -9.8,
+        "mean": -26.2,
+        "max": -9.8,
+        "bus": 0.6
+      },
+      {
+        "theme": "autumn",
+        "I": -25.6,
+        "peak": -8.8,
+        "mean": -27.6,
+        "max": -8.8,
+        "bus": 0.6
+      },
+      {
+        "theme": "winter",
+        "I": -26.5,
+        "peak": -9,
+        "mean": -28.7,
+        "max": -9,
+        "bus": 0.6
+      },
+      {
+        "theme": "crisis",
+        "I": -25.2,
+        "peak": -8.9,
+        "mean": -27,
+        "max": -8.9,
+        "bus": 0.45
+      },
+      {
+        "theme": "recovering",
+        "I": -24.3,
+        "peak": -8.9,
+        "mean": -26.5,
+        "max": -8.9,
+        "bus": 0.6
+      },
+      {
+        "theme": "spring-night",
+        "I": -25.8,
+        "peak": -8.9,
+        "mean": -28,
+        "max": -8.9,
+        "bus": 0.42
+      },
+      {
+        "theme": "summer-night",
+        "I": -24.8,
+        "peak": -9,
+        "mean": -27.1,
+        "max": -9,
+        "bus": 0.42
+      },
+      {
+        "theme": "autumn-night",
+        "I": -25.6,
+        "peak": -9.1,
+        "mean": -27.8,
+        "max": -9.1,
+        "bus": 0.42
+      },
+      {
+        "theme": "winter-night",
+        "I": -28.4,
+        "peak": -8.8,
+        "mean": -30.4,
+        "max": -8.8,
+        "bus": 0.42
+      },
+      {
+        "theme": "death",
+        "I": -25.1,
+        "peak": -8.9,
+        "mean": -27.1,
+        "max": -8.9,
+        "bus": 0.5
+      },
+      {
+        "theme": "extinct",
+        "I": -24.8,
+        "peak": -8.8,
+        "mean": -27.4,
+        "max": -8.8,
+        "bus": 0.35
+      }
+    ],
+    "trace": {
+      "clear": {
+        "label": "村内 昼 clear",
+        "beds": [
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.758406348901412
+          }
+        ],
+        "buffers": [
+          "amb:day"
+        ],
+        "musicRamp": 0.6,
+        "sources": 1,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          }
+        ]
+      },
+      "rain": {
+        "label": "村内 昼 rain",
+        "beds": [
+          {
+            "slot": "weather",
+            "material": "rain",
+            "gain": 0.12879587680085103
+          },
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.758406348901412
+          }
+        ],
+        "buffers": [
+          "amb:rain",
+          "amb:day"
+        ],
+        "musicRamp": 0.4765969408345689,
+        "sources": 2,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 141146,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          }
+        ]
+      },
+      "cold": {
+        "label": "村内 昼 cold",
+        "beds": [
+          {
+            "slot": "weather",
+            "material": "cold",
+            "gain": 0.35473330075651
+          },
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.758406348901412
+          }
+        ],
+        "buffers": [
+          "amb:cold",
+          "amb:day"
+        ],
+        "musicRamp": 0.4765969408345689,
+        "sources": 2,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          }
+        ]
+      },
+      "drought": {
+        "label": "村内 昼 干旱",
+        "beds": [
+          {
+            "slot": "weather",
+            "material": "wind",
+            "gain": 0.5068762703336793
+          },
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.758406348901412
+          }
+        ],
+        "buffers": [
+          "amb:wind",
+          "amb:day"
+        ],
+        "musicRamp": 0.4765969408345689,
+        "sources": 2,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 176426,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          }
+        ]
+      },
+      "night": {
+        "label": "村内 夜 clear",
+        "beds": [
+          {
+            "slot": "daynight",
+            "material": "night",
+            "gain": 0.3757525702707688
+          }
+        ],
+        "buffers": [
+          "amb:night"
+        ],
+        "musicRamp": 0.42,
+        "sources": 1,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 154376,
+            "nonzero": true
+          }
+        ]
+      },
+      "crisis": {
+        "label": "村内 危机 rain",
+        "beds": [
+          {
+            "slot": "weather",
+            "material": "rain",
+            "gain": 0.12879587680085103
+          },
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.758406348901412
+          },
+          {
+            "slot": "crisis",
+            "material": "crisis",
+            "gain": 0.412004500446658
+          }
+        ],
+        "buffers": [
+          "amb:rain",
+          "amb:day",
+          "amb:crisis"
+        ],
+        "musicRamp": 0.45,
+        "sources": 3,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 141146,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 44126,
+            "nonzero": true
+          }
+        ]
+      },
+      "farRain": {
+        "label": "村外 prox=1 rain",
+        "beds": [
+          {
+            "slot": "weather",
+            "material": "rain",
+            "gain": 0.06439793840042551
+          },
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.22752190467042363
+          },
+          {
+            "slot": "wind",
+            "material": "wind",
+            "gain": 0.5068762703336793
+          }
+        ],
+        "buffers": [
+          "amb:rain",
+          "amb:day",
+          "amb:wind"
+        ],
+        "musicRamp": 0.0001,
+        "sources": 3,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 141146,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 176426,
+            "nonzero": true
+          }
+        ]
+      },
+      "dead": {
+        "label": "野外 prox=1 倒下",
+        "beds": [
+          {
+            "slot": "crisis",
+            "material": "crisis",
+            "gain": 0.412004500446658
+          }
+        ],
+        "buffers": [
+          "amb:crisis"
+        ],
+        "musicRamp": 0.5,
+        "sources": 1,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 44126,
+            "nonzero": true
+          }
+        ]
+      },
+      "corner": {
+        "label": "镇角 (119,79) 忙",
+        "beds": [
+          {
+            "slot": "daynight",
+            "material": "day",
+            "gain": 0.48685626889343947
+          },
+          {
+            "slot": "wind",
+            "material": "wind",
+            "gain": 0.3459320500276298
+          }
+        ],
+        "buffers": [
+          "amb:day",
+          "amb:wind"
+        ],
+        "musicRamp": 0.6,
+        "sources": 2,
+        "bufferDetail": [
+          {
+            "channels": 2,
+            "length": 132326,
+            "nonzero": true
+          },
+          {
+            "channels": 2,
+            "length": 176426,
+            "nonzero": true
+          }
+        ]
+      }
+    },
+    "windowRows": [
+      {
+        "label": "村中心",
+        "dist": 0,
+        "play": true,
+        "theme": "spring",
+        "day": true,
+        "reason": "busy-day",
+        "t": 100,
+        "level": 0.6,
+        "inCamp": true
+      },
+      {
+        "label": "镇角 (119,79)",
+        "dist": 70.7248188403477,
+        "play": true,
+        "theme": "spring",
+        "day": true,
+        "reason": "busy-day",
+        "t": 100,
+        "level": 0.6,
+        "inCamp": true
+      },
+      {
+        "label": "x=120 镇外",
+        "dist": 60,
+        "play": false,
+        "theme": "menu",
+        "day": true,
+        "reason": "away",
+        "t": 100,
+        "level": 0,
+        "inCamp": false
+      },
+      {
+        "label": "x=130 距核心70但镇外",
+        "dist": 70,
+        "play": false,
+        "theme": "menu",
+        "day": true,
+        "reason": "away",
+        "t": 100,
+        "level": 0,
+        "inCamp": false
+      },
+      {
+        "label": "村外 夜",
+        "dist": 70,
+        "play": false,
+        "theme": "menu",
+        "day": false,
+        "reason": "away",
+        "t": 100,
+        "level": 0,
+        "inCamp": false
+      },
+      {
+        "label": "村外 晨",
+        "dist": 70,
+        "play": false,
+        "theme": "menu",
+        "day": true,
+        "reason": "away",
+        "t": 100,
+        "level": 0,
+        "inCamp": false
+      },
+      {
+        "label": "村外 灭绝",
+        "dist": 70,
+        "play": true,
+        "theme": "extinct",
+        "day": true,
+        "reason": "extinct",
+        "t": 100,
+        "level": 0.35,
+        "inCamp": false
+      },
+      {
+        "label": "村外 倒下",
+        "dist": 70,
+        "play": false,
+        "theme": "death",
+        "day": true,
+        "reason": "player-dead",
+        "t": 100,
+        "level": 0,
+        "inCamp": false
+      },
+      {
+        "label": "村内 夜",
+        "dist": 0,
+        "play": true,
+        "theme": "spring-night",
+        "day": false,
+        "reason": "night",
+        "t": 100,
+        "level": 0.42,
+        "inCamp": true
+      },
+      {
+        "label": "村内 夜+危机",
+        "dist": 0,
+        "play": true,
+        "theme": "crisis",
+        "day": false,
+        "reason": "night",
+        "t": 100,
+        "level": 0.45,
+        "inCamp": true
+      },
+      {
+        "label": "村内 夜+恢复",
+        "dist": 0,
+        "play": true,
+        "theme": "recovering",
+        "day": false,
+        "reason": "night",
+        "t": 100,
+        "level": 0.6,
+        "inCamp": true
+      },
+      {
+        "label": "村内 恢复·昼·忙",
+        "dist": 0,
+        "play": true,
+        "theme": "recovering",
+        "day": true,
+        "reason": "busy-day",
+        "t": 100,
+        "level": 0.6,
+        "inCamp": true
+      }
+    ]
+  },
+  "effective": {
+    "beds": [
+      {
+        "name": "rain",
+        "oldGain": 0.5,
+        "oldLufs": -27.718639112994488,
+        "newGain": 0.12879587680085103,
+        "newLufs": -39.5
+      },
+      {
+        "name": "wind",
+        "oldGain": 0.25,
+        "oldLufs": -39.13923902627411,
+        "newGain": 0.5068762703336793,
+        "newLufs": -33
+      },
+      {
+        "name": "cold",
+        "oldGain": 0.5,
+        "oldLufs": -36.518639112994485,
+        "newGain": 0.35473330075651,
+        "newLufs": -39.5
+      },
+      {
+        "name": "day",
+        "oldGain": 0.4,
+        "oldLufs": -45.05683937315561,
+        "newGain": 0.758406348901412,
+        "newLufs": -39.5
+      },
+      {
+        "name": "night",
+        "oldGain": 0.7,
+        "oldLufs": -34.59607839942973,
+        "newGain": 0.3757525702707688,
+        "newLufs": -40
+      },
+      {
+        "name": "crisis",
+        "oldGain": 0.55,
+        "oldLufs": -27.490785409829986,
+        "newGain": 0.412004500446658,
+        "newLufs": -30
+      }
+    ],
+    "bgm": [
+      {
+        "theme": "menu",
+        "bus": 0.6,
+        "noWeatherLufs": -31.93501419204199,
+        "rainLufs": -33.93501419204199,
+        "peak": -9
+      },
+      {
+        "theme": "spring",
+        "bus": 0.6,
+        "noWeatherLufs": -31.635014192041993,
+        "rainLufs": -33.63501419204199,
+        "peak": -10.5
+      },
+      {
+        "theme": "summer",
+        "bus": 0.6,
+        "noWeatherLufs": -31.53501419204199,
+        "rainLufs": -33.53501419204199,
+        "peak": -9.8
+      },
+      {
+        "theme": "autumn",
+        "bus": 0.6,
+        "noWeatherLufs": -33.13501419204199,
+        "rainLufs": -35.13501419204199,
+        "peak": -8.8
+      },
+      {
+        "theme": "winter",
+        "bus": 0.6,
+        "noWeatherLufs": -34.03501419204199,
+        "rainLufs": -36.03501419204199,
+        "peak": -9
+      },
+      {
+        "theme": "crisis",
+        "bus": 0.45,
+        "noWeatherLufs": -35.233788924207985,
+        "rainLufs": -35.233788924207985,
+        "peak": -8.9
+      },
+      {
+        "theme": "recovering",
+        "bus": 0.6,
+        "noWeatherLufs": -31.835014192041992,
+        "rainLufs": -33.835014192041996,
+        "peak": -8.9
+      },
+      {
+        "theme": "spring-night",
+        "bus": 0.42,
+        "noWeatherLufs": -36.43305339175686,
+        "rainLufs": -36.43305339175686,
+        "peak": -8.9
+      },
+      {
+        "theme": "summer-night",
+        "bus": 0.42,
+        "noWeatherLufs": -35.43305339175686,
+        "rainLufs": -35.43305339175686,
+        "peak": -9
+      },
+      {
+        "theme": "autumn-night",
+        "bus": 0.42,
+        "noWeatherLufs": -36.233053391756854,
+        "rainLufs": -36.233053391756854,
+        "peak": -9.1
+      },
+      {
+        "theme": "winter-night",
+        "bus": 0.42,
+        "noWeatherLufs": -39.03305339175685,
+        "rainLufs": -39.03305339175685,
+        "peak": -8.8
+      },
+      {
+        "theme": "death",
+        "bus": 0.5,
+        "noWeatherLufs": -34.21863911299449,
+        "rainLufs": -34.21863911299449,
+        "peak": -8.9
+      },
+      {
+        "theme": "extinct",
+        "bus": 0.35,
+        "noWeatherLufs": -37.01667831270935,
+        "rainLufs": -37.01667831270935,
+        "peak": -8.8
+      }
+    ]
+  },
+  "headroom": {
+    "maxSfx": {
+      "name": "chop",
+      "peak": 0.5
+    },
+    "maxMusicPeak": {
+      "theme": "autumn",
+      "I": -25.6,
+      "peak": -8.8,
+      "mean": -27.6,
+      "max": -8.8,
+      "bus": 0.6
+    },
+    "worstMusicLevel": 0.5,
+    "maxBedPeak": {
+      "name": "day",
+      "amp": 0.0955591999615779
+    },
+    "bgmAmp": 0.12707731916953544,
+    "bedAmp": 0.0955591999615779,
+    "sfxAmp": 0.27999999999999997,
+    "sum": 0.5026365191311133,
+    "headroomDb": 5.974919217337816
+  }
+}
