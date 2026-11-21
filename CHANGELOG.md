@@ -1,5 +1,16 @@
 # 变更记录
 
+## [1.4.0] - 2026-11-21
+
+主动对话版：居民会注意玩家、停下表现、开口对话。
+
+- 服务端 resident-attention：交谈后 until/untilMin 写 attention，当拍不推进 busy/旅行/新决策，任务不取消、劳动结算不丢；下一分钟恢复。
+- 玩家主动对话：空手点击居民，头顶名字气泡 2s、转向玩家、注意姿势、压制工作动画；打开 4 话题对话面板，多轮/关闭。
+- 新增免费 camp_talk/camp_talk_say/camp_talk_close：0 游戏分/0 体力/0 世界动作，但同套距离/房间/存活/幽魂/busy/compare 门；按饥饿/工作/天气/聚落/关系出确定性台词；不刷 trust、不取消 task、不接模型。
+- compare/研究态仍走旧 talk_open/talk_say 模型车道。
+- 全量 1238/1238；quickstart PASS；golden 45/45；22k parity 0；研究 md5 5/5。
+- 边界：attention 为瞬态不入档；面板模态但世界 tick 不停；旧 camp_resident 每日首次 trust+4 仍只属旧入口。
+
 ## [1.3.0] - 2026-11-21
 
 1.3 幽魂观察版：玩家死亡不再是这一局的终点。
