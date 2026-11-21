@@ -21,6 +21,14 @@ const modelRelease = () => budget.release();
 const modelChargeLane = (free) => budget.chargeLane(free);
 const modelCharged = (tokens = 0) => budget.charged(tokens);
 
+// 对话道地的失败口径。玩家侧只看到"回的是固定话"，分不清是超时、空回复，还是回了却被判无效，
+// 所以这里按 boot 累计六个计数（与 attempts 同寿命，不参与每日归零），线上直接除一下就是落地率。
+const chatterNote = (key, n = 1) => {
+  const c = S.model.chatter ??= { asked: 0, ok: 0, timeout: 0, http: 0, empty: 0, invalid: 0 };
+  c[key] = (c[key] ?? 0) + n;
+};
+const isAbort = (e) => /abort/i.test(`${String(e?.name ?? '')} ${String(e?.message ?? '')}`);
+
 function isFreeProvider(base) {
   return freeProvider(base, { freeHosts: FREE_HOSTS, paidHosts: PAID_HOSTS });
 }
@@ -179,6 +187,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
   if (!observerActive(lastVisitor, Date.now())) return null;
   if (!continuousWorld() && PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
+  chatterNote('asked');
   const here = (world.locs ?? LOCS)[world.loc[npc.id]] ?? world.loc[npc.id];
   const turns = (history ?? []).slice(-6).map((h) => `${h.who === 'p1' ? '对方' : npc.name}：${h.text}`).join('\n');
   const prompt = [
@@ -204,14 +213,15 @@ async function modelTalk({ npc, world, history, text, trust }) {
     const to = setTimeout(() => ac.abort(), MODEL_TIMEOUT_MS);
     try {
       const res = await postChat(CFG.providers[i], key, { model: mdl, temperature: 0.9, messages: [{ role: 'user', content: prompt }], max_tokens: 120 }, mdl, ac);
-      if (!res.ok) { budget.see(free, false); continue; }
+      if (!res.ok) { budget.see(free, false); chatterNote('http'); continue; }
       const j = await res.json();
       // ARCH5-06：calls/车道/token 统一由预算域记账，host 不再手写字段。
       budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
       budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim();
-      if (line) return line.slice(0, 80);
-    } catch { budget.see(free, false); /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
+      if (line) { chatterNote('ok'); return line.slice(0, 80); }
+      chatterNote('empty');
+    } catch (e) { budget.see(free, false); chatterNote(isAbort(e) ? 'timeout' : 'http'); /* 超时/解析失败：换下一个供应商，全都失败则模板兜底 */ } finally { clearTimeout(to); }
   }
   return null;
 }
@@ -229,6 +239,7 @@ async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag 
   if (!observerActive(lastVisitor, Date.now())) return null;
   if (!continuousWorld() && PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
+  chatterNote('asked');
   const note = (msg) => budget.attempt(`${tag}:${msg}`);
   let refusal = null;
   for (let i = 0; i < CFG.providers.length; i++) {
@@ -245,21 +256,23 @@ async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag 
     if (!lane.go) { refusal = lane.why; note(`LANE:${lane.why}`); continue; }
     const ac = new AbortController();
     const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
-    if (waitMs <= 0) return null;
+    if (waitMs <= 0) { chatterNote('timeout'); return null; }   // 本刻模型时限已耗尽：玩家那侧同样是"没等到回话"
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
       const res = await postChat(CFG.providers[i], key, {
         model: mdl, temperature, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens,
       }, mdl, ac);
-      if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); continue; }
+      if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); chatterNote('http'); continue; }
       const j = await res.json();
       budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
       budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').trim();
-      if (line) return [...line].slice(0, 240).join('');
+      if (line) { chatterNote('ok'); return [...line].slice(0, 240).join(''); }
+      chatterNote('empty');
     } catch (e) {
       note(String(e?.message ?? e).slice(0, 40));
       budget.see(free, false);
+      chatterNote(isAbort(e) ? 'timeout' : 'http');
     } finally {
       clearTimeout(to);
     }
@@ -278,7 +291,7 @@ function modelChatter({ world, prompt } = {}) {
 
   return {
     configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-    modelBrain, modelTalk, modelChat, modelChatter, modelConfigured,
+    modelBrain, modelTalk, modelChat, modelChatter, modelConfigured, chatterNote,
     buildDeliberationPrompt, deliberationPrompt, budget,
   };
 }

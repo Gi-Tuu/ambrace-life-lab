@@ -81,7 +81,7 @@ const C = {
   BREAKER_MS, FREE_HOSTS, PAID_HOSTS, ATTEMPT_CAP, PRESENCE_MS,
 };
 
-const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '' }, breaker: { fails: 0, openUntil: 0 }, campKey: null, campName: null, campViewers: {}, mainSurv: null, seedSurv: null, camps: null,
+const S = { comparison: null, compareView: null, compareSaveError: null, compareRunning: true, comparisonMasks: {m3: false, coupling: false}, packs: null, timer: null, tickError: null, running: true, savedAt: 0, missed: { minutes: 0, capped: false }, model: { calls: 0, tokens: 0, moneyCalls: 0, nodeCalls: 0, attempts: [], dayKey: '', chatter: { asked: 0, ok: 0, timeout: 0, http: 0, empty: 0, invalid: 0 } }, breaker: { fails: 0, openUntil: 0 }, campKey: null, campName: null, campViewers: {}, mainSurv: null, seedSurv: null, camps: null,
   lastVisitor: 0, viewers: { survival: 0, compare: 0, comparison: 0 }, saveError: null,
   get dir() { return process.env.DATA_DIR ?? 'data'; }, masks: { m3: false, coupling: false }, startRaw: null, surv: null };
 
@@ -104,7 +104,7 @@ model = createModelDomain({ S, CFG, C, observerActive });
 replay = createReplayDomain({ S, CFG, C, world });
 const {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-  modelBrain, modelTalk, modelChat, modelConfigured, buildDeliberationPrompt, deliberationPrompt,
+  modelBrain, modelTalk, modelChat, modelConfigured, buildDeliberationPrompt, deliberationPrompt, chatterNote,
 } = model;
 const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison, controlComparison } = replay;
 const {
@@ -176,6 +176,9 @@ async function actFreeTalkFast(sp, body, now) {
       try { line = await modelChat({ world: sp.world, prompt: pending.prompt }); } catch { line = null; }
     }
     result = await queueAct(() => finishFreeSay(sp.world, pending, line, now));
+    // 模型回了话但被 sanitize 判无效（JSON 形状/纯符号）时，玩家看到的是模板，而 askLine 只记得到 ok。
+    // 这一格只能在 host 侧补：sanitize 在 resident-dialogue 里，返回值 served 是唯一能区分两者的地方。
+    if (result?.served === 'template' && line) chatterNote('invalid');
   }
   return result;
 }
@@ -262,7 +265,7 @@ export const host = {
       viabCrit: PARAMS.viab.crit, // 曲线上的操作点参考线：跌破这里，存续才开始影响选择
       stat: p.stat,
     });
-    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : (invalidCamp ? { key: invalidCamp, invalid: true } : null), saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0 } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
+    return { ...(mode === 'compare' && {comparison: S.compareView, compareSaveError: S.compareSaveError, compareRunning: S.compareRunning}), savedAt: S.savedAt, tickMs:TICK_MS, running: S.running, mode: GAME_MODE, brain: CFG.brain, missed: S.missed, model: { ...S.model, budget: BUDGET, nodeBudget: NODE_BUDGET, watching: observerActive(S.lastVisitor, Date.now()), unattended: UNATTENDED_ON, paidWhenUnattended: PAID_WHEN_UNATTENDED, breaker: { open: breakerOpenAt(S.breaker), fails: S.breaker.fails, trips: S.breaker.trips ?? 0 } }, camp: key ? { key, name: S.camps?.live.get(key)?.name ?? key } : (invalidCamp ? { key: invalidCamp, invalid: true } : null), saveError: key ? S.campSaveErrors.get(key) ?? null : S.saveError, saveWrites: S.saveWrites ?? 0, schemaWarning: S.schemaWarning ?? null, tickError: S.tickError, masks: S.masks, layer: { commitment: PARAMS.m3.commitment, tau: PARAMS.coupling.tau, minInput: PARAMS.coupling.minInput }, survival: survSel ? { ...survView(survSel), model: { configured: modelConfigured(), enabled: CFG.brain === 'model', watching: observerActive(key ? S.campViewers[key] : S.viewers.survival, Date.now()), choices: S.model.survivalChoices ?? 0, chatter: S.model.chatter } } : null, A: view(S.packs.A, true), B: view(S.packs.B, false) };
   },
   act(body, campKey) {
     // P1c：正式连续世界（simClock 存在）里，talk_say/camp_sleep/compare 与普通 /act 共用
