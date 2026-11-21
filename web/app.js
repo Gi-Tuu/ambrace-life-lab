@@ -18,6 +18,7 @@ import { floorContains, hash2 } from '../shared/camp-terrain.mjs';
 import { itemBoxes, itemIcon } from './camp-items.mjs';
 import { constructionLot, residentialSite, HOUSING_PLOTS, TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { campSceneBundle, campSitesOf, staticCampSites, tileKey } from '../shared/camp-scene-content.mjs';
+import { wildClaimSignature, wildHouseSolids } from '../shared/wild-plots.mjs';
 import { CONSTRUCTION_CODES, CONSTRUCTION_REACH } from '../shared/camp-construction-access.mjs';
 import * as audio from './audio.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity } from './audio-events.mjs';
@@ -451,7 +452,7 @@ function buildWorld(w) {
   const pads=districtPads(w.districts);
   const sites=staticSites;
   const sig=JSON.stringify([w.compareSide??'survival',w.layoutVersion??0,mapSeed,staticSites,pads,ASSETS.ready,true,Boolean(w.camp?.timber),Boolean(w.households),Object.entries(w.homeRoads??{}).filter(([k,v])=>w.peripheralHomes?.[k]?v.present:!v.present)
-    .map(([k])=>k).sort(),null]);
+    .map(([k])=>k).sort(),wildClaimSignature(w),null]);
   if (worldCaches.has(sig)) {
     worldCache = worldCaches.get(sig);
     return worldWithCollisions(liveSites, w);
@@ -464,6 +465,7 @@ function buildWorld(w) {
     camp:w.camp, timber:Boolean(w.camp?.timber), sites:staticSites,
     districts:w.districts, peripheralHomes:w.peripheralHomes,
     households:w.households, homeRoads:w.homeRoads, ecoSources:w.ecoSources,
+    wildPlots:w.wildPlots,
   });
   const { trees, hills, bridges, bridgeCells, rocks, landscape, blockers, roads, beds, grove, river,
     flatLand, roadDistance, plantClearance, harvestNodes, terrainHash, streamCenter, streamHalfWidth } = content;
@@ -546,7 +548,7 @@ function buildWorld(w) {
   // scene3d.floors 只作为“可站表面/建筑地板”注册进 space（桥面、连廊、房间地板）。
   // 桥带只认画出来的那份 content.bridges（默认存档 layout=null 时同样有效）；crossing 由它反推，
   // 不再在调用点各写一个 `?? 24`（那会让桥面在 mesh 里、在 space 里消失）。
-  const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape,bridges});
+  const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape,bridges,extraSolids:wildHouseSolids(w)});
   const space=createSpace({
     camp,
     wild:wildSurface(landscape,{crossing:camp.crossing}),
@@ -1180,13 +1182,32 @@ function campMapFrame(g,camera,stage,ratio,bounds={west:0,north:0,east:stage.wid
 }
 let campHover=null, outdoorIntent=null, guidance=null;
 
+const roomCrowdMotion=new Map();
 function roomCrowd(w,site) {
   const ids=(w.occupancy?.[site]??[]).filter(who=>who!=='p1');
   const slots=[[6,9],[9.6,9],[5.65,5.4],[9.45,5.4],[4,9],[11.7,9],[6.7,7.3],[9.6,7.3]];
   // P4：占位点是否站得住只问 roomSurface（16×12 世界单位 + 家具/墙 + 门）。
   const space=roomSpaceFor(site);
-  return slots.filter(([x,z])=>space.walkable(x,z,CAMP_BODY_RADIUS)).slice(0,ids.length)
-    .map(([x,z],i)=>({who:ids[i],x,z,r:residentCollisionRadius(w.agents?.[ids[i]]?.stage),moving:false,direction:'down'}));
+  // 1.2 B：居民进房后按服务端 w.pos 走动（唯一位置事实）；pos 不可用/不可站才回退旧槽位。
+  const people=[], used=new Set();
+  for (const who of ids) {
+    const p=w.agents?.[who]?.pos;
+    let at=null;
+    if (p && p.space==='room:'+site && Number.isFinite(p.x) && Number.isFinite(p.z) && space.walkable(p.x,p.z,CAMP_BODY_RADIUS)) at=[p.x,p.z];
+    if (!at) {
+      const slot=slots.find(([x,z])=>!used.has(x+','+z) && space.walkable(x,z,CAMP_BODY_RADIUS));
+      if (!slot) continue;
+      used.add(slot[0]+','+slot[1]);
+      at=slot;
+    }
+    const key=site+':'+who, previous=roomCrowdMotion.get(key);
+    const dx=previous?at[0]-previous.x:0, dz=previous?at[1]-previous.z:0;
+    const moving=Boolean(previous)&&Math.hypot(dx,dz)>0.02;
+    const direction=moving?walkDirection(dx,dz,previous.direction):(previous?.direction??'down');
+    roomCrowdMotion.set(key,{x:at[0],z:at[1],direction});
+    people.push({who,x:at[0],z:at[1],r:residentCollisionRadius(w.agents?.[who]?.stage),moving,direction});
+  }
+  return people;
 }
 const campWorlds=new Map(), campHerds=new Map();
 function animalGround(world,a,x,z) {
@@ -3069,7 +3090,31 @@ function ecoButtons(s, which) {
   }).join('');
 }
 function renderExchangeDlg(s) { const el=$('exchangeBody'); if(el) el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'exchange')}</div>`; }
-function renderBuildDlg(s) { const el=$('buildBody'); if(el) el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'build')}</div>`; }
+function renderBuildDlg(s) {
+  const el=$('buildBody'); if(!el) return;
+  const wild=s?.wildPlots;
+  const wildRows = wild ? wild.plots.map((p)=>{
+    const cost=wild.build??{wood:5,stone:3,labor:3};
+    const bag=s.pinv?.p1??{wood:0,stone:0};
+    const at=s.playerPos;
+    const near=at && Number.isFinite(at.x) && Number.isFinite(at.z) &&
+      distanceToRect([at.x,at.z],p.gate)<=1.45;
+    const project=s.households?.projects?.[p.id];
+    const deed=s.households?.deeds?.[p.id];
+    if (project || deed) {
+      const label = project ? (project.owner==='p1'?`施工 ${Math.min(cost.labor,Math.floor(project.progress))}/${cost.labor}`:'居民在建')
+        : (deed.owner==='p1'?'你的小屋':deed.owner?`${esc(s.agents?.[deed.owner]?.name??'居民')}的小屋`:'待售小屋');
+      const act = project && project.owner==='p1'
+        ? `<button data-sk="house_work" data-type="${p.id}" title="继续施工（木料已付，${cost.labor} 次完工）"${near?'':' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${label}</span></button>`
+        : `<button disabled title="${label}（${near?'就在旁边':'不在附近'}）"><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">${label}</span></button>`;
+      return act;
+    }
+    const ok=near && bag.wood>=cost.wood && bag.stone>=cost.stone;
+    const why=!near?'走到宅基地门口再开工':bag.wood<cost.wood||bag.stone<cost.stone?'材料不足':'';
+    return `<button data-sk="home_claim" data-type="${p.id}" title="${why||`开工建房（木${cost.wood} 石${cost.stone}）`}"${ok?'':' disabled'}><img width="32" height="32" alt="" src="${itemIcon('wood')}"><span class="tag">宅</span></button>`;
+  }).join('') : '';
+  el.innerHTML=`<div class="eco-icons">${ecoButtons(s,'build')}</div>${wildRows?`<h3>荒野宅基地</h3><div class="eco-icons">${wildRows}</div>`:''}`;
+}
 function renderVillageDlg(s) {
   const el = $('villageBody'); if (!el || !s) return;
   const rows = Object.entries(s.agents ?? {}).filter(([id]) => id !== 'p1').map(([id,a]) => {
@@ -4100,6 +4145,18 @@ function outdoorEntities(world,w,people,animals) {
     id:'lot:'+loc,kind:'lot',target:loc,rect,at:[rect.x+rect.w/2,rect.z+rect.d/2],
     reach:CONSTRUCTION_REACH,tool:'hammer',name:'可施工地块',
   })) : [];
+  // 1.2 A：荒野宅基地（未认领 = 只有可点击的门前地块；认领后才在建房/入住的链路里出现）。
+  const wildLots=ui.tool==='hammer' ? (w.wildPlots?.plots??[]).filter(p=>!p.claimed).map(p=>({
+    id:'wild:'+p.id,kind:'wildLot',target:p.id,rect:p.gate,
+    at:[p.gate.x+p.gate.w/2,p.gate.z+p.gate.d*.72],reach:CONSTRUCTION_REACH,tool:'hammer',name:'荒野宅基地',
+  })) : [];
+  // 1.2 A：玩家认领后未完工的房屋工地（复用 workProjects 的施工入口）。
+  const houseWorks=(world.workProjects??[]).filter(p=>p.record.type==='house' && w.households?.projects?.[p.record.loc]).map(p=>{
+    const project=w.households.projects[p.record.loc];
+    return {id:p.id+'#house',kind:'houseWork',target:p.record.loc,room:p.record.loc,rect:p.lot,phase:p.phase,
+      owner:project.owner,progress:project.progress,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
+      reach:CONSTRUCTION_REACH,tool:'hammer',name:project.owner==='p1'?'在建房屋':'在建住宅'};
+  });
   const resources=Object.entries(w.districts??{}).map(([loc,{source:[x,z],resource}])=>({
     id:'resource:'+loc,kind:'resource',target:loc,rect:{x:x-.42,z:z-.42,w:.84,d:.84},at:[x,z],
     reach:1.15,tool:resource==='wood'?'axe':'pick',
@@ -4109,7 +4166,7 @@ function outdoorEntities(world,w,people,animals) {
     id:p.id,kind:'work',target:p.id,room:p.record.loc,rect:p.lot,gate:p.gate,phase:p.phase,operable:p.phase!=='complete'||integrity.get(p.id)<1,at:[p.lot.x+p.lot.w/2,p.lot.z+p.lot.d/2],
     reach:CONSTRUCTION_REACH,tool:'hammer',name:BUILDING_NAMES[p.record.type]??'工地',
   }));
-  return [...doors,...facilities,...timber,...plants,...fields,...works,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
+  return [...doors,...facilities,...timber,...plants,...fields,...works,...wildLots,...houseWorks,...lots,...resources,...people.filter(p=>p.who!=='p1'&&!w.agents?.[p.who]?.dead)
     .map(p=>({id:'resident:'+p.who,kind:'resident',target:p.who,at:[p.x,p.z],room:null,reach:REACH.resident,
       labelHeight:p.y+actorLabelHeight(p.stage),tool:'hand',name:w.agents?.[p.who]?.name??p.who,person:p})),
     ...animals.map(a=>({id:a.id,kind:a.kind==='bird'?'scenery':a.wild?'wildAnimal':'animal',target:a.id,at:[a.x,a.z],reach:REACH.animal,
@@ -4165,9 +4222,11 @@ function pointedEntity(cv,ev) {
     for (const e of entries) {
       if (e.person) push(actorBoxes(e.person,ACT.frame),e);
       if (e.animal) push(animalBoxes(e.animal,ACT.motionTime??0),e);
-      if (e.kind==='plot' || e.kind==='door' || e.kind==='lot') {
+      if (e.kind==='plot' || e.kind==='door' || e.kind==='lot' || e.kind==='wildLot' || e.kind==='houseWork') {
         const {x,z,w,d}=e.rect;
-        push([{x,z,w,d,y:(e.kind==='lot' && view.extended ? view.extended.height(...e.at) : view.stage.heightAt(...e.at))+.025,h:.008}],e);
+        const outside = e.kind==='wildLot' || e.kind==='houseWork' || (e.kind==='lot' && view.extended);
+        const y=(outside ? view.extended?.height?.(...e.at) ?? view.stage.heightAt(...e.at) : view.stage.heightAt(...e.at))+.025;
+        push([{x,z,w,d,y,h:.008}],e);
       }
     }
     for (const b of [...view.stage.boxes,...(world.life3d?.boxes??[]),...(world.homes3d?.boxes??[]),...(world.regional?.boxes??[]),...view.work]) {
@@ -4222,6 +4281,23 @@ function ecoPoint(item, target) {
   return row && Number.isFinite(row.x) && Number.isFinite(row.z) ? [row.x, row.z] : null;
 }
 async function useOutdoorEntity(e,from) {
+  if (e.kind==='wildLot') {
+    // 1.2 A：荒野宅基地开工。客户端只发意图；距离/材料/可站/可达/重复认领全由服务端原子裁决。
+    const bag=S.view.pinv?.p1??{wood:0,stone:0}, cost=S.view.wildPlots?.build??{wood:5,stone:3,labor:3};
+    inspectWorkSite('荒野宅基地',[[`开工建房 · 木${cost.wood} 石${cost.stone}`,
+      bag.wood<cost.wood||bag.stone<cost.stone?'材料不足':'',
+      ()=>performCamp({kind:'home_claim',type:e.target,from})]]);
+    return;
+  }
+  if (e.kind==='houseWork') {
+    const project=S.view.households?.projects?.[e.target];
+    if (!project) { toast('这里没有在建的住宅。'); return; }
+    if (project.owner!=='p1') { toast('这是居民的工地。'); return; }
+    const labor=S.view.wildPlots?.build?.labor??3;
+    inspectWorkSite('在建房屋',[[`继续施工（${Math.min(labor,Math.floor(project.progress))}/${labor}）`,'',
+      ()=>performCamp({kind:'house_work',target:e.room,from})]]);
+    return;
+  }
   if (e.kind==='lot') {
     const s=S.view, bag=s.pinv.p1;
     inspectWorkSite(s.rooms?.[e.target]??'施工地块',Object.entries(s.buildingsDef??{}).map(([type,{label,cost}])=>[

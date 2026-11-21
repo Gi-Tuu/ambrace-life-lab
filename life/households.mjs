@@ -2,10 +2,15 @@ import { noteWorkMotion } from './work-motion.mjs';
 import { gatherPlace } from './production.mjs';
 import { CURRENT_EVENT_RULES } from './rng.mjs';
 import { dayOf, DAY_TICKS } from './clock.mjs';
-import { residentialSite, HOUSING_PLOTS } from '../shared/camp-layout.mjs';
+import { residentialSite, HOUSING_PLOTS, homeLot } from '../shared/camp-layout.mjs';
+import { distanceToRect } from '../shared/camp-interaction.mjs';
+import { inCamp } from '../shared/wild-landscape.mjs';
+import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
+import { worldRoute } from '../shared/asset-collision.mjs';
+import { wildExpansionEnabled, wildPlotById, wildPlotCandidates, registerWildClaim } from '../shared/wild-plots.mjs';
 import { isAlive } from './viability.mjs';
 import { worldSite } from './geometry.mjs';
-import { constructionAccess, constructionAccessEnabled, siteRecord } from './construction-access.mjs';
+import { constructionAccess, constructionAccessEnabled, constructionSpace, sceneSpace, siteRecord } from './construction-access.mjs';
 
 export const ADULT_DAYS = 12;
 export const INFANT_DAYS = 3;   // P1-1：0–3 天婴幼儿
@@ -267,19 +272,101 @@ function marketHome(w, actor, room) {
   return true;
 }
 
-function startHome(w, actor, room) {
+function startHome(w, actor, room, { wild = null } = {}) {
   const h = w.survival.households, bag = w.pinv[actor];
-  if (!residentialSite(room,w.peripheralHomes) || Object.hasOwn(h.deeds, room) ||
-      Object.hasOwn(h.projects, room) || !affordable(bag, BUILD)) return false;
-  if (!constructionAccess(w,siteRecord(w,room,'house'),{proposed:true}).ok) return false;
+  const at = wild ? wild.at : residentialSite(room,w.peripheralHomes);
+  if (!at || (wild && inCamp(at[0], at[1])) || Object.hasOwn(h.deeds, room) || Object.hasOwn(h.projects, room) || !affordable(bag, BUILD)) return false;
+  const lot = wild ? wild.lot : homeLot(room, w.campLayout, w.peripheralHomes);
+  if (!lot) return false;
+  if (wild && !wildPreflight(w, wild).ok) return false;
+  if (!constructionAccess(w,{loc:room,type:'house',lot},{proposed:true}).ok) return false;
+  // 1.2 A：荒野地块在开工这一刻才认领（服务端原子：claims + peripheralHomes + project 一次写）。
+  // 认领前的可站/可达/占地校验全部在上面完成；写后不再有失败分支。
+  if (wild) registerWildClaim(w, room, wild, actor, w.t);
   transfer(bag, null, BUILD);
   h.projects[room] = { owner: actor, started: w.t, progress: 0 };
   if (constructionAccessEnabled(w)) w.locs[room]='住宅工地';
   else if (w.peripheralHomes?.[room]) w.locs[room]='外围住宅工地';
   w.observeProduction?.('materialSpent', 'houseWood', BUILD.wood);
   w.observeProduction?.('materialSpent', 'houseStone', BUILD.stone);
-  if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'start', room, owner: actor });
+  if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'start', room, owner: actor, ...(wild ? { wild: true } : {}) });
   return true;
+}
+
+// 1.2 A：荒野地块的“可站/可建/可达”闸门。layout 0 没有 constructionAccessEnabled，
+// 这里仍用与 client/server 同一份 sceneSpace 回答：lot 四角+中心可站、地块门可站、
+// 且从地块门到村口（hall）有一条沿既有空间的路线（不是凭空直线）。
+export function wildPreflight(w, plot) {
+  if (!wildExpansionEnabled(w) || !plot) return fail('NO_WILD_EXPANSION');
+  if (inCamp(plot.at[0], plot.at[1])) return fail('NOT_WILDERNESS');
+  const space = constructionSpace(w) ?? sceneSpace(w);
+  if (!space) return fail('NO_SPACE');
+  const { lot, gate } = plot;
+  const points = [[lot.x, lot.z], [lot.x + lot.w, lot.z], [lot.x, lot.z + lot.d], [lot.x + lot.w, lot.z + lot.d],
+    [lot.x + lot.w / 2, lot.z + lot.d / 2]];
+  const bad = points.find(([x, z]) => !space.walkable(x, z, 0));
+  if (bad) return fail('BUILD_PATH_BLOCKED', { blockedAt: bad });
+  const door = [gate.x + gate.w / 2, gate.z + gate.d / 2];
+  if (!space.walkable(door[0], door[1], CAMP_BODY_RADIUS)) return fail('BUILD_ENTRANCE_BLOCKED', { blockedAt: door });
+  const anchor = worldSite(w, 'hall');
+  if (!anchor) return fail('BUILD_PATH_BLOCKED');
+  const route = worldRoute(door, [anchor[0] + .5, anchor[1] + .5], (x, z) => space.walkable(x, z, 0), { margins: [14, 60] });
+  if (!route) return fail('BUILD_PATH_BLOCKED', { unreachableAt: door });
+  return { ok: true, code: 'OK', route: route.length };
+}
+
+// 1.2 A：玩家在一处未认领的荒野宅基地上开工。校验（未认领/距离/材料/可站/可走）全在写入前完成。
+export function claimWildPlot(w, id, room, { from = null } = {}) {
+  const s = w.survival, h = s?.households;
+  if (!wildExpansionEnabled(w) || !h) return fail('NO_WILD_EXPANSION');
+  const plot = wildPlotById(w, room);
+  if (!plot) return fail('NO_PLOT');
+  if (inCamp(plot.at[0], plot.at[1])) return fail('NOT_WILDERNESS');
+  if (w.peripheralHomes?.[room] || Object.hasOwn(h.deeds, room) || Object.hasOwn(h.projects, room)) return fail('PLOT_TAKEN');
+  const bag = w.pinv?.[id];
+  if (!bag || !affordable(bag, BUILD)) return fail('NO_MATERIAL');
+  const p = s.playerPos;
+  const foot = Array.isArray(from) && from.length === 2 && from.every(Number.isFinite) ? from
+    : p && Number.isFinite(p.x) && Number.isFinite(p.z) ? [p.x, p.z] : null;
+  if (!foot || distanceToRect(foot, plot.gate) > 1.45) return fail('OUT_OF_REACH');
+  const preflight = wildPreflight(w, plot);
+  if (!preflight.ok) return preflight;
+  const access = constructionAccess(w, { loc: room, type: 'house', lot: plot.lot }, { proposed: true, from: foot });
+  if (!access.ok) return access;
+  // 原子写入：到这里所有校验都过了，写 claims + peripheralHomes + project，没有回滚分支。
+  registerWildClaim(w, room, plot, id, w.t);
+  transfer(bag, null, BUILD);
+  h.projects[room] = { owner: id, started: w.t, progress: 0 };
+  w.locs[room] = '住宅工地';
+  w.observeProduction?.('materialSpent', 'houseWood', BUILD.wood);
+  w.observeProduction?.('materialSpent', 'houseStone', BUILD.stone);
+  if (housingMode(w) !== 'legacy') recordHousing(w, { kind: 'start', room, owner: id, wild: true });
+  return { ok: true, ...ok(), room, lot: { ...plot.lot } };
+}
+
+// 1.2 A：玩家在自己认领的地块上施工。每次动作 +1 进度（老年 0.5），WORK_DAYS 次完工。
+export function playerHouseWork(w, id, { from = null } = {}) {
+  const h = w.survival?.households;
+  if (!h) return fail('NO_HOUSEHOLDS');
+  const entry = Object.entries(h.projects).find(([, p]) => p.owner === id);
+  if (!entry) return fail('NO_PROJECT');
+  const [room, work] = entry;
+  const lot = homeLot(room, w.campLayout, w.peripheralHomes) ?? wildPlotById(w, room)?.lot ?? null;
+  if (!lot) return fail('NO_LOT');
+  if (!w.peripheralHomes?.[room]) return fail('NO_PLOT');
+  const p = w.survival.playerPos;
+  const foot = Array.isArray(from) && from.length === 2 && from.every(Number.isFinite) ? from
+    : p && Number.isFinite(p.x) && Number.isFinite(p.z) ? [p.x, p.z] : null;
+  if (!foot) return fail('BUILD_NOT_ARRIVED');
+  if (distanceToRect(foot, lot) > 1.85) return fail('BUILD_NOT_ARRIVED');
+  const access = constructionAccess(w, { loc: room, type: 'house', lot }, { from: foot });
+  if (!access.ok) return access;
+  work.progress += residentStage(w, id) === 'elder' ? .5 : 1;
+  work.lastWorkDay = dayOf(w.t);
+  noteWorkMotion(w, id, 'hammer', { home: room, loc: room, rect: lot });
+  const complete = work.progress >= WORK_DAYS;
+  if (complete) finishHome(w, room, work, []);
+  return { ok: true, code: 'OK', room, progress: Math.min(WORK_DAYS, work.progress), complete };
 }
 
 const mark = (person, decision, w) => {
@@ -438,12 +525,14 @@ export function stepHouseholds(w, log) {
     const sale = Object.keys(h.deeds).find(k => h.deeds[k].listed && h.deeds[k].owner !== id && !residentsAt(w, k));
     const available=k=>!Object.hasOwn(h.deeds,k) && !Object.hasOwn(h.projects,k) &&
       constructionAccess(w,siteRecord(w,k,'house'),{proposed:true}).ok;
-    const plot=Object.keys(HOUSING_PLOTS).find(available) ?? Object.keys(w.peripheralHomes??{}).find(available);
+    // 1.2 A：固定地块住满后，聚落可继续向外申请荒野宅基地（同一套住房流程，地块在开工时才认领）。
+    const wildPlot=wildExpansionEnabled(w) ? wildPlotCandidates(w)[0]?.id ?? null : null;
+    const plot=Object.keys(HOUSING_PLOTS).find(available) ?? Object.keys(w.peripheralHomes??{}).find(available) ?? wildPlot;
     const buyScore = sale && affordable(bag, PRICE) ? 3 : 0;
     const buildScore = plot && affordable(bag, BUILD) ? (w.agents[id].traits.archetype === '孤僻' ? 4 : 2) : 0;
     if (stayScore > 0 && stayScore >= Math.max(buyScore, buildScore)) mark(person, 'stayed', w);
     else if (buyScore > 0 && buyScore >= buildScore && marketHome(w, id, sale)) mark(person, 'bought', w);
-    else if (buildScore > 0 && startHome(w, id, plot)) mark(person, 'building', w);
+    else if (buildScore > 0 && startHome(w, id, plot, { wild: wildPlot === plot ? wildPlotById(w, plot) : null })) mark(person, 'building', w);
     else {
       if (!person.decision) mark(person, 'seeking', w);
       continue;

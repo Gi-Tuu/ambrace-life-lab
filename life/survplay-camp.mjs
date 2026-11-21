@@ -18,7 +18,7 @@ import { COOP, willingness } from './cooperation.mjs';
 import { recordSettlementEvent } from './settlement-events.mjs';
 import { constructionAccess, constructionAccessEnabled, constructionSpace, recordConstructionBlock, residentConstructionAccess, sceneSpace, siteRecord, roomSpaceOf, roomDoorPoint } from './construction-access.mjs';
 import { CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
-import { houseAction } from './households.mjs';
+import { houseAction, claimWildPlot, playerHouseWork } from './households.mjs';
 import { respondRequest } from './resident-requests.mjs';
 import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, roomContains } from './space.mjs';
 import { LEGACY_RESEARCH_UNITS_PER_TICK } from './research-policy.mjs';
@@ -287,6 +287,22 @@ export function survActInner(sp, body) {
     if (result.ok) playerViabSpend(w, SURV_COST[kind]);
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     return result;
+  }
+  if (kind === 'home_claim') {
+    // 1.2 A：荒野宅基地开工（服务端原子裁决；客户端只发意图，不本地先占）。
+    const r = claimWildPlot(w, 'p1', String(body.type ?? body.plot ?? ''), { from: body.from ?? null });
+    if (r.ok) playerViabSpend(w, .1);
+    sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
+    if (sp.log.length > 40) sp.log.shift();
+    return r;
+  }
+  if (kind === 'house_work') {
+    // 1.2 A：在自己认领的地块上施工；每次 15 游戏分（长动作，到点才落进度）。
+    const r = playerHouseWork(w, 'p1', { from: body.from ?? null });
+    if (r.ok) playerViabSpend(w, SURV_COST.house_work);
+    sp.log.push({ t: w.t, kind, ok: r.ok, code: r.code });
+    if (sp.log.length > 40) sp.log.shift();
+    return r;
   }
   if (kind.startsWith('family_')) {
     const result = houseAction(w, 'p1', body);

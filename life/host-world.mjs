@@ -19,6 +19,12 @@ import { createSimScheduler, gameMinutesForRealMinutes } from './sim-scheduler.m
 import { worldTick } from './sim-clock.mjs';
 import { createViewerDomain } from './host-viewers.mjs';
 import { createWriteQueue, createCoalescer, writeArchiveAtomic, readArchiveFile, quarantineArchive, publicSaveError } from './host-saves.mjs';
+import { rebuildOccupancy, placeActor, roomSpaceId } from './actor-pos.mjs';
+import { sceneSpace } from './construction-access.mjs';
+import { wildPlotDoor } from '../shared/wild-plots.mjs';
+import { worldRoute } from '../shared/asset-collision.mjs';
+import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
+import { worldSite } from './geometry.mjs';
 
 export function createHostWorld({ S, CFG, C, getModel, getReplay, observerActive }) {
   const { ROSTER, M5_ENABLED, WORK_CAP, TICK_MS, GAME_MODE, CATCHUP_CAP_MIN, SURV_CATCHUP_CAP,
@@ -282,7 +288,7 @@ async function backToMainCampInQueue() {
 
 // V7.2 阶段 B：正式游戏默认走角色个人时间（一天 1440 分）；V72_TIME=0 是退回旧"每刻 100 点预算"的兼容开关。
 function survivalOptions() {
-  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, actTimeModel: process.env.V72_TIME !== '0', gameRules: process.env.GAME_RULES === '1', simTime: process.env.SIM_TIME !== '0', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, wildExpansion: true, actTimeModel: process.env.V72_TIME !== '0', gameRules: process.env.GAME_RULES === '1', simTime: process.env.SIM_TIME !== '0', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null };
 }
 
 async function advanceWorlds(onError = null, auto = false) {
@@ -974,12 +980,80 @@ function applyInto(pack, d, { skipM5 = false } = {}) {
     }
   }
 
+  // 1.2 浏览器验收夹具（仅 V73_TEST=1）：荒野宅基地状态/站到门口/室内走动摆位。
+  // 只写位置与测试材料，不替玩家做任何生产判定（认领/施工仍走 /act 的真实规则路径）。
+  function v12Fixture(body) {
+    if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };
+    const sp = S.mainSurv ?? S.surv;
+    if (!sp) return { ok: false, code: 'NO_SURVIVAL' };
+    const w = sp.world, s = w.survival;
+    const action = String(body.action);
+    if (action === 'v12_state') {
+      const view = survView(sp);
+      const space = sceneSpace(w);
+      const anchor = worldSite(w, 'hall') ?? w.campLayout?.sites?.hall ?? null;
+      const plots = (view.wildPlots?.plots ?? []).map((plot) => {
+        const door = wildPlotDoor(plot);
+        const route = anchor
+          ? worldRoute(door, [anchor[0] + .5, anchor[1] + .5], (x, z) => space.walkable(x, z, CAMP_BODY_RADIUS), { margins: [14, 60, 135] })
+          : null;
+        return {
+          id: plot.id, at: plot.at, gate: plot.gate, lot: plot.lot, claimed: plot.claimed, owner: plot.owner,
+          door, stand: space.walkable(door[0], door[1], CAMP_BODY_RADIUS), route: route?.length ?? null,
+          houseCenterWalkable: plot.claimed
+            ? space.walkable(plot.lot.x + plot.lot.w / 2, plot.lot.z + plot.lot.d / 2, CAMP_BODY_RADIUS) : null,
+        };
+      });
+      return {
+        ok: true, t: w.t, playerPos: s.playerPos ?? null, campPlayerRoom: w.campPlayerRoom ?? null,
+        materials: { ...(w.pinv?.p1 ?? {}) },
+        claims: Object.keys(s.wildExpansion?.claims ?? {}),
+        deeds: Object.fromEntries(Object.entries(s.households?.deeds ?? {}).filter(([k]) => k.startsWith('wild-')).map(([k, d]) => [k, d.owner])),
+        projects: Object.fromEntries(Object.entries(s.households?.projects ?? {}).filter(([k]) => k.startsWith('wild-')).map(([k, p]) => [k, { owner: p.owner, progress: p.progress }])),
+        housing: w.housing, loc: w.loc, plots,
+        residents: Object.values(w.agents).filter((a) => !a.isPlayer).map((a) => ({ id: a.id, loc: w.loc[a.id] ?? null, pos: w.pos?.[a.id] ?? null })),
+      };
+    }
+    const which = String(body.fixture ?? body.which ?? '');
+    if (which === 'materials') {
+      w.pinv.p1 = { wood: Number(body.wood ?? 8), stone: Number(body.stone ?? 6) };
+      return { ok: true, materials: { ...w.pinv.p1 } };
+    }
+    if (which === 'stand') {
+      const plot = (survView(sp).wildPlots?.plots ?? []).find((p) => p.id === body.plot) ?? null;
+      if (!plot) return { ok: false, code: 'NO_PLOT' };
+      const door = wildPlotDoor(plot);
+      s.playerReachState = null;
+      placeActor(w, 'p1', { x: door[0], z: door[1], space: 'world' }, { mirror: true });
+      return { ok: true, plot: plot.id, door, playerPos: s.playerPos };
+    }
+    if (which === 'indoor') {
+      const room = String(body.room ?? 'home');
+      const ids = Array.isArray(body.ids) ? body.ids : ['a2', 'a3'];
+      const slots = [[6, 9], [9.6, 9], [5.65, 5.4]];
+      const positions = {};
+      ids.forEach((id, i) => {
+        if (!w.agents[id]) return;
+        if (s.districtTravel) delete s.districtTravel[id];
+        w.loc[id] = room;
+        w.agents[id].nextThinkMin = Infinity;
+        const slot = slots[i % slots.length];
+        placeActor(w, id, { x: slot[0], z: slot[1], space: roomSpaceId(room) });
+        positions[id] = { ...w.pos[id] };
+      });
+      rebuildOccupancy(w);
+      return { ok: true, room, ids, positions, locs: Object.fromEntries(ids.map((id) => [id, w.loc[id]])) };
+    }
+    return { ok: false, code: 'UNKNOWN_FIXTURE' };
+  }
+
   return {
     viewers, writeQueue, start, stop, flushWrites, save, saveWorld, saveMain, saveCampEntry,
     serialize, applyInto, loadArchive, readArchive, quarantine, buildPacks, makePack, freshPacks, packsFrom,
     catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, takePendingFlush,
     campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
     claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, queueAct, manualTick, autoTick,
+    v12Fixture,
     scheduleTickSave, takeTickSave, onSignal,
   };
 }

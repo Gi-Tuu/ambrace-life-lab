@@ -18,6 +18,7 @@ import { districtPads } from './camp-districts.mjs';
 import { createCampOutskirts } from './camp-outskirts.mjs';
 import { forestDensity } from './wild-landscape.mjs';
 import { outdoorStage, penLayout } from './camp-scene.mjs';
+import { wildPlotPad } from './wild-plots.mjs';
 
 export const TILE = 16;
 export const WORLD_TW = TOWN_SIZE.width;
@@ -77,11 +78,12 @@ export function staticCampSites(sites, districts = null, peripheralHomes = null)
  * @param {object} [spec.households]      view.households / survival.households（含 deeds）
  * @param {object} [spec.homeRoads]
  * @param {object} [spec.ecoSources]
+ * @param {object|null} [spec.wildPlots]  1.2 A 荒野宅基地视图（只有 claimed 的地块参与几何）
  */
 export function campSceneContent({
   mapSeed = 0, layoutVersion = 0, layout = null, camp = false, timber = false,
   sites = {}, districts = null, peripheralHomes = null, households = false,
-  homeRoads = {}, ecoSources = null,
+  homeRoads = {}, ecoSources = null, wildPlots = null,
 } = {}) {
   const campOn = Boolean(camp);
   const hasTimber = Boolean(timber);
@@ -139,6 +141,16 @@ export function campSceneContent({
     addSegment([(x + .5) * TILE, (z - 1.1) * TILE], [(x + .5) * TILE, (sz + 2.6) * TILE]);
     addSegment([(x + .5) * TILE, (sz + 2.6) * TILE], [(sx + .5) * TILE, (sz + 2.6) * TILE]);
   }
+  // 1.2 A：荒野宅基地在**认领后**才生成几何——压平 pad、清林、画接入小路、避开建筑。
+  // 未认领时 wildClaimed 为空，以下循环一次都不执行 ⇒ 金样/研究/22k 逐位不变。
+  const wildClaimed = (wildPlots?.plots ?? []).filter((plot) => plot.claimed && Array.isArray(plot.at));
+  const wildPads = wildClaimed.map((plot) => wildPlotPad(plot.at));
+  for (const plot of wildClaimed) {
+    const points = (plot.road ?? []).filter((p) => Array.isArray(p) && p.length === 2);
+    for (let i = 0; i < points.length - 1; i += 1) {
+      addSegment([points[i][0] * TILE, points[i][1] * TILE], [points[i + 1][0] * TILE, points[i + 1][1] * TILE], false);
+    }
+  }
   for (const [u, v, mids] of links) {
     if (!routeSites[u] || !routeSites[v]) continue;
     const points = [routeSites[u], ...mids, routeSites[v]].map((p) => p.map((n) => n * TILE + 8));
@@ -191,7 +203,7 @@ export function campSceneContent({
   }
   const pads = districtPads(districts);
   const flatLand = [
-    ...reserved, ...pads,
+    ...reserved, ...pads, ...wildPads,
     ...Object.values(sites).map(([x, z]) => ({ x: x - 4.5, z: z - 8, w: 9, d: 11 })),
     ...land,
     ...grove.map(({ x, z }) => ({ x: x - 1, z: z - 1, w: 2, d: 2 })),
@@ -218,7 +230,7 @@ export function campSceneContent({
   const harvestNodes = campOn ? campPlants(layout, 12, mapSeed, layoutVersion, ecoSources ?
     { ...ecoSources, fruit: Array.from({ length: 12 }, (_, slot) => ({ id: `fruit:${slot}`, slot })) } : undefined) : [];
   const landscape = campOn ? createCampOutskirts(mapSeed, layoutVersion ?? 0, layout?.crossZ ?? 34,
-    { flatLand, hills, roadDistance, plantClearance, harvestNodes, districtPads: pads }) : null;
+    { flatLand, hills, roadDistance, plantClearance, harvestNodes, districtPads: [...pads, ...wildPads] }) : null;
 
   // 一次跨河对应一座完整木桥；同一组 bridgeCells 同时决定绘制与可走范围。
   const bridgeCells = new Set(), bridgeRows = [];

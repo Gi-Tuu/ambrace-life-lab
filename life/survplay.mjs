@@ -1,4 +1,5 @@
 import { campDistricts, districtHomes } from '../shared/camp-districts.mjs';
+import { initWildExpansion, wildExpansionEnabled, wildPlotView } from '../shared/wild-plots.mjs';
 // 生存单世界游玩层（Phase D / §14–15 P2）。居民＝完整 Organism（同权：玩家能做的 AI 都能做）。
 // 服务端权威；前端只读 /world.survival；玩家动作走 /act {mode:'survival'}。
 // additive：不改动 A/B pack、不改动 lab/town 基线；存档以独立键 survival 挂载（缺省 tolerant）。
@@ -92,7 +93,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null,wildExpansion=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   // P1 连续时钟只属于正式游戏（gameRules）且必须显式开启；研究态/旧参数路径不创建、不写字段。
   const continuous = simTime === true && gameRules === true;
@@ -139,6 +140,8 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
     if (residentialDecisions) world.peripheralHomes=districtHomes(world.districts);
     restoreDistricts(world);
   }
+  // 1.2 A：荒野宅基地（未认领只是数据；认领后才出现 pad/道路/房屋）。门控在 shared/wild-plots.mjs。
+  if (wildExpansion) initWildExpansion(world, { mapSeed, layoutVersion, gameRules, settlementLife, residentialDecisions });
   restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
   world.residentChannelMask = residentChannelMask;
@@ -842,6 +845,9 @@ export function survView(sp) {
     day: dayOf(w.t), targetDays: SURV_TARGET,
     rooms:{...w.locs,...housingLabels(w)}, outdoor:w.outdoor,
     ...(w.districts && {districts:w.districts,peripheralHomes:w.peripheralHomes,districtTravel:s.districtTravel??{},resStock:s.resStock,playerPos:s.playerPos??null}),
+    // 1.2 A：荒野宅基地只随正式游戏出现；未认领地块零几何，只给客户端候选/认领态（路只给已认领）。
+    ...(!w.districts && wildExpansionEnabled(w) && {peripheralHomes:w.peripheralHomes??{},playerPos:s.playerPos??null}),
+    ...(wildExpansionEnabled(w) && {wildPlots:wildPlotView(w)}),
     loc: w.loc, occupancy: w.occupancy,
     ...(constructionAccessEnabled(w) && { constructionArrivals: Object.fromEntries(Object.entries(w.residentTravel??{})
       .filter(([id,row])=>row.at && row.to===w.loc[id]).map(([id,row])=>[id,row.at])) }),

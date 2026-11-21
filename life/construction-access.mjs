@@ -8,6 +8,7 @@ import { joinedRoute } from '../shared/camp-outskirts.mjs';
 import { constructionFootprint, constructionGate, entrancePoints, workPoints, clearOfLots, CONSTRUCTION_CODES } from '../shared/camp-construction-access.mjs';
 import { campSurface, createSpace, roomSurface, wildSurface } from './space.mjs';
 import { campSceneBundle, campSitesOf, staticCampSites } from '../shared/camp-scene-content.mjs';
+import { wildClaimSignature, wildHouseSolids, wildPlotView } from '../shared/wild-plots.mjs';
 
 const cache = new WeakMap();
 const ok = { ok:true, code:'OK' };
@@ -26,7 +27,8 @@ const sceneCache = new WeakMap();
 function sceneGeometry(w) {
   const layout = w.campLayout ?? null;
   let g = sceneCache.get(w);
-  if (g && g.layout === layout && g.districts === w.districts) return g;
+  const wildSig = wildClaimSignature(w);
+  if (g && g.layout === layout && g.districts === w.districts && g.wildSig === wildSig) return g;
   const landmarks = Object.fromEntries(['home','hall','store','yard','workshop','garden','watch','well']
     .map(loc => [loc,campSite(loc,layout)]));
   const liveSites = campSitesOf({ rooms:w.locs, districts:w.districts, layout, peripheralHomes:w.peripheralHomes });
@@ -36,8 +38,9 @@ function sceneGeometry(w) {
     camp:true, timber:true, sites,
     districts:w.districts, peripheralHomes:w.peripheralHomes,
     households:w.survival?.households, homeRoads:w.survival?.homeRoads,
+    wildPlots: wildPlotView(w),
   });
-  g = { layout, districts:w.districts, landmarks, sites, content, stage };
+  g = { layout, districts:w.districts, wildSig, landmarks, sites, content, stage };
   sceneCache.set(w,g);
   return g;
 }
@@ -49,19 +52,20 @@ export function sceneSpace(w) {
   if (!w?.survival) return null;
   const hit = spaceCache.get(w);
   const layout = w.campLayout ?? null;
-  if (hit && hit.layout === layout && hit.districts === w.districts) return hit.space;
+  const wildSig = wildClaimSignature(w);
+  if (hit && hit.layout === layout && hit.districts === w.districts && hit.wildSig === wildSig) return hit.space;
   const g = sceneGeometry(w);
   // 地形链只有一条：营地内与野外都由 campSceneContent 生成的同一份 content.landscape 回答。
   const terrain = g.content.landscape;
   // 桥带与 crossing 同源：都用 content.bridges（画出来的那份）。默认存档 layout=null 时
   // 旧写法桥上不可走；这里显式传入，wild 的 crossing 也从 camp 派生，不再各写 `?? 24`。
-  const camp = campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain, bridges:g.content.bridges });
+  const camp = campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain, bridges:g.content.bridges, extraSolids: wildHouseSolids(w) });
   const space = createSpace({
     camp,
     wild: wildSurface(terrain, { crossing:camp.crossing }),
     terrain,
   });
-  spaceCache.set(w, { layout, districts: w.districts, space });
+  spaceCache.set(w, { layout, districts: w.districts, wildSig, space });
   return space;
 }
 

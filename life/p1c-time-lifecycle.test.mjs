@@ -193,7 +193,10 @@ test('P1c-05 world.t 是派生 getter：读=floor(minutes/60)，写=重锚，JSO
   assert.equal(clone.t, 12, 'structuredClone 必须读得到派生 t');
   const back = loadSurv(clone, 7, { ...FORMAL, simTime: true });
   assert.equal(back.world.t, 12);
-  assert.ok(Math.abs(back.world.simClock.nowMinutes() - 720) < 1e-6);
+  // nowMinutes 是“真实时间 → 游戏分钟”的派生读法：读档返回后到断言之间的真实毫秒会按 1:10 计入。
+  // 这里容许 0.05 游戏分（=300ms 真实时间，并行跑全量时足够），仍然能抓住“重锚到 0/610”这类错误
+  // （那会差几百游戏分）；原来 1e-6 分（=6µs）的容差在 211 个测试文件并行时是负载抖动，不是语义。
+  assert.ok(Math.abs(back.world.simClock.nowMinutes() - 720) < 0.05);
 });
 
 test('P1c-06 暂停/倍速/离线补时同一 rate：rate=2 时 60 真实分补 120 游戏分', async (t) => {

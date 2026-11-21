@@ -111,7 +111,7 @@ const {
   campManager, sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, campOwnerHash,
   claimCamp, openCamp, backToMainCamp, survivalOptions, queueWorldWrite, manualTick,
   catchUp, catchUpSurvival, actInSurvival, sleepSurvival, persistAfterAction, serialize,
-  makePack, freshPacks, packsFrom, buildPacks, queueAct,
+  makePack, freshPacks, packsFrom, buildPacks, queueAct, v12Fixture,
 } = world;
 
 // 旧导出名全部保留：调用方（serve/scripts/测试）不需要知道模块内部怎么分层。
@@ -346,7 +346,9 @@ export const host = {
     }
     if (body.action === 'step') return manualTick().then(() => ({ ...this.status(), ok: true }));
     return queueWorldWrite(async () => {
-      const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death'];
+      const known = ['pause', 'resume', 'rate', 'brain', 'reset', 'compare_reset', 'survival_reset', 'catchup', 'step', 'mask', 'v73_fixture', 'v73_state', 'quickstart_death', 'v12_state', 'v12_fixture'];
+      // 1.2 浏览器验收夹具（V73_TEST=1 才生效；实装在 host-world，位置/占用的唯一写入口仍受静态闸门约束）。
+      if (body.action === 'v12_state' || body.action === 'v12_fixture') return v12Fixture(body);
       // V7.3 第三批浏览器夹具：只在 V73_TEST=1 下暴露的受控接口（不进入生产默认路径）。
       if (body.action === 'v73_fixture') {
         if (process.env.V73_TEST !== '1') return { ok: false, code: 'DISABLED' };

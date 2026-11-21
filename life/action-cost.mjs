@@ -38,6 +38,7 @@ export const PLAYER_TO_SHARED = Object.freeze({
   animal_feed: 'feed', animal_slaughter: 'slaughter',
   road_lay: 'road', road_remove: 'road',
   home_request: 'home', home_grant: 'home', home_revoke: 'home', home_break: 'repair', home_fix: 'repair',
+  home_claim: 'home',
   facility_use: 'facility', coop_request: 'home',
   camp_chop: 'gather', camp_plant: 'plant', camp_water: 'water', camp_craft: 'build',
   camp_store: 'store', camp_take: 'take', camp_eat: 'eat', camp_resident: 'talk',

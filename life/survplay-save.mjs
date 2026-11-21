@@ -12,6 +12,7 @@ import { homeEntry } from './home-access.mjs';
 import { SURV } from './worldstate.mjs';
 import { LEGACY_EVENT_RULES } from './rng.mjs';
 import { adoptTravels, migratePositions, rebuildOccupancy, removeActor, setLocOnly, setPlayerRoom } from './actor-pos.mjs';
+import { generateWildPlots, restoreWildExpansion, wildExpansionEnabled } from '../shared/wild-plots.mjs';
 
 export function createSaveDomain({ createSurvPlay, newChild, restoreDistricts, logLimit = 200, resetSimCursor = null }) {
   const SURV_LOG_LIMIT = logLimit;
@@ -82,6 +83,12 @@ function loadSurv(raw,seed=7,options) {
       w.t = raw.t;
     }
     if (w.survival.households && raw.survival.households) w.survival.households = raw.survival.households;
+    // 1.2 A：荒野认领必须先于 restoreHouseholds 合并回 peripheralHomes，
+    // 否则住宅→房屋映射（housing/deed）会因为 residentialSite 查不到地块而丢失。
+    if (raw.survival?.wildExpansion && wildExpansionEnabled(w)) {
+      w.survival.wildExpansion = raw.survival.wildExpansion;
+      restoreWildExpansion(w);
+    }
     for (const id of Object.keys(raw.minds ?? {})) {
       if (!/^c[1-9]\d*$/.test(id)) continue;
       w.agents[id] = newChild(w, id);
@@ -151,6 +158,15 @@ function loadSurv(raw,seed=7,options) {
       }
     }
     restoreDistricts(w);
+    // 1.2 A：读档后重建荒野宅基地（旧档没有字段 ⇒ 按当前 world 选项重新生成候选；claims 由存档恢复）。
+    if (wildExpansionEnabled(w)) {
+      const wild = w.survival.wildExpansion;
+      if (!Array.isArray(wild.plots) || !wild.plots.length) {
+        wild.plots = generateWildPlots(w.mapSeed ?? 0, w.layoutVersion ?? 0).plots;
+      }
+      wild.claims ??= {};
+      restoreWildExpansion(w);
+    }
     restoreFarmPlots(w);
     restoreSources(w);
     if (w.survival.settlementLife) {
