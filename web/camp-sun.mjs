@@ -12,7 +12,9 @@ export function solarLight(t,dayTicks,season,{storm=false,overcast=false,indoor=
   const daylight=smooth(rise-.085,rise+.075,day)*(1-smooth(set-.075,set+.085,day));
   const dawn=smooth(rise-.083,rise,day)*(1-smooth(rise,rise+.095,day));
   const dusk=smooth(set-.098,set,day)*(1-smooth(set,set+.08,day));
-  const weather=storm?.63:overcast?.79:1;
+  // 天气倍率吃 0..1 的连续量（客户端 camp-climate-view）：雨 .79、暴风 .63 两个旧端点保持，
+  // 中间值是连续过渡；传布尔仍按 1/0 处理，旧调用不受影响。
+  const weather=1-.21*clamp(overcast,0,1)-.16*clamp(storm,0,1);
   const sky=blend([.46,.53,.72],[1,1,.98],daylight);
   const warm=blend(blend(sky,[1,.78,.66],dawn*.7),[1,.69,.48],dusk*.79);
   const light=warm.map(v=>v*weather);

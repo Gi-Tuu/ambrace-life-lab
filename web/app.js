@@ -5,6 +5,7 @@ import { residentPortrait } from './resident-portrait.mjs';
 import { residentLook } from './resident-look.mjs';
 import { guidedOutdoor, planApproach, guideGeometry, GUIDE_COLORS } from './camp-guidance.mjs';
 import { campClimate, paintWeather, plotWeather, stormEffects } from './camp-weather.mjs';
+import { createClimateView } from './camp-climate-view.mjs';
 import { campSight, sightScene, terrainHit } from './camp-sight.mjs';
 import { districtPads } from '../shared/camp-districts.mjs';
 import { roomExposure } from './camp-lighting.mjs';
@@ -37,7 +38,7 @@ import {
 import { expandWalk, fillCollisionRect, pixelPath } from '../shared/asset-collision.mjs';
 import { districtResources, addCampWork, homeAppearance, homeStyle, outdoorHomes, outdoorLife, penLayout, roomStage, timberStage, workModelKey } from '../shared/camp-scene.mjs';
 import { actorBoxes, actorLabelHeight, animalBoxes, campCamera, collisionFootprint, coveredModels, createCampRenderer,
-  modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
+  fadeableCovered, fadesAsOccluder, modelBounds, rayBox, residentCollisionRadius } from './camp-3d-render.mjs';
 import { bodyGrid, CAMP_BODY_RADIUS, separates } from '../shared/camp-physics.mjs';
 import { hallExitAt, hallFrontGeometry, roomPropsPx, roomDoorPx, ROOM_DOOR_WORLD, ROOM_INTERIORS } from '../shared/room-layout.mjs';
 import { campSurface, createSpace, roomSurface, unitsForRealMs, wildSurface } from '../life/space.mjs';
@@ -543,10 +544,12 @@ function buildWorld(w) {
   }
   // P4：唯一空间查询（life/space.mjs）。营地内地面与野外共用同一份 content.landscape 高度链；
   // scene3d.floors 只作为“可站表面/建筑地板”注册进 space（桥面、连廊、房间地板）。
-  const crossing=w.layout?.crossZ??24;
+  // 桥带只认画出来的那份 content.bridges（默认存档 layout=null 时同样有效）；crossing 由它反推，
+  // 不再在调用点各写一个 `?? 24`（那会让桥面在 mesh 里、在 space 里消失）。
+  const camp=campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape,bridges});
   const space=createSpace({
-    camp:campSurface({mapSeed,layoutVersion:w.layoutVersion??0,layout:w.layout,stage:scene3d,terrain:landscape}),
-    wild:wildSurface(landscape,{crossing}),
+    camp,
+    wild:wildSurface(landscape,{crossing:camp.crossing}),
     terrain:landscape,
   });
   const habitats=wildHabitats(w.layout);
@@ -852,6 +855,8 @@ const campFog=new WeakMap();
 const previewFlags=new URLSearchParams(location.search);
 const physicalLighting=!previewFlags.has('bakedLight');
 const animateParts=!previewFlags.has('staticParts');
+// `?cover=none`：只给真实浏览器验收做"遮挡淡出关闭"的对照帧（纯表现，不写世界状态）。
+const coverControl=previewFlags.get('cover');
 // 首帧内部渲染比例（GL 填充率在 SwiftShader/低端 GPU 上是首帧大头）。
 // `?firstScale=1` 可关掉降采样做 A/B；默认 0.5 只影响第一帧，下一帧即恢复全分辨率。
 const FIRST_FRAME_SCALE=Math.max(.35,Math.min(1,Number(previewFlags.get('firstScale')??.5)||.5));
@@ -1446,14 +1451,28 @@ function drawCamp(cv,w,historical=false) {
   const camera=campCamera({x,z,width,height,span,yaw:overview?0:CAMP_ANGLES[campAngle],pitch:overview?Math.PI/2-.001:room?.76:.65,targetY});
   const climate=campClimate(w);
   const open=!room || ['hall','yard','garden','well','watch'].includes(site);
+  // ── 天气过渡层（纯表现，2026-11-21 审计 P1）────────────────────────────────
+  // 服务端布尔 → 10–30s 连续量。每块画布各持一份（A/B 两个世界的天气不同）；
+  // 回放、首帧、读档/切世界的刻跳变直接 snap 到目标，避免读档后重播一段雨。
+  const climateView=cv._climateView??(cv._climateView=createClimateView());
+  const climateNow=performance.now();
+  const climateDt=cv._climateAt===undefined?0:Math.min(.5,(climateNow-cv._climateAt)/1000);
+  cv._climateAt=climateNow;
+  const climateJump=cv._climateTick!==undefined &&
+    (Math.abs(w.t-cv._climateTick)>24 || cv._climateSide!==w.compareSide ||
+     cv._climateSeed!==w.seed || cv._climateMap!==(w.mapSeed??0));
+  cv._climateTick=w.t; cv._climateSide=w.compareSide; cv._climateSeed=w.seed; cv._climateMap=w.mapSeed??0;
+  climateView.update(climate,climateDt,{snap:historical||firstFrame3d||climateJump});
+  const climateNowView=climateView.view();
   const elapsed=!historical && S.running ? Math.max(0,performance.now()-(S.sunTickAt??performance.now())) : 0;
   // 室内判定的 solarLight 会把 direct 置 0（indoor:true），所以白天因子必须用"室外视角"再算一次。
 const daylightDirect=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
-  {storm:climate.storm,overcast:climate.rain||climate.snow,indoor:false}).direct : 0;
+  {storm:climateNowView.storm,overcast:climateNowView.overcast,indoor:false}).direct : 0;
 const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTicks??24,climate.season,
-    {storm:climate.storm,overcast:climate.rain||climate.snow,indoor:!open}) : null;
+    {storm:climateNowView.storm,overcast:climateNowView.overcast,indoor:!open}) : null;
   const light=sun?.light??(w.phase==='夜'?[.55,.62,.76]:w.phase==='暮'?[.88,.79,.70]:climate.storm?[.68,.76,.82]:[1,1,1]);
-  const weather=[time,open?(climate.storm?2.7:climate.rain?1.15:.55):0,Number(open&&climate.frost),
+  // 风力/积雪吃连续量：端点 0.55 / 1.15 / 2.7 与旧的布尔三档逐位一致。
+  const weather=[time,open?climateNowView.wind:0,open?climateNowView.frost:0,
     sun?.glow??(w.phase==='夜'?.96:w.phase==='暮'?.48:0)];
   const sunHint=$('campSunPhase');
   if (!right && sun && sunHint.textContent!==sun.phase) sunHint.textContent=sun.phase;
@@ -1472,7 +1491,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const player=people.find(p=>p.who==='p1');
   const motionKey=ui.compare ? `compare:${S.compareRevision}:${w.compareSide}` : outingKey(w);
   const active=historical?[]:workPlayers[playerId](motionKey,w.t,w.workMotions??noWorkMotions,performance.now()/1000);
-  const impacts=stormEffects({active:climate.storm && open && !overview,time,
+  const impacts=stormEffects({active:open && !overview && climateNowView.storm>.02,time,
+    intensity:climateNowView.storm,
     focus:player ? [player.x,player.z] : [x,z],
     bounds:extended?WILDS:{west:0,east:stage.width,north:0,south:stage.depth},
     surface:(px,pz)=>{
@@ -1513,7 +1533,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const surfaceHeight=(px,pz)=>exterior?.space ? groundHeightOf(exterior,px,pz) : stage.heightAt(px,pz);
   const shadows=firstFrame3d||overview ? undefined : {source:room?roomContactSource(stage):campShadows(exterior,regions??[]),x,z,height:surfaceHeight};
   const daylight=room?Math.max(0,Math.min(1,daylightDirect/.5)):0;
-  const wetness=open&&climate.rain?(climate.storm?.95:.65):0;
+  const wetness=open?climateNowView.wetness:0;
   const workshopRoofs=(exterior?.workProjects??[]).filter(p=>p.phase==='complete' && p.record.type==='workshop')
     .map(({lot:{x,z,w,d}})=>[x+.22,z+.22,w-.44,d-.44]);
   const shelters=[...stage.shelters,...workshopRoofs].sort(
@@ -1523,7 +1543,8 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   // （覆盖判定每帧要对上百个 occluder 做射线，室外移动时是可持续的 CPU 开销。）
   const coverKey=`${Math.round((player?.x??0)*2)},${Math.round((player?.z??0)*2)},${Math.round(x*2)},${Math.round(z*2)},${stage.boxes.length},${life?.boxes?.length??0},${regions?.length??0},${work.length}`;
   let covered;
-  if (firstFrame3d) covered=new Set();
+  if (coverControl==='none') covered=new Set();   // 验收对照帧：关掉遮挡淡出
+  else if (firstFrame3d) covered=new Set();
   else if (cv._cover?.key===coverKey) covered=cv._cover.set;
   else { covered=coveredModels(camera,player,stage.boxes,life?.boxes??[],homes?.boxes??[],work,...regionDetails); cv._cover={key:coverKey,set:covered}; }
   cv._cam={mode:room?'interior':overview?'overview':'view',project3d:camera,stage,site,covered,
@@ -1537,7 +1558,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   // 首帧策略：第一张 3D 帧不出接触阴影、GL 内部半分辨率，先把 #cvA[data-renderer] 打出来；
   // 同一 rAF 链的下一帧立刻按全分辨率+阴影重画（forceRepaint），所以停留画面与金样逐像素一致。
   const renderT0=performance.now();
-  if(!campRenderer.render({target:cv,stage,regions:firstFrame3d?undefined:regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,cutout: !room && player ? [player.x,player.z,2.6,1] : null,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
+  if(!campRenderer.render({target:cv,stage,regions:firstFrame3d?undefined:regions,regionAtlas:regions?.length?outskirtsAtlas():null,life,homes,camera,people,animals,work,impacts,hearth,covered,sun,wetness,shelters,exposure:room?roomExposure(open,daylight,hearth?.[3]??0):1,
       // 白天因子：sun.direct 夜里为 0、正午约 0.5-0.55，归一化到 0..1 交给窗光通道。
       windows: room ? (stage.windows ?? null) : null,
       daylight,
@@ -1547,7 +1568,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
   const overlayT0=performance.now();
   const g=cv.getContext('2d'), ratio=campRatio(cv);
   if (!historical && exterior && playerId==='cvA' && S.playing) advanceOutdoorIntent(cv._cam,w,player);
-  if (open && !overview) paintWeather(g,climate,time,ratio);
+  if (open && !overview) paintWeather(g,climateNowView,time,ratio);
   if(overview)campMapFrame(g,camera,stage,ratio,extended?WILDS:undefined);
   // 贴地光圈：p1 黄、AI 绿抖动环；常驻，不穿屋顶。
   for(const p of people)campRing(g,camera,p,ratio,p.who==='p1'?'#FFEC27':'#C2C3C7',frame);
@@ -1577,7 +1598,11 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??7500)),w.dayTi
       campBadge(g,camera,[px,hit.labelHeight??baseY+1.15,pz],hit.name,'',16,ratio);
     }
   }
-  cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null};
+  cv._debug={tick:w.t,historical,wetness,weatherGeometry,hints,pose:campPose?.kind,animals:animals.map(a=>[a.kind,a.x,a.z]),renderer:'3d',ratio,span,people:people.length,stageBoxes:stage.boxes.length,stageFxs:stage.fxs?.length??0,chimneys:stage.chimneys?.length??0,acts:people.map(q=>q.who+':'+q.act),climate,sun:sun?.phase,focus:[x,z],facing:player?.direction,hover:!!h,hoverLabel,wildRegions:regions?.length??0,unifiedGround:Boolean(extended),p1:player?[player.x,player.y,player.z]:null,
+    // 验收读数（DOM 断言用）：遮挡命中的全部 occluder、真正会淡出的子集、以及天气过渡层的连续量。
+    covered:[...covered].sort(),occluded:fadeableCovered(covered).sort(),coverControl:coverControl??null,
+    climateView:climateNowView,climateTarget:climateView.targets()};
+  cv._cam.climateView=climateNowView;
   perfMark('overlay', overlayT0);
   cv.dataset.renderer='3d';
   if(firstFrame3d){ cv._painted3d=true; forceRepaint=true; } // 下一帧全分辨率重画
@@ -4755,6 +4780,9 @@ if (!campRenderer) showGfxUnavailable(true);
 
 Object.assign(window.__lifeDebug, {
   WALK, ui, S, IPOS,
+  // 遮挡白名单/天气过渡的只读验收口（纯查询，不改任何状态）。
+  fadesOccluder: (id) => fadesAsOccluder(id),
+  fadeable: (ids) => fadeableCovered(ids),
   survFlash: () => survFlash,
   interact: () => survInteract(),
   pointedEntity,

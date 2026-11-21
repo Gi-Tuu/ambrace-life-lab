@@ -31,10 +31,10 @@ function clientSpaceFromView(v) {
     districts: v.districts, peripheralHomes: v.peripheralHomes,
     households: v.households, homeRoads: v.homeRoads, ecoSources: v.ecoSources,
   });
-  const crossing = v.layout?.crossZ ?? 24;
+  const camp = campSurface({ mapSeed: v.mapSeed, layoutVersion: v.layoutVersion ?? 0, layout: v.layout ?? null, stage, terrain: content.landscape, bridges: content.bridges });
   const space = createSpace({
-    camp: campSurface({ mapSeed: v.mapSeed, layoutVersion: v.layoutVersion ?? 0, layout: v.layout ?? null, stage, terrain: content.landscape }),
-    wild: wildSurface(content.landscape, { crossing }),
+    camp,
+    wild: wildSurface(content.landscape, { crossing: camp.crossing }),
     terrain: content.landscape,
   });
   return { space, content, stage };

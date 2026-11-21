@@ -53,9 +53,12 @@ export function sceneSpace(w) {
   const g = sceneGeometry(w);
   // 地形链只有一条：营地内与野外都由 campSceneContent 生成的同一份 content.landscape 回答。
   const terrain = g.content.landscape;
+  // 桥带与 crossing 同源：都用 content.bridges（画出来的那份）。默认存档 layout=null 时
+  // 旧写法桥上不可走；这里显式传入，wild 的 crossing 也从 camp 派生，不再各写 `?? 24`。
+  const camp = campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain, bridges:g.content.bridges });
   const space = createSpace({
-    camp: campSurface({ mapSeed:w.mapSeed, layoutVersion:w.layoutVersion??0, layout, stage:g.stage, terrain }),
-    wild: wildSurface(terrain, { crossing:layout?.crossZ ?? 24 }),
+    camp,
+    wild: wildSurface(terrain, { crossing:camp.crossing }),
     terrain,
   });
   spaceCache.set(w, { layout, districts: w.districts, space });
@@ -124,6 +127,9 @@ export function roomSpaceOf(w, room) {
 
 // 房间在世界里的落点：室内坐标 → 世界坐标不作为几何事实（房间是独立空间），
 // 但"从哪扇门出去/进来"必须唯一：用服务端的 campEntrance 门矩形中心（与客户端同一条 campEntrance）。
+// 2026-11-21：入口矩形已挪到门前可站的位置（center 距实体 slab 0.66 > 玩家半径 0.33），
+// 因此这里的"中心"口径不需要再改成 .82 —— 改它会平移居民的旅行起点，
+// 把研究态 dumpSurv 的 districtTravel.start/length 一起改掉（V11-RESEARCH-05 逐位基线）。
 export function roomDoorPoint(w, room) {
   if (typeof room === 'string' && room.startsWith('facility:')) {
     const building = facilityOf(w, room);

@@ -199,10 +199,17 @@ function nearColliders(index, colliders, x, z, radius = 0) {
 export function campSurface({ mapSeed = 0, layoutVersion = 0, layout = null, stage = null,
   terrain = null, raised = true, bridges = null, extraSolids = [] } = {}) {
   const { riverCenter, riverHalfWidth } = campTerrain(mapSeed, raised, layoutVersion);
-  const crossing = layout?.crossZ ?? 24;
+  // 桥带是画出来的那份（content.bridges），不是按 crossZ 再推一次：
+  // 旧写法在 layout=null（默认存档）时 bridgeList=[]、crossing 兜底 24，桥只画在 mesh 里、
+  // 行走层当水处理 —— 东岸 0 格可达。现在桥带优先用调用方传入的 content.bridges，
+  // crossing 由桥带反推（与 campBridgeBounds(first,last) 的 z0..z1 一致），layout 只作兼容兜底。
+  const layoutCrossing = layout?.crossZ ?? null;
   const bridgeList = bridges ?? (layout
-    ? [campBridgeBounds(crossing - 1, crossing + 1, riverCenter, riverHalfWidth)]
+    ? [campBridgeBounds(layoutCrossing - 1, layoutCrossing + 1, riverCenter, riverHalfWidth)]
     : []);
+  const crossing = layoutCrossing ?? (bridgeList.length
+    ? Math.round((bridgeList[0][1] + bridgeList[0][3]) / 2 - .5)
+    : 24);
   const bridgeTiles = new Set();
   for (const [x0, z0, x1, z1] of bridgeList) {
     for (let tx = Math.floor(x0); tx < Math.ceil(x1); tx += 1) {

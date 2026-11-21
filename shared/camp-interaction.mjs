@@ -19,12 +19,19 @@ export const distanceTo = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1]);
 export function campEntrance(room, at, peripheralHomes) {
   if (!at) return null;
   const [sx,sz]=at, x=sx+.5,z=sz+.5;
+  // 入口矩形是“门前可站的那块地”，不是“建筑占地里的一块”。
+  // 建筑都朝南开口，前脸/台阶的位置由 camp-scene 的 house()/watchTower() 决定：
+  //   house():      front = z-1.7 = sz-1.2（台阶 boxes 在 front+.08..front+.66）
+  //   watchTower(): front = z-1.75 = sz-1.25（台阶在 front+.10..front+2.20）
+  // 旧兜底把 z 落在 sz-1.75..sz-0.25：0.55 格压在 house 的门阶/地板上，中心离 slab 只有
+  // 0.20（< 玩家半径 0.33），服务端 camp_exit 会把人放进碰撞体；瞭台那条更是整块落在塔身内、
+  // 台阶背面。现在三条闭合建筑统一起点 = 前脸 + 0.06，中心落在前一格门阶外沿（可站）。
   if (residentialSite(room,peripheralHomes)) return {x:sx-1.15,z:sz-2.55,w:2.3,d:1.6};
   if (room==='hall') return {x:x-1,z:z-1.35,w:2,d:2.25};
-  if (room==='watch') return {x:x-.95,z:z-3.71,w:1.9,d:1.35};
+  if (room==='watch') return {x:x-.95,z:sz-1.15,w:1.9,d:1.35};
   if (room==='well') return {x:x+.4,z:z-1.3,w:2.2,d:1.5};
   if (room==='yard'||room==='garden') return {x:x+.72,z:z-1.2,w:2.4,d:1.5};
-  return {x:x-1.15,z:z-2.25,w:2.3,d:1.5};
+  return {x:x-1.15,z:sz-1.14,w:2.3,d:1.2};
 }
 
 export function campPen(at) {

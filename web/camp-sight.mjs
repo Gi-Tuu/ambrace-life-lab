@@ -2,6 +2,17 @@ import { modelBounds, rayBox } from './camp-3d-render.mjs';
 
 const CELL=.5, BIN=2;
 
+// 遮挡分件后，同一栋建筑有 wall:<id> / roof:<id> / 残留 site:<id> 三组盒子；
+// ownModel（门口实体传 'site:<room>'）要能把这一族一起跳过，否则站在自家门口看向外面会被
+// 自己的门框/墙判定为挡视线。work:<room>:house（外围住宅）保持精确匹配。
+const ownFamily = (id) => {
+  if (typeof id !== 'string') return id;
+  const cut = id.indexOf(':');
+  if (cut < 0) return id;
+  const prefix = id.slice(0, cut);
+  return prefix === 'wall' || prefix === 'roof' || prefix === 'room-roof' ? 'site:' + id.slice(cut + 1) : id;
+};
+
 function heightSampler(height) {
   const samples=new Map();
   return (x,z)=>{
@@ -51,7 +62,7 @@ export function sightScene(height, lists) {
       if (key===lastBin) continue;
       lastBin=key;
       for (const b of bins.get(key)??[]) {
-        if (ownModel && b.occluder===ownModel) continue;
+        if (ownModel && ownFamily(b.occluder)===ownModel) continue;
         const hit=rayBox(from,ray,b);
         if (hit!==null && hit<end) return false;
       }

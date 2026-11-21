@@ -117,6 +117,14 @@ export function coveredModels(camera, player, ...lists) {
   return covered;
 }
 
+// 遮挡淡出白名单（唯一来源，渲染与闸门共用）：
+//   roof:/room-roof: = 屋盖；wall: = 建筑墙身、连廊栏杆/立柱、井台/棚架、瞭台塔身。
+// 天然排除 pen:（栅栏）、plot:（田地/作物）、tree:/wildtree:（树）、rock:（石）、
+// timber:/resource:（木料/资源）、landmark:（地标）——这些命中遮挡也不改材质。
+export const FADE_OCCLUDERS = /^(roof|room-roof|wall):/;
+export const fadesAsOccluder = (id) => typeof id === 'string' && FADE_OCCLUDERS.test(id);
+export const fadeableCovered = (covered) => [...(covered ?? [])].filter(fadesAsOccluder);
+
 const QUAD_UV=[[0,0],[0,0],[0,0],[0,0]];
 const noFx=()=>[0,0,0];
 function quad(data,a,b,c,d,color,uv=QUAD_UV,material=noFx,normal=faceNormal(a,c,b),surface=.5) {
@@ -433,7 +441,6 @@ const VERTEX = `
   attribute vec4 aNormal;
   uniform mat4 uView, uProjection;
   uniform mediump vec4 uWeather;
-uniform mediump vec4 uCutout;
   uniform bool uRegionTexture;
   uniform mediump vec4 uSunRay;
   uniform mediump vec3 uLight;
@@ -569,14 +576,17 @@ float exteriorWindowPool(vec4 window, vec2 point, float elevation) {
       if (uSeason==2.) color=mix(color,vec3(.64,.38,.15)*(.6+color.g*.7),.61);
       if (uSeason==3.) color=mix(color,vec3(.71,.79,.81),uRegionTexture?.68:.37);
     }
-    if (uWeather.z>.5 && water<.5 && !uShadow && vGlow<=0.) {
+    // 积雪覆盖量 uWeather.z 是 0..1 的连续量（客户端 camp-climate-view 跨 20–26s 推进），
+    // 所以白化用 smoothstep 渐变而不是 >.5 的硬开关；端点仍是"无雪 0 / 冷snap 全覆盖 1"。
+    float snowCover=smoothstep(.2,.8,uWeather.z);
+    if (snowCover>.002 && water<.5 && !uShadow && vGlow<=0.) {
       // Cold-snap rime clings to exposed surfaces. Break up the edge at pixel scale.
       vec2 pixel=floor(vec2(vWorld.x+vHeight*.37,vWorld.y-vHeight*.57)*18.);
       float crystal=fract(sin(dot(mod(pixel,113.),vec2(.93,1.27)))*207.1);
       float patch=sin(vWorld.x*4.5+sin(vWorld.y*6.4)+vHeight*4.1);
       float crust=smoothstep(.19,.71,crystal+patch*.23)*(.19+.46*max(0.,vUp));
       float grain=step(.93,crystal)*.22;
-      color=mix(color,mix(vec3(.65,.77,.81),vec3(.88,.93,.90),crystal),crust+grain);
+      color=mix(color,mix(vec3(.65,.77,.81),vec3(.88,.93,.90),crystal),(crust+grain)*snowCover);
     }
     if (water>.5) {
       float flow=sin(vWorld.y*15.-uWeather.x*5.+sin(vWorld.x*9.)*1.4);
@@ -736,7 +746,7 @@ export function createCampRenderer() {
     gl.deleteShader(vs);gl.deleteShader(fs);
     aPos=gl.getAttribLocation(p,'aPosition');aColor=gl.getAttribLocation(p,'aColor');aUV=gl.getAttribLocation(p,'aUV');
     aNormal=gl.getAttribLocation(p,'aNormal');aMaterial=gl.getAttribLocation(p,'aMaterial');
-    uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','Cutout','RegionAtlas','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
+    uniform=Object.fromEntries(['SunStrength','SunRay','ViewDirection','Grain','Physical','Shadow','RegionTexture','Wild','Sight','Hearth','Exposure','WindowA','WindowB','ExteriorWindows[0]','ExteriorWindowCount','Daylight','Interior','Season','Wetness','Shelters[0]','ShelterCount','Weather','View','Projection','RegionAtlas','Fog','FogBounds','Visibility','Light','Alpha'].map(k=>[k,gl.getUniformLocation(p,'u'+k)]));
     gl.useProgram(p);gl.enable(gl.DEPTH_TEST);
     for (const a of [aPos,aColor,aUV,aMaterial,aNormal]) gl.enableVertexAttribArray(a);
     blank=createTexture(gl.TEXTURE0); fog=createTexture(gl.TEXTURE1);
@@ -825,20 +835,14 @@ export function createCampRenderer() {
     }
     return item;
   }
-  function paintStage({b,count,ranges,terrainCount}, covered, faded, cutout=null) {
+  // 遮挡淡出（2026-11-21）：只把 FADE_OCCLUDERS 白名单里的 range 推进 faded，
+  // 复用 paintFaded 的一次预写深度 + 一次混合（Alpha=.28）。旧的 cutout 分支已删：
+  // 它把屋顶按原色整块重画、抢在淡出之前，而 uCutout 在片元里从未被引用（死 uniform）。
+  function paintStage({b,count,ranges,terrainCount}, covered, faded) {
     if (terrainCount) paint(b,terrainCount);
     let from=terrainCount;
     for (const r of ranges) {
-      const isRoof=/^(roof|room-roof):/.test(r.id);
-      if (isRoof && cutout) {
-        if (from<r.from) paint(b,r.from-from,from);
-        gl.uniform4f(uniform.Cutout,cutout[0],cutout[1],cutout[2],1);
-        paint(b,r.count,r.from);
-        gl.uniform4f(uniform.Cutout,0,0,0,0);
-        from=r.from+r.count;
-        continue;
-      }
-      if (!covered.has(r.id) || !isRoof) continue;
+      if (!covered.has(r.id) || !fadesAsOccluder(r.id)) continue;
       if (from<r.from) paint(b,r.from-from,from);
       faded.push({b,...r});
       from=r.from+r.count;
@@ -862,7 +866,7 @@ export function createCampRenderer() {
     gl.depthFunc(gl.LESS);
   }
   return {
-    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, cutout=null, resolutionScale=1 }) {
+    render({ target,stage,regions,regionAtlas,life,homes,camera,people,work=[],impacts=[],covered=new Set(),frame,light,sun,visibility,animals=[],hearth=[0,0,0,0],sight=[0,0,0],season=-1,weather=[0,0,0,0], physical=true, shadows, wetness=0, shelters=[], animateParts=true, exposure=1, windows=null, daylight=0, interior=false, resolutionScale=1 }) {
       if (lost || gl.isContextLost()) return false;
       if (!ensureSetup()) return false;
       // 归因探针（仅 ?perfseg=1 时由页面侧建立 window.__perfSeg；正常路径只多一次 undefined 判断）。
@@ -930,9 +934,9 @@ gl.uniform1i(uniform.Interior,Number(Boolean(interior)));
         }
         gl.uniform1i(uniform.RegionTexture,0);
       }
-      paintStage(stageBuffer(stage,cacheLimit,'stage'),covered,faded,cutout);
-      if (life) paintStage(stageBuffer(life,cacheLimit,'life'),covered,faded,cutout);
-      if (homes) paintStage(stageBuffer(homes,cacheLimit,'homes'),covered,faded,cutout);
+      paintStage(stageBuffer(stage,cacheLimit,'stage'),covered,faded);
+      if (life) paintStage(stageBuffer(life,cacheLimit,'life'),covered,faded);
+      if (homes) paintStage(stageBuffer(homes,cacheLimit,'homes'),covered,faded);
       if (perf) phaseT.push(performance.now());
       if (physical && shadows) {
         const base=groundContactMesh(shadows);

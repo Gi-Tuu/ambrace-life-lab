@@ -211,10 +211,13 @@ test('legacy house shells get joined slopes with closed gables',()=>{
     const world={tw:24,th:24,hills:[],trees:[],grass:[],sites:{[id]:[10,14]}};
     const a=outdoorStage(world,[],[]), b=outdoorStage(world,[],[]);
     assert.equal(JSON.stringify(a.boxes),JSON.stringify(b.boxes));
-    const roofBoxes=a.boxes.filter(p=>p.occluder==='site:'+id && p.rot && p.h===.13);
+    // 2026-11-21 遮挡分件：屋盖从 site:<id> 独立成 roof:<id>（墙身/门窗在 wall:<id>），
+    // 这样渲染端能让整栋建筑参与淡出，而栅栏/田地保持不透明。几何本身不变。
+    const roofBoxes=a.boxes.filter(p=>p.occluder==='roof:'+id && p.rot && p.h===.13);
     assert.equal(roofBoxes.length,8);
     assert.ok(roofBoxes.every(p=>Math.abs(p.pivot[1]+p.d*Math.abs(Math.sin(p.rot[0]))/2-4.2)<1e-9));
-    assert.equal(a.boxes.filter(p=>p.occluder==='site:'+id && p.w===.095 && !p.shape).length,32);
+    assert.equal(a.boxes.filter(p=>p.occluder==='roof:'+id && p.w===.095 && !p.shape).length,32);
+    assert.ok(a.boxes.some(p=>p.occluder==='wall:'+id),'墙身/门窗必须在 wall:'+id);
   }
 });
 

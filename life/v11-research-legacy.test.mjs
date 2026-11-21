@@ -33,10 +33,18 @@ const md5 = (s) => createHash('md5').update(s).digest('hex');
 
 // 四组基线来自 HEAD e65105f 的同一探针（evidence/v11-research/baseline-probe.log）。
 // A 纯研究、B 研究+GAME_OPTIONS、C 正式规则但无 simClock（旧档/对照）、D independent 研究。
+//
+// 2026-11-21 迁移（唯一一次，逐字段留档 evidence/fix-world-view/research-dump-{before,after}.json）：
+// 体验审计 P0/P1 把 home/store/workshop/watch 的 campEntrance 从"压在 slab/塔身内、服务端
+// camp_exit 会把玩家放进碰撞体"挪到门前可站的位置；residentRoute 的起点/终点复用同一个
+// roomDoorPoint，于是 C 组 store 出发的旅行起点 z 从 23 变成 23.46（门矩形中心南移 0.46）。
+// 差异只有 6 个字段，全部是门点派生量：districtTravel.a3.start.1 / .length / .cursor.{x,z}
+// 与镜像的 pos.a3.{x,z}；研究态的时间/空间策略（60 分/刻、居民 12/刻、直线旅行、不用 space
+// 路径、每刻身体结算）逐位不变，A/B/D 三组基线也一位未动。
 const BASELINES = Object.freeze({
   A: { label: 'research-base', seed: 7, options: {}, ticks: 12, bytes: 40405, md5: '62ccc1af1b9d45d34d145aedc468b539' },
   B: { label: 'research-gameopts', seed: 13, options: GAME_OPTIONS, ticks: 24, bytes: 54778, md5: '052b65f18591b7308bc9f20dbf6684da' },
-  C: { label: 'legacy-formal', seed: 7, options: { ...FORMAL_OPTIONS, simTime: false }, ticks: 24, bytes: 54953, md5: '8622d4070400cfbc6a76a86f04c0ae46' },
+  C: { label: 'legacy-formal', seed: 7, options: { ...FORMAL_OPTIONS, simTime: false }, ticks: 24, bytes: 54957, md5: '492916b197fc7537b55a3865f464cafd' },
   D: { label: 'research-independent', seed: 7, options: { independentWorld: true, actTimeModel: true, residentialDecisions: true, unifiedCooperation: true, gameRules: false }, ticks: 24, bytes: 58875, md5: '41f75f8e5cd3c9472274584a608e3842' },
 });
 

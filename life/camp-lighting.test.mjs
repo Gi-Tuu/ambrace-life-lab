@@ -15,7 +15,8 @@ test('接触阴影只贴接地物，桥桩伸入地面且井沿高于井水',()=
   const posts=stage.boxes.filter(b=>b.color==='#5B4434' && b.z<5 && b.h>.4);
   assert.equal(posts.length,4);
   assert.ok(posts.every(b=>b.y<-.27 && Math.abs(b.y+b.h-.30)<1e-8));
-  const water=stage.boxes.find(b=>b.water), rim=stage.boxes.filter(b=>b.occluder==='site:well' && b.color==='#939584');
+  // 井沿/井台在遮挡分件后归 wall:well（roof:well 是井盖），见 shared/camp-scene.mjs outdoorFixture。
+  const water=stage.boxes.find(b=>b.water), rim=stage.boxes.filter(b=>b.occluder==='wall:well' && b.color==='#939584');
   assert.ok(water && rim.some(b=>b.y<=water.y && b.y+b.h>water.y+water.h));
   assert.ok(roomExposure(false,1)<roomExposure(true,1));
   assert.ok(roomExposure(false,0,1)>roomExposure(false,0,0));

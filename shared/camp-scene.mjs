@@ -79,30 +79,33 @@ function hall(s, x, z) {
   const left = x - 3.55, right = x + 3.55, back = z - 6.8, front = z - 1.1, y = .48;
   s.floor(left, back, right-left, front-back, y, WOOD);
   s.floor(x-1, front, 2, 1.45, y, LIGHT, 'z', 0);
-  rail(s,left,front-.14,x-1-left,.15,y);
-  rail(s,x+1,front-.14,right-x-1,.15,y);
-  rail(s,left,back,right-left,.15,y);
-  rail(s,left,back,.15,front-back,y);
-  rail(s,right-.15,back,.15,front-back,y);
-  for (const px of [left+.12,right-.30]) {
-    for (const pz of [back+.12,back+2.85]) s.box(px,y,pz,.18,2.45,.18,DARK,true);
-  }
-  for (const px of [left+.12,right-.30]) s.box(px,y,front-.37,.18,2.55,.18,DARK,true);
-  // stage.box 比 addCampWork 的 box 多一个 fxKind 位；适配后再复用同一套双坡几何。
-  const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
-  s.group('roof:hall',() => timberGable(roofStage,left,3.04,back,right-left,front-back-.25,'#3F7036',false,true));
-  s.box(left+.1,2.96,front-.4,right-left-.2,.16,.19,DARK);
-  for(const bx of [left+1.1,right-1.6]){
-    s.box(bx-.06,2.91,front-.25,.78,.10,.12,LIGHT);
-    s.box(bx,1.74,front-.19,.66,1.19,.06,'#944735',false,false,'banner');
-    s.box(bx+.2,2.27,front-.124,.26,.30,.023,'#E6BD70',false,false,'banner');
-  }
-  for (const bz of [back+1.5, back+3.4]) {
-    s.box(left+.7, y+.42, bz, 2.4, .1, .48, WOOD);
-    for (const bx of [left+.85, left+2.8]) s.box(bx, y, bz+.1, .14, .42, .28, DARK);
-  }
-  s.box(right-2.6, y, back+2.2, 1.5, .5, .9, WOOD);
-  s.box(right-2.5, y+.5, back+2.3, 1.3, .06, .7, LIGHT);
+  // 连廊的栏杆/立柱/檐口进 wall:hall，屋盖进 roof:hall：整座连廊参与遮挡淡出。
+  s.group('wall:hall', () => {
+    rail(s,left,front-.14,x-1-left,.15,y);
+    rail(s,x+1,front-.14,right-x-1,.15,y);
+    rail(s,left,back,right-left,.15,y);
+    rail(s,left,back,.15,front-back,y);
+    rail(s,right-.15,back,.15,front-back,y);
+    for (const px of [left+.12,right-.30]) {
+      for (const pz of [back+.12,back+2.85]) s.box(px,y,pz,.18,2.45,.18,DARK,true);
+    }
+    for (const px of [left+.12,right-.30]) s.box(px,y,front-.37,.18,2.55,.18,DARK,true);
+    // stage.box 比 addCampWork 的 box 多一个 fxKind 位；适配后再复用同一套双坡几何。
+    const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
+    s.group('roof:hall',() => timberGable(roofStage,left,3.04,back,right-left,front-back-.25,'#3F7036',false,true));
+    s.box(left+.1,2.96,front-.4,right-left-.2,.16,.19,DARK);
+    for(const bx of [left+1.1,right-1.6]){
+      s.box(bx-.06,2.91,front-.25,.78,.10,.12,LIGHT);
+      s.box(bx,1.74,front-.19,.66,1.19,.06,'#944735',false,false,'banner');
+      s.box(bx+.2,2.27,front-.124,.26,.30,.023,'#E6BD70',false,false,'banner');
+    }
+    for (const bz of [back+1.5, back+3.4]) {
+      s.box(left+.7, y+.42, bz, 2.4, .1, .48, WOOD);
+      for (const bx of [left+.85, left+2.8]) s.box(bx, y, bz+.1, .14, .42, .28, DARK);
+    }
+    s.box(right-2.6, y, back+2.2, 1.5, .5, .9, WOOD);
+    s.box(right-2.5, y+.5, back+2.3, 1.3, .06, .7, LIGHT);
+  });
 }
 
 function cladding(s, x, y, z, w, h, d, masonry) {
@@ -132,30 +135,34 @@ function house(s, id, x, z, seed) {
   const color=(variant==null?null:seededColors[variant])??colors[id]??'#976A45';
   const width=7.2, depth=6.15;
   const left=x-width/2, back=z-depth-1.7;
-  s.box(left,0,back,width,.27,depth,DARK,true);
-  const masonry = id === 'workshop' || id === 'watch' || variant===2;
-  s.box(left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry?'#67675E':'#72513B',false,false,null,{castShadow:true});
-  cladding(s,left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry);
-  cladding(s,left,0,back,width,.27,depth,true);
-  const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
-  timberGable(roofStage,left,3.08,back,width,depth,color,false);
-  if (id==='workshop') s.shelters.push([left,back,width,depth]);
   const front = back + depth;
-  s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
-  s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
+  // 遮挡分件（2026-11-21）：底板/台基留 site:<id>（贴地、挡不住人）；墙身/门窗/烟囱进 wall:<id>；
+  // 屋顶进 roof:<id>。渲染端按 FADE 白名单整栋淡出，栅栏/田地/树/石不在白名单里。
+  s.box(left,0,back,width,.27,depth,DARK,true);
+  cladding(s,left,0,back,width,.27,depth,true);
+  s.group(`wall:${id}`, () => {
+    const masonry = id === 'workshop' || id === 'watch' || variant===2;
+    s.box(left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry?'#67675E':'#72513B',false,false,null,{castShadow:true});
+    cladding(s,left+.15,.27,back+.1,width-.30,2.8,depth-.20,masonry);
+    const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
+    s.group(`roof:${id}`, () => timberGable(roofStage,left,3.08,back,width,depth,color,false));
+    if (id==='workshop') s.shelters.push([left,back,width,depth]);
+    s.box(x-.63,.27,front-.02,1.26,1.82,.10,'#72513B');
+    s.box(x-.49,.33,front+.09,.98,1.66,.035,'#AB5236');
+    s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
+    for (const dx of [-2.45,1.57]) {
+      s.box(x+dx,1.36,front-.025,.89,.83,.1,'#514134');
+      s.box(x+dx+.09,1.45,front+.079,.71,.65,.035,'#458996');
+      s.box(x+dx+.12,1.88,front+.116,.28,.16,.02,'#A0D2C6');
+    }
+    if (id === 'workshop' || id === 'home') {
+      s.box(x+2.2,3.55,back+1.8,.56,1.18,.62,'#5F574F');
+      s.box(x+2.14,4.7,back+1.74,.68,.13,.74,'#939584');
+      s.chimneys.push([x+2.48,4.92,back+2.07]);
+    }
+  });
   s.box(x-.69,0,front+.08,1.38,.13,.58,'#786C58');
   s.box(x-.63,.13,front+.015,1.26,.13,.39,'#AE865A');
-  s.box(x+.23,1.02,front+.135,.11,.1,.04,'#EDC787');
-  for (const dx of [-2.45,1.57]) {
-    s.box(x+dx,1.36,front-.025,.89,.83,.1,'#514134');
-    s.box(x+dx+.09,1.45,front+.079,.71,.65,.035,'#458996');
-    s.box(x+dx+.12,1.88,front+.116,.28,.16,.02,'#A0D2C6');
-  }
-  if (id === 'workshop' || id === 'home') {
-    s.box(x+2.2,3.55,back+1.8,.56,1.18,.62,'#5F574F');
-    s.box(x+2.14,4.7,back+1.74,.68,.13,.74,'#939584');
-      s.chimneys.push([x+2.48,4.92,back+2.07]);
-  }
   lantern(s, x-1.15, .27, front+.42);
   s.box(left-1.11,0,front-1.42,.81,.053,1.58,'#5B4938');
   worldItem(s,'crate',left-1.05,front-1.35,.8,.045);
@@ -164,75 +171,85 @@ function house(s, id, x, z, seed) {
 
 function watchTower(s,x,z) {
   const left=x-2.3, back=z-5.9, width=4.6, depth=4.15, deck=3.16, front=back+depth;
-  for (const px of [left,left+width-.27]) for (const pz of [back,front-.27]) {
-    s.box(px,0,pz,.27,5.35,.27,DARK,true);
-    s.box(px-.06,0,pz-.06,.39,.32,.39,'#77766E',true);
-  }
-  s.box(left-.13,deck-.19,back-.13,width+.26,.19,depth+.26,WOOD);
-  for (const pz of [back,front-.15]) rail(s,left,pz,width,.15,deck,false);
-  for (const px of [left,left+width-.15]) rail(s,px,back,.15,depth,deck,false);
-  for (let step=0;step<8;step+=1) {
-    const h=(step+1)*.39;
-    s.box(x-.61,h-.13,front+.1+(7-step)*.30,1.22,.13,.34,LIGHT);
-  }
-  for (let i=0;i<5;i+=1) {
-    const h=.5+i*.48;
-    s.box(left+.27+i*.65,h,front-.14,.78,.14,.15,WOOD);
-    s.box(left+width-1.04-i*.65,h,back+.06,.78,.14,.15,WOOD);
-  }
-  const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
-  s.group('roof:watch',()=>timberGable(roofStage,left,5.32,back,width,depth,'#526464',false,true));
-  s.box(x-.1,deck+.64,back+.6,.2,1.0,.2,'#6F685F');
-  s.box(x-.22,deck+1.42,back-.18,.44,.37,1.35,'#837C69');
-  s.box(left+.3,deck,back+.3,.08,1.5,.08,DARK);
-  s.box(left+.38,deck+1.0,back+.3,.7,.5,.03,'#944735',false,false,'banner');
-  s.box(left+.5,deck+1.15,back+.33,.24,.2,.02,'#E6BD70',false,false,'banner');
+  // 塔身（柱/台/栏/梯）进 wall:watch，屋盖留在 roof:watch：两者都参与遮挡淡出，
+  // 但分成两个 range，淡出时仍按各自构件着色，不会把塔身涂成屋顶色。
+  s.group('wall:watch', () => {
+    for (const px of [left,left+width-.27]) for (const pz of [back,front-.27]) {
+      s.box(px,0,pz,.27,5.35,.27,DARK,true);
+      s.box(px-.06,0,pz-.06,.39,.32,.39,'#77766E',true);
+    }
+    s.box(left-.13,deck-.19,back-.13,width+.26,.19,depth+.26,WOOD);
+    for (const pz of [back,front-.15]) rail(s,left,pz,width,.15,deck,false);
+    for (const px of [left,left+width-.15]) rail(s,px,back,.15,depth,deck,false);
+    for (let step=0;step<8;step+=1) {
+      const h=(step+1)*.39;
+      s.box(x-.61,h-.13,front+.1+(7-step)*.30,1.22,.13,.34,LIGHT);
+    }
+    for (let i=0;i<5;i+=1) {
+      const h=.5+i*.48;
+      s.box(left+.27+i*.65,h,front-.14,.78,.14,.15,WOOD);
+      s.box(left+width-1.04-i*.65,h,back+.06,.78,.14,.15,WOOD);
+    }
+    const roofStage={box:(...a)=>s.box(...a.slice(0,9),null,a[9]),beam:(...a)=>s.beam(...a)};
+    s.group('roof:watch',()=>timberGable(roofStage,left,5.32,back,width,depth,'#526464',false,true));
+    s.box(x-.1,deck+.64,back+.6,.2,1.0,.2,'#6F685F');
+    s.box(x-.22,deck+1.42,back-.18,.44,.37,1.35,'#837C69');
+    s.box(left+.3,deck,back+.3,.08,1.5,.08,DARK);
+    s.box(left+.38,deck+1.0,back+.3,.7,.5,.03,'#944735',false,false,'banner');
+    s.box(left+.5,deck+1.15,back+.33,.24,.2,.02,'#E6BD70',false,false,'banner');
+  });
 }
 
 function outdoorFixture(s, id, x, z) {
   if (id === 'well') {
     s.shelters.push([x+.12,z-3.98,2.8,2.6]);
-    s.box(x+.2,0,z-4,2.6,.57,2.65,'#67675E',true);
-    cladding(s,x+.2,0,z-4,2.6,.57,2.65,true);
-    for (const edge of [z-4,z-1.62]) s.box(x+.17,.57,edge,2.66,.20,.29,'#939584');
-    for (const edge of [x+.17,x+2.54]) s.box(edge,.57,z-3.71,.29,.20,2.09,'#939584');
-    s.box(x+.46,.585,z-3.71,2.08,.013,2.09,'#2F6066',false,false,null,{water:true});
-    for (const dx of [.28,2.56]) s.box(x+dx,.72,z-3.12,.18,1.84,.18,DARK);
-    s.group('roof:well',()=>timberGable(roofAdapter(s),x+.12,2.5,z-3.98,2.8,2.6,'#5F574F',false,true));
-    s.beam([x+.37,2.2,z-3.03],[x+2.65,2.2,z-3.03],.06,DARK);
-    s.cyl(x+1.5,1.15,z-3.03,.025,1.05,'#D8A667',6);
-    worldItem(s, 'bucket', x+1.28, z-3.25, .55, .74);
+    // 井台/立柱/提梁进 wall:well，井盖进 roof:well：整座井棚参与遮挡淡出（水景仍是独立面）。
+    s.group('wall:well', () => {
+      s.box(x+.2,0,z-4,2.6,.57,2.65,'#67675E',true);
+      cladding(s,x+.2,0,z-4,2.6,.57,2.65,true);
+      for (const edge of [z-4,z-1.62]) s.box(x+.17,.57,edge,2.66,.20,.29,'#939584');
+      for (const edge of [x+.17,x+2.54]) s.box(edge,.57,z-3.71,.29,.20,2.09,'#939584');
+      s.box(x+.46,.585,z-3.71,2.08,.013,2.09,'#2F6066',false,false,null,{water:true});
+      for (const dx of [.28,2.56]) s.box(x+dx,.72,z-3.12,.18,1.84,.18,DARK);
+      s.group('roof:well',()=>timberGable(roofAdapter(s),x+.12,2.5,z-3.98,2.8,2.6,'#5F574F',false,true));
+      s.beam([x+.37,2.2,z-3.03],[x+2.65,2.2,z-3.03],.06,DARK);
+      s.cyl(x+1.5,1.15,z-3.03,.025,1.05,'#D8A667',6);
+      worldItem(s, 'bucket', x+1.28, z-3.25, .55, .74);
+    });
     return;
   }
   const x0 = x+.1, z0 = z-4.95;
-  s.box(x0,0,z0,3.75,.22,3.75,DARK);
-  for (const dx of [.12,3.46]) for (const dz of [.12,3.46]) s.box(x0+dx,.21,z0+dz,.17,2.3,.17,DARK,true);
-  // 棚屋此前是一整块深棕立方体：补屋脊亮线、檐口和两只货箱，与住屋同一套材质语言。
-  s.group(`roof:${id}`,()=>{
-    timberGable(roofAdapter(s),x0,2.5,z0,3.75,3.75,id === 'garden' ? '#3F7036' : '#B65B3C',false,true);
-    s.box(x0-.16,3.60,z0+1.62,4.07,.14,.5,id === 'garden' ? '#93AE73' : '#E99E61');
+  // 棚架是四柱无墙的镂空结构：台基/立柱/货箱/屋盖都进 wall:<id>，入口矩形本来就落在开口线上。
+  s.group(`wall:${id}`, () => {
+    s.box(x0,0,z0,3.75,.22,3.75,DARK);
+    for (const dx of [.12,3.46]) for (const dz of [.12,3.46]) s.box(x0+dx,.21,z0+dz,.17,2.3,.17,DARK,true);
+    // 棚屋此前是一整块深棕立方体：补屋脊亮线、檐口和两只货箱，与住屋同一套材质语言。
+    s.group(`roof:${id}`,()=>{
+      timberGable(roofAdapter(s),x0,2.5,z0,3.75,3.75,id === 'garden' ? '#3F7036' : '#B65B3C',false,true);
+      s.box(x0-.16,3.60,z0+1.62,4.07,.14,.5,id === 'garden' ? '#93AE73' : '#E99E61');
+    });
+    s.box(x0-.12,2.46,z0-.12,3.99,.12,.16,'#D8A667');
+    s.box(x0+.36,.24,z0+.37,1.13,.76,.94,WOOD,true);
+    s.box(x0+.45,1.0,z0+.46,.95,.09,.76,'#D8A667');
+    s.box(x0+2.28,.24,z0+2.36,.86,.58,.84,'#72513B',true);
+    s.box(x0+2.36,.82,z0+2.44,.7,.08,.68,'#D8A667');
+    if (id === 'garden') {
+      const sx = x0+3.1, sz = z0+3.1;
+      s.box(sx,0,sz,.1,1.7,.1,DARK);
+      s.box(sx-.6,1.22,sz-.05,1.3,.09,.09,WOOD);
+      s.box(sx-.14,1.5,sz-.14,.28,.26,.28,'#D8A667');
+      s.box(sx-.22,1.74,sz-.22,.44,.07,.44,'#8D6A3D');
+      s.box(sx-.1,1.62,sz+.14,.06,.05,.03,'#32302C');
+      s.box(sx+.06,1.62,sz+.14,.06,.05,.03,'#32302C');
+      s.box(sx-.3,1.05,sz-.06,.6,.5,.12,'#944735');
+    } else {
+      s.box(x0+.5,.24,z0+2.5,1.6,.34,.6,WOOD);
+      s.box(x0+.58,.5,z0+2.56,1.44,.05,.48,'#458996');
+      worldItem(s, 'bucket', x0+2.4, z0+1.5, .6, .24);
+      s.box(x0+2.3,.24,z0+.5,1.0,.5,.8,'#D8A667');
+      s.box(x0+2.3,.44,z0+.5,1.0,.06,.8,'#B58A4C');
+    }
   });
-  s.box(x0-.12,2.46,z0-.12,3.99,.12,.16,'#D8A667');
-  s.box(x0+.36,.24,z0+.37,1.13,.76,.94,WOOD,true);
-  s.box(x0+.45,1.0,z0+.46,.95,.09,.76,'#D8A667');
-  s.box(x0+2.28,.24,z0+2.36,.86,.58,.84,'#72513B',true);
-  s.box(x0+2.36,.82,z0+2.44,.7,.08,.68,'#D8A667');
-  if (id === 'garden') {
-    const sx = x0+3.1, sz = z0+3.1;
-    s.box(sx,0,sz,.1,1.7,.1,DARK);
-    s.box(sx-.6,1.22,sz-.05,1.3,.09,.09,WOOD);
-    s.box(sx-.14,1.5,sz-.14,.28,.26,.28,'#D8A667');
-    s.box(sx-.22,1.74,sz-.22,.44,.07,.44,'#8D6A3D');
-    s.box(sx-.1,1.62,sz+.14,.06,.05,.03,'#32302C');
-    s.box(sx+.06,1.62,sz+.14,.06,.05,.03,'#32302C');
-    s.box(sx-.3,1.05,sz-.06,.6,.5,.12,'#944735');
-  } else {
-    s.box(x0+.5,.24,z0+2.5,1.6,.34,.6,WOOD);
-    s.box(x0+.58,.5,z0+2.56,1.44,.05,.48,'#458996');
-    worldItem(s, 'bucket', x0+2.4, z0+1.5, .6, .24);
-    s.box(x0+2.3,.24,z0+.5,1.0,.5,.8,'#D8A667');
-    s.box(x0+2.3,.44,z0+.5,1.0,.06,.8,'#B58A4C');
-  }
 }
 
 const CANOPIES = [
