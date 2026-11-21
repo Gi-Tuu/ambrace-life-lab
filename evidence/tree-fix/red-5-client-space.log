@@ -1,0 +1,18 @@
+01.whitelist {"tree":true,"wild":true,"pen":false,"plot":false,"rock":false,"fadeableTree":["wall:home","tree:1:2"]}
+02.pick {"best":{"id":"forest:31:29","occluder":"tree:31:29","cx":31.5,"cz":29.5,"stand":[31.128262107363714,28.254282961833493],"dist":4.401351940286026},"player":[30,24],"candidates":430}
+02.behind {"walkBehind":{"reached":true,"pos":{"k":"cvA:p1","x":30.8499,"y":28.39980000000002}},"behind":{"p1":[29.91452208886146,0.009339108402968392,27.813664533211682],"covered":["tree:31:29"],"occluded":["tree:31:29"],"hiddenCount":0}}
+02.pixels {"walkFront":{"reached":true,"pos":{"k":"cvA:p1","x":32.14910000000002,"y":31.599300000000028}},"front":{"mean":[30.6,50.04,30.2],"screen":[397.9042082961667,135.55694520630442],"onscreen":true},"behind":{"mean":[52.88,52.48,42.64],"screen":[437.57384760913806,222.97454151599408],"onscreen":true},"sideBehind":{"mean":[37.2,49.88,37.2],"screen":[612.0040599404504,244.9768209400177],"onscreen":true},"sideFront":{"mean":[37.2,49.88,37.2],"screen":[563.2172344468202,147.1114032091784],"onscreen":true},"treeDiff":37.16,"controlDiff":0}
+03.pick {"pickInfo":{"cursor":"pointer","clientX":593.5707158119495,"clientY":510.3386630671374},"hover":{"hover":true,"hoverLabel":"树"}}
+04.chop {"walkBack":{"reached":true,"pos":{"k":"cvA:p1","x":31.049300000000038,"y":28.249800000000043}},"near":[31.549300000000038,0.03757751527857185,28.749800000000043],"target":"forest:31:29","wood0":0,"chop":{"ok":true,"code":"OK","res":"wood","amount":2,"persisted":true}}
+04.after {"forest":{"stage":"stump","regrowAt":1680,"at":[31.5,29.5]},"hidden":["tree:31:29"],"hiddenCount":1,"stumps":4,"wood":2,"spaceWalkable":false,"tileWalk":1,"pathPixel":1,"coveredHasTree":false}
+error {"message":"砍后树心必须可走（客户端 space）"}
+file:///E:/Competition/AMBRACElife/scripts/tree-fix-verify.mjs:31
+const assert = (cond, message) => { if (!cond) throw new Error(message); };
+                                                     ^
+
+Error: 砍后树心必须可走（客户端 space）
+    at assert (file:///E:/Competition/AMBRACElife/scripts/tree-fix-verify.mjs:31:54)
+    at file:///E:/Competition/AMBRACElife/scripts/tree-fix-verify.mjs:225:3
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.18.0

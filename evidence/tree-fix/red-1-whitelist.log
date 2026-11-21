@@ -1,0 +1,59 @@
+✖ TREE-01 树/荒野树纳入淡出：真实 stage 的树 range 进 faded，栅栏/田地/岩石仍不淡 (0.907ms)
+✔ TREE-02 非 grove 树可砍：+2 木、space 由挡变通、视图与存档同步 (170.713ms)
+✔ TREE-04 30 天再生：条目消失、树回场景、space 重新挡住；天数可配置 (79.9619ms)
+✔ TREE-05 拒绝：无斧/太远/无脚点/隔水/隔墙；栅栏与目标自身树干不算挡 (35.2743ms)
+✔ TREE-06 客户端 buildWorld 与服务端同一份树清单；砍后 space 仍 0 差异 (259.8826ms)
+✔ TREE-07 一次砍 50 棵只重建一次 space（增量；不重建 stage/地形） (35.8385ms)
+✔ TREE-08 研究态不受影响：没有森林字段、dump 形状不变 (0.7957ms)
+✖ EXP-RENDER-01 遮挡分件：建筑墙/屋顶/连廊各自成组，白名单只淡建筑，栅栏/田地/树/石不淡 (69.6465ms)
+✔ EXP-RENDER-02 默认存档的桥可走：桥带/crossing/portal/高度同源，东岸 BFS 可达 ≥99% (147.2468ms)
+✔ EXP-RENDER-03 8 个房间入口不压实心、中心可站，camp_exit 落到可站位置 (180.212ms)
+✔ EXP-RENDER-04 天气跨日不再一帧硬切：10–30s 平滑、30s 到位、端点与旧硬切一致 (5.3785ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 9
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 736.4379
+
+✖ failing tests:
+
+test at life\tree-fix.test.mjs:93:1
+✖ TREE-01 树/荒野树纳入淡出：真实 stage 的树 range 进 faded，栅栏/田地/岩石仍不淡 (0.907ms)
+  AssertionError [ERR_ASSERTION]: tree:1:2 必须淡出
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/tree-fix.test.mjs:94:57)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at life\worldview-fix.test.mjs:52:1
+✖ EXP-RENDER-01 遮挡分件：建筑墙/屋顶/连廊各自成组，白名单只淡建筑，栅栏/田地/树/石不淡 (69.6465ms)
+  AssertionError [ERR_ASSERTION]: tree:1:2 必须能淡出（树后玩家可见）
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/worldview-fix.test.mjs:77:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

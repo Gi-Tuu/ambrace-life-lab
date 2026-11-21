@@ -1,0 +1,95 @@
+✔ TREE-01 树/荒野树纳入淡出：真实 stage 的树 range 进 faded，栅栏/田地/岩石仍不淡 (90.9032ms)
+✖ TREE-02 非 grove 树可砍：+2 木、space 由挡变通、视图与存档同步 (71.1074ms)
+✖ TREE-04 30 天再生：条目消失、树回场景、space 重新挡住；天数可配置 (51.6546ms)
+✖ TREE-05 拒绝：无斧/太远/无脚点/隔水/隔墙；栅栏与目标自身树干不算挡 (41.9142ms)
+✖ TREE-06 客户端 buildWorld 与服务端同一份树清单；砍后 space 仍 0 差异 (88.7035ms)
+✔ TREE-07 一次砍 50 棵只重建一次 space（增量；不重建 stage/地形） (39.9871ms)
+✔ TREE-08 研究态不受影响：没有森林字段、dump 形状不变 (1.0583ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 3
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 535.0825
+
+✖ failing tests:
+
+test at life\tree-fix.test.mjs:120:1
+✖ TREE-02 非 grove 树可砍：+2 木、space 由挡变通、视图与存档同步 (71.1074ms)
+  AssertionError [ERR_ASSERTION]: 世界里必须能找到一棵够得到的非 grove 树
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/tree-fix.test.mjs:124:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\tree-fix.test.mjs:174:1
+✖ TREE-04 30 天再生：条目消失、树回场景、space 重新挡住；天数可配置 (51.6546ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(target)
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/tree-fix.test.mjs:178:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\tree-fix.test.mjs:200:1
+✖ TREE-05 拒绝：无斧/太远/无脚点/隔水/隔墙；栅栏与目标自身树干不算挡 (41.9142ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(target)
+  
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/tree-fix.test.mjs:203:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\tree-fix.test.mjs:228:1
+✖ TREE-06 客户端 buildWorld 与服务端同一份树清单；砍后 space 仍 0 差异 (88.7035ms)
+  AssertionError [ERR_ASSERTION]: 0/0 应有可砍树
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/tree-fix.test.mjs:238:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

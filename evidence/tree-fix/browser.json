@@ -1,0 +1,114 @@
+{
+  "at": "2026-11-21T13:06:32.877Z",
+  "ok": true,
+  "whitelist": {
+    "tree": true,
+    "wild": true,
+    "pen": false,
+    "plot": false,
+    "rock": false,
+    "fadeableTree": [
+      "wall:home",
+      "tree:1:2"
+    ]
+  },
+  "target": {
+    "id": "forest:31:29",
+    "occluder": "tree:31:29",
+    "cx": 31.5,
+    "cz": 29.5,
+    "stand": [
+      31.128262107363714,
+      28.254282961833493
+    ],
+    "dist": 4.401351940286026
+  },
+  "pixels": {
+    "behind": {
+      "mean": [
+        52.68,
+        52.2,
+        42.36
+      ],
+      "screen": [
+        435.94656100889466,
+        224.86917553858663
+      ],
+      "onscreen": true
+    },
+    "front": {
+      "mean": [
+        31.48,
+        50.88,
+        31.08
+      ],
+      "screen": [
+        396.0647326142074,
+        139.0273564278695
+      ],
+      "onscreen": true
+    },
+    "sideBehind": {
+      "mean": [
+        38,
+        51,
+        38
+      ],
+      "screen": [
+        611.161183271319,
+        245.4471565585862
+      ],
+      "onscreen": true
+    },
+    "sideFront": {
+      "mean": [
+        36.4,
+        48.76,
+        36.4
+      ],
+      "screen": [
+        561.3777466885346,
+        150.5818115595192
+      ],
+      "onscreen": true
+    },
+    "treeDiff": 33.8,
+    "controlDiff": 5.440000000000005
+  },
+  "pickInfo": {
+    "cursor": "pointer",
+    "clientX": 591.2137252546481,
+    "clientY": 514.785919630245
+  },
+  "hover": {
+    "hover": true,
+    "hoverLabel": "树"
+  },
+  "chop": {
+    "ok": true,
+    "code": "OK",
+    "res": "wood",
+    "amount": 2,
+    "persisted": true
+  },
+  "after": {
+    "forest": {
+      "stage": "stump",
+      "regrowAt": 1680,
+      "at": [
+        31.5,
+        29.5
+      ]
+    },
+    "hidden": [
+      "tree:31:29"
+    ],
+    "hiddenCount": 1,
+    "stumps": 4,
+    "wood": 2,
+    "spaceWalkable": true,
+    "tileWalk": 1,
+    "pathPixel": 1,
+    "coveredHasTree": false
+  }
+}

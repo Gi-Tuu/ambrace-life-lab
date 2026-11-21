@@ -67,10 +67,15 @@ test('EXP-RENDER-01 遮挡分件：建筑墙/屋顶/连廊各自成组，白名�
     assert.ok(covered.has('roof:home'), `玩家在居所后必须命中屋顶：${[...covered].join(',')}`);
     const faded = fadeableCovered(covered);
     assert.ok(faded.includes('wall:home') && faded.includes('roof:home'), `真正淡出集合要含墙+屋顶：${faded.join(',')}`);
-    // 栅栏/田地/作物/树/石即使在 covered 里也不得进入淡出集合
-    for (const id of ['pen:0', 'pen:shelter', 'plot:bed-0', 'tree:1:2', 'wildtree:3:4', 'rock:5:6', 'timber:grove1', 'resource:yard', 'landmark:fork-cairn']) {
+    // 栅栏/田地/作物/石/木料/资源/地标即使在 covered 里也不得进入淡出集合；
+    // 树（tree:/wildtree:）自 2026-11-21 树可砍透明修复起必须淡出，否则玩家在树后永远看不见。
+    for (const id of ['pen:0', 'pen:shelter', 'plot:bed-0', 'rock:5:6', 'timber:grove1', 'resource:yard', 'landmark:fork-cairn']) {
       assert.equal(fadesAsOccluder(id), false, `${id} 不得淡出`);
       assert.equal(fadeableCovered(new Set(['wall:home', id])).includes(id), false, `${id} 不得进入淡出集合`);
+    }
+    for (const id of ['tree:1:2', 'wildtree:3:4']) {
+      assert.equal(fadesAsOccluder(id), true, `${id} 必须能淡出（树后玩家可见）`);
+      assert.ok(fadeableCovered(new Set(['wall:home', id])).includes(id), `${id} 必须进入淡出集合`);
     }
   }
   // 死 cutout 必须删干净：shader 不再声明 uCutout，渲染器不再有抢跑分支
@@ -79,7 +84,7 @@ test('EXP-RENDER-01 遮挡分件：建筑墙/屋顶/连廊各自成组，白名�
   assert.equal(/uniform\.Cutout/.test(render), false, '不得再有 uniform.Cutout 的取址/上传');
   assert.equal(/gl\.uniform4f\(uniform\.Cutout/.test(render), false, '不得再有 cutout 分支的上传');
   // 白名单必须是显式常量并被 paintStage 复用（不是内联只认 roof 的正则）
-  assert.ok(/export const FADE_OCCLUDERS\s*=\s*\/\^\(roof\|room-roof\|wall\)/.test(render), 'FADE_OCCLUDERS 白名单缺失');
+  assert.ok(/export const FADE_OCCLUDERS\s*=\s*\/\^\(roof\|room-roof\|wall\|tree\|wildtree\)/.test(render), 'FADE_OCCLUDERS 白名单缺失（必须含 tree/wildtree）');
   assert.ok(/!fadesAsOccluder\(r\.id\)/.test(render), 'paintStage 必须复用 fadesAsOccluder 白名单');
   // 室外场景本身不再出现"整栋共用一个 site: 前缀"的屋顶：屋顶与墙必须能分开识别
   const { stage } = build(0, 0);
