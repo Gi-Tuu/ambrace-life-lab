@@ -15,7 +15,8 @@ import { homeAccessView, homeEntry } from './home-access.mjs';
 import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { speechLine } from './speech.mjs';
-import { converseRound, converse } from './intent.mjs';
+import { converse } from './intent.mjs';
+import { chatRound } from './resident-chatter.mjs';
 import { maybeResidentRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
 import { residentInjury, settleResidentInjuries } from './resident-injury.mjs';
 import { campTimberView } from './camp-play.mjs';
@@ -97,7 +98,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null,wildExpansion=false}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,chatModel=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null,wildExpansion=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   // P1 连续时钟只属于正式游戏（gameRules）且必须显式开启；研究态/旧参数路径不创建、不写字段。
   const continuous = simTime === true && gameRules === true;
@@ -148,6 +149,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   if (wildExpansion) initWildExpansion(world, { mapSeed, layoutVersion, gameRules, settlementLife, residentialDecisions });
   restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
+  if (chatModel) world.chatModel = chatModel;
   world.residentChannelMask = residentChannelMask;
   world.residentCondition = residentCondition;
   // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
@@ -240,9 +242,13 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
 }
 
 // E1 安全网觅食（保留供对照；默认关）：全聚落每日预算 1 收＋1 种。
-export function setSurvivalDeliberator(sp, deliberator) {
+export function setSurvivalDeliberator(sp, deliberator, chatModel) {
   sp.world.survivalDeliberator = deliberator;
   for (const a of Object.values(sp.world.agents)) if (!a.isPlayer) a.deliberator = deliberator;
+  if (chatModel !== undefined) {
+    if (chatModel) sp.world.chatModel = chatModel;
+    else delete sp.world.chatModel;
+  }
 }
 
 function housingLabels(w) {
@@ -689,7 +695,7 @@ async function worldTick(sp, { now, onResidentAction, think }) {
     }
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
-  try { converseRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  try { chatRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
   try { maybeResidentRequest(w); maybePeerRequest(w); stepPeerRequests(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理；分钟身体路径在 body-clock 里处理）。
