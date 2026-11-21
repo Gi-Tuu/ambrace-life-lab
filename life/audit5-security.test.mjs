@@ -161,7 +161,7 @@ test('DATA5-05 索引删除后重开仍归原 owner；重启从侧车重建索�
   }
 });
 
-test('SEC5-02 HTTP：/world?camp= 无 cookie 403、owner 200、他人 403', async () => {
+test('SEC5-02 HTTP：/world?camp= 无 cookie / 他人 = 访客投影、owner 200（A′ 后写路由仍 403）', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '' });
   try {
     const jarA = {};
@@ -177,16 +177,24 @@ test('SEC5-02 HTTP：/world?camp= 无 cookie 403、owner 200、他人 403', asyn
     const b = await rB.json();
     assert.ok(b.ok);
 
+    // A′（2026-11-22）：无 owner cookie 不再 403，只给独立白名单投影；完整 survival 仍只给 owner。
     const noCookie = await jsonGet(h.base, `/world?camp=${a.key}`);
-    assert.equal(noCookie.status, 403, '无 owner cookie 不得读非 MAIN 营地');
-    assert.equal((await noCookie.json()).error, 'CAMP_NOT_OWNER');
+    assert.equal(noCookie.status, 200, '无 owner cookie 应拿到访客投影');
+    const guest = await noCookie.json();
+    assert.equal(guest.guest, true);
+    assert.ok(!Object.hasOwn(guest, 'survival'), '访客投影不得含 survival');
 
     const owner = await jsonGet(h.base, `/world?camp=${a.key}`, { jar: { camp_owner: jarA.camp_owner } });
     assert.equal(owner.status, 200, 'owner 应能读自己的营地');
-    assert.equal((await owner.json()).camp?.key, a.key);
+    const ownerBody = await owner.json();
+    assert.equal(ownerBody.camp?.key, a.key);
+    assert.ok(ownerBody.survival, 'owner 仍拿完整 survival');
 
     const other = await jsonGet(h.base, `/world?camp=${a.key}`, { jar: { camp_owner: jarB.camp_owner } });
-    assert.equal(other.status, 403, '他人 owner 不得读');
+    assert.equal(other.status, 200, '他人的 owner cookie 只拿到访客投影');
+    const otherBody = await other.json();
+    assert.equal(otherBody.guest, true);
+    assert.ok(!Object.hasOwn(otherBody, 'survival'), '他人不得拿到 survival');
   } finally { await stopAudit5(h); }
 });
 
