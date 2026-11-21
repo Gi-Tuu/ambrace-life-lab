@@ -10,6 +10,11 @@ import {
 } from '../web/audio-data.mjs';
 import { SOUND_INVENTORY } from '../web/audio-inventory.mjs';
 import { readWorld, diffAudioEvents, sceneSignature, musicWindow, windowSignature, proximity, PLAY_TICKS, musicTarget, MUSIC_LEVEL, MUSIC_LEVEL_CRISIS, MUSIC_LEVEL_NIGHT, MUSIC_LEVEL_DEATH, MUSIC_LEVEL_EXTINCT } from '../web/audio-events.mjs';
+import {
+  BED_SLOTS, AMBIENCE_MATERIALS, AMBIENCE_LUFS, BED_TARGET_LUFS, BED_GAIN, bedGain,
+  weatherBed, dayNightBed, CAMP_REGION, inCampRegion, playerInCamp, musicDuck, MUSIC_DUCK_WEATHER,
+} from '../web/audio-events.mjs';
+import { TOWN_SIZE } from '../shared/camp-layout.mjs';
 import { analyze } from '../web/audio-synth.mjs';
 
 const SR = 44100;
@@ -206,6 +211,9 @@ test('A-16 场景签名只在真会换音的读数上变化', () => {
   assert.notEqual(sceneSignature(base), sceneSignature({ ...base, phase: '夜' }));
   assert.notEqual(sceneSignature(base), sceneSignature({ ...base, settlement: 'crisis' }));
   assert.notEqual(sceneSignature(base), sceneSignature({ ...base, player: { dead: true } }));
+  // 天气床按 climate 选素材：灾害/干旱必须触发重排，否则雨停、寒潮、干旱时床不换。
+  assert.notEqual(sceneSignature(base), sceneSignature({ ...base, disasterToday: 'coldsnap' }));
+  assert.notEqual(sceneSignature(base), sceneSignature({ ...base, drought: true }));
   // 天数、人口这些不该重排环境声（它们走事件音），签名必须相同。
   assert.equal(sceneSignature(base), sceneSignature({ ...base, day: 9, births: 4 }));
 });
@@ -409,3 +417,254 @@ test('A-31 BGM 不再有合成器兜底：没有素材就静音，绝不回落�
     assert.ok(MUSIC_TRACKS[t] && MUSIC_TRACKS[t].starts.length >= 1, `${t} 缺素材却仍会被窗口选中`);
   }
 });
+
+// ───────────────── 2026-11-21：环境床接线 / LUFS 平衡 / BGM 边界 ─────────────────
+// 这一组直接针对体验审计的 P0/P1：光调函数不算数，必须看到 AudioBuffer 与层真的建起来。
+
+test('A-32 环境床槽位→素材映射闭合：清单 ready、可渲染、增益、目标 LUFS 四处一致', () => {
+  assert.deepEqual({ ...CAMP_REGION }, { west: 0, north: 0, east: TOWN_SIZE.width, south: TOWN_SIZE.depth },
+    'BGM 边界必须与聚落矩形同源，不能各自写死');
+  const materials = Object.values(BED_SLOTS).flat();
+  assert.equal(AMBIENCE_MATERIALS.length, new Set(AMBIENCE_MATERIALS).size, 'AMBIENCE_MATERIALS 有重复');
+  assert.equal(new Set(materials).size, AMBIENCE_MATERIALS.length, 'BED_SLOTS 与素材清单不同步');
+  for (const material of new Set(materials)) {
+    assert.ok(AMBIENCE_MATERIALS.includes(material), `${material} 没登记为环境床素材`);
+    assert.ok(renderAmbience(material), `${material} 渲染不出来`);
+    assert.ok(bedGain(material) > 0, `${material} 的归一化增益必须是正数`);
+    const effective = AMBIENCE_LUFS[material] + 20 * Math.log10(0.7 * bedGain(material));
+    assert.ok(Math.abs(effective - BED_TARGET_LUFS[material]) < 1e-9,
+      `${material} 实际有效 ${effective.toFixed(2)}LUFS ≠ 目标 ${BED_TARGET_LUFS[material]}LUFS`);
+  }
+  // 清单的 bed 条目必须指向真实槽位；否则"ready"又会变成文档里的好听话。
+  for (const item of SOUND_INVENTORY.filter((x) => x.bed)) {
+    if (item.status !== 'ready') continue;
+    assert.ok(item.slot, `环境床 ${item.id} 没写 slot`);
+    assert.ok((BED_SLOTS[item.slot] ?? []).includes(item.id), `清单 ${item.id} 不在槽位 ${item.slot} 的可选素材里`);
+    assert.ok(renderAmbience(item.id), `清单标 ready 的 ${item.id} 渲染失败`);
+  }
+  // weather 槽按 climate 选素材；daynight 槽只认昼夜。
+  assert.equal(weatherBed(null, 'rain'), 'rain');
+  assert.equal(weatherBed({ storm: true }, 'clear'), 'rain', '风暴按雨声底处理');
+  assert.equal(weatherBed(null, 'cold'), 'cold');
+  assert.equal(weatherBed({ frost: true }, 'clear'), 'cold');
+  assert.equal(weatherBed({ snow: true }, 'clear'), 'cold');
+  assert.equal(weatherBed({ drought: true }, 'clear'), 'wind');
+  assert.equal(weatherBed(null, 'clear'), null);
+  assert.equal(dayNightBed('夜'), 'night');
+  for (const phase of ['晨', '昼', '暮', undefined]) assert.equal(dayNightBed(phase), 'day');
+  // 显式 ducking 只压常规日曲；危机/夜曲已经低于常规，不再压。
+  assert.equal(musicDuck(null, MUSIC_LEVEL), 1);
+  assert.equal(musicDuck('rain', MUSIC_LEVEL_CRISIS), 1);
+  assert.equal(musicDuck('rain', MUSIC_LEVEL), MUSIC_DUCK_WEATHER);
+  assert.ok(MUSIC_DUCK_WEATHER < 1 && MUSIC_DUCK_WEATHER > 0.7);
+});
+
+test('A-33 BGM 边界按聚落矩形：镇角在镇内要播，矩形外算村外；灭绝/倒下例外不变', () => {
+  assert.equal(inCampRegion([119, 79]), true, '镇角 (119,79) 在 120×80 镇内');
+  assert.equal(inCampRegion([119.99, 79.99]), true);
+  assert.equal(inCampRegion([120, 40]), false, 'x=120 是镇外');
+  assert.equal(inCampRegion([130, 40]), false, '距核心 70 但已在镇矩形外');
+  assert.equal(inCampRegion([0, 0]), true);
+  assert.equal(inCampRegion([0, 80]), false);
+  assert.equal(playerInCamp({ playerPos: [119, 79] }), true);
+  assert.equal(playerInCamp({ locs: { house1: [119, 79] }, loc: { p1: 'house1' } }), true, '旧档退回 loc 坐标');
+  assert.equal(playerInCamp({ playerPos: [130, 40] }), false);
+  assert.equal(playerInCamp({}), true, '没有位置读数时按村内兜底');
+
+  const corner = win({ playerPos: [119, 79], sites: [{ loc: 'yard', type: 'shelter', phase: 'frame' }] });
+  assert.equal(corner.play, true, '镇角在镇内，忙碌日必须播');
+  assert.equal(corner.reason, 'busy-day');
+  const outside = win({ playerPos: [130, 40] });
+  assert.equal(outside.play, false);
+  assert.equal(outside.reason, 'away', '矩形外即村外');
+  assert.equal(win({ playerPos: [130, 40], settlement: 'extinct' }).play, true,
+    '灭绝例外不受矩形边界影响');
+  const dead = win({ playerPos: [130, 40], player: { dead: true } });
+  assert.equal(dead.play, false);
+  assert.equal(dead.theme, 'death');
+  assert.equal(dead.reason, 'player-dead', '倒下仍由 audio.scene 播送别曲，语义不变');
+  const night = win({ playerPos: [119, 79], phase: '夜' });
+  assert.equal(night.play, true);
+  assert.equal(night.theme, 'spring-night');
+});
+
+test('A-34 菜单/村外/夜间/恢复规则明确：恢复与危机覆盖夜曲，村外不因时段例外', () => {
+  const night = win({ phase: '夜' });
+  assert.equal(night.theme, 'spring-night');
+  assert.equal(musicTarget(night, 'active'), MUSIC_LEVEL_NIGHT);
+  const nightCrisis = win({ phase: '夜', settlement: 'crisis' });
+  assert.equal(nightCrisis.theme, 'crisis', '危机主题覆盖夜曲');
+  assert.equal(musicTarget(nightCrisis, 'crisis'), MUSIC_LEVEL_CRISIS);
+  const nightRecover = win({ phase: '夜', settlement: 'recovering' });
+  assert.equal(nightRecover.theme, 'recovering', '恢复主题覆盖夜曲');
+  assert.equal(musicTarget(nightRecover, 'recovering'), MUSIC_LEVEL,
+    '恢复主题不是 -night 结尾，保持常规电平（本轮明确口径，未改）');
+
+  // 村外：任何时段都不播；晨/暮也不是距离豁免。
+  const busy = [{ loc: 'yard', type: 'shelter', phase: 'frame' }];
+  for (const phase of ['晨', '昼', '夜', '暮']) {
+    const w = win({ phase, playerPos: [130, 40], sites: busy });
+    assert.equal(w.play, false, `村外 ${phase} 不该播`);
+    assert.equal(w.reason, 'away');
+  }
+  // 恢复白天：照常按忙碌/时段播，不获得额外距离或时段豁免。
+  const recovering = win({ settlement: 'recovering', sites: busy });
+  assert.equal(recovering.play, true);
+  assert.equal(recovering.theme, 'recovering');
+  // 菜单：独立主题，musicTarget 不读位置；世界场景有 ui.menu 守卫。
+  assert.equal(musicTarget({ play: true, theme: 'menu' }, 'active'), MUSIC_LEVEL);
+  const app = readFileSync(resolve(process.cwd(), 'web', 'app.js'), 'utf8');
+  assert.match(app, /if \(ui\.menu\) \{[\s\S]{0,120}audioSceneSig = null;[\s\S]{0,120}return; \}/,
+    '菜单期间世界场景音频必须让路');
+});
+
+// mock 只替代 Web Audio 节点；audio.mjs 的槽位/素材选择、缓存、增益与层管理是产品代码原样执行。
+class MockParam {
+  constructor(value) { this.value = value; this.events = []; }
+  setTargetAtTime(v, t, c) { this.events.push({ type: 'target', v, t, c }); this.value = v; return this; }
+  setValueAtTime(v, t) { this.events.push({ type: 'set', v, t }); this.value = v; return this; }
+  linearRampToValueAtTime(v, t) { this.events.push({ type: 'ramp', v, t }); this.value = v; return this; }
+  cancelScheduledValues(t) { this.events.push({ type: 'cancel', t }); return this; }
+}
+class MockNode {
+  connect(target) { this.target = target; return target; }
+  disconnect() { this.disconnected = true; }
+}
+class MockGain extends MockNode {
+  constructor(ctx) { super(); this.ctx = ctx; this.gain = new MockParam(1); }
+}
+class MockSource extends MockNode {
+  constructor(ctx) { super(); this.ctx = ctx; this.buffer = null; this.loop = false; this.onended = null; this.stopCount = 0; }
+  start(...args) { this.startArgs = args; }
+  stop() { this.stopCount += 1; }
+}
+class MockBuffer {
+  constructor(channels, length, sampleRate) {
+    this.numberOfChannels = channels;
+    this.length = length;
+    this.sampleRate = sampleRate;
+    this.duration = length / sampleRate;
+    this.channels = Array.from({ length: channels }, () => null);
+  }
+  copyToChannel(data, channel) { this.channels[channel] = data; }
+}
+class MockCtx {
+  constructor() {
+    this.sampleRate = 44100;
+    this.currentTime = 0;
+    this.state = 'running';
+    this.destination = new MockNode();
+    this.gains = []; this.sources = []; this.buffers = [];
+    globalThis.__audioMockCtx = this;
+  }
+  createGain() { const g = new MockGain(this); this.gains.push(g); return g; }
+  createBufferSource() { const s = new MockSource(this); this.sources.push(s); return s; }
+  createDynamicsCompressor() {
+    const c = new MockNode();
+    for (const [name, value] of [['threshold', -16], ['knee', 24], ['ratio', 3], ['attack', 0.004], ['release', 0.22]]) {
+      c[name] = new MockParam(value);
+    }
+    return c;
+  }
+  createBuffer(channels, length, sampleRate) {
+    const b = new MockBuffer(channels, length, sampleRate);
+    this.buffers.push(b);
+    return b;
+  }
+  decodeAudioData() {
+    return Promise.resolve(new MockBuffer(2, 44100 * 168, 44100));
+  }
+  resume() { return Promise.resolve(); }
+}
+
+let audioCase = 0;
+async function mountAudio() {
+  globalThis.window = { AudioContext: MockCtx };
+  globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+  globalThis.fetch = async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(16) });
+  const href = new URL('../web/audio.mjs', import.meta.url).href;
+  const mod = await import(`${href}?bed-case=${++audioCase}`);
+  assert.equal(mod.unlock(), true, '解锁失败：mock AudioContext 没被接上');
+  return { mod, ctx: globalThis.__audioMockCtx };
+}
+
+const lastMusicRamp = (gain) => [...gain.gain.events].reverse().find((e) => e.type === 'ramp')?.v;
+
+test('A-35 真实接线：雨天建 2 层真 AudioBuffer、夜建 night、rain→cold 换缓冲，倒下只留心跳', async () => {
+  const clear = await mountAudio();
+  clear.mod.scene(sceneArgs());
+  const clearSnap = clear.mod.audioDebug();
+  assert.deepEqual(clearSnap.beds.map((b) => b.slot), ['daynight'], '晴天村内只应有昼夜床');
+  assert.equal(clearSnap.beds[0].material, 'day');
+  assert.ok(clearSnap.beds[0].gain > 0);
+  const clearBus = lastMusicRamp(clear.ctx.gains[1]);
+  assert.equal(clearBus, MUSIC_LEVEL);
+
+  const rainy = await mountAudio();
+  rainy.mod.scene(sceneArgs({ weather: 'rain', climate: { rain: true } }));
+  const rainSnap = rainy.mod.audioDebug();
+  assert.deepEqual(rainSnap.beds.map((b) => b.slot).sort(), ['daynight', 'weather'], '雨天必须建起天气+昼夜两层');
+  assert.equal(rainSnap.beds.find((b) => b.slot === 'weather').material, 'rain');
+  assert.equal(rainSnap.beds.find((b) => b.slot === 'daynight').material, 'day');
+  assert.ok(rainSnap.beds.every((b) => b.gain > 0), '两层床的增益必须非 0');
+  assert.ok(rainSnap.buffers.includes('amb:rain') && rainSnap.buffers.includes('amb:day'));
+  assert.equal(rainy.ctx.sources.filter((s) => s.loop).length, 2, '两层循环床必须真的起播');
+  const real = rainy.ctx.buffers.filter((b) => b.channels.some((c) => c && c.length));
+  assert.ok(real.length >= 2, 'createBuffer 必须真的被调用');
+  for (const b of real) {
+    assert.equal(b.numberOfChannels, 2, '环境床是交织立体声');
+    assert.ok(b.length > 0, 'AudioBuffer 长度必须非 0');
+    assert.ok(b.channels.some((c) => c && c.some((v) => v !== 0)), '缓冲必须是真实采样，不能是空数组');
+  }
+  const rainBus = lastMusicRamp(rainy.ctx.gains[1]);
+  assert.ok(rainBus < clearBus, '天气床在场时 BGM 必须被显式 ducking 压低');
+  assert.ok(Math.abs(rainBus - MUSIC_LEVEL * MUSIC_DUCK_WEATHER) < 1e-9);
+
+  // 同一 weather 槽换素材：缓存键必须跟着素材走，不能复用 amb:weather。
+  rainy.mod.scene(sceneArgs({ weather: 'cold', climate: { snow: true } }));
+  const coldSnap = rainy.mod.audioDebug();
+  assert.equal(coldSnap.beds.find((b) => b.slot === 'weather').material, 'cold');
+  assert.ok(coldSnap.buffers.includes('amb:rain') && coldSnap.buffers.includes('amb:cold'),
+    'rain→cold 必须各自建缓冲，不能复用槽位名缓存');
+  assert.ok(coldSnap.beds.every((b) => b.gain > 0));
+
+  const night = await mountAudio();
+  night.mod.scene(sceneArgs({ phase: '夜', window: { play: true, theme: 'spring-night', day: false, t: 0 } }));
+  const nightSnap = night.mod.audioDebug();
+  assert.deepEqual(nightSnap.beds.map((b) => b.slot), ['daynight']);
+  assert.equal(nightSnap.beds[0].material, 'night');
+  assert.ok(nightSnap.buffers.includes('amb:night'));
+  assert.ok(night.ctx.buffers.some((b) => b.channels.some((c) => c && c.some((v) => v !== 0))));
+
+  const crisis = await mountAudio();
+  crisis.mod.scene(sceneArgs({
+    settlement: 'crisis', weather: 'rain', climate: { rain: true },
+    window: { play: true, theme: 'crisis', day: true, t: 0 },
+  }));
+  const crisisSnap = crisis.mod.audioDebug();
+  assert.deepEqual(crisisSnap.beds.map((b) => b.slot).sort(), ['crisis', 'daynight', 'weather']);
+  assert.equal(lastMusicRamp(crisis.ctx.gains[1]), MUSIC_LEVEL_CRISIS, '危机曲已低于常规，不再叠加 ducking');
+
+  const dead = await mountAudio();
+  dead.mod.scene(sceneArgs({ dead: true, proximity: 1, window: { play: false, theme: 'death', day: true, t: 0 } }));
+  const deadSnap = dead.mod.audioDebug();
+  assert.deepEqual(deadSnap.beds.map((b) => b.slot), ['crisis'], '倒下时只留心跳，天气/昼夜/风停');
+  assert.equal(deadSnap.beds[0].material, 'crisis');
+
+  const muted = await mountAudio();
+  muted.mod.scene(sceneArgs({
+    proximity: 0.4, settlement: 'crisis', weather: 'rain', climate: { rain: true },
+    window: { play: true, theme: 'crisis', day: true, t: 0 },
+  }));
+  assert.equal(muted.mod.audioDebug().beds.length, 4, '静音前应有 weather/daynight/wind/crisis 四层');
+  muted.mod.toggleMute();
+  assert.deepEqual(muted.mod.audioDebug().beds, [], '静音必须停掉全部四层（wind 不再漏）');
+});
+
+function sceneArgs(over = {}) {
+  return {
+    season: '春', phase: '昼', weather: 'clear', settlement: 'active', crisisDays: 0, dead: false,
+    window: { play: true, theme: 'spring', day: true, t: 0 }, proximity: 0, climate: {},
+    ...over,
+  };
+}
