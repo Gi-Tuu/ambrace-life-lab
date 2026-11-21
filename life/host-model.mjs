@@ -286,7 +286,8 @@ function modelChat({ world, prompt } = {}) {
 }
 
 function modelChatter({ world, prompt } = {}) {
-  return askLine({ world, prompt, maxTokens: 80, temperature: 0.85, tag: 'CHATTER' });
+  // 居民互聊只改一句措辞，48 token 足够；玩家自由输入走 modelChat（140），别混。
+  return askLine({ world, prompt, maxTokens: 48, temperature: 0.85, tag: 'CHATTER' });
 }
 
   return {

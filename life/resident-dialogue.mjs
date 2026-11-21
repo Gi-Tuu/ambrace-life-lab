@@ -28,8 +28,10 @@ export const FREE_TALK_LIMITS = Object.freeze({
   textMax: 240,
   lineMax: 80,
   historyMax: 12,
-  promptHistory: 8,
-  promptMax: 4000,
+  // 提示词瘦身：27B-FP8 的耗时 ≈ prefill(提示词长度) + decode(max_tokens)。
+  // 历史只带最近 4 轮、全文 1600 字符封顶；historyMax 12 仍只影响存档/摘要保留量。
+  promptHistory: 4,
+  promptMax: 1600,
   pendingMs: 20000,
   trustSession: 4,
   trustDay: 6,
@@ -274,6 +276,7 @@ export function buildFreeTalkPrompt(world, npc, session, text, intent = null) {
   const state = stateOf(world, npc);
   const here = (world.locs ?? {})[world.loc[npc.id]] ?? world.loc[npc.id];
   const work = state.busy ? (WORK_WORD[state.busy.kind] ?? '手上的活') : '暂时空闲';
+  // 最近几轮只由 promptHistory 决定，不要在这里写第二份魔数；最后一条是本次玩家输入。
   const prior = session.history.slice(0, -1).slice(-FREE_TALK_LIMITS.promptHistory);
   const lines = [
     `你是${npc.name}（${npc.traits?.archetype ?? '谨慎'}型性格），第 ${Math.floor(world.t / (world.dayTicks ?? 24)) + 1} 天，此刻在${here}。`,
