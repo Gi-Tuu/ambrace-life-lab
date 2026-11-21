@@ -3980,7 +3980,7 @@ async function refresh() {
     // 清掉营地指针落回主营地（那里恒可读），并把该做什么说清楚。
     const notOwner = e.code === 'CAMP_NOT_OWNER';
     const message = notOwner
-      ? '这个营地认不出当前浏览器。回到主营地，或用名字重新进入即可。'
+      ? '这个营地认不出当前浏览器：档还在服务器上，但只有当初建档的那台浏览器能继续。想在这里玩，就换个名字新开一段；或者回主营地。'
       : e.code === 'CAMP_UNAVAILABLE'
         ? '当前名字营地暂时无法加载，正在重试。'
         : '无法连接生存服务，正在重试。';
@@ -4218,7 +4218,20 @@ async function submitCamp() {
   if (!name) { if (status) status.textContent = '先输入一个名字。'; return; }
   try {
     const res = await fetch('/saves/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
-    if (!res.ok) { const j = await res.json().catch(() => ({})); if (status) status.textContent = '进不去：' + (j.error ?? res.status); return; }
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      // 别把服务端错误码原样甩给玩家：CAMP_OWNED 看起来像故障，实际是"换设备进不去"这一件明确的事。
+      const why = {
+        CAMP_OWNED: '这个名字的营地属于当初建档的那台浏览器，换设备进不去；想在这里继续就换个名字新开一段。',
+        RATE_LIMITED: '同一个名字建档太频繁，等一会儿再试。',
+        CAMP_LIMIT: '常驻营地已经住满了，过一会儿再来。',
+        SAVE_FAILED: '服务端没能把营地落到盘上，稍后再试。',
+        TOO_LONG: '名字最长 16 个字。',
+        EMPTY: '先输入一个名字。',
+      }[String(j.error ?? '')];
+      if (status) status.textContent = why ? '进不去：' + why : `进不去：${j.error ?? res.status}`;
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     setCampKey(data?.key);
     try { if (data?.name) localStorage.setItem('ambrace.campName.v1', data.name); } catch { /* 隐私模式 */ }
