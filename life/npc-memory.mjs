@@ -14,6 +14,7 @@ import { stateDistance } from './memory.mjs';
 export const NPC_MEMORY = Object.freeze({
   v: 1,
   maxEntries: 600,
+    maxBytes: 220 * 1024,
   pinnedMax: 150,
   dayReserve: 120,
   residentsMax: 16,
@@ -174,6 +175,7 @@ export function addEntry(container, raw, { t = null, dayTicks = null } = {}) {
   container.nextId = entry.id + 1;
   container.entries.push(entry);
   container.stats.written += 1;
+    if (container.entries.length >= 500 || container.stats.written % 50 === 0) enforceByteLimit(container);
   if (container.entries.length > NPC_MEMORY.maxEntries) {
     enforceLimits(container, { t: Number.isFinite(t) ? t : entry.at, dayTicks: dayTicks ?? container.dt });
   }
@@ -479,6 +481,29 @@ function compact(container, t, dayTicks) {
     container.entries = container.entries.filter((x) => !drop.has(x.id));
   }
 }
+
+  // 字节上限：600 条不是唯一约束；长摘要/承诺会先把档撑大。
+  function enforceByteLimit(container) {
+    if (!container || !Array.isArray(container.entries)) return container;
+    const over = () => JSON.stringify(container).length > NPC_MEMORY.maxBytes;
+    if (!over()) return container;
+    const now = Math.max(...container.entries.map((e) => e.at));
+    for (;;) {
+      let index = -1;
+      let best = Infinity;
+      for (let i = 0; i < container.entries.length; i += 1) {
+        const entry = container.entries[i];
+        if (isPinnedEntry(entry) || entry.state?.day === true) continue;
+        const score = evictScore(entry, now, container.dt || 24);
+        if (score < best) { best = score; index = i; }
+      }
+      if (index < 0) break;
+      container.entries.splice(index, 1);
+      container.stats.evicted += 1;
+      if (!over()) break;
+    }
+    return container;
+  }
 
 export function enforceLimits(container, { t = null, dayTicks = null } = {}) {
   if (!container || container.entries.length <= NPC_MEMORY.maxEntries) return container;
