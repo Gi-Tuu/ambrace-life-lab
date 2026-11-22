@@ -9,7 +9,7 @@
 ## 一、五份基准读数（已随仓库发布）
 
 ```bash
-npm test                                  # 221 个测试文件 / 1261 条断言（2026-11-21，v1.6.0；日志 evidence/v16-livestock/full-test.log）
+npm test                                  # 233 个测试文件 / 1309 条检查（2026-11-22，本地全量通过；历史 v1.6.0 日志仍为 1261 条）
 node life/run.mjs --report > /tmp/report.log    # 四条件消融矩阵
 node life/run.mjs --sweep  > /tmp/sweep.log     # 5 seed 复核
 node life/run.mjs --viab   > /tmp/viab.log      # 受损速度
@@ -33,7 +33,7 @@ md5sum /tmp/{report,sweep,viab,recover,metab}.log
 
 ## 二、"闸门能变红"怎么自己验
 
-三套变异电池（把源码复制到临时目录、施加一条变异、要求它瞄准的闸门真的红）：
+四套变异电池（把源码及 `shared/web/seed/packs` 依赖复制到临时目录、施加一条变异、要求它瞄准的闸门真的红）：
 
 ```bash
 node life/o1o9-mutation-battery.mjs      # 13 条
@@ -42,7 +42,11 @@ node life/m6lp-mutation-battery.mjs      # 4 条
 node life/m4-mutation-battery.mjs        # 7 条（2026-11-09 补，之前只存在日志里）
 ```
 
-每条都要求：未变异对照必须先全绿、锚点必须唯一命中、变异必须打红指定闸门。任一条不满足即 `exit 1`。
+未变异对照必须全绿，变异必须打红指定闸门；锚点按各电池的匹配规则校验（部分允许首处或全部替换），不是所有脚本都要求唯一命中。任一必要条件不满足即 `exit 1`。
+
+2026-11-22 在随后提交为 `709f02b` 的补丁上实跑：四套合计 **28/28** 指定判据变红、对照全绿；`npm run check` **1309/1309，0 fail，exit 0**，测试耗时 96127.7131ms；20 张 PNG 指纹一致。原始日志在本地 `docs/battery-harness-{m4,m6p,m6lp,o1o9,check}-20261122.log`，**未随仓库发布**；可用上列命令独立复跑。本文更新未重跑覆盖率、浏览器或线上验证。
+
+`node scripts/test-ids.mjs` 当前盘点为 233 文件、1305 静态标题、1028 完整 ID、0 重复。完整复合记号不拆分：`FAM-05/06` 与 `FAM-05` 不算重复；此结果不保证拆号无指向歧义，也不等同运行时测试条数。
 
 ## 三、README 各句话对应的证据
 
@@ -52,13 +56,13 @@ node life/m4-mutation-battery.mjs        # 7 条（2026-11-09 补，之前只存
 | "切断通道后行为分布改变" | `--report` 的 C2 vs C2-neg 两行 | **该矩阵不是同随机流对照**（掩码被哈希进角色种子）；同种子臂在 `coupling.test.mjs` / `m6-*.test.mjs` / `o9-event-first.test.mjs` 里 |
 | "每条判据配负向对照" | `life/host-layers.test.mjs`（B 侧永不叠层）、`m3.test.mjs` 闸门④、变异电池 | 负向对照的有效性由变异电池自己验 |
 | "不可逆损伤" | `--viab` / `--recover`；`life.test.mjs` 的 L13 用例 | 默认档（town）跑 3600 刻仍 0 掉档；能看到掉档的是离线 lab 与 `WORK_CAP=0` 情景 |
-| "语言层不是语义理解" | `life/speech.mjs` 顶部注释 + `town.test.mjs` T4/T5 | 台词是状态条件化模板；玩家输入是六类正则 |
+| "研究预设的语言层不是语义理解" | `life/speech.mjs` + `town.test.mjs` | 仅指研究预设模板与关键词意图分类；正式自由对话可接模型措辞，规则仍由服务端裁决 |
 | "可复现" | 上面五份 md5 + `m3-baseline-*.json` 行为指纹 | 只在同 Node 大版本、同 seed 下逐位 |
 
 ## 四、明确不保证的
 
-- **真实模型链路**：`BRAIN=model` 需要自备端点/密钥（见 `.env.example`）。仓库内只有一个**假上游**测试
-  （`life/model-path.test.mjs`），它验的是预算闸门/退替身/坏 JSON，不验供应商的真实质量。
+- **真实模型链路**：`BRAIN=model` 需要配置端点/凭据（见 `.env.example`）。`life/model-path.test.mjs` 与对话系列测试使用假上游验证预算、回退和解析边界，不能证明当前供应商质量或多人负载下的回复成功率。
+- **验收记录边界**：访客投影与营地导出/导入已实现，SA15 与 EXPORT-01…08 属于当前套件。此次未找到访客真浏览器验收、线上备份→部署→恢复、多人对话采样的当前证据，不能据此断言无人做过。当前导入测试缺专门并发用例，属于覆盖缺口，不是已证实缺陷。
 - **外部基线**：部分 M5 训练脚本读 `D:/Codex-Projects/output/` 下的历史日志，仓库不保证能复现（README 已声明）。
 - **线上实例**：部署在平台上的行为依赖平台休眠策略与是否配置了 `CTL_TOKEN`，仓库无法自证。
 - **覆盖率只统计被套件加载的模块**（以 `npm run coverage` 最后一次输出为准）：2026-11-21 这轮报告的模块行是 **170 个**；`scripts/*.mjs`（66 个生成/检查/探针脚本）与 `docs/*.mjs` 的一次性测量脚本不在其中，它们是离线装置，不在运行时路径上。

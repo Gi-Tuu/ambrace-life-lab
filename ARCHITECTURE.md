@@ -1,6 +1,6 @@
 # 架构与接手说明
 
-写给 **clone 之后、不想依赖 `docs/`（被 `.gitignore` 挡在库外）也能接手** 的人。`docs/` 里的实验台账/赛事底稿不入库；这里与根目录文档是公开可读的边界。
+写给 **clone 之后、不依赖 `docs/` 也能接手** 的人。`docs/` 默认被忽略，但索引、手记及部分历史回报已入库，以 `git ls-files docs` 为准。本文核对 main `709f02b`；包版本仍为 `1.6.0`，下述历史拆分行数不代表当前行数。
 
 ## 一句话
 
@@ -56,7 +56,7 @@ survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs
 2. 生存主世界 + 常驻名字营地各走一拍（`tickSurvPlay`）；
 3. 每 `SAVE_EVERY` 刻排一次异步存档（不 await 磁盘；`flushWrites/start/stop` 收口）。
 
-所有世界写入走同一条 `queueWorldWrite` 串行链：定时器忙则跳过本拍，显式 `ctl step/tickOnce` 排队。
+tick/控制与营地切换等走 `queueWorldWrite`：定时器忙则跳过本拍，显式 `ctl step/tickOnce` 排队。普通动作另走 `queueAct`，不排在长 tick/模型等待后；自由对话分准备、模型等待、提交，等待不占动作队列。`/import` 直接调用 `importCampExport` 写盘，不经过这两条队列；不能宣称所有写入全局串行。
 
 ### 玩家动作
 
@@ -69,7 +69,9 @@ survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs
 ### 数据与存档
 
 - `data/world.json`：城镇 A/B + `survival` 子档；保存时留 `.bak`，坏档 quarantine。
-- `data/saves/`：名字营地；`index.json` + owner 侧车；32hex key、TTL 清扫、索引锁。
+- `data/saves/<32hex>.json.gz`：名字营地 gzip 档；`index.json` + `<key>.owner.json` 侧车；32hex key、TTL 清扫、索引锁。
+- 已登记名字营地的非 owner 只能经 `/world` 获取独立白名单访客投影（camp key/名字、day、人口、settlement、最近 3 条事件 kind），无背包/关系/对话/位置明细；不能通过同名接管或操作。
+- `/export`、`/import` 是 `SAVE_EXPORT_TOKEN` 控制的名字营地备份入口，默认关闭；包含 gzip 档的 base64、索引及 owner 侧车，不含 MAIN/对照。导入校验 key/解压/档形状，跳过已有 owner 的营地；停服全量归档用 `scripts/archive-saves.mjs`（主档、名字营地、对照及哈希校验）。
 - `data/comparison.json`：A/B 对照分支与回放帧，独立于主档。
 - 研究五份面：`node life/run.mjs --report|--sweep|--viab|--recover|--metab`，md5 见 [EVIDENCE.md](./EVIDENCE.md)。
 
@@ -79,7 +81,7 @@ survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs
 |---|---|---|---|
 | `GAME_MODE` | `research` | `GAME_MODE=game` | research 同时推进旧城镇 A/B；game 只推进生存 |
 | `GAME_RULES` | 关 | `GAME_RULES=1` | 只影响 `gameRules` 世界；研究表逐位不变 |
-| `BRAIN` | `local` | `BRAIN=model` + 模型 env | 无端点/无观众时退替身；预算/熔断在 `host-model` |
+| `BRAIN` | `local` | `BRAIN=model` + 模型 env | 无端点时退替身；无人调用另受 `MODEL_UNATTENDED` 等配置控制；预算/熔断在模型域 |
 | M3/M4 | 关 | 仅 A/B 页开关，只叠 A 侧 | 不落盘，重启回关；B 侧保持 C2-neg |
 | `M5_ENABLED` | 关 | `M5_ENABLED=1` | 慢仓状态校验失败会拒绝启动（不半载入） |
 | 讨论/合作/生态等 | 按生存配置 | `createSurvPlay` 选项 | 研究路径不传这些选项时保持旧轨迹 |
@@ -87,8 +89,9 @@ survplay.mjs ──> survplay-actions.mjs ──> survplay-camp.mjs
 ## 已知限制
 
 - **不是通用开放世界**：房间/地点/资源点是有限集合；玩家和居民的动作空间由 `body.mjs`/`rules.mjs` 定义，超出即 `UNKNOWN_KIND`。
-- **语言层不是语义理解**：NPC 台词是状态条件化模板；玩家输入走关键词意图分类（问候/讨食/警告/指责/道歉/分享等）。
-- **真实模型质量未验证**：仓库内只有假上游测试（预算/退替身/坏 JSON），不证明供应商真实质量；`BRAIN=model` 需要自备端点。
+- **语言层分路径**：研究预设与快捷话题是确定性模板/关键词分类；正式自由输入由 `resident-dialogue.mjs` 接模型措辞，服务端裁决态度与关系后果，不把模型文本当世界动作；无模型、超时、预算耗尽或熔断退模板。
+- **统一长期记忆**：`npc-memory.mjs` 汇合事件/对话/承诺/知识，供正式世界决策与叙事检索，持久化在 `survival.npcMemory`，读档清洗/迁移；旧情景记忆仍保留统计/反思与兼容用途，研究/compare 不启用统一层。它是有界确定性记录，不是无限记忆或通用语义理解。
+- **真实模型证据边界**：本地假上游测试验证预算/回退/坏 JSON 等机制，不证明当前线上供应商质量；`BRAIN=model` 需要端点。当前线上 token 配置/轮换、浏览器验收和多人采样未找到当前证据，待核实，不等于确定未做。
 - **单机单进程**：`S` 是模块单例；同一 `DATA_DIR` 多进程并发写只做了索引锁与原子写，不是分布式系统。
 - **离线补时有界且重启也生效**：MAIN 重启后按 `savedAt` 的真实停机时长、同一 `simClock.rate` 走本地替身补齐；上限 `SURV_CATCHUP_CAP`（默认 120 刻 = 7200 游戏分），超长空档如实标截断，不补决策。研究态/无 `simClock` 的旧路径才按 `TICK_MS` 整拍补：`分钟 × 60000 / TICK_MS` 刻（`TICK_MS` 默认 7500，部署若设 1200 或 360000 会得到不同刻数，口径以实际 env 为准）。
 - **性能/内存**：trace 默认封顶 400/角色，日志与 observer 有界；长跑仍建议单独 `DATA_DIR` 并监控 RSS。

@@ -4,7 +4,7 @@
 
 参赛作品：AI+∞ 开发者创作大赛 第三期「AI 造游戏」。
 
-**版本 `1.6.0`**（tag `v1.6.0`）· 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+**包版本 `1.6.0`**（历史 tag `v1.6.0`；本文核对 main `709f02b`，含 tag 后续改动，不表示新 tag 或已部署）· 5 分钟上手见 [QUICKSTART.md](./QUICKSTART.md) · 模块边界/接手见 [ARCHITECTURE.md](./ARCHITECTURE.md) · 作者侧基准与未验证声明见 [BENCHMARK.md](./BENCHMARK.md) · 变更记录见 [CHANGELOG.md](./CHANGELOG.md) · **每条结论怎么自己验**见 [EVIDENCE.md](./EVIDENCE.md) · 参与/复现约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 它不是什么
 
@@ -27,7 +27,7 @@
 | L9 规则校验 | 合法性 + 驳回重决策（唯一裁决点） | `life/rules.mjs` |
 | L10 反应器（效应器） | 意图 → 世界改变 | `life/body.mjs` 的 `actuate`（**不是** `host.mjs`） |
 | — 世界宿主 | 持久化 / tick 调度 / 玩家面 / 载荷 | `life/host.mjs`（facade + 单例）+ `host-world.mjs`（世界/tick/存档）+ `host-model.mjs`（思考层）+ `host-replay.mjs`（A/B 回放）+ `serve.mjs`（HTTP） |
-| L11 记忆 | 情景记忆 + 习惯表 | `life/memory.mjs`（情景）+ `life/model.mjs` 的 `makeHabit`（习惯） |
+| L11 记忆 | 情景记忆 + 习惯表 + 正式世界统一长期记忆 | `life/memory.mjs`（情景）+ `life/model.mjs` 的 `makeHabit`（习惯）+ `life/npc-memory.mjs`（事件/对话/承诺/知识） |
 | L12 思考层 | 事件门控、按需接 LLM | 线上：`life/host-model.mjs` 的 `modelBrain` + `life/agent.mjs` 的 `choose`；离线实验：`life/loop-real.mjs`（**CLI 脚本，服务端不加载**） |
 | L13 自我维持 | 存续账本 + 不可逆降级 | `life/viability.mjs` |
 
@@ -39,6 +39,8 @@
 **世界预设**：`lab`（4 房间，全部研究读数与五份面用它）与 `town`（演示用：8 房间、物件、天气、工作/换粮/接济/结伴、群体规范、自然语言台词）。离线 `simulate` 默认 `lab`；`serve` 演示默认 `town`；预设随存档走。美术资源接入时按 `rooms/grid/things` 数据挂图，不改逻辑。
 
 **研究预设的语言层**：NPC 的话是**状态条件化的确定性模板**；玩家的话走**关键词意图分类**（问候/讨食/警告/指责/道歉/分享，其余按中立），**不是语义理解**——交付文案按这个口径写。
+
+**正式自由对话与长期记忆**：`resident-dialogue.mjs` 处理居民自由输入，服务端裁决态度/关系后果，模型只写措辞；不可用时退模板，不把生成文本执行成世界动作。`npc-memory.mjs` 统一事件、对话、承诺、知识，供正式世界叙事与决策检索，随 `survival.npcMemory` 存档并清洗/迁移；研究/compare 不启用统一层，旧情景记忆仍保留统计/反思与兼容用途。
 
 L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask` 不传），关掉时不消费额外随机数、不写状态，轨迹与没有这两层时逐位相同。
 离线实验用 `channelMask` 打开它们并单独计量；演示页上的 `M3 承诺期 / M4 耦合调制` 两个开关只是同一件事的入口，且只叠加在 A 侧（B 侧是切断承重通道的负向对照，把内部状态接回决策就不再是对照）。
@@ -64,7 +66,8 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ survplay-camp.mjs                   #   营地/住房/设施/建造/家庭/合作动作入口
 │  ├─ survplay-save.mjs                   #   生存档 dump/load 与旧档迁移
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
-│  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
+│  ├─ resident-dialogue.mjs               # 正式自由对话：服务端定态度/关系后果，模型只写措辞
+│  ├─ npc-memory.mjs                      # 统一长期记忆：事件/对话/承诺/知识，检索与存档迁移
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
 │  ├─ *.test.mjs          #   233 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
@@ -92,7 +95,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 
 美术只保留 **20 张 PNG**：16 张地形 tile（3D 地面 `regionAtlas` 的唯一来源）与 4 张 HUD 头像（`npm run actions` 可重生成，应用 `pixel-overrides` 手改），色板锁 `web/assets/palette.json`，20 张全部由 `art-hashes.json` 钉 sha256。旧的 2D 资产管线（`gen-pixel-assets.mjs` / `pack-assets.mjs` / `npm run assets`）已随 2D 视口在 1.5 前删除，仓库里不再有能重画整批 2D 素材的生成器。
 前端只读 `/world` 载荷做表现，动画不读 `w.t`、不消费 rng、不写世界状态，故不污染研究读数。
-内部台账 / 交接稿大部分在 `docs/`（`.gitignore`，不入库）；**现行文档**（创作手记 v2、参赛评分冲刺、像素工作台说明、`docs/README.md` 索引、文档状态）用 `git add -f` 随仓库发布，其余 `docs/*.md` 是带「历史快照」标记的当时版本。**不读 `docs/` 也能接手**：公开的模块边界、默认开关、存档位置与已知限制见根目录 [ARCHITECTURE.md](./ARCHITECTURE.md)；5 分钟真实路径见 [QUICKSTART.md](./QUICKSTART.md)。
+内部台账 / 交接稿大部分在 `docs/`（默认被 `.gitignore` 忽略）；现行文档（创作手记 v2、参赛评分冲刺、像素工作台说明、索引、文档状态）及部分历史回报已显式入库。历史记录保留当时口径，是否发布以 `git ls-files docs` 为准。**不读 `docs/` 也能接手**：公开的模块边界、默认开关、存档位置与已知限制见根目录 [ARCHITECTURE.md](./ARCHITECTURE.md)；5 分钟真实路径见 [QUICKSTART.md](./QUICKSTART.md)。
 
 ## 快速开始
 
@@ -106,9 +109,9 @@ node serve.mjs          # http://localhost:7860
 
 生存世界使用一份共享存档，多位玩家访问同一服务时会互相影响。将 `DATA_DIR` 放在持久卷上可以跨容器恢复。没有持久卷的平台只能在容器存续期间保存进度。
 
-玩家在名字营地选择「新开一局」时，以新地图替换这份同名档。主营地进度独立。
+玩家在有权限的名字营地选择「新开一局」时，以新地图替换这份同名档。主营地进度独立。名字/key 仅定位，`camp_owner` cookie 才是归属凭据；已登记营地的非 owner 只能读 `/world` 白名单投影（名字、day、人口、settlement、最近 3 条事件 kind），不能同名接管或写入。
 
-游戏内的「研究对照 A/B」从同一份生存快照复制两条独立分支，沿用相同的地图、玩法、裁决和居民初始随机状态。两侧都用本地决策，B 切断登记的状态通道。在 A 侧操作，两侧分别裁决。点击「重跑对照」回到本轮起点，或点击「用当前生存快照」从当前选中的营地另起一轮。对照进度单独存于 `DATA_DIR/comparison.json`，主营地继续使用 `DATA_DIR/world.json`，名字营地使用 `DATA_DIR/saves/`。停服后运行 `scripts/archive-saves.mjs` 可归档这三种存档，恢复前逐项校验哈希。
+游戏内的「研究对照 A/B」从同一份生存快照复制两条独立分支，沿用相同的地图、玩法、裁决和居民初始随机状态。两侧都用本地决策，B 切断登记的状态通道。在 A 侧操作，两侧分别裁决。点击「重跑对照」回到本轮起点，或点击「用当前生存快照」从当前选中的营地另起一轮。对照进度单独存于 `DATA_DIR/comparison.json`，主营地继续使用 `DATA_DIR/world.json`，名字营地使用 `DATA_DIR/saves/<32hex>.json.gz`，另有索引与 owner 侧车。`/export`、`/import` 为独立 `SAVE_EXPORT_TOKEN` 控制的名字营地备份入口（默认关闭，不含 MAIN/对照，导入跳过已有 owner 的营地；安全边界见 SECURITY.md）。停服后运行 `scripts/archive-saves.mjs` 可归档这三种存档，恢复前逐项校验哈希。
 
 未配置模型端点时世界自动退回本地确定性替身，照常运行。接入真实模型：
 
@@ -131,8 +134,8 @@ SURV_CATCHUP_CAP= # 生存离线补时上限，默认 120 刻
 BRAIN=            # local（默认，0 成本）| model
 GAME_MS_PER_MINUTE= # 正式节奏：1 游戏分钟的真实毫秒，默认 6000（现实 1 分 = 10 游戏分，1 天 = 144 现实分钟）
 TICK_MS=          # 研究态/非连续旧路径的整拍间隔；正式连续世界不读它（部署游戏态可设 360000 对齐 60 分/刻）
-PRESENCE_MS=      # 无人观看多久后停调真模型。**单位是毫秒**：60 秒要写 60000
-CTL_TOKEN=        # 公开部署必设，否则任何脚本一条 JSON 就能重置世界（见 SECURITY.md）
+PRESENCE_MS=      # 观众在场窗口（毫秒，60 秒写 60000）；无人调用另受 MODEL_UNATTENDED 等配置控制
+CTL_TOKEN=        # 建议公开部署配置；未设走会话 nonce，MAIN 重开另有例外（见 SECURITY.md）
 CHAT_TOKEN=       # 不设时 /chat 转发整体关闭（默认）
 WORK_CAP=         # 工坊每日收工次数；不设＝无上限＝默认行为逐位不变
 MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
@@ -153,6 +156,8 @@ npm run check     # lint + art:check + test
 npm run smoke:online # 线上冒烟：只读检查 + 写路径拒绝检查（SMOKE_URL / SMOKE_COOKIE / SMOKE_TOKEN）
 ```
 
+本次口径依据本地日志 `docs/battery-harness-check-20261122.log`（未随仓库发布，可运行上述命令复核）：233 个测试文件、1309/1309 检查通过。ID 按标题开头的**完整记号**统计：1028 个唯一 ID；复合号不拆分，0 重复不表示拆号后无歧义。历史覆盖率与研究读数保留原日期，不以本地测试证明线上状态。当前线上 token 配置/轮换、浏览器验收及多人采样尚未找到当前证据，均待核实。
+
 **为什么美术也要指纹**：研究面早有"五份面 md5"钉死，但素材没有指纹时，"改图"只能靠肉眼发现——重生成、覆盖稿、别人提交一张图都可能在无人察觉时改变游戏外观。`art:check` 把外观也纳入"改了就必须在提交里承认"的纪律（与五份面同源思路）。哈希对 PNG 字节取，Node 大版本升级可能改变压缩输出（像素相同、字节不同）⇒ 那时 `--check` 会红，逼你显式重钉并在 CHANGELOG 说明"只是压缩器变了"。
 
 研究读数（五份面随仓库发布在 `evidence/`，md5 与复现方法见 [`EVIDENCE.md`](./EVIDENCE.md)）：
@@ -166,7 +171,7 @@ node life/run.mjs --metab      # 代谢与进食实测账
 node life/o18-heldout.mjs      # 事前特征、时间留出、传话切断对照
 ```
 
-闸门有效性（"不能变红的闸门不算闸门"的机械证明；每条都要求未变异对照先全绿、锚点唯一命中、变异必须打红指定闸门）：
+闸门有效性（"不能变红的闸门不算闸门"的机械证明；要求未变异对照全绿、锚点符合各脚本匹配规则、变异打红指定闸门）：
 
 ```bash
 node life/o1o9-mutation-battery.mjs   # 13 条
@@ -200,13 +205,13 @@ node life/m4-mutation-battery.mjs     # 7 条
 
 **固定历史起点**：免费创空间实测无跨容器重建持久卷（重新部署即清空 `/data`）。因此镜像内置 `seed/world.json`——一份由 `seed-gen.mjs` 离线实跑 600 刻产生的存档（seed=7，含不可逆损失与关系历史）。启动时 `/data` 有存档优先续跑（休眠补时），没有则载入种子：平台重置变成「回到同一个可复现的历史起点」，而非一个空白世界。种子是实跑产物，不是编造历史；载入种子不做休眠补时。
 
-**运行时后端**：种子历史由离线确定性替身产生；启动后的实时决策后端由 `BRAIN` 环境变量显式开关（`model` = 接所配置的真实模型，默认 `local` 替身，防止无预算时意外调用）。公开部署设 `BRAIN=model`，端点为魔搭 API-Inference（失败按配置顺序退到第三方），每供应商可配各自模型 id（`MODEL_NAMES` 按位对应 `MODEL_PROVIDERS`）。
+**运行时后端**：种子历史由离线确定性替身产生；启动后的实时决策后端由 `BRAIN` 环境变量显式开关（`model` = 接所配置的真实模型，默认 `local` 替身）。供应商及回退顺序由配置决定，`MODEL_NAMES` 按位对应 `MODEL_PROVIDERS`；当前线上 provider、模型及开关待核实，不从仓库推定。
 
-**成本策略**（公开实例）：`MAX_CALLS` 是**每日**额度，跨天归零；只有最近有人在访问（`/world` 等应用路径，`PRESENCE_MS` 内）才允许调用真模型，无人观看时走替身。依据是 1 魔粒≈2 次旗舰调用、签到约 250 魔粒/天。**因此公开实例的行为依赖"当前有没有观众"，它只作为演示，不作为实验读数来源**——实验一律用离线固定条件复现。
+**成本策略**（代码机制）：`MAX_CALLS` 是**每日**额度，跨天归零；模型调用还受在场窗口、车道预算与熔断限制；无人时是否允许调用还取决于 `MODEL_UNATTENDED` 等配置，不是无观众就一律退替身。当前线上额度与策略待核实。历史预算估算为 1 魔粒≈2 次旗舰调用、签到约 250 魔粒/天，不作为当前价格或配额承诺。公开实例只作演示，实验用离线固定条件复现。
 
 ## 仓库边界
 
-内部实验记录、台账、赛事工作底稿与手记活稿不在本仓库（见 `.gitignore`）。研究全文与创作手记另行发布。根目录的日志、截图与 dump 均为临时产物，不入库。
+`docs/` 默认被 `.gitignore` 忽略，但已有索引、手记、工作底稿及部分历史回报被显式纳入版本控制；是否入库以 `git ls-files docs` 为准，不能把内部记录一概视为未公开。研究全文与创作手记另行发布；临时日志、截图与 dump 通常不入库。
 
 **外部基线**：部分 M5 训练/校准脚本需要本机基线目录 `D:/Codex-Projects/output/` 下的历史日志，仓库内不保证独立复现；M3 第一候选的停止证明日志与 M5 缩放的原始日志未随仓库发布（结论保留在台账 §1 行内）。
 

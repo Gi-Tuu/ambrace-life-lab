@@ -1,6 +1,6 @@
 # 5 分钟快速开始
 
-目标：从零到看见一个会自己走、会吃饭、会睡觉、会死的世界。所有按钮名与 `web/index.html` / `web/app.js` 当前实现一致；完整验收日志见 [`evidence/v16-livestock/quickstart-browser.log`](./evidence/v16-livestock/quickstart-browser.log)（1.6.0 实跑）。
+目标：从零到看见一个会自己走、会吃饭、会睡觉、会死的世界。下列路径保留 1.6.0 历史实跑记录，日志见 [`evidence/v16-livestock/quickstart-browser.log`](./evidence/v16-livestock/quickstart-browser.log)。当前源码核对 main `709f02b`（包版本仍 1.6.0）；后续改动的当前浏览器/线上验收及多人采样待核实，历史记录不是当前部署证明。
 
 ## 3 条命令
 
@@ -18,14 +18,14 @@ Windows PowerShell 第 3 条改成：
 $env:GAME_MODE='game'; $env:GAME_RULES='1'; node serve.mjs
 ```
 
-> `GAME_RULES=1` 才启用正式游戏规则层（研究世界的读数不受影响）。不设这两个变量时默认是研究态（`GAME_MODE=research`、`GAME_RULES` 关），世界仍会跑，但手感与线上部署不同。端口用 `PORT` 改，存档目录用 `DATA_DIR` 改。
+> `GAME_RULES=1` 才启用正式游戏规则层（研究世界的读数不受影响）。不设这两个变量时默认是研究态（`GAME_MODE=research`、`GAME_RULES` 关），世界仍会跑，但不等同正式游戏配置；当前线上配置待核实。端口用 `PORT` 改，存档目录用 `DATA_DIR` 改。
 
 ## 5 分钟真实路径
 
 | 时间 | 做什么 | 实际按钮 / 读数 |
 |---|---|---|
 | 0:00 | 起服后打开 `http://localhost:7860` | 菜单出现「生存模式」卡片 |
-| 0:30 | 进游戏 | 点 **「继续生存」**；没有存档时点 **「新开一局」**。名字营地输入名字后点 **「进入 / 开新营地」**（名字就是钥匙，别人输同名进同一世界） |
+| 0:30 | 进游戏 | 点 **「继续生存」**；没有存档时点 **「新开一局」**。名字营地输入名字后点 **「进入 / 开新营地」**（名字/key 仅定位，凭据是浏览器的 `camp_owner` cookie；同名非 owner 不能接管，已登记营地的 `/world` 只给访客摘要投影） |
 | 1:00 | 走 | **WASD / 方向键**走路，**Shift** 奔跑；页面顶部 **「生存游玩」** 进入单世界，**「世界全景」** 切俯视 |
 | 1:30 | 看 HUD | 左上 `季节 / 第 N 天 / 天气`；`体力 · 存续 · 今日动作已用 N 分`。时间是一条连续游戏钟（默认 1 游戏分 = 6 秒真实时间，1 天 1440 分 = 144 现实分钟）；`今日动作已用` 只是日统计，不限制行动。正式路径**没有**「每刻 60 分池」，也不会返回 `TIME_WAIT`——那是研究态/旧路径的兼容码 |
 | 2:00 | 采集 | 走到 **瞭台 / 井台**，按 **3** 选 **镐**，靠近石堆按 **F**（或点石堆）；到 **院子 / 树林** 按 **2** 选 **斧** 采木。种子档里院子木料可能已采空，瞭台/井台更稳 |
@@ -40,7 +40,7 @@ $env:GAME_MODE='game'; $env:GAME_RULES='1'; node serve.mjs
 
 - **机制层默认关**：M3 目标承诺、M4 耦合调制只在 **「研究对照 A/B」** 页面出现，且只叠加在 A 侧；B 侧是切断状态通道的负向对照。演示开关不落盘，重启回到关。
 - **正式游戏规则层默认关**：`GAME_RULES=1` 才启用游戏价目/分类粮仓/灯火燃料等；研究世界逐位保持旧表。`GAME_MODE=game` 只推进生存单世界，`research`（默认）同时推进旧城镇 A/B 研究预设。
-- **真实模型默认关**：默认 `BRAIN=local`，居民走确定性替身。要接模型：`cp .env.example .env`，填 `MODEL_PROVIDERS` / `MODEL_KEYS` / `MODEL_NAME`，再 `node --env-file=.env serve.mjs`。没配端点时世界照常跑。
+- **真实模型默认关**：默认 `BRAIN=local`，居民走确定性替身。要接模型：`cp .env.example .env`，填 `MODEL_PROVIDERS` / `MODEL_KEYS` / `MODEL_NAME` 并设 `BRAIN=model`，再 `node --env-file=.env serve.mjs`。没配端点时世界照常跑。
 - **研究态**：离线复现用 `node life/run.mjs --report` 等五份面（见 [EVIDENCE.md](./EVIDENCE.md)）；在线研究态是默认的 `GAME_MODE=research`，不要开 `GAME_RULES`。作者侧消融/负控见 [BENCHMARK.md](./BENCHMARK.md)。
 - **死亡**：玩家个人死亡＝化为幽魂，继续观察世界（不能操作角色）；聚落灭绝才是这一局真正的终局。两种情况下自然生态都继续演化。
 
@@ -49,9 +49,13 @@ $env:GAME_MODE='game'; $env:GAME_RULES='1'; node serve.mjs
 | 内容 | 路径（默认 `DATA_DIR=./data`） |
 |---|---|
 | 主营地 | `data/world.json`（每次保存留 `world.json.bak`） |
-| 名字营地 | `data/saves/<32hex>.json` + `data/saves/index.json` + `saves/<key>.owner.json` |
+| 名字营地 | `data/saves/<32hex>.json.gz` + `data/saves/index.json` + `saves/<key>.owner.json` |
 | A/B 对照 | `data/comparison.json` |
 | 坏档隔离 | `data/quarantine/`（启动失败时保留现场，不覆盖） |
+
+正式游戏的居民自由输入走 `resident-dialogue.mjs`：服务端定态度/关系后果，模型只写措辞，不可用时退模板。`npc-memory.mjs` 将事件、对话、承诺、知识统一持久化并跨会话检索；研究/对照路径不启用该统一层。
+
+名字营地在线备份为 `/export`、`/import`，须配置独立 `SAVE_EXPORT_TOKEN`（默认关闭），仅覆盖名字营地，导入不覆盖已有 owner 的营地；备份包含归属信息，应私下保存，详见 SECURITY.md。
 
 停服后可用 `node scripts/archive-saves.mjs` 归档三种存档并在恢复前校验哈希。`data/` 不入库；换 `DATA_DIR` 即可开一份干净世界。
 
