@@ -22,7 +22,7 @@ test('V741-M3 m3 on 2 日：errors=0、规划器决策与目标事件真实存�
   assert.ok(Object.values(w.agents).some((a) => (a.counters.m3Decisions ?? 0) > 0));
 });
 
-test('V741-M3 m3Choose：重复 id 被 sanitize、未知 kind 不进规划器且不抛错', () => {
+test('V741-M3-CHOOSE m3Choose：重复 id 被 sanitize、未知 kind 不进规划器且不抛错', () => {
   const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });
   const w = sp.world, a = w.agents.a1;
   w.t = 10; move(w, 'a1', 'home');
@@ -34,7 +34,7 @@ test('V741-M3 m3Choose：重复 id 被 sanitize、未知 kind 不进规划器且
   assert.ok(a.m3Last, '应留下规划器状态');
 });
 
-test('V741-M3 m3 off 与不传 mask 的 1 日 dump 哈希一致', async () => {
+test('V741-M3-OFF m3 off 与不传 mask 的 1 日 dump 哈希一致', async () => {
   const a = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: false } });
   const b = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   for (let i = 0; i < 24; i += 1) { await tickSurvPlay(a); await tickSurvPlay(b); }

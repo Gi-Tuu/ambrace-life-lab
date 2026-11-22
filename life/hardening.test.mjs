@@ -282,7 +282,7 @@ test('BUG-1 驳回重选后仍非法则本刻不得执行 【变红法：删掉 
 
 // ═══════════════════ 第二次审计的修复闸门（2026-11-09 第二批）═══════════════════
 
-test('R1 习惯层必须过规则层：夜里不许再执行 look_out 【变红法：把 agent.mjs 的 habitLegal 条件去掉】', async () => {
+test('HARD-R1 习惯层必须过规则层：夜里不许再执行 look_out 【变红法：把 agent.mjs 的 habitLegal 条件去掉】', async () => {
   const { Organism } = await import('./agent.mjs');
   const w = makeWorld({ pantries: 3, stash: 3, preset: 'lab', seed: 7 });
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 1, condition: 'C2' });
@@ -316,7 +316,7 @@ test('R1b execute 是结构性兜底：非法动作不得消耗任何资源 【�
   assert.equal((a.counters.refused ?? 0), 1, '没有记 refused 计数');
 });
 
-test('R8 侵蚀后的信任上限必须被常规路径尊重 【变红法：把 agent.mjs 的 bumpRel 换回直接写 trust】', async () => {
+test('HARD-R8 侵蚀后的信任上限必须被常规路径尊重 【变红法：把 agent.mjs 的 bumpRel 换回直接写 trust】', async () => {
   const { Organism } = await import('./agent.mjs');
   const w = makeWorld({ pantries: 3, stash: 3, preset: 'lab', seed: 7 });
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 1, condition: 'C2' });
@@ -330,7 +330,7 @@ test('R8 侵蚀后的信任上限必须被常规路径尊重 【变红法：把 
   assert.ok(a.relations.get('a2').trust <= a.relations.ceiling, `信任 ${a.relations.get('a2').trust} 越过了被侵蚀的上限 ${a.relations.ceiling} ⇒ 不可逆降级可逆`);
 });
 
-test('R3 归因表必须闭合：parts.total = Σ 已命名分量（含常数偏移） 【变红法：把 model.mjs 的 常数偏移 项去掉】', async () => {
+test('HARD-R3 归因表必须闭合：parts.total = Σ 已命名分量（含常数偏移） 【变红法：把 model.mjs 的 常数偏移 项去掉】', async () => {
   const { agents } = await simulate({ seed: 7, ticks: 300, condition: 'C2' });
   let rows = 0;
   let worst = 0;
@@ -452,7 +452,7 @@ test('BUG-16 耦合状态 hold 归零后必须回弹（坏档/τ=0 不留永久�
   assert.equal(c.v.refuse, 0, 'hold=0 但值停在非默认 ⇒ 没有自愈');
 });
 
-test('B3 expect 缺失不得凭空造出「私藏超额」秘密 【变红法：把 expect 的兜底改回 ?? 3】', async () => {
+test('HARD-B3 expect 缺失不得凭空造出「私藏超额」秘密 【变红法：把 expect 的兜底改回 ?? 3】', async () => {
   const { scanSecrets } = await import('./body.mjs');
   const w = makeWorld({ pantries: 3, stash: 3, preset: 'town', seed: 7 });
   spawn(w, 'a1', 'home');

@@ -21,7 +21,7 @@ test('V73 深链房间键 = ROOM_INTERIORS ∪ HOUSING_PLOTS，且不再引用�
   assert.match(APP, /Object\.hasOwn\(HOUSING_PLOTS, bootRoom\)/);
 });
 
-test('V73 浏览器测试等待真实世界状态（S.view）并收集 pageerror，不再用 __lifeDebug 假绿', () => {
+test('V73-BROWSER-WAIT 浏览器测试等待真实世界状态（S.view）并收集 pageerror，不再用 __lifeDebug 假绿', () => {
   for (const [name, source] of [['v73', V73], ['v731', V731]]) {
     assert.match(source, /__lifeDebug\?\.S\?\.view/, `${name} 必须等 S.view 而不是仅等 __lifeDebug`);
     assert.match(source, /__pageErrors/, `${name} 必须收集页面异常`);

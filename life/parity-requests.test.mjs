@@ -40,7 +40,7 @@ test('SOC-01 居民请求食物：玩家接受 ⇒ 扣餐台食物、居民回�
   assert.equal(w.survival.requests.length, 0, '回应后请求应清掉');
 });
 
-test('SOC-01 居民请求木料被拒：扣信任、请求清掉、资源不动', () => {
+test('SOC-01-WOOD-REJECT 居民请求木料被拒：扣信任、请求清掉、资源不动', () => {
   const { sp, w } = fixture();
   w.agents.a1.drives.v.energy = 0.9;
   w.agents.a1.pinv.wood = 0;
@@ -55,7 +55,7 @@ test('SOC-01 居民请求木料被拒：扣信任、请求清掉、资源不动'
   assert.equal(w.survival.requests.length, 0);
 });
 
-test('SOC-01 接受木料请求：玩家背包少 1、居民背包多 1', () => {
+test('SOC-01-WOOD-ACCEPT 接受木料请求：玩家背包少 1、居民背包多 1', () => {
   const { sp, w } = fixture();
   w.agents.a1.drives.v.energy = 0.9;
   w.agents.a1.pinv.wood = 0;
@@ -66,7 +66,7 @@ test('SOC-01 接受木料请求：玩家背包少 1、居民背包多 1', () => 
   assert.equal(w.pinv.a1.wood, 1);
 });
 
-test('SOC-01 分食需要实际在可使用的居所餐台，失败保留请求和食物', () => {
+test('SOC-01-TABLE-REQUIRED 分食需要实际在可使用的居所餐台，失败保留请求和食物', () => {
   const { sp, w } = fixture();
   const req = maybeResidentRequest(w);
   const accept = () => survAct(sp, { kind: 'respond_request', id: req.id, accept: true });

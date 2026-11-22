@@ -66,12 +66,12 @@ test('E3a 维修真发生（repairEarly on）：≥2/3 seed 修≥1 且有好楼
   }
 });
 
-test('E3 负控：执行侧阈值退回 <=0 则 E3a 红【变红法：execTick 维修目标过滤去掉 repairEarly 分支】', async () => {
+test('FORAGE-E3 负控：执行侧阈值退回 <=0 则 E3a 红【变红法：execTick 维修目标过滤去掉 repairEarly 分支】', async () => {
   const on = await run(7, { forage: false, flags: { repairEarly: true, eco: false, disasters: false, playerEats: false, endFreeze: false, droughts: false } });
   assert.ok(on.repairs >= 1, '成对阈值缺失 ⇒ 维修归零（E2 网格根因）');
 });
 
-test('E1 开关与旧档 tolerant：默认关（同权后）；旧档缺键继承；显式 true 保留', () => {
+test('FORAGE-E1 开关与旧档 tolerant：默认关（同权后）；旧档缺键继承；显式 true 保留', () => {
   assert.equal(createSurvPlay(7).world.survival.forage, false);
   assert.equal(loadSurv({ t: 5, survival: { store: 2 } }, 7).world.survival.forage, false);
   assert.equal(loadSurv({ t: 5, survival: { store: 2, forage: true } }, 7).world.survival.forage, true);

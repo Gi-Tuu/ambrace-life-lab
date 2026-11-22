@@ -73,7 +73,7 @@ test('D1/D2 慢模型不拖死世界与玩家动作；整拍等待有上限', as
   assert.ok(t0Calls() >= c0, '账本不应倒退');
 });
 
-test('D2 供应商 500 记录 attempts，世界仍推进', async () => {
+test('MLA-D2 供应商 500 记录 attempts，世界仍推进', async () => {
   fake.mode = 'fail'; fake.calls = [];
   host.touch('survival');
   const t0 = Date.now();
@@ -114,7 +114,7 @@ test('D3 默认思考的模型带关思考参数；端点 400 时去掉参数重
   assert.ok(fake.calls.every((b) => !b.chat_template_kwargs), '非默认思考的模型不应带额外参数');
 });
 
-test('D3 适配器覆盖命名变体与请求体剥离', () => {
+test('D3-ADAPTER 适配器覆盖命名变体与请求体剥离', () => {
   for (const m of ['Qwen/Qwen3.8-27B', 'qwen3.8-27b', 'qwen3.8-27b-fp8', 'QWEN3.8-27B',
     'Qwen/Qwen3.5-35B-A3B', 'Qwen/Qwen3.5-27B', 'qwen3.5-397b-a17b',
     'deepseek-ai/DeepSeek-V4.1-Flash-1017', 'deepseek/deepseek-v4.1-flash-1017', 'deepseek-ai/DeepSeek-V4-Pro']) assert.equal(needsNoThink(m), true, m);

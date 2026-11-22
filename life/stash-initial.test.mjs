@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeWorld, spawn } from './body.mjs';
 
-test('F1 显式 stash 生效：t0 私人库存等于传入值（0/3/5 三档）', () => {
+test('F1-EXPLICIT 显式 stash 生效：t0 私人库存等于传入值（0/3/5 三档）', () => {
   for (const stash of [0, 3, 5]) {
     const w = makeWorld({ pantries: 6, stash });
     spawn(w, 'a1', 'home');
@@ -14,7 +14,7 @@ test('F1 显式 stash 生效：t0 私人库存等于传入值（0/3/5 三档）'
   }
 });
 
-test('F1 默认档不变：不传 stash 时仍为 3（历史默认路径逐位不变的前提）', () => {
+test('F1-DEFAULT 默认档不变：不传 stash 时仍为 3（历史默认路径逐位不变的前提）', () => {
   const w = makeWorld({ pantries: 6 });
   spawn(w, 'a1', 'home');
   assert.equal(w.stash.a1, 3);

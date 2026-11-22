@@ -15,7 +15,7 @@ test('D1 生存单世界创建：preset=survival、coop 开、居民+玩家齐',
   for (const id of ['a1', 'a2', 'a3', 'p1']) assert.ok(sp.world.agents[id]);
 });
 
-test('D2 随拍推进：t 递增、日界消耗、合作自动完工', () => {
+test('SURV-D2 随拍推进：t 递增、日界消耗、合作自动完工', () => {
   const sp = createSurvPlay(7);
   sp.world.survival.store = 0; // 触发公共需求 → 合作
   let completed = null;
@@ -24,7 +24,7 @@ test('D2 随拍推进：t 递增、日界消耗、合作自动完工', () => {
   assert.ok(completed, '合作应随 tick 自动完工');
 });
 
-test('D3 玩家生存动作：move/gather/plan/build 生效；未知 kind 拒绝', () => {
+test('SURV-D3 玩家生存动作：move/gather/plan/build 生效；未知 kind 拒绝', () => {
   const sp = createSurvPlay(7);
   assert.equal(survAct(sp, { kind: 'move', room: 'yard' }).ok, true);
   assert.equal(sp.world.loc.p1, 'yard');
@@ -36,7 +36,7 @@ test('D3 玩家生存动作：move/gather/plan/build 生效；未知 kind 拒绝
   assert.equal(sp.world.survival.buildings.length, 1);
 });
 
-test('D4 survView 载荷齐全（前端只读这份）', () => {
+test('SURV-D4 survView 载荷齐全（前端只读这份）', () => {
   const v = survView(createSurvPlay(7));
   for (const k of ['t', 'phase', 'store', 'storeCap', 'plots', 'inv', 'buildings', 'coop', 'loc', 'agents', 'buildingsDef', 'rooms', 'outdoor', 'day', 'targetDays']) assert.ok(k in v, `缺 ${k}`);
 });
@@ -56,7 +56,7 @@ test('D5 持久化 round-trip：t/粮仓/建筑/合作状态读回一致', () =>
   assert.ok(loadSurv(undefined, 7).world.survival);
 });
 
-test('D7 重置世界同时重置生存单世界（回零刻、清失败态）', async () => {
+test('SURV-D7 重置世界同时重置生存单世界（回零刻、清失败态）', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-survreset-'));
   process.env.DATA_DIR = dir; process.env.SEED_FILE = join(dir, 'none.json');
   process.env.BRAIN = 'local'; process.env.MODEL_PROVIDERS = ''; process.env.MODEL_KEYS = '';
@@ -75,7 +75,7 @@ test('D7 重置世界同时重置生存单世界（回零刻、清失败态）',
   }
 });
 
-test('D8 occupancy 不变量：合作改位置也必须同步占位，否则 move() 崩→agentError 冻结 AI', async () => {
+test('SURV-D8 occupancy 不变量：合作改位置也必须同步占位，否则 move() 崩→agentError 冻结 AI', async () => {
   const sp = createSurvPlay(7);
   sp.world.survival.store = 0; // 触发合作采集/奠基/施工
   for (let i = 0; i < 120; i++) await tickSurvPlay(sp);
@@ -106,7 +106,7 @@ test('D9 读档重建 occupancy：存档位置与占位必须一致（否则重�
   assert.deepEqual(back2.log.filter((x) => x.kind === 'agentError'), [], '旧引擎的 agentError 不应随档回来');
 });
 
-test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
+test('SURV-D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作不污染 A/B', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ambrace-surv-'));
   process.env.DATA_DIR = dir; process.env.SEED_FILE = join(dir, 'none.json');
   process.env.BRAIN = 'local'; process.env.MODEL_PROVIDERS = ''; process.env.MODEL_KEYS = '';
@@ -129,7 +129,7 @@ test('D6 host 集成：/world 带 survival、A/B 仍 town；mode=survival 动作
   }
 });
 
-test('D10 玩家动作过规则层：位置不对先被裁决拒绝，地点对才允许', async () => {
+test('SURV-D10 玩家动作过规则层：位置不对先被裁决拒绝，地点对才允许', async () => {
   const sp = createSurvPlay(7);
   const w = sp.world;
   w.survival.plots[0].growth = 1;

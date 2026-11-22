@@ -27,7 +27,7 @@ const anchor = (over = {}) => ({
   gameMinutes: 360, at: 1000, rate: 1, msPerGameMinute: 6000, paused: false, ...over,
 });
 
-test('T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 6000ms/游戏分 = 1:10）', () => {
+test('FTIME-T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 6000ms/游戏分 = 1:10）', () => {
   assert.equal(FALLBACK_MS_PER_GAME_MINUTE, 6000);
   assert.equal(FALLBACK_TICK_MS, 360000);
   assert.equal(interpolateGameMinutes(anchor(), 0), 360, '同一时刻不得凭空跳分钟');
@@ -40,13 +40,13 @@ test('T1 两次轮询之间按 rate/msPerGameMinute 插值（默认 6000ms/游�
   assert.equal(read.leftToday, GAME_MINUTES_PER_DAY - 361, '今日剩余=1440-当日已过分钟');
 });
 
-test('T2 暂停/零倍速不漂移', () => {
+test('FTIME-T2 暂停/零倍速不漂移', () => {
   assert.equal(interpolateGameMinutes(anchor({ paused: true }), 6000), 360);
   assert.ok(close(interpolateGameMinutes(anchor(), 1000), 360 + 1 / 6), '1s 应走 1/6 游戏分钟');
   assert.equal(interpolateGameMinutes(anchor({ rate: 0 }), 60_000), 360, 'rate=0 等同于冻结');
 });
 
-test('T3 倍速严格按 rate 缩放', () => {
+test('FTIME-T3 倍速严格按 rate 缩放', () => {
   assert.equal(interpolateGameMinutes(anchor({ rate: 2 }), 3000), 361, '2×：3s=1 游戏分钟');
   assert.ok(close(interpolateGameMinutes(anchor({ rate: 0.5 }), 4000), 360 + 1 / 3), '0.5×：4s=1/3 游戏分钟');
   assert.equal(interpolateGameMinutes(anchor({ rate: 4 }), 3000), 362, '4×：3s=2 游戏分钟');
@@ -77,14 +77,14 @@ test('T7b HUD 锚点只读服务端 clock：不抖动、缺失回退 6000、暂�
   assert.equal(clockAnchorFromView({ ...view(undefined), timeMode: 'legacy' }), null);
 });
 
-test('T4 离线/掉轮询时外推封顶 5s，不无限漂', () => {
+test('FTIME-T4 离线/掉轮询时外推封顶 5s，不无限漂', () => {
   assert.equal(MAX_EXTRAPOLATION_MS, 5000);
   assert.ok(close(interpolateGameMinutes(anchor(), 4000), 360 + 4 / 6), '4s 内仍按 rate 走');
   assert.ok(close(interpolateGameMinutes(anchor(), 60_000), 360 + 5 / 6), '超过 5s 只算 5s（+0.833 分）');
   assert.equal(interpolateGameMinutes(anchor(), -1000), 360, '负 elapsed 不得倒流');
 });
 
-test('T5 busy 进度按分钟插值，只显示不提前结算', () => {
+test('FTIME-T5 busy 进度按分钟插值，只显示不提前结算', () => {
   assert.equal(busyRemainMinutes({ endMin: 500, remainMin: 120 }, 430, 360), 70, '连续路径用 endMin 精确插值');
   assert.equal(busyRemainMinutes({ endMin: 500, remainMin: 120 }, 500, 360), 0, '到点只显示 0，完成仍等 /world');
   assert.equal(busyRemainMinutes({ endMin: 500, remainMin: 120 }, 560, 360), 0, '越界钳到 0，不出现负数');
@@ -92,7 +92,7 @@ test('T5 busy 进度按分钟插值，只显示不提前结算', () => {
   assert.equal(busyRemainMinutes(null, 400, 360), null);
 });
 
-test('T6 今日剩余与时刻格式可读、跨日归零', () => {
+test('FTIME-T6 今日剩余与时刻格式可读、跨日归零', () => {
   assert.equal(formatGameClock(0), '00:00');
   assert.equal(formatGameClock(390), '06:30');
   assert.equal(formatGameClock(1439), '23:59');
@@ -187,7 +187,7 @@ const post = (base, path, body) => fetch(`${base}${path}`, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
 });
 
-test('T10 真 HTTP：/world 与 /healthz 暴露同一世界分钟，暂停/倍速可见', async () => {
+test('FTIME-T10 真 HTTP：/world 与 /healthz 暴露同一世界分钟，暂停/倍速可见', async () => {
   const { child, base } = await bootServer();
   try {
     const world = await (await fetch(`${base}/world?mode=survival`)).json();

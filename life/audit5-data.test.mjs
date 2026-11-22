@@ -30,7 +30,7 @@ test('DATA5-06 索引 key 必须是 32hex：穿越 key 被丢弃、saves 外文�
   assert.ok(existsSync(victim), 'saves/ 外的文件绝不能被 sweep 删除');
 });
 
-test('DATA5-06 非法 key 无法生成路径（saveCamp 抛 BAD_KEY）', () => {
+test('DATA5-06-BAD-KEY 非法 key 无法生成路径（saveCamp 抛 BAD_KEY）', () => {
   const d = dir();
   for (const bad of ['../../victim', 'A'.repeat(32), 'a'.repeat(31), 'z'.repeat(32), '', null]) {
     assert.throws(() => saveCamp(d, bad, { t: 0 }), (e) => e.code === 'BAD_KEY', String(bad));
@@ -58,7 +58,7 @@ test('DATA5-04 锁超时 fail-fast：不无锁继续写，旧索引保持原样'
   }
 });
 
-test('DATA5-04 stale lock 回收：owner 时间戳过期后继续写并清锁', () => {
+test('DATA5-04-STALE-LOCK stale lock 回收：owner 时间戳过期后继续写并清锁', () => {
   const d = dir();
   mkdirSync(savesDir(d), { recursive: true });
   writeIndex(d, { entries: [{ key: KEY, name: 'before' }] });

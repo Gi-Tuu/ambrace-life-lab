@@ -5,7 +5,7 @@ import { EpisodicMemory } from './memory.mjs';
 
 const row = (t) => ({ kind: 'x', payload: '', mSnapshot: { arousal: 0.5 }, importance: 0.5 });
 
-test('F3 截断后 id 不复用：超过 400 条仍单调', () => {
+test('MEMID-F3-TRUNCATE 截断后 id 不复用：超过 400 条仍单调', () => {
   const m = new EpisodicMemory();
   for (let i = 0; i < 450; i++) m.add(i, row(i));
   const ids = m.rows.map((r) => r.id);
@@ -13,7 +13,7 @@ test('F3 截断后 id 不复用：超过 400 条仍单调', () => {
   assert.ok(m.nextId > 449);
 });
 
-test('F3 存档往返后继续单调：载入 120 条后新增 200 条不得撞号', () => {
+test('MEMID-F3-ROUNDTRIP 存档往返后继续单调：载入 120 条后新增 200 条不得撞号', () => {
   const m = new EpisodicMemory();
   for (let i = 0; i < 400; i++) m.add(i, row(i));
   const dumped = m.dump();
@@ -24,7 +24,7 @@ test('F3 存档往返后继续单调：载入 120 条后新增 200 条不得撞�
   assert.equal(new Set(ids).size, ids.length, '载入后新增与存量撞号 ⇒ 旧实现 bug 复发');
 });
 
-test('F3 旧档兼容：没有 nextId 的旧存档从现存最大 id 之后继续', () => {
+test('MEMID-F3-LEGACY 旧档兼容：没有 nextId 的旧存档从现存最大 id 之后继续', () => {
   const n = new EpisodicMemory();
   n.load({ rows: [{ id: 280, t: 1, kind: 'x', payload: '', m: {}, importance: 0.5 }, { id: 399, t: 2, kind: 'x', payload: '', m: {}, importance: 0.5 }], kCap: 6, failures: [] });
   n.add(3, row(3));

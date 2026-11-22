@@ -19,7 +19,7 @@ const site = (w, progress = 0) => {
   return w.survival.sites[0];
 };
 
-test('R1 同一刻在个人时间预算内可连续动作，动作数不再有资格上限', () => {
+test('V72T-R1 同一刻在个人时间预算内可连续动作，动作数不再有资格上限', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'home');
@@ -39,7 +39,7 @@ test('R1 同一刻在个人时间预算内可连续动作，动作数不再有�
   assert.equal(clockOf(w, 'a1').tick.n, 1);
 });
 
-test('R2 常规决策环同一世界刻会产生不止一个动作（不是"每刻一次"）', async () => {
+test('V72T-R2 常规决策环同一世界刻会产生不止一个动作（不是"每刻一次"）', async () => {
   const sp = make(13), w = sp.world, a = w.agents.a1;
   let chained = false;
   for (let i = 0; i < 24 && !chained; i += 1) {
@@ -54,7 +54,7 @@ test('R2 常规决策环同一世界刻会产生不止一个动作（不是"每�
   assert.ok(clock.tick.usedMin <= TICK_MINUTES, `本刻分钟不得超 60，实测 ${clock.tick.usedMin}`);
 });
 
-test('R3 同一角色同一时刻只有一个进行中动作：不能再开第二处施工', () => {
+test('V72T-R3 同一角色同一时刻只有一个进行中动作：不能再开第二处施工', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'yard');
@@ -73,7 +73,7 @@ test('R3 同一角色同一时刻只有一个进行中动作：不能再开第�
   assert.equal(lastRefusal(a).code, 'BUSY');
 });
 
-test('R4 施工被打断：已完成的进度留在工地，材料不重复扣，busy 清空并留中止记录', () => {
+test('V72T-R4 施工被打断：已完成的进度留在工地，材料不重复扣，busy 清空并留中止记录', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'yard');
@@ -100,7 +100,7 @@ test('R4 施工被打断：已完成的进度留在工地，材料不重复扣�
   assert.ok(clock.lastAbort.progressMin >= 30);
 });
 
-test('R5 体力门：体力不够连开工都不行，且不白扣个人时间', () => {
+test('V72T-R5 体力门：体力不够连开工都不行，且不白扣个人时间', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'yard');
@@ -117,7 +117,7 @@ test('R5 体力门：体力不够连开工都不行，且不白扣个人时间',
   assert.ok(a.drives.v.energy < 0.5, '普通劳动应从体力里扣');
 });
 
-test('R6 休息恢复体力（个人时间模型下体力才是短期劳动账户）', () => {
+test('V72T-R6 休息恢复体力（个人时间模型下体力才是短期劳动账户）', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', w.housing.a1);
@@ -127,7 +127,7 @@ test('R6 休息恢复体力（个人时间模型下体力才是短期劳动账�
   assert.ok(a.drives.v.energy > 0.2, `休息后体力应回升，实测 ${a.drives.v.energy}`);
 });
 
-test('R8 旧档 actClock 缺 busy/tick 字段：载入后按当前刻补账，不拒绝', async () => {
+test('V72T-R8 旧档 actClock 缺 busy/tick 字段：载入后按当前刻补账，不拒绝', async () => {
   const sp = make(), w = sp.world;
   const raw = structuredClone(dumpSurv(sp));
   raw.survival.actClock.a1 = { day: 0, usedMin: 90 }; // 第 1 步留下的旧字段
@@ -140,7 +140,7 @@ test('R8 旧档 actClock 缺 busy/tick 字段：载入后按当前刻补账，�
   assert.ok(Number.isFinite(after.usedMin));
 });
 
-test('R9 进行中的动作随存档恢复：busy 与 remainMin 不丢', () => {
+test('V72T-R9 进行中的动作随存档恢复：busy 与 remainMin 不丢', () => {
   const sp = make(), w = sp.world, a = w.agents.a1;
   w.t = 10;
   move(w, 'a1', 'yard');
@@ -155,7 +155,7 @@ test('R9 进行中的动作随存档恢复：busy 与 remainMin 不丢', () => {
   assert.equal(busy.remainMin, RESIDENT_MIN.build - 5);
 });
 
-test('R10 只有 independentWorld、没有 gameRules 不算正式游戏：不进个人时间模型', () => {
+test('V72T-R10 只有 independentWorld、没有 gameRules 不算正式游戏：不进个人时间模型', () => {
   const sp = createSurvPlay(7, { independentWorld: true, unifiedCooperation: true }), w = sp.world, a = w.agents.a1;
   w.t = 10;
   assert.equal(w.survival.actTimeModel, undefined, '研究/长跑世界不得挂上个人时间模型');
@@ -166,7 +166,7 @@ test('R10 只有 independentWorld、没有 gameRules 不算正式游戏：不进
   assert.equal(a.execute(w, { kind: 'rest' }, 'deliberation', w.t, true), null, '研究态仍是旧的每刻一次');
 });
 
-test('R7 研究态保持旧的"每刻一次"：不建 actClock，第二次执行仍被拒', () => {
+test('V72T-R7 研究态保持旧的"每刻一次"：不建 actClock，第二次执行仍被拒', () => {
   const sp = createSurvPlay(7, { unifiedCooperation: true }), w = sp.world, a = w.agents.a1;
   w.t = 10;
   assert.equal(w.survival.actModel ?? undefined, undefined);

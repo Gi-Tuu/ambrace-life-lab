@@ -29,7 +29,7 @@ test('P2-01 正式游戏视图预算 = 冲刺预算 39.375/刻；研究态仍是
   assert.equal(survView(lab).playerUnitsPerTick, PLAYER_UNITS_PER_TICK);
 });
 
-test('P2b-02 正式游戏居民 startMove 接同一 speedBudget + space 路径；研究态仍 12/刻', () => {
+test('P2b-02-SERVER-MOVE 正式游戏居民 startMove 接同一 speedBudget + space 路径；研究态仍 12/刻', () => {
   const sp = start(), w = sp.world;
   const loc = Object.keys(w.districts)[0];
   const from = w.loc.p1;

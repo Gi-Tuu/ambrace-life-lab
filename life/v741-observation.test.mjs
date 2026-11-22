@@ -16,7 +16,7 @@ test('V741 M3 off：无目标事件；观测/无观测哈希一致；关系来�
   }
 });
 
-test('V741 M3 on：事件只用规划器状态，follow 可追溯；3/6/12 窗口分母一致', async () => {
+test('V741-M3-ON M3 on：事件只用规划器状态，follow 可追溯；3/6/12 窗口分母一致', async () => {
   const r = await runGroup(7, 2, true);
   assert.equal(r.goalEnabled, true);
   for (const e of r.goalEvents) {
@@ -31,7 +31,7 @@ test('V741 M3 on：事件只用规划器状态，follow 可追溯；3/6/12 窗�
   assert.equal(r.nonPerturbation.equalControl, true);
 });
 
-test('V741 同配置重复观测哈希一致', async () => {
+test('V741-REPEAT 同配置重复观测哈希一致', async () => {
   const a = await runGroup(13, 1, true);
   const b = await runGroup(13, 1, true);
   assert.equal(a.nonPerturbation.observedHash, b.nonPerturbation.observedHash);

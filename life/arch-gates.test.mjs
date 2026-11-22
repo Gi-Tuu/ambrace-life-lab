@@ -33,7 +33,7 @@ test('ARCH-2D-01 退役 2D 符号逐条能变红', () => {
   }
 });
 
-test('ARCH-2D-01 TIME_WAIT 只放行研究态隔离模块，正式路径 0', () => {
+test('ARCH-2D-01-TIME-WAIT TIME_WAIT 只放行研究态隔离模块，正式路径 0', () => {
   const legacy = run([
     file('life/research-policy.mjs', "export const LEGACY_TIME_CODE = 'TIME_WAIT';\n"),
   ]);
@@ -64,7 +64,7 @@ test('ARCH-CLOCK-01 正式模块写 world.t 即红，存档/研究夹具不误�
   ]).problems, []);
 });
 
-test('ARCH-2D-01 测试/文档/证据/实验目录不计入运行路径', () => {
+test('ARCH-2D-01-EXCLUDE-TEST-DOCS 测试/文档/证据/实验目录不计入运行路径', () => {
   const { problems, scanned } = run([
     file('life/foo.test.mjs', 'paintTerrain(); groundPixels; uWater;\n'),
     file('docs/old.md', 'paintTerrain\n'),
@@ -139,7 +139,7 @@ test('ARCH-POS-01 位置字段只允许白名单整字段写入', () => {
   assert.equal(plannerRogue.problems.length, 1);
 });
 
-test('ARCH-POS-01 白名单按内容+次数：换行仍绿、复制违规行/换文件/改内容即红', () => {
+test('ARCH-POS-01-CONTENT-COUNT 白名单按内容+次数：换行仍绿、复制违规行/换文件/改内容即红', () => {
   const allowedLine = '  w.occupancy = ok\n';
   // 行号漂移（前面插 200 行）不影响判定；line 字段只是提示。
   const shifted = `${'\n'.repeat(200)}${allowedLine}`;

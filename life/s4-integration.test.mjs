@@ -103,7 +103,7 @@ test('P5：固定状态改变精度会改变可见性和记忆驱动的条件动
   assert.equal(report.offDrawChanges, 0);
 });
 
-test('P5：固定误差方差、只改变预测均值，校准评分对同一事件有响应', async () => {
+test('P5-CALIBRATION：固定误差方差、只改变预测均值，校准评分对同一事件有响应', async () => {
   const { execFileSync } = await import('node:child_process');
   const { fileURLToPath } = await import('node:url');
   const script = fileURLToPath(new URL('./s4-calibration-intervention.mjs', import.meta.url));
@@ -114,7 +114,7 @@ test('P5：固定误差方差、只改变预测均值，校准评分对同一事
   }
 });
 
-test('P5：留出种子上固定均值切断逐通道精度，整体可靠性与 Brier 变差', async () => {
+test('P5-PRECISION-CUT：留出种子上固定均值切断逐通道精度，整体可靠性与 Brier 变差', async () => {
   const { execFileSync } = await import('node:child_process');
   const { fileURLToPath } = await import('node:url');
   const script = fileURLToPath(new URL('./s4-precision-ablation.mjs', import.meta.url));

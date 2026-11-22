@@ -119,7 +119,7 @@ test('BUG-8 未配 CHAT_TOKEN 时 /chat 必须整个端点不存在 【变红法
   }
 });
 
-test('BUG-8 /chat 必须有鉴权，且不能靠它把 watching 顶成 true 【变红法：撤掉 chatAuthorized 与 touch 列表移除】', async () => {
+test('BUG-8-AUTH /chat 必须有鉴权，且不能靠它把 watching 顶成 true 【变红法：撤掉 chatAuthorized 与 touch 列表移除】', async () => {
   const { child, base } = await bootServer({ CHAT_TOKEN: 'smoke-test-token' });
   try {
     const noAuth = await post(base, '/chat', { messages: [{ role: 'user', content: 'hi' }] });
@@ -143,7 +143,7 @@ test('BUG-8 /chat 必须有鉴权，且不能靠它把 watching 顶成 true 【�
   }
 });
 
-test('BUG-8 额度耗尽时 /chat 必须被同一本账挡住 【变红法：把路由里的 modelGate() 判空撤掉】', async () => {
+test('BUG-8-QUOTA 额度耗尽时 /chat 必须被同一本账挡住 【变红法：把路由里的 modelGate() 判空撤掉】', async () => {
   const { child, base } = await bootServer({ CHAT_TOKEN: 'smoke-test-token', MAX_CALLS: '0' });
   try {
     await get(base, '/'); // 制造"有观众"，把 503/NO_OBSERVER 这条分支排除掉

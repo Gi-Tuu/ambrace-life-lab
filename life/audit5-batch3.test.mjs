@@ -34,7 +34,7 @@ test('DATA5-13 deaths 封顶且总数累计（trimDeaths）', () => {
   assert.ok(DEATHS_CAP <= 500, 'deaths 上限必须足够小，长期档不能无限增长');
 });
 
-test('DATA5-13 observer 默认上限有界（events 2 万、raw 2×）', () => {
+test('DATA5-13-OBSERVER-CAP observer 默认上限有界（events 2 万、raw 2×）', () => {
   assert.ok(ACTION_EVENT_CAP <= 50000, `默认 cap 仍过大：${ACTION_EVENT_CAP}`);
   const o = createActionObserver();
   for (let i = 0; i < ACTION_EVENT_CAP + 500; i += 1) {
@@ -62,7 +62,7 @@ test('ARCH5-06 addTokens 只记 token，不消耗 /chat 的在途 reserved', () 
   assert.equal(state.model.tokens, 10);
 });
 
-test('ARCH5-06 预算域 recordCall/attempt/choice 与 gate/charged 对账', () => {
+test('ARCH5-06-BUDGET-DOMAIN 预算域 recordCall/attempt/choice 与 gate/charged 对账', () => {
   const state = { lastVisitor: Date.now(), model: { calls: 0, tokens: 0, reserved: 0, attempts: [], dayKey: '' } };
   const budget = createBudgetDomain({ getState: () => state, budget: 10, presenceMs: 1000, breakerFails: 3, breakerMs: 1000, attemptCap: 3 });
   // /chat 路径：预扣 1 → 成功转正式
@@ -83,7 +83,7 @@ test('ARCH5-06 预算域 recordCall/attempt/choice 与 gate/charged 对账', () 
   assert.equal(state.model.survivalChoices, 2);
 });
 
-test('ARCH5-06 host 不再手写 calls/attempts（统一走预算域）', async () => {
+test('ARCH5-06-HOST-NO-MANUAL host 不再手写 calls/attempts（统一走预算域）', async () => {
   const { readFileSync } = await import('node:fs');
   // 2026-11-18 主路径拆分：模型调用搬到 host-model.mjs，源码位置断言跟着职责走；
   // 语义不变——facade 与模型域都不得手写 calls/attempts，且必须走预算域。

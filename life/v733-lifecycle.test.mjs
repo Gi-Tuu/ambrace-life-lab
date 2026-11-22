@@ -13,7 +13,7 @@ test('V733-LIFE 日中死亡：当日行标 partial、只收尾一次、无重�
   assert.ok(day0[0].ticks < 24);
 });
 
-test('V733-LIFE 日界死亡与最后一刻死亡：只收尾一次、part 标记正确', async () => {
+test('V733-LIFE-DAY-BOUNDARY 日界死亡与最后一刻死亡：只收尾一次、part 标记正确', async () => {
   const r1 = await measureIdle(7, 2, { onAfterTick: (w, i) => { if (i === 24) w.agents.a1.viab.v = 0; } });
   const d0 = r1.rows.filter((x) => x.id === 'a1' && x.day === 0);
   assert.equal(d0.length, 1);
@@ -23,7 +23,7 @@ test('V733-LIFE 日界死亡与最后一刻死亡：只收尾一次、part 标�
   assert.equal(new Set(rows2.map((x) => x.day)).size, rows2.length, '同一天不得重复收尾');
 });
 
-test('V733-LIFE 出生当日：自然 30 日窗口含 partial 行且无重复 [id,day]', async () => {
+test('V733-LIFE-BIRTH-DAY 出生当日：自然 30 日窗口含 partial 行且无重复 [id,day]', async () => {
   const r = await measureIdle(7, 30);
   const partial = r.rows.filter((x) => x.partial);
   assert.ok(partial.length >= 0, '允许无出生；有出生时必须 partial');

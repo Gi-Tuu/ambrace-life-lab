@@ -156,7 +156,7 @@ test('S7 move 防御：occupancy[from] 缺失不得崩溃（否则 survplay 每�
   assert.deepEqual(w.occupancy['home'] ?? [], [], 'from 键应重建为空数组而非 undefined');
 });
 
-test('P1 预警与风暴跟随 world.seed：非 7 的 seed 不再借用 seed 7', () => {
+test('SURVIVAL-P1 预警与风暴跟随 world.seed：非 7 的 seed 不再借用 seed 7', () => {
   const w = makeWorld({ preset: 'survival', seed: 11, pantries: 0 });
   w.t = 24 * 5;
   assert.equal(forecastDisasters(w).forecast, weatherFor(11, 6), '明日预警必须用 world.seed');

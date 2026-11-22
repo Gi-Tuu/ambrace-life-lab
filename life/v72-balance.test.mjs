@@ -11,7 +11,7 @@ import { FORMAL_OPTIONS } from './balance-probe.mjs';
 const KNOWN_CAUSES = new Set(['衰老', '饥饿', '衰竭']);
 const avg = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 
-test('B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显不繁荣', async () => {
+test('BAL-B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显不繁荣', async () => {
   const rows = [];
   for (const seed of LONG_SEEDS) rows.push(await runLong(seed, 100, { checkpoints: [100], options: FORMAL_OPTIONS }));
   const populations = rows.map((r) => r.final.population);
@@ -32,7 +32,7 @@ test('B1 正式游戏 100 日（5 种子）：有劳动、有出生、但明显�
   assert.ok([...causes].every((c) => KNOWN_CAUSES.has(c)), `出现未知死因：${[...causes].join(',')}`);
 });
 
-test('B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁荣', async () => {
+test('BAL-B2 正式游戏 200 日（5 种子）：仍会自然灭绝，不假装繁荣', async () => {
   let extinct = 0;
   const detail = [];
   for (const seed of LONG_SEEDS) {

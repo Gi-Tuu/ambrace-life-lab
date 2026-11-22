@@ -25,7 +25,7 @@ test('V734-D 无机会刻：pending 只消费一次、informedTick 清空、不�
   assert.equal(w.pending.some((p) => p.for === 'a2' && p.evt?.tag === 'v734'), false, '第二刻不得重复评价');
 });
 
-test('V734-D busy 时 pending 仍消费一次、busy 保留', async () => {
+test('V734-D-BUSY busy 时 pending 仍消费一次、busy 保留', async () => {
   process.env.FAIR_SCHED = '0';
   const sp = createSurvPlay(7, GAME), w = sp.world;
   w.t = 10; move(w, 'a1', 'yard');
@@ -43,7 +43,7 @@ test('V734-D busy 时 pending 仍消费一次、busy 保留', async () => {
   assert.ok(clockOf(w, 'a1').busy || w.agents.a1.dead, 'busy 不得被 pending 取消');
 });
 
-test('V734-D 第二 episode 不重复基础/评价；读档首刻 pending 只消费一次', async () => {
+test('V734-D-SECOND-EPISODE 第二 episode 不重复基础/评价；读档首刻 pending 只消费一次', async () => {
   process.env.FAIR_SCHED = '0';
   const sp = createSurvPlay(7, GAME), w = sp.world;
   w.pending.push({ for: 'a1', evt: { kind: 'contact', valence: 0.2, selfCaused: false } });

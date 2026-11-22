@@ -14,7 +14,7 @@ test('V734-A actionId：同刻同类两实例、重复完成去重、eventsAt', 
   assert.equal(o.feed({ ...a }), false, '重复完成通知不得重复累计');
 });
 
-test('V734-A 真实 2 日观测：actionId 唯一、每实例每状态最多一次', async () => {
+test('V734-A-OBSERVE-2DAY 真实 2 日观测：actionId 唯一、每实例每状态最多一次', async () => {
   const r = await measureIdle(7, 2);
   assert.ok(Array.isArray(r.events) && r.events.length > 0);
   const ids = new Set();

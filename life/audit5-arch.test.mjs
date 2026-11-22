@@ -40,7 +40,7 @@ test('ARCH5-02 所有派发的 camp_* 成本都在统一表（注册=扣费同�
   assert.notEqual(costFor('camp_store').minutes, PLAYER_TIME.camp_store, '注册若继续看旧 PLAYER_TIME 会得到 25');
 });
 
-test('ARCH5-02 未登记成本仍 fail-closed', () => {
+test('ARCH5-02-FAIL-CLOSED 未登记成本仍 fail-closed', () => {
   assert.equal(validateCamp(world, { kind: 'camp_nope' }).code, 'UNKNOWN_CAMP_ACTION');
 });
 

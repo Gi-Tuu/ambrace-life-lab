@@ -21,7 +21,7 @@ const cfOf = (a) => ({
   fallback: a.counters.cfFallback ?? 0,
 });
 
-test('C1 同量纲：四项计数都落在 [0,1] 的率里；④ 关掉时记忆改变率必须为 0', async () => {
+test('O1CF-C1-SCALE 同量纲：四项计数都落在 [0,1] 的率里；④ 关掉时记忆改变率必须为 0', async () => {
   const on = await simulate({ seed: 7, ticks: 400, condition: 'C2', channelMask: { cfUsage: 1 } });
   const a = Object.values(on.agents)[0];
   const c = cfOf(a);
@@ -36,7 +36,7 @@ test('C1 同量纲：四项计数都落在 [0,1] 的率里；④ 关掉时记忆
   assert.equal(cfOf(ac).mem, 0, `④ 关后记忆改变 ${cfOf(ac).mem} 次 ⇒ 装置测的不是检索加成造成的换人`);
 });
 
-test('C1 关系自证：关系本来就是中性时，影子路径必须一次都不动（否则中性值写错了）', async () => {
+test('O1CF-C1-REL-NEUTRAL 关系自证：关系本来就是中性时，影子路径必须一次都不动（否则中性值写错了）', async () => {
   const { affordancesFor } = await import('./body.mjs');
   const { visibleActions, scoreAll } = await import('./model.mjs');
   const world = makeWorld({ pantries: 6, stash: 3 });
@@ -67,7 +67,7 @@ test('C1a 中性值同源：关系初值 == REL_NEUTRAL，影子 stub 引用同�
   assert.ok(/this\.relations = \{ get: \(\) => \(\{ familiarity: REL_NEUTRAL\.familiarity, trust: REL_NEUTRAL\.trust \}\) \}/.test(src), '影子 stub 没有引用 REL_NEUTRAL ⇒ 两个中性值会再次漂移');
 });
 
-test('C2 装置交叉核对：引擎内的计数与从 trace 独立重算的改变率一致（两条实现）', async () => {
+test('O1CF-C2 装置交叉核对：引擎内的计数与从 trace 独立重算的改变率一致（两条实现）', async () => {
   const { agents } = await simulate({ seed: 7, ticks: 400, condition: 'C2', channelMask: { cfUsage: 1 } });
   const trace = influenceFromTrace(agents);
   const total = Object.values(agents).reduce((acc, a) => { const c = cfOf(a); acc.decisions += c.decisions; acc.mem += c.mem; acc.habit += c.habit; return acc; }, { decisions: 0, mem: 0, habit: 0 });
@@ -77,7 +77,7 @@ test('C2 装置交叉核对：引擎内的计数与从 trace 独立重算的改�
   assert.equal(c.habit, trace.习惯改变, `习惯改变数不一致：引擎 ${c.habit} vs trace ${trace.习惯改变}`);
 });
 
-test('C3 零影响度必须退回旧公式并计数，不许按对象键序乱选器官', async () => {
+test('O1CF-C3 零影响度必须退回旧公式并计数，不许按对象键序乱选器官', async () => {
   const world = makeWorld({ pantries: 6, stash: 3 });
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 3, condition: 'C2', channelMask: { cfUsage: 1 } });
   world.agents.a1 = a; spawn(world, 'a1', 'home');
@@ -92,7 +92,7 @@ test('C3 零影响度必须退回旧公式并计数，不许按对象键序乱�
   assert.equal(a.counters.cfFallback, 1, '退化没有计数 ⇒ 看不见它发生过');
 });
 
-test('C4 D1 语义不变：⑥ 关掉仍不侵蚀；开 cfUsage 也不改变"只有 ⑥ 一条通道"', async () => {
+test('O1CF-C4 D1 语义不变：⑥ 关掉仍不侵蚀；开 cfUsage 也不改变"只有 ⑥ 一条通道"', async () => {
   assert.equal(channelsFor('C2').erosion, 1, 'C2 默认 ⑥ 开（D1 的默认语义）');
   // 注意 simulate 每 55 刻自动补粮（run.mjs），pantry:0 并不是真缺粮 ⇒ 这里自己跑一个每刻清零的手工世界
   const starve = async (mask) => {
@@ -124,7 +124,7 @@ test('C4 D1 语义不变：⑥ 关掉仍不侵蚀；开 cfUsage 也不改变"只
   }
 });
 
-test('C5 默认关：C2 的 cfUsage 必须是 0；关闭档不产生任何 cf 计数，⑤⑥ 读数与旧世界一致', async () => {
+test('O1CF-C5 默认关：C2 的 cfUsage 必须是 0；关闭档不产生任何 cf 计数，⑤⑥ 读数与旧世界一致', async () => {
   assert.equal(channelsFor('C2').cfUsage, 0, 'C2 默认必须关');
   const { agents } = await simulate({ seed: 7, ticks: 300, condition: 'C2' });
   for (const a of Object.values(agents)) {
@@ -134,7 +134,7 @@ test('C5 默认关：C2 的 cfUsage 必须是 0；关闭档不产生任何 cf �
   assert.ok(PARAMS.viab.upkeep > 0);
 });
 
-test('C2b 选择跟踪影响度：每次侵蚀削掉的器官 = 那一刻 usage 的 argmax（开/关两档都成立）', async () => {
+test('O1CF-C2b 选择跟踪影响度：每次侵蚀削掉的器官 = 那一刻 usage 的 argmax（开/关两档都成立）', async () => {
   const run = async (cfUsage) => {
     const w = makeWorld({ pantries: 0, stash: 0 });
     const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 1, condition: 'C2', channelMask: { cfUsage } });
@@ -164,7 +164,7 @@ test('C2b 选择跟踪影响度：每次侵蚀削掉的器官 = 那一刻 usage 
   assert.ok([...onKeys].some((k) => !offKeys.has(k)), `开关两档削的是同一批器官（${[...offKeys]} vs ${[...onKeys]}）⇒ 量纲改动没有行为后果`);
 });
 
-test('C1 影子路径是活的：每刻的中性化都必须真的动过候选效用（否则 cfRel 恒 0 分不清是数据还是没接上）', async () => {
+test('O1CF-C1-SHADOW-LIVE 影子路径是活的：每刻的中性化都必须真的动过候选效用（否则 cfRel 恒 0 分不清是数据还是没接上）', async () => {
   const { agents } = await simulate({ seed: 7, ticks: 300, condition: 'C2', channelMask: { cfUsage: 1 } });
   const total = Object.values(agents).reduce((s, a) => s + (a.counters.cfRelMoved ?? 0), 0);
   const decisions = Object.values(agents).reduce((s, a) => s + (a.counters.cfDecisions ?? 0), 0);

@@ -146,7 +146,7 @@ test('R8 迟到的结果被拒（409），不会把答案塞给已走开的等�
   } finally { await stop(child); }
 });
 
-test('R9 引擎入口认容器自己的密钥，但节点端点不认它（两条边界分开）', async () => {
+test('RELAYRT-R9 引擎入口认容器自己的密钥，但节点端点不认它（两条边界分开）', async () => {
   const { child, base } = await boot({ BRAIN_RELAY_TOKEN: 'tok-r9', MODEL_KEYS: 'k-model-only' });
   try {
     // 引擎（容器内）发的是 MODEL_KEYS[0]：插不进密文变量，所以入口额外认它

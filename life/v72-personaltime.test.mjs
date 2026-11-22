@@ -17,7 +17,7 @@ test('B-STEP2 同一刻可连续完成多个动作，不再返回 ACTION_BUDGET'
   assert.equal(w.t, 0, '玩家连续动作不应偷偷推进世界刻');
 });
 
-test('B-STEP2 本刻 60 分钟用尽后返回 TIME_WAIT，下一拍恢复（V7.3 每刻池）', () => {
+test('B-STEP2-TIME-WAIT 本刻 60 分钟用尽后返回 TIME_WAIT，下一拍恢复（V7.3 每刻池）', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world; w.survival.actTimeModel = true;
   clockOf(w, 'p1').tick = { t: w.t, usedMin: 60, n: 0 };
@@ -30,7 +30,7 @@ test('B-STEP2 本刻 60 分钟用尽后返回 TIME_WAIT，下一拍恢复（V7.3
   assert.equal(r2.ok, true);
 });
 
-test('B-STEP2 失败不扣个人时间（误点不吃当天时间）', () => {
+test('B-STEP2-FAIL-NO-CHARGE 失败不扣个人时间（误点不吃当天时间）', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world; w.survival.actTimeModel = true;
   const before = clockOf(w, 'p1').tick.usedMin;

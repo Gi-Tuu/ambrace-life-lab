@@ -17,7 +17,7 @@ test('V740-B 观测不扰动：observed/control/repeat 的 dump 哈希一致，�
   }
 });
 
-test('V740-B 同种子重复实验摘要一致（确定性）', async () => {
+test('V740-B-DETERMINISM 同种子重复实验摘要一致（确定性）', async () => {
   const a = await measureBehavior(13, 1);
   const b = await measureBehavior(13, 1);
   assert.equal(a.nonPerturbation.observedHash, b.nonPerturbation.observedHash);

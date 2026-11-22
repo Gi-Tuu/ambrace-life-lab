@@ -47,7 +47,7 @@ test('NEW-01 5 种子 × layout 0/1/2：真实站位采集水果/蛋/奶/羊毛�
   assert.deepEqual(failures, [], '带真实站位的采集必须全 OK：' + JSON.stringify(failures));
 });
 
-test('NEW-01 远距离仍拒：玩家不在来源旁', () => {
+test('NEW-01-FAR-REJECT 远距离仍拒：玩家不在来源旁', () => {
   const sp = make(7, 1), w = sp.world;
   w.t = 30 * 24;
   matureSources(w);

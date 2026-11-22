@@ -13,7 +13,7 @@ test('SEC-02 配了令牌就只认令牌：伪造 same-origin/Origin 不得放�
   assert.equal(mutatingDenied({ ...spoof, headers: { ...spoof.headers, authorization: 'Bearer wrong' } }, 'secret'), 'UNAUTHORIZED');
 });
 
-test('SEC-02 未配令牌：反代来源（x-forwarded-host）不得再走 loopback 免检', () => {
+test('SEC-02-PROXY 未配令牌：反代来源（x-forwarded-host）不得再走 loopback 免检', () => {
   const proxied = req({ host: '127.0.0.1:7860', 'x-forwarded-host': 'ambrace.ms.show' });
   assert.equal(mutatingDenied(proxied, ''), 'UNAUTHORIZED', '经反代的脚本请求应要求同源证据/令牌');
 });

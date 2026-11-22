@@ -32,7 +32,7 @@ test('ARCH3-02 人在家里点鸡圈坐标：camp_collect 必须被位置裁决�
   assert.ok(['TELEPORT', 'OUT_OF_REACH'].includes(r.code), '应映射到 TELEPORT/OUT_OF_REACH，实测 ' + r.code);
 });
 
-test('ARCH3-02 正常走到鸡圈旁再采：通过位置裁决并成功', () => {
+test('ARCH3-02-REACH-OK 正常走到鸡圈旁再采：通过位置裁决并成功', () => {
   const sp = createSurvPlay(7, GAME), w = sp.world;
   w.t = 10;
   w.loc.p1 = 'yard';
@@ -45,7 +45,7 @@ test('ARCH3-02 正常走到鸡圈旁再采：通过位置裁决并成功', () =>
   assert.ok(r.ok, '站在鸡圈旁应能采：' + JSON.stringify(r));
 });
 
-test('ARCH3-02 研究态不走新裁决（基线不变）', () => {
+test('ARCH3-02-RESEARCH 研究态不走新裁决（基线不变）', () => {
   const sp = createSurvPlay(7, { independentWorld: true, unifiedCooperation: true }), w = sp.world;
   w.t = 10;
   w.loc.p1 = 'home';

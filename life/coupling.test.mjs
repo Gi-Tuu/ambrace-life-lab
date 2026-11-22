@@ -69,7 +69,7 @@ test('P6a 三条动作真的被选中并改写了耦合变量；S3 要的极端�
 
 // —— P6a 负向对照：删掉三条动作，机制（tick、增益、五个消费者）全部照旧。
 // 此时 gain.* 若仍会离开初值，说明清单之外还有写入者——那才是"外挂"的形态。
-test('P6a 负控：清单删掉后 gain.* 恒为初值（除三条动作外没有别的写入者）', async () => {
+test('P6a-NEG-CONTROL 负控：清单删掉后 gain.* 恒为初值（除三条动作外没有别的写入者）', async () => {
   const moved = [];
   for (const seedBase of [1, 2, 3]) {
     const r = await drive({ coupling: 1, seedBase, ticks: 400, couplingActions: false });
@@ -81,7 +81,7 @@ test('P6a 负控：清单删掉后 gain.* 恒为初值（除三条动作外没�
 
 // —— 消费者① 的接线证明：输入增益必须作用在**事件注入的调用点**上，不是只在状态里躺着。
 // 这里包一层 a1.assess 记录"真正进入评价层的事件"，所以验的是 tick 里那条 `gain === 1 ? inc.evt : {...}` 分支本身。
-test('P6a/① 输入增益接在注入调用点上：听不进时同一条 contact 到账打折，关闭时逐位不变', async () => {
+test('P6a-INPUT-GAIN/① 输入增益接在注入调用点上：听不进时同一条 contact 到账打折，关闭时逐位不变', async () => {
   const runOnce = async ({ coupling, deafen }) => {
     const { world, agents } = room({ seedBase: 7, coupling });
     const a1 = agents.a1;
@@ -130,7 +130,7 @@ test('P6b 他人清单收缩 + 规则层 SECLUDED；走动作时 τ 到期两处
 });
 
 // 防御式默认：占位 agent（旧档、离线消融里的 {id,name}）没有耦合对象，绝不能因此凭空"叫不到"
-test('P6b 负控：没有耦合对象的角色照旧可被叫到（默认值不是隐身）', async () => {
+test('P6b-NEG-CONTROL 负控：没有耦合对象的角色照旧可被叫到（默认值不是隐身）', async () => {
   const { world, agents } = room({ seedBase: 5 });
   world.agents.a1 = { id: 'a1', name: '岑' }; // 摘掉耦合对象，位置不动
   const targets = affordancesFor(world, 'a2').filter((x) => x.kind === 'talk').map((x) => x.target);
@@ -139,7 +139,7 @@ test('P6b 负控：没有耦合对象的角色照旧可被叫到（默认值不�
   world.agents.a1 = agents.a1;
 });
 
-test('P6b 拒绝是世界侧的：refuse=1 时 talk 失败且不注入 contact；初值时同一调用成功', async () => {
+test('P6b-REFUSE 拒绝是世界侧的：refuse=1 时 talk 失败且不注入 contact；初值时同一调用成功', async () => {
   const { world, agents } = room({ seedBase: 6 });
   const talk = affordancesFor(world, 'a1').find((x) => x.kind === 'talk' && x.target === 'a3');
   assert.ok(talk, 'a1 的清单里没有对 a3 的 talk，负控无从比较');
@@ -156,7 +156,7 @@ test('P6b 拒绝是世界侧的：refuse=1 时 talk 失败且不注入 contact�
   assert.ok(!world.pending.some((p) => p.for === 'a3'), '被拒后仍向目标注入事件 ⇒ 拒绝没有真的挡住耦合');
 });
 
-test('P6b 聚合后果：同随机流下开启组对话成功数减半以上、发起数下降（S2 的三项量）', async () => {
+test('P6b-AGGREGATE 聚合后果：同随机流下开启组对话成功数减半以上、发起数下降（S2 的三项量）', async () => {
   const stat = async (coupling) => {
     let talkRows = 0, talkOk = 0, initiated = 0, secluded = 0, refused = 0;
     for (const seedBase of [1, 2, 3]) {

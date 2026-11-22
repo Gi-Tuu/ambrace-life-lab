@@ -22,7 +22,7 @@ test('V740B 1 日：24 刻、每人每刻需求一次、活跃+无动作=有效�
   assert.match(r.goalState.note, /未启用/);
 });
 
-test('V740B 同种子重复观测哈希一致', async () => {
+test('V740B-DETERMINISM 同种子重复观测哈希一致', async () => {
   const a = await measureBehaviorB(13, 1);
   const b = await measureBehaviorB(13, 1);
   assert.equal(a.nonPerturbation.observedHash, b.nonPerturbation.observedHash);

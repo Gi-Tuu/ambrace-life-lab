@@ -72,7 +72,7 @@ test('M2 有观众 ⇒ 真的调用，且账面与上游调用数一致', async 
   assert.equal(snap().A.t, snap().B.t, 'A/B 刻数错位');
 });
 
-test('M3 上游返回坏 JSON ⇒ 退替身且不崩，fallback 计数上升', async () => {
+test('M3-BAD-JSON 上游返回坏 JSON ⇒ 退替身且不崩，fallback 计数上升', async () => {
   fake.mode = 'badjson';
   const fb0 = sumCounter('fallback');
   const c0 = snap().model.calls;
@@ -86,7 +86,7 @@ test('M3 上游返回坏 JSON ⇒ 退替身且不崩，fallback 计数上升', a
   fake.mode = 'ok';
 });
 
-test('M4 供应商 500 ⇒ 记录 attempts、退回替身、账面不多记', async () => {
+test('MODELPATH-M4 供应商 500 ⇒ 记录 attempts、退回替身、账面不多记', async () => {
   fake.mode = 'fail';
   const c0 = snap().model.calls;
   const tk0 = snap().model.tokens;
@@ -103,7 +103,7 @@ test('M4 供应商 500 ⇒ 记录 attempts、退回替身、账面不多记', as
   fake.mode = 'ok';
 });
 
-test('M5 预算用尽 ⇒ 不再调用（熔断生效）', async () => {
+test('MODELPATH-M5 预算用尽 ⇒ 不再调用（熔断生效）', async () => {
   fake.mode = 'ok';
   host.touch();
   for (let i = 0; i < 400 && snap().model.calls < 30; i += 1) await runTicks(1, { touch: true });

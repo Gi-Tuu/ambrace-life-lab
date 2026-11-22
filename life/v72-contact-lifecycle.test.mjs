@@ -99,7 +99,7 @@ test('C4-03 旧档缺 lifecycle：继承当前默认、不崩、不突变', () =
   assert.deepEqual([residentStage(again, 'a1'), ageDays(again, 'a1')], [residentStage(back, 'a1'), ageDays(back, 'a1')]);
 });
 
-test('E1 生育条件成功时返回 {room, ok:true}，统计不再记 unknown', () => {
+test('V72C-E1 生育条件成功时返回 {room, ok:true}，统计不再记 unknown', () => {
   const sp = make(), w = sp.world;
   const h = w.survival.households;
   h.spouses.a1 = 'a2'; h.spouses.a2 = 'a1';

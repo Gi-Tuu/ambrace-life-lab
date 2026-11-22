@@ -9,7 +9,7 @@ import { moveMapFeet } from '../web/collision.mjs';
 const open = (tw, th) => ({ tw, th, walk: new Uint8Array(tw * th).fill(1) });
 const block = (w, x, y) => { w.walk[y * w.tw + x] = 0; return w; };
 
-test('K1 空格直线：起终点曼哈顿距离即路径长，逐格相邻、终于目标', () => {
+test('WALK-K1 空格直线：起终点曼哈顿距离即路径长，逐格相邻、终于目标', () => {
   const w = open(8, 8);
   const path = astar(w, [0, 0], [7, 7]);
   assert.ok(path, '应可达');
@@ -22,7 +22,7 @@ test('K1 空格直线：起终点曼哈顿距离即路径长，逐格相邻、�
   }
 });
 
-test('K2 一堵墙留缝：绕行穿过缺口；封死则不可达返回 null', () => {
+test('WALK-K2 一堵墙留缝：绕行穿过缺口；封死则不可达返回 null', () => {
   const w = open(9, 5);
   for (let y = 0; y < 5; y += 1) if (y !== 2) block(w, 4, y);   // x=4 全堵，只留 y=2 缺口
   const path = astar(w, [0, 2], [8, 2]);
@@ -35,7 +35,7 @@ test('K2 一堵墙留缝：绕行穿过缺口；封死则不可达返回 null', 
   assert.equal(astar(sealed, [0, 2], [8, 2]), null, '封死必须 null');
 });
 
-test('K3 isWalkable：越界与阻挡格为假，可行格为真', () => {
+test('WALK-K3 isWalkable：越界与阻挡格为假，可行格为真', () => {
   const w = open(4, 4);
   block(w, 1, 1);
   assert.equal(isWalkable(w, 2, 2), true);
@@ -52,7 +52,7 @@ test('K4 起终重合返回空路径；目标不可走返回 null', () => {
   assert.equal(astar(w, [0, 0], [4, 4]), null);
 });
 
-test('K5 stepWalker：沿路径匀速推进、置 moving、按横向翻面、到点后停', () => {
+test('WALK-K5 stepWalker：沿路径匀速推进、置 moving、按横向翻面、到点后停', () => {
   const s = { x: 0, y: 0, path: [[1, 0], [2, 0], [2, 1]], pi: 0, moving: false, face: 1 };
   stepWalker(s, 0.5);
   assert.equal(s.moving, true);

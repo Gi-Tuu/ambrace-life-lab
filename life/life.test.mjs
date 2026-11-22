@@ -71,7 +71,7 @@ test('L5 人格参与：同一个事件，三个人格得到的注入向量必�
   assert.ok(outs[0].targets.inhibit > outs[1].targets.inhibit, '秩序/规范更强的人格，越轨事件的目标自制应更高');
 });
 
-test('L5 经历参与：事件被重复预期后，意外性必须下降、唤起目标必须回落', () => {
+test('L5-EXPERIENCE 经历参与：事件被重复预期后，意外性必须下降、唤起目标必须回落', () => {
   const traits = sampleTraits(makeRng(9), '谨慎');
   const fresh = appraise(ev(), { m: { ...traits.baseline }, traits, drives: new Drives(makeRng(9), traits), memory: new EpisodicMemory(), relations: new Relations('x'), t: 50 });
   const ctx = ctxFor('谨慎', ['witnessed', 'witnessed', 'witnessed', 'witnessed', 'witnessed', 'relocate']);
@@ -121,7 +121,7 @@ test('P1a 通道通电：持续钳制调制维，行为分布必须变', async (
   assert.ok(r.meanKl > 0.02, `按住 m 行为却几乎不动（meanKl=${r.meanKl}）⇒ 通道没载流`);
 });
 
-test('P1a 负向对照：C2-neg 按住 m 也不该改变行为', async () => {
+test('P1a-NEG-CONTROL 负向对照：C2-neg 按住 m 也不该改变行为', async () => {
   const r = await p1a({ seed: 7, ticks: 320, condition: 'C2-neg' });
   assert.ok(r.meanKl < 0.005, `C2-neg 也在变（${r.meanKl}）⇒ 有通道没切断`);
 });
@@ -143,7 +143,7 @@ test('P2 无触发自主性：环境完全静默仍有自发行为，且不是�
   // 需求是否进入行动比较由下方独立的受控干预及切断负控检验。
 });
 
-test('P2 受控需求干预：条件决策变化，切断需求贡献后不变', async () => {
+test('P2-CONTROLLED-NEEDS 受控需求干预：条件决策变化，切断需求贡献后不变', async () => {
   const { execFileSync } = await import('node:child_process');
   const { fileURLToPath } = await import('node:url');
   const script = fileURLToPath(new URL('./s4-p2-intervention.mjs', import.meta.url));
@@ -334,7 +334,7 @@ test('O2 储能救济：峰值必须等于解析上限，且"站上操作点→�
   assert.ok(up < dry && dry < back, `顺序不对（站上 ${up} → 耗尽 ${dry} → 跌破 ${back}）：耗尽之后才跌破才符合"储能放完就靠代谢往下走"`);
 });
 
-test('O2 储能是单向门：垮掉之后吃饭补不进储能，只有高位才攒得下', () => {
+test('O2-ONE-WAY 储能是单向门：垮掉之后吃饭补不进储能，只有高位才攒得下', () => {
   const low = bareLedger(0.2);
   low.regen(0.5);
   assert.equal(Number(low.reserve.toFixed(6)), 0, 'v=0.2 吃一顿就攒下储能 ⇒ 储能从"富余的缓冲"变成了"垮后的救济"，O2 的结论要重写');
@@ -344,27 +344,27 @@ test('O2 储能是单向门：垮掉之后吃饭补不进储能，只有高位�
   assert.ok(high.reserve > 0, 'v=0.95 吃一顿储能仍为 0 ⇒ regen 的"先补满 v、补不下才进储能"结构变了');
 });
 
-test('O2 打平线：每 50 刻一顿 + 每刻一个普通动作 ⇒ 收支打平，停在原地而不是回升', () => {
+test('O2-BREAKEVEN 打平线：每 50 刻一顿 + 每刻一个普通动作 ⇒ 收支打平，停在原地而不是回升', () => {
   const s = bareLedger(0.2);
   const crossed = runLedger(s, { every: 50, work: 0.06 });
   assert.ok(Math.abs(s.v - 0.2) < 0.005, `打平档跑满 600 刻末存续 ${s.v.toFixed(4)}，偏离起始 0.2 超过 0.005 ⇒ mealYield/upkeep/costScale 的校准关系变了`);
   assert.equal(crossed, null, '打平档居然爬到了操作点 ⇒ 收入被高估，"打平＝不恢复"这条主张不成立');
 });
 
-test('O2 低于打平线：每 100 刻一顿 ⇒ 垮掉之后只会更低，不会自己回来', () => {
+test('O2-BELOW-BREAKEVEN 低于打平线：每 100 刻一顿 ⇒ 垮掉之后只会更低，不会自己回来', () => {
   const s = bareLedger(0.2);
   runLedger(s, { every: 100, work: 0.06 });
   assert.ok(s.v < 0.2 - 0.02, `低频进食后末存续 ${s.v.toFixed(4)} 没有往下走 ⇒ 收支式子算错了`);
 });
 
-test('O2 高于打平线才谈得上恢复：每 25 刻一顿必须爬回操作点以上', () => {
+test('O2-ABOVE-BREAKEVEN 高于打平线才谈得上恢复：每 25 刻一顿必须爬回操作点以上', () => {
   const s = bareLedger(0.2);
   const crossed = runLedger(s, { every: 25, work: 0.06 });
   assert.ok(crossed !== null, '两倍于打平线的进食都爬不回操作点 ⇒ 这套账本压根没有恢复通道，观察侧的所有回升读数都得作废');
   assert.ok(crossed < 400, `爬回操作点用了 ${crossed} 刻，比"净升 0.0048/刻"推算的还慢 ⇒ 恢复速率的推导与实现不符`);
 });
 
-test('O2 恢复不退档：tick 驱动的回升不许把部件还回来', () => {
+test('O2-NO-RESTORE 恢复不退档：tick 驱动的回升不许把部件还回来', () => {
   const s = bareLedger(0.6, 0, true);
   s.stage = 2;
   s.ledger = [{ organ: '习惯可塑性' }, { organ: '记忆可用性' }];
@@ -374,7 +374,7 @@ test('O2 恢复不退档：tick 驱动的回升不许把部件还回来', () => 
   assert.equal(s.ledger.length, 2, '回升时账本被清空 ⇒ 受损记录是可撤销的');
 });
 
-test('O2 恢复指标自身的对照：锯齿要报出回升，单调下降必须报 0 次', () => {
+test('O2-METRIC-CONTROL 恢复指标自身的对照：锯齿要报出回升，单调下降必须报 0 次', () => {
   const saw = [];
   for (let t = 1; t <= 200; t++) {
     // 守恒的锯齿：每 50 刻一顿（+0.09），其余每刻掉 0.0018 ⇒ 一个周期先涨 0.088 再跌回去
@@ -395,7 +395,7 @@ test('O2 恢复指标自身的对照：锯齿要报出回升，单调下降必�
   assert.equal(st2.ateCoupledShare, null, '没有回升时耦合率不该是数字');
 });
 
-test('O2 观察侧接线：真实轨迹取得到存续序列，储能那一栏不是空读数', async () => {
+test('O2-VIEW-WIRING 观察侧接线：真实轨迹取得到存续序列，储能那一栏不是空读数', async () => {
   const { rows, verdict } = await recoveryProfile({ seeds: [7], ticks: 400 });
   assert.equal(rows.length, 9, `seed 7 × 3 配置应有 9 行，实测 ${rows.length} ⇒ trace 里的 viab 采样没接到`);
   assert.equal(verdict.样本, 9, '判定里的样本数与行数不一致 ⇒ 统计漏了人');
@@ -487,7 +487,7 @@ test('D7 扣存通道不造能量：同一份进食日程，总能量轨迹与 s
   assert.ok(a.some((x, i) => Math.abs(x.v - b[i].v) > 0.001), '两条 v 轨迹居然几乎一样 ⇒ 通道没生效，守恒也就只是没跑起来');
 });
 
-test('D7 扣存只能削峰、不可能填谷：谷底对 spill 不变，峰头必须被压低', () => {
+test('D7-PEAK-ONLY 扣存只能削峰、不可能填谷：谷底对 spill 不变，峰头必须被压低', () => {
   const a = spillLedger(0).slice(200);
   const b = spillLedger(0.5).slice(200);
   const va = a.map((x) => x.v);
@@ -499,7 +499,7 @@ test('D7 扣存只能削峰、不可能填谷：谷底对 spill 不变，峰头�
   assert.ok(troughB >= troughA - 1e-6, `谷底反而掉了 ${troughA.toFixed(4)}→${troughB.toFixed(4)}，超出浮点容差 ⇒ 扣存在周期内没放完，储能变成了漏损而不是延迟线`);
 });
 
-test('D7 spill=0 逐位退化成旧式子（等价性核对）', () => {
+test('D7-ZERO-EQUIV spill=0 逐位退化成旧式子（等价性核对）', () => {
   const P = PARAMS.viab;
   const prev = P.spill;
   try {
@@ -518,7 +518,7 @@ test('D7 spill=0 逐位退化成旧式子（等价性核对）', () => {
   }
 });
 
-test('D7 通道是开关不是装饰：spill>0 必须真的改变这一顿的分配', () => {
+test('D7-SWITCH 通道是开关不是装饰：spill>0 必须真的改变这一顿的分配', () => {
   const prev = PARAMS.viab.spill;
   PARAMS.viab.spill = 0.5;
   const on = bareLedger(0.2);
@@ -531,7 +531,7 @@ test('D7 通道是开关不是装饰：spill>0 必须真的改变这一顿的分
   assert.ok(on.v < off.v - 0.03, `当下补的量没少（${on.v.toFixed(4)} vs ${off.v.toFixed(4)}）⇒ 扣存是从别处变出来的`);
 });
 
-test('D7 扣存比例进冻结指纹：同组里一半人扣存一半人不扣，必须报参数漂移', () => {
+test('D7-FINGERPRINT 扣存比例进冻结指纹：同组里一半人扣存一半人不扣，必须报参数漂移', () => {
   const prev = PARAMS.viab.spill;
   const label = 'D7指纹组';
   try {
@@ -954,7 +954,7 @@ test('告知扣的是当事人（作案者）的信任，不是受害者的', as
 });
 // 用户 2026-11-07 批准修订 D8：旧分层/样本内覆盖结论作为历史保留于 PLAN，
 // 新闸门分别检验两档真实传话、时间留出与相同 mask 切断；不预设准确率变化方向。
-test('D8 两档收益：传话有记录，事前特征可时间留出，切断后行为一致', async (t) => {
+test('LIFE-D8 两档收益：传话有记录，事前特征可时间留出，切断后行为一致', async (t) => {
   const bin = v => v < .35 ? 'low' : v < .6 ? 'mid' : 'high';
   for (const riskyPortion of [.45, 1.1]) {
     const base = await simulate({ seed: 7, ticks: 400, condition: 'C2', riskyPortion });
@@ -1008,7 +1008,7 @@ test('配对对照：--paired 下两臂人格逐位相同，且通道差异仍�
   const u2 = await simulate({ seed: 7, ticks: 40, condition: 'C2-neg' });
   assert.notDeepEqual(traitsOf(u1), traitsOf(u2), '默认模式居然给出了相同人格 ⇒ 那条"掩码进种子"的限制记载有误，需更正台账');
 });
-test('O17 规范代价进比较：测量留痕（方向性主张在装置更正后**不成立**，见注释）', async () => {
+test('O17-NORM-COST 规范代价进比较：测量留痕（方向性主张在装置更正后**不成立**，见注释）', async () => {
   // 第二次审计的发现，必须如实留在这里，不许为了绿而改判据线：
   // 原来这条断言是"同种子下 order 高者越轨更少"（单种子 seed=11、600 刻的方向性读数）。
   // 装置更正（R1：习惯层不再绕过规则层）重抽了轨迹之后：seed 11 = 4 vs 5（方向反转）、
@@ -1038,7 +1038,7 @@ test('O10 切断干净：权重为 0 时所有动作的日程标注恒为 0', as
   assert.ok(acts.every((x) => (x.schedBonus ?? 0) === 0), '权重 0 仍有非零标注 ⇒ 切断不干净，等价性核对会假绿');
 });
 
-test('O10 日程进比较：开权重后走动目的地更贴节律表，且行动序列真的改变', async () => {
+test('O10-SCHEDULE-COMPARE 日程进比较：开权重后走动目的地更贴节律表，且行动序列真的改变', async () => {
   const on = await simulate({ seed: 7, ticks: 600, scheduleWeight: 0.06 });
   const off = await simulate({ seed: 7, ticks: 600, scheduleWeight: 0 });
   // 测行为而非单点快照：整段轨迹里 move_to 的目的地命中该刻节律表位置的比例（trace.action 是 "kind:对象" 字符串）

@@ -18,7 +18,7 @@ test('V741-CLEAN 旧档 fairSched/m3GraceWait 未知字段可读且被忽略', (
   assert.equal(back.world.agents.a1.m3GraceTicks, undefined);
 });
 
-test('V741-CLEAN 默认无 fair 调度，M3 on 仍无 agentErrors', async () => {
+test('V741-CLEAN-NO-FAIR-SCHED 默认无 fair 调度，M3 on 仍无 agentErrors', async () => {
   const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   assert.equal(sp.world.fairSched, undefined);
   const m3 = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });

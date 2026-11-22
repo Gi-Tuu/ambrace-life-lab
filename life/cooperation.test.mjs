@@ -13,7 +13,7 @@ function survWorld(coop = false) {
   return w;
 }
 
-test('C1 意愿评估：默认愿意协助；匮乏+风险+低回报转为拒绝/替代', () => {
+test('COOP-C1 意愿评估：默认愿意协助；匮乏+风险+低回报转为拒绝/替代', () => {
   const w = survWorld();
   const base = willingness(w, 'a1', { severity: 0.8 });
   assert.equal(base.decision, 'assist');
@@ -30,7 +30,7 @@ test('C1 意愿评估：默认愿意协助；匮乏+风险+低回报转为拒绝
   assert.equal(willingness(w, 'p1', {}).decision, 'refuse');
 });
 
-test('C2 自发识别公共需求：缺粮→储粮、无住所→住所、损坏优先', () => {
+test('COOP-C2 自发识别公共需求：缺粮→储粮、无住所→住所、损坏优先', () => {
   const w = survWorld();
   w.survival.store = 0;
   let needs = identifyPublicNeeds(w);
@@ -41,12 +41,12 @@ test('C2 自发识别公共需求：缺粮→储粮、无住所→住所、损�
   assert.equal(needs[0].repair, true, '损坏建筑应最优先');
 });
 
-test('C3 任务分解：采集→奠基→施工；维修单步', () => {
+test('COOP-C3 任务分解：采集→奠基→施工；维修单步', () => {
   assert.deepEqual(decompose({ type: 'granary' }), ['gather', 'plan', 'build']);
   assert.deepEqual(decompose({ type: 'granary', repair: true }), ['repair']);
 });
 
-test('C4 配对闸门：同 seed 独建 vs 协作，协作完工更快（撤掉组队即红）', () => {
+test('COOP-C4 配对闸门：同 seed 独建 vs 协作，协作完工更快（撤掉组队即红）', () => {
   const solo = runConstruction({ seed: 7, type: 'granary', coop: false, makeWorld, spawn });
   const coop = runConstruction({ seed: 7, type: 'granary', coop: true, makeWorld, spawn });
   assert.equal(solo.completed, true, '独建应能完工');
@@ -55,7 +55,7 @@ test('C4 配对闸门：同 seed 独建 vs 协作，协作完工更快（撤掉�
   assert.ok(coop.ticks < solo.ticks, `协作(${coop.ticks})应快于独建(${solo.ticks})`);
 });
 
-test('C5 默认关隔离：coop 默认 off，stepCooperation 不动世界；lab/town 无 survival', () => {
+test('COOP-C5 默认关隔离：coop 默认 off，stepCooperation 不动世界；lab/town 无 survival', () => {
   const w = survWorld(false);
   assert.equal(w.survival.coop.enabled, false);
   const before = JSON.stringify(w.survival);

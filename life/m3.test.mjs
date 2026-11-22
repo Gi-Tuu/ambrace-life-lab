@@ -23,7 +23,7 @@ test('M3 闸门③：默认关闭时 seed 7/11 的 400/1200 刻行为指纹与 2
   }
 });
 
-test('M3 闸门①：只改内部需求，功能目标与两条可行路径的相对分数都会变', () => {
+test('M3-GATE1-NEEDS 闸门①：只改内部需求，功能目标与两条可行路径的相对分数都会变', () => {
   const snap = (energy) => ({ selfId: 'a1', loc: 'home', energy, social: 0.6, pantry: 3, energySetpoint: 0.55, socialSetpoint: 0.5, companions: {} });
   const mk = () => [{ id: 'rest', kind: 'rest', cost: 0.02 }, { id: 'eat', kind: 'eat', cost: 0.05 }, { id: 'move_to:hall', kind: 'move_to', to: 'hall', cost: 0.06 }];
   const rich = new ShortHorizonPlanner().step({ snapshot: snap(0.95), actions: mk(), catalog: mk() });
@@ -36,7 +36,7 @@ test('M3 闸门①：只改内部需求，功能目标与两条可行路径的�
   assert.ok(score(poor, 'eat') > score(poor, 'rest'), '能量见底时 eat 没赢过 rest ⇒ 两条可行路径的相对分数没分开');
 });
 
-test('M3 闸门②：承诺 N 按非反射机会递减；默认关不产生 M3 决策；反射刻不带目标', async () => {
+test('M3-GATE2-COMMIT-DECAY 闸门②：承诺 N 按非反射机会递减；默认关不产生 M3 决策；反射刻不带目标', async () => {
   const { agents } = await simulate({ seed: 7, ticks: 60, condition: 'C2', channelMask: { m3: 1 } });
   for (const a of Object.values(agents)) {
     const rows = a.trace.filter((r) => r.m3);
@@ -58,7 +58,7 @@ test('M3 闸门②：承诺 N 按非反射机会递减；默认关不产生 M3 �
   }
 });
 
-test('M3 闸门②：承诺长度进冻结指纹，同组内改 N 必须报参数漂移', () => {
+test('M3-GATE2-FINGERPRINT 闸门②：承诺长度进冻结指纹，同组内改 N 必须报参数漂移', () => {
   assert.notEqual(paramsFingerprint({ m3: 4 }), paramsFingerprint({ m3: 1 }), 'N 不在指纹里 ⇒ 同组可以偷偷换承诺长度');
   const label = 'M3指纹组';
   try {
@@ -69,7 +69,7 @@ test('M3 闸门②：承诺长度进冻结指纹，同组内改 N 必须报参�
   }
 });
 
-test('M3 闸门④：夜禁在规划器与规则层一致；即使调用方给错事实，规则层仍兜底', () => {
+test('M3-GATE4-NIGHT 闸门④：夜禁在规划器与规则层一致；即使调用方给错事实，规则层仍兜底', () => {
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 3, condition: 'C2', channelMask: { m3: 1 } });
   const w = makeWorld({ pantries: 3, stash: 3 });
   w.agents.a1 = a;
@@ -90,7 +90,7 @@ test('M3 闸门④：夜禁在规划器与规则层一致；即使调用方给�
   assert.equal(validate(w, 'a1', { kind: 'look_out' }).ok, false, '给错事实时规则层没有兜底');
 });
 
-test('M3 闸门④：驳回重决策在开启后仍可达（用打桩的规划器固定选 look_out）', async () => {
+test('M3-GATE4-REDECIDE 闸门④：驳回重决策在开启后仍可达（用打桩的规划器固定选 look_out）', async () => {
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 3, condition: 'C2', channelMask: { m3: 1 } });
   const w = makeWorld({ pantries: 3, stash: 3 });
   w.agents.a1 = a;
@@ -102,7 +102,7 @@ test('M3 闸门④：驳回重决策在开启后仍可达（用打桩的规划�
   assert.equal(a.counters.rejected, 1, `被驳回次数 ${a.counters.rejected} ⇒ M3 把非法动作直接执行了`);
 });
 
-test('M3 闸门④：承诺状态可存档恢复，旧档缺字段时安全初始化', () => {
+test('M3-GATE4-SAVE 闸门④：承诺状态可存档恢复，旧档缺字段时安全初始化', () => {
   const snap = { selfId: 'a1', loc: 'home', energy: 0.1, social: 0.2, pantry: 3, energySetpoint: 0.55, socialSetpoint: 0.5, companions: {} };
   const acts = [{ id: 'eat', kind: 'eat', cost: 0.05 }, { id: 'rest', kind: 'rest', cost: 0.02 }];
   const p = new ShortHorizonPlanner({ commitment: 4 });
@@ -118,7 +118,7 @@ test('M3 闸门④：承诺状态可存档恢复，旧档缺字段时安全初�
   assert.doesNotThrow(() => old.step({ snapshot: snap, actions: acts, catalog: acts }), '旧档初始化后第一次决策就抛错');
 });
 
-test('M3 闸门④：告知注入在开启后照常改变对持有者的信任', async () => {
+test('M3-GATE4-INFORM 闸门④：告知注入在开启后照常改变对持有者的信任', async () => {
   const { world, agents } = await simulate({ seed: 7, ticks: 400, condition: 'C2', channelMask: { m3: 1 } });
   const a = agents.a2;
   const holder = 'a1';
@@ -130,7 +130,7 @@ test('M3 闸门④：告知注入在开启后照常改变对持有者的信任',
   assert.notEqual(after, before, '开启 M3 后告知不再改变对持有者的信任 ⇒ 告知被吞掉了');
 });
 
-test('M3 在引擎里真的过滤候选：recover 目标下只留该目标的首步（含"为去吃而移动"）', () => {
+test('M3-FILTER-RECOVER 在引擎里真的过滤候选：recover 目标下只留该目标的首步（含"为去吃而移动"）', () => {
   // 不能用"开启/关闭两次跑序列不同"来证明承重：hashSeed 把掩码编进了种子，那种对照测的是随机流（§31 已记）。
   // 也不能按 kind 白名单断言：recover 目标允许"先走到公仓再吃"，那正是两步规划的意义。
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 3, condition: 'C2', channelMask: { m3: 1 } });
@@ -150,7 +150,7 @@ test('M3 在引擎里真的过滤候选：recover 目标下只留该目标的首
   assert.ok(!out.some((p) => p.kind === 'look_out'), 'recover 目标下还留着 look_out（explore 类）');
 });
 
-test('M3 承诺在需求被满足后仍然锁定：第二次决策复用同一目标', () => {
+test('M3-COMMIT-LOCK 承诺在需求被满足后仍然锁定：第二次决策复用同一目标', () => {
   const a = new Organism({ id: 'a1', name: '岑', archetype: '谨慎', seed: 3, condition: 'C2', channelMask: { m3: 1 } });
   const w = makeWorld({ pantries: 3, stash: 3 });
   w.agents.a1 = a;

@@ -57,7 +57,7 @@ test('C′ caches reuse geometry within state and rebuild named parts after real
   assert.ok(part(build(occupied),'workshop','forge-embers'));
 });
 
-test('C′ occupied homes move their shutters and wall damage opens local gaps in three stages',()=>{
+test('C′-SHUTTERS occupied homes move their shutters and wall damage opens local gaps in three stages',()=>{
   const view=structuredClone(survView(fixture()));
   const room=view.housing.a1, id='work:'+room+':house:shutter-left';
   const occupied=build(view).homes;
@@ -78,7 +78,7 @@ test('C′ occupied homes move their shutters and wall damage opens local gaps i
   assert.ok(braces[2]<braces[0]);
 });
 
-test('C′ animation changes rendered vertices without affecting 48 ticks of world state',async()=>{
+test('C′-ANIMATION animation changes rendered vertices without affecting 48 ticks of world state',async()=>{
   const a=fixture(), b=fixture();
   for(let t=0;t<48;t++){
     await tickSurvPlay(a);

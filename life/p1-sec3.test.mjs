@@ -31,7 +31,7 @@ mkdirSync(join(DIR, 'saves'), { recursive: true });
 process.env.DATA_DIR = DIR;
 const host = await import('./host.mjs');
 
-test('SEC3-02 营地归属：首次 claim 绑定，之后换人 claim 不抢占，哈希不落原文', () => {
+test('SEC3-02-CAMP-OWNER 营地归属：首次 claim 绑定，之后换人 claim 不抢占，哈希不落原文', () => {
   const K = '0123456789abcdef0123456789abcdef';
   writeFileSync(join(DIR, 'saves', 'index.json'), JSON.stringify({ entries: [{ key: K, name: '甲', lastSeenAt: Date.now() }] }));
   const hashA = 'a'.repeat(64);

@@ -17,7 +17,7 @@ test('SEC5-01 纯函数：自选 nonce（无服务端校验器）永远不能授
   assert.equal(ctlDenied(forged, RESET, ''), 'UNAUTHORIZED');
 });
 
-test('SEC5-01 纯函数：只有服务端校验器认可的一次性 nonce 才放行', () => {
+test('SEC5-01-PURE-VALID 纯函数：只有服务端校验器认可的一次性 nonce 才放行', () => {
   const req = unitReq({ cookie: 'ctl_sid=s1; ctl_nonce=n1', 'x-ctl-nonce': 'n1' });
   assert.equal(ctlDenied(req, RESET, '', () => true), null);
   assert.equal(ctlDenied(req, RESET, '', () => false), 'UNAUTHORIZED');
@@ -25,7 +25,7 @@ test('SEC5-01 纯函数：只有服务端校验器认可的一次性 nonce 才�
   assert.equal(ctlDenied(unitReq({ origin: 'https://x' }), { action: 'pause' }, '', () => false), null, '同源浏览器非破坏性动作不受 nonce 限制');
 });
 
-test('SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 默认不授权；仅 allowNonce 的 MAIN reset 例外', () => {
+test('SEC5-01-PURE-TOKEN 纯函数：配了 CTL_TOKEN 时 nonce 默认不授权；仅 allowNonce 的 MAIN reset 例外', () => {
   const req = unitReq({ cookie: 'ctl_sid=s1; ctl_nonce=n1', 'x-ctl-nonce': 'n1', origin: 'https://x', 'sec-fetch-site': 'same-origin' });
   assert.equal(ctlDenied(req, RESET, 'tok', () => true), 'UNAUTHORIZED');
   assert.equal(ctlDenied(req, { action: 'survival_reset', confirm: true }, 'tok', () => true, { allowNonce: true }), null);
@@ -33,7 +33,7 @@ test('SEC5-01 纯函数：配了 CTL_TOKEN 时 nonce 默认不授权；仅 allow
   assert.equal(ctlDenied({ ...req, headers: { ...req.headers, authorization: 'Bearer tok' } }, RESET, 'tok', () => true), null);
 });
 
-test('SEC5-01 HTTP：伪造头 + 自选 nonce 的一条 POST 重置必须 403', async () => {
+test('SEC5-01-HTTP-FORGED HTTP：伪造头 + 自选 nonce 的一条 POST 重置必须 403', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '' });
   try {
     const r = await jsonPost(h.base, '/ctl', RESET, {
@@ -49,7 +49,7 @@ test('SEC5-01 HTTP：伪造头 + 自选 nonce 的一条 POST 重置必须 403', 
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-01 HTTP：服务端签发 nonce + 会话 cookie 的浏览器路径可重置', async () => {
+test('SEC5-01-HTTP-ISSUED HTTP：服务端签发 nonce + 会话 cookie 的浏览器路径可重置', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '' });
   try {
     const jar = {};
@@ -68,7 +68,7 @@ test('SEC5-01 HTTP：服务端签发 nonce + 会话 cookie 的浏览器路径可
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-01 HTTP：CTL_TOKEN 姿态下无令牌/伪造头一律 403，Bearer 可用', async () => {
+test('SEC5-01-HTTP-TOKEN HTTP：CTL_TOKEN 姿态下无令牌/伪造头一律 403，Bearer 可用', async () => {
   const h = await bootAudit5({ CTL_TOKEN: 'top-secret' });
   try {
     const jar = {};
@@ -109,7 +109,7 @@ test('SEC5-05 HTTP：令牌姿态下 MAIN survival_reset 走服务端 nonce（�
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-05 HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', async () => {
+test('SEC5-05-TTL HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', async () => {
   const h = await bootAudit5({ CTL_TOKEN: 'top-secret', CTL_NONCE_TTL_MS: '600' });
   try {
     const jar = {};
@@ -123,7 +123,7 @@ test('SEC5-05 HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', async
   } finally { await stopAudit5(h); }
 });
 
-test('DATA5-05 索引删除后重开仍归原 owner；重启从侧车重建索引', async () => {
+test('DATA5-05-REOPEN-OWNER 索引删除后重开仍归原 owner；重启从侧车重建索引', async () => {
   const { rmSync } = await import('node:fs');
   const { join } = await import('node:path');
   const h = await bootAudit5({ CTL_TOKEN: '' });
@@ -198,7 +198,7 @@ test('SEC5-02 HTTP：/world?camp= 无 cookie / 他人 = 访客投影、owner 200
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-05 重开已归属营地：不换 owner、不发新 cookie、明确 403 CAMP_OWNED', async () => {
+test('SEC5-05-CAMP-OWNED 重开已归属营地：不换 owner、不发新 cookie、明确 403 CAMP_OWNED', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '' });
   try {
     const jarA = {};
@@ -224,7 +224,7 @@ test('SEC5-05 重开已归属营地：不换 owner、不发新 cookie、明确 4
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-05 MAIN survival_reset：未设令牌时服务端 nonce 可重开一局（浏览器路径）', async () => {
+test('SEC5-05-MAIN-NONCE MAIN survival_reset：未设令牌时服务端 nonce 可重开一局（浏览器路径）', async () => {
   const h = await bootAudit5({ CTL_TOKEN: '' });
   try {
     const jar = {};
@@ -261,7 +261,7 @@ test('SEC5-06 安全头/ cookie 标志：CSP、nosniff、frame-ancestors 白名�
   } finally { await stopAudit5(h); }
 });
 
-test('SEC5-06 saveError 不回显绝对路径', async () => {
+test('SEC5-06-SAVE-ERROR saveError 不回显绝对路径', async () => {
   const { mkdtempSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');

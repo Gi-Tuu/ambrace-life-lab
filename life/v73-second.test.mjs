@@ -136,7 +136,7 @@ const crossDay = (w, id) => {
   return c;
 };
 
-test('V73-08 跨日清玩家 busy：写 cancelled 事件与账本，且不重复结算', () => {
+test('V73-08-CROSSDAY 跨日清玩家 busy：写 cancelled 事件与账本，且不重复结算', () => {
   const sp = make(), w = sp.world;
   w.t = 10; move(w, 'p1', 'yard');
   w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
@@ -157,7 +157,7 @@ test('V73-08 跨日清玩家 busy：写 cancelled 事件与账本，且不重复
   assert.equal((w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'player_action').length, evs.length, '再次跨日不再写');
 });
 
-test('V73-09 跨日清居民 busy：写 work_interrupted 与中止账本', () => {
+test('V73-09-CROSSDAY 跨日清居民 busy：写 work_interrupted 与中止账本', () => {
   const sp = make(), w = sp.world;
   const c = clockOf(w, 'a1');
   c.busy = { kind: 'build', action: null, startTick: w.t, totalMin: 30, remainMin: 10,
@@ -172,7 +172,7 @@ test('V73-09 跨日清居民 busy：写 work_interrupted 与中止账本', () =>
   assert.equal((w.survival.eventJournal?.rows ?? []).filter((e) => e.kind === 'work_interrupted').length, evs.length, '重复跨日不再写');
 });
 
-test('V73-10 玩家主动取消 busy：写 cancelled 事件与账本，二次取消 NO_BUSY', async () => {
+test('V73-10-PLAYER-CANCEL 玩家主动取消 busy：写 cancelled 事件与账本，二次取消 NO_BUSY', async () => {
   const sp = make(), w = sp.world;
   w.t = 10; move(w, 'p1', 'yard');
   w.survival.sites = [{ type: 'shelter', loc: 'yard', progress: 0 }];
@@ -193,7 +193,7 @@ test('V73-10 玩家主动取消 busy：写 cancelled 事件与账本，二次取
   assert.equal(cancelPlayerBusy(sp).code, 'NO_BUSY', '无 busy 时二次取消被拒');
 });
 
-test('V73-11 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', async () => {
+test('V73-11-LAMP-FUEL 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', async () => {
   const { measureConservation } = await import('./resource-conservation-probe.mjs');
   const r = await measureConservation(7, 240);
   assert.equal(r.error, undefined, String(r.error));
@@ -218,7 +218,7 @@ test('V73-11 公共灯火燃料记 consumed/fuel，资源守恒残差为 0', asy
   assert.equal(w.survival.resLedger.consumed.wood?.fuel ?? 0, 1, '灯火消费进账本');
 });
 
-test('V73-12 严格角色互换：正式游戏居民/玩家同动作同分钟同体力', async () => {
+test('V73-12-ROLE-SWAP 严格角色互换：正式游戏居民/玩家同动作同分钟同体力', async () => {
   const { measureSwap } = await import('./role-swap-probe.mjs');
   const r = measureSwap(7);
   assert.ok(r.allSame, `互换实验应全通过：${JSON.stringify(r.rows.filter((x) => !x.same))}`);

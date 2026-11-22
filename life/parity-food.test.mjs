@@ -6,7 +6,7 @@ import { advanceSurvival } from './worldstate.mjs';
 
 const GAME = { independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true, playerRation: true };
 
-test('FOOD-01 玩家一份饭 = 居民一份日粮（存续/能量同一折算）', () => {
+test('FOOD-01-RATION-PARITY 玩家一份饭 = 居民一份日粮（存续/能量同一折算）', () => {
   // 玩家：餐台一份
   const spP = createSurvPlay(7, GAME);
   const wP = spP.world;
@@ -35,7 +35,7 @@ test('FOOD-01 玩家一份饭 = 居民一份日粮（存续/能量同一折算�
   assert.ok(Math.abs(pd.e - rd.e) < 1e-6, `能量效果应一致：玩家 ${pd.e} vs 居民 ${rd.e}`);
 });
 
-test('FOOD-02 不重复计粮：日界配给与主动进食各扣各的库存', () => {
+test('FOOD-02-NO-DOUBLE-COUNT 不重复计粮：日界配给与主动进食各扣各的库存', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
   w.loc.p1 = 'home'; w.campPlayerRoom = 'home';
@@ -53,7 +53,7 @@ test('FOOD-02 不重复计粮：日界配给与主动进食各扣各的库存', 
   assert.equal(w.survival.campContainers['home:meal'].crop, 0, '主动进食只扣餐台');
 });
 
-test('FOOD-03 居民能自己去公仓吃：一份 = 0.09 存续，每日一次，无粮不能吃', () => {
+test('FOOD-03-RESIDENT-GRANARY 居民能自己去公仓吃：一份 = 0.09 存续，每日一次，无粮不能吃', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
   w.loc.a1 = 'store';

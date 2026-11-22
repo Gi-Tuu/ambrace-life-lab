@@ -30,7 +30,7 @@ async function arm(seed, mask, ticks = 600) {
   };
 }
 
-test('P1 承重：同种子臂 on/off 的习惯强度与动作轨迹在 ≥2/3 seed 上不同', async () => {
+test('M6PL-P1 承重：同种子臂 on/off 的习惯强度与动作轨迹在 ≥2/3 seed 上不同', async () => {
   let hit = 0;
   for (const seed of [7, 11, 13]) {
     const on = await arm(seed, { plasticGate: 1 });
@@ -40,14 +40,14 @@ test('P1 承重：同种子臂 on/off 的习惯强度与动作轨迹在 ≥2/3 s
   assert.ok(hit >= 2, `只有 ${hit}/3 seed 出现差异 ⇒ 门控没落到行为上（预登记线 ≥2/3）`);
 });
 
-test('P2 负控：没有精度信息时 gate 恒 1，开开关必须与关开关逐位相同', async () => {
+test('M6PL-P2 负控：没有精度信息时 gate 恒 1，开开关必须与关开关逐位相同', async () => {
   const on = await arm(7, { plasticGate: 1, precision: 0 });
   const off = await arm(7, { precision: 0 });
   assert.equal(on.digest, off.digest, 'precision 关时开 plasticGate 仍改变轨迹 ⇒ gate 在无精度信息时不是 1');
   assert.deepEqual(on.strength, off.strength);
 });
 
-test('P3 不进效用：首刻 parts 逐位相同，且 scoreAll 源码不引用门控/精度权重', async () => {
+test('M6PL-P3 不进效用：首刻 parts 逐位相同，且 scoreAll 源码不引用门控/精度权重', async () => {
   const on = await arm(7, { plasticGate: 1 }, 1);
   const off = await arm(7, {}, 1);
   for (const id of Object.keys(on.agents)) {
@@ -58,7 +58,7 @@ test('P3 不进效用：首刻 parts 逐位相同，且 scoreAll 源码不引用
   assert.ok(!/plasticGate|weights/.test(body), 'scoreAll 引用了 plasticGate/weights ⇒ 精度漏进效用比较');
 });
 
-test('P4 默认关：C2 与 C2-neg 的 plasticGate 都是 0；gate 读数落在 (0,1]', async () => {
+test('M6PL-P4 默认关：C2 与 C2-neg 的 plasticGate 都是 0；gate 读数落在 (0,1]', async () => {
   assert.equal(channelsFor('C2').plasticGate, 0);
   assert.equal(channelsFor('C2-neg').plasticGate, 0);
   const on = await arm(7, { plasticGate: 1 }, 120);

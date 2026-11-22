@@ -8,7 +8,7 @@ const BUILD = { wood: 5, stone: 3 }; // households.mjs 内部常量
 
 const GAME = { eventRulesVersion: CURRENT_EVENT_RULES, independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true, settlementLife: true, autonomousGoals: true, farmLife: true, regionalWork: true, ecosystem: true, wildFood: true, playerRation: true };
 
-test('A1 玩家不会被居民住房决策自动买房/建房或扣私人物资', async () => {
+test('AUTO-A1 玩家不会被居民住房决策自动买房/建房或扣私人物资', async () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
   const h = w.survival.households;
@@ -24,7 +24,7 @@ test('A1 玩家不会被居民住房决策自动买房/建房或扣私人物资'
   assert.ok(w.pinv.p1.stone >= bag0.stone - 1, '玩家石料不应被自动扣');
 });
 
-test('A2 公共缺粮不得直接清空私人餐台；公共容器可被征用', () => {
+test('AUTO-A2 公共缺粮不得直接清空私人餐台；公共容器可被征用', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
   w.survival.store = 0;
@@ -39,7 +39,7 @@ test('A2 公共缺粮不得直接清空私人餐台；公共容器可被征用',
   assert.ok(w.survival.campContainers['store:1'].crop < 2, '公共容器应优先用于公共配给');
 });
 
-test('A3 公共燃料不足不得直接烧玩家背包木材（居民个人木材也不应被特殊对待）', () => {
+test('AUTO-A3 公共燃料不足不得直接烧玩家背包木材（居民个人木材也不应被特殊对待）', () => {
   const sp = createSurvPlay(7, GAME);
   const w = sp.world;
   w.survival.inv.wood = 0;

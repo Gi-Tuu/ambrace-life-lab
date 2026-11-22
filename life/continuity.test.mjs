@@ -24,7 +24,7 @@ function sig(sp) {
   });
 }
 
-test('C4 连续 240 刻 vs 120 刻存档再跑 120 刻：核心状态一致（seed 7/13/29）', async () => {
+test('CONT-C4 连续 240 刻 vs 120 刻存档再跑 120 刻：核心状态一致（seed 7/13/29）', async () => {
   for (const seed of [7, 13, 29]) {
     const a = createSurvPlay(seed, GAME);
     const frames = [];
@@ -44,7 +44,7 @@ test('C4 连续 240 刻 vs 120 刻存档再跑 120 刻：核心状态一致（se
   }
 });
 
-test('C2 RNG 状态可保存/恢复且不改变原序列', () => {
+test('CONT-C2 RNG 状态可保存/恢复且不改变原序列', () => {
   const r = makeRng(7);
   const first = [r(), r(), r()];
   const st = r.state();
@@ -56,7 +56,7 @@ test('C2 RNG 状态可保存/恢复且不改变原序列', () => {
   assert.deepEqual([fresh(), fresh(), fresh()], first);
 });
 
-test('C3 旧档宽容：缺 RNG/调制/计数器/占位时按确定回退，不崩溃', async () => {
+test('CONT-C3 旧档宽容：缺 RNG/调制/计数器/占位时按确定回退，不崩溃', async () => {
   const sp = createSurvPlay(7, GAME);
   for (let i = 0; i < 30; i += 1) await tickSurvPlay(sp);
   const raw = JSON.parse(JSON.stringify(dumpSurv(sp)));

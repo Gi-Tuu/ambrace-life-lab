@@ -33,7 +33,7 @@ test('V734-E 5+25 与 10+20 总体力=0.10，按进度累计', () => {
   }
 });
 
-test('V734-E 提前中止保留已用；体力不足按本段判断；读档不重复', () => {
+test('V734-E-ABORT 提前中止保留已用；体力不足按本段判断；读档不重复', () => {
   const { w } = setup(55, 0.04);
   const a = w.agents.a1;
   assert.equal(a.execute(w, { kind: 'build' }, 'deliberation', w.t, true).code, 'BUSY_START');

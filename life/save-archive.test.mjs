@@ -22,7 +22,7 @@ function makeData() {
   return { base, data, out: join(base, 'out') };
 }
 
-test('A1 归档后清空再恢复：文件与内容逐字节一致', () => {
+test('ARCHIVE-A1 归档后清空再恢复：文件与内容逐字节一致', () => {
   const { data, out } = makeData();
   execFileSync(process.execPath, [SCRIPT, '--data', data, '--out', out], { encoding: 'utf8' });
   const before = {
@@ -39,7 +39,7 @@ test('A1 归档后清空再恢复：文件与内容逐字节一致', () => {
   assert.equal(readFileSync(join(data, 'saves', 'k1.json.gz'), 'utf8'), before.camp, '营地档必须恢复（拆掉 saves 复制这行即红）');
 });
 
-test('A2 没有数据目录时归档必须明确失败，而不是生成空归档', () => {
+test('ARCHIVE-A2 没有数据目录时归档必须明确失败，而不是生成空归档', () => {
   const base = mkdtempSync(join(tmpdir(), 'arch-empty-'));
   let code = 0;
   try {

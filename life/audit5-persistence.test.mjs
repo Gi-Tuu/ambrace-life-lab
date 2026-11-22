@@ -67,7 +67,7 @@ function runSignalProbe(script, dir) {
   });
 }
 
-test('DATA5-02 SIGTERM：保存失败必须非零退出', async () => {
+test('DATA5-02-SIGTERM-FAIL SIGTERM：保存失败必须非零退出', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'audit5-sig-'));
   const script = `
     import { rmSync, mkdirSync, existsSync } from 'node:fs';
@@ -87,7 +87,7 @@ test('DATA5-02 SIGTERM：保存失败必须非零退出', async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('DATA5-02 SIGTERM：成功路径退出 0 且主档已落盘', async () => {
+test('DATA5-02-SIGTERM-OK SIGTERM：成功路径退出 0 且主档已落盘', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'audit5-sig-ok-'));
   const script = `
     const { host } = await import(${JSON.stringify(HOST_URL)});
@@ -101,7 +101,7 @@ test('DATA5-02 SIGTERM：成功路径退出 0 且主档已落盘', async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('DATA5-01 主档损坏时启动从 .bak 恢复最近完整档', async (t) => {
+test('DATA5-01-BAK-RESTORE 主档损坏时启动从 .bak 恢复最近完整档', async (t) => {
   const { mod, dir } = await freshHost(t);
   for (let i = 0; i < 10; i += 1) {
     await mod.host.tickOnce();
@@ -123,7 +123,7 @@ test('DATA5-01 主档损坏时启动从 .bak 恢复最近完整档', async (t) =
   assert.equal(mod.host.status().campT, bakT, '恢复后的生存世界刻数必须来自 .bak');
 });
 
-test('DATA5-01 SAVE_EVERY 可配：=2 时硬退出前已落第 2 刻，不再固定丢 10 刻', () => {
+test('DATA5-01-SAVE-EVERY SAVE_EVERY 可配：=2 时硬退出前已落第 2 刻，不再固定丢 10 刻', () => {
   const dir = mkdtempSync(join(tmpdir(), 'audit5-save-every-'));
   const script = `
     const { host } = await import(${JSON.stringify(HOST_URL)});

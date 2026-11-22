@@ -18,7 +18,7 @@ test('B-STEP1 正式游戏每个角色都有个人时间账，且存读档一致
   assert.equal(restored.world.survival.actClock.p1.usedMin, 90, 'usedMin 应随档恢复');
 });
 
-test('B-STEP1 旧正式档缺 actClock 时补账，不拒绝载入', () => {
+test('B-STEP1-LEGACY-PATCH 旧正式档缺 actClock 时补账，不拒绝载入', () => {
   const sp = createSurvPlay(7, GAME);
   const raw = structuredClone(dumpSurv(sp));
   delete raw.survival.actClock;
@@ -27,7 +27,7 @@ test('B-STEP1 旧正式档缺 actClock 时补账，不拒绝载入', () => {
   assert.equal(restored.world.survival.actClock.p1.usedMin, 0);
 });
 
-test('B-STEP1 研究态不写入 actClock（基线逐位不变）', () => {
+test('B-STEP1-RESEARCH-NO-WRITE 研究态不写入 actClock（基线逐位不变）', () => {
   const research = createSurvPlay(7, { ...GAME, gameRules: false, independentWorld: false });
   assert.equal(research.world.survival.actClock, undefined);
   const d = dumpSurv(research);

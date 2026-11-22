@@ -31,7 +31,7 @@ let cached = null;
 // 收尾顺序错乱 ⇒ 触发表互相污染（第一版用 Promise.all，on 档的 ask 率被算成 63.6%）。
 const audit = () => (cached ??= (async () => ({ off: await askAudit({ eventFirst: 0 }), on: await askAudit({ eventFirst: 1 }) }))());
 
-test('E1 事件优先：三类非生存事件的 ask 率 ≥90%，习惯不再截流，关键事件仍按设计留给反射', async () => {
+test('O9-E1-EVENT-FIRST 事件优先：三类非生存事件的 ask 率 ≥90%，习惯不再截流，关键事件仍按设计留给反射', async () => {
   const { on } = await audit();
   assert.ok(on.nonSurvivalAskRate >= 0.9, `非生存事件 ask 率 ${(on.nonSurvivalAskRate * 100).toFixed(1)}% < 90% ⇒ 事件仍被截流（预登记线）`);
   assert.equal(on.habitIntercepts, 0, `仍有 ${on.habitIntercepts} 次被习惯接管 ⇒ 开关没接在习惯分支上`);
@@ -39,7 +39,7 @@ test('E1 事件优先：三类非生存事件的 ask 率 ≥90%，习惯不再�
   assert.ok(on.alarmCount > 0, '样本里没有关键事件 ⇒ 这条断言是空跑');
 });
 
-test('E1 负控：关闭档必须回到"习惯截流"的老世界，否则开关本身没被检验到', async () => {
+test('O9-E1-OFF-BASELINE 负控：关闭档必须回到"习惯截流"的老世界，否则开关本身没被检验到', async () => {
   const { off } = await audit();
   assert.ok(off.habitIntercepts > 0, `关闭档习惯截流为 0 ⇒ 这条负控没有样本，E1 的差异可能来自别处`);
   assert.ok(off.nonSurvivalAskRate < 0.9, `关闭档 ask 率 ${(off.nonSurvivalAskRate * 100).toFixed(1)}% 已 ≥90% ⇒ 开关前后没差别，E1 是无约束的`);
@@ -57,7 +57,7 @@ test('E2 默认关：掩码默认 0；同种子两跑逐位相同；同种子臂
   assert.notEqual(off, on, '同种子臂开/关轨迹一模一样 ⇒ 开关没有落到行为上（或根本没人读）');
 });
 
-test('E3 生存语义不被延迟：alarm 触发后同一刻到走廊，开档不许比关档差', async () => {
+test('O9-E3 生存语义不被延迟：alarm 触发后同一刻到走廊，开档不许比关档差', async () => {
   const { off, on } = await audit();
   assert.ok(off.alarmCount > 0, '没有关键事件样本，E3 无从比较');
   // 生存语义的硬要求：开档后**每一次** alarm 都必须在同一刻经反射走到走廊。

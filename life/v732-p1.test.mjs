@@ -39,7 +39,7 @@ test('V732-P1 普通动作成对：玩家/居民 viab 不因劳动下降，体�
   }
 });
 
-test('V732-P1 clock：本刻/当日累计正确，跨日重置，取消不退还已用', async () => {
+test('V732-P1-CLOCK clock：本刻/当日累计正确，跨日重置，取消不退还已用', async () => {
   const { sp, w } = setup();
   assert.ok(survAct(sp, { kind: 'gather' }).ok);
   const c = clockOf(w, 'p1');
@@ -64,7 +64,7 @@ test('V732-P1 clock：本刻/当日累计正确，跨日重置，取消不退还
   assert.equal(clockOf(w2, 'p1').tick.usedMin, used, '取消不得退还已用分钟');
 });
 
-test('V732-P1 账本字段：玩家/居民 attempt/success/minutes/energy 同口径，sync 单列', () => {
+test('V732-P1-LEDGER 账本字段：玩家/居民 attempt/success/minutes/energy 同口径，sync 单列', () => {
   const { sp, w } = setup();
   assert.ok(survAct(sp, { kind: 'gather' }).ok);
   const p = w.survival.actionLedger.player;

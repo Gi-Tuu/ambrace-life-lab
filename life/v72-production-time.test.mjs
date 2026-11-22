@@ -28,7 +28,7 @@ test('V72 生产配置默认开启个人时间：同刻多动作、当天用尽 
   assert.equal(r.code, 'TIME_WAIT');
 }));
 
-test('V72 兼容开关 V72_TIME=0：正式游戏退回每刻 100 点预算', () => withV72('0', () => {
+test('V72-COMPAT-OFF 兼容开关 V72_TIME=0：正式游戏退回每刻 100 点预算', () => withV72('0', () => {
   assert.equal(survivalOptions().actTimeModel, false, 'V72_TIME=0 必须真的关掉个人时间');
   const opts = { ...survivalOptions(), gameRules: true, independentWorld: true, simTime: false };
   const sp = createSurvPlay(7, opts);

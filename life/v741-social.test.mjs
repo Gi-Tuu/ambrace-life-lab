@@ -17,7 +17,7 @@ test('V741-SOC m3=on 5 日 talk 执行>0', async () => {
   assert.ok(talk > 0, 'm3=on 社交保留后应有 talk 执行，实测 ' + talk);
 });
 
-test('V741-SOC m3Choose 每刻最多保留 1 个 talk', () => {
+test('V741-SOC-CHOOSE-LIMIT m3Choose 每刻最多保留 1 个 talk', () => {
   const sp = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: true } });
   const w = sp.world, a = w.agents.a1;
   w.t = 10; move(w, 'a1', 'home'); move(w, 'a2', 'home');
@@ -30,7 +30,7 @@ test('V741-SOC m3Choose 每刻最多保留 1 个 talk', () => {
   assert.ok(out.filter((p) => p.kind === 'talk').length <= 1, '每刻最多 1 个 talk 候选');
 });
 
-test('V741-SOC m3=off 与无 mask 的 1 日 dump 哈希一致', async () => {
+test('V741-SOC-OFF m3=off 与无 mask 的 1 日 dump 哈希一致', async () => {
   const a = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES, residentChannelMask: { m3: false } });
   const b = createSurvPlay(7, { ...FORMAL_OPTIONS, eventRulesVersion: CURRENT_EVENT_RULES });
   for (let i = 0; i < 24; i += 1) { await tickSurvPlay(a); await tickSurvPlay(b); }

@@ -36,7 +36,7 @@ test('DATA3-02 坏索引 + 4 天前孤儿档：重启后文件仍在、一条都
   assert.ok(r.indexUnhealthy === true, '必须显式报告索引不健康');
 });
 
-test('DATA3-02 健康索引 + 过期孤儿档：隔离到 quarantine，不 rm', () => {
+test('DATA3-02-QUARANTINE 健康索引 + 过期孤儿档：隔离到 quarantine，不 rm', () => {
   const dir = makeDir();
   writeFileSync(join(dir, 'saves', 'index.json'), JSON.stringify({ entries: [] }));
   const gz = oldFile(dir, `${KEY}.json.gz`, 4);
@@ -48,7 +48,7 @@ test('DATA3-02 健康索引 + 过期孤儿档：隔离到 quarantine，不 rm', 
   assert.equal(r.quarantined.length, 1);
 });
 
-test('DATA3-02 健康索引仍按 TTL 清已登记的过期档，正常档不受影响', () => {
+test('DATA3-02-TTL 健康索引仍按 TTL 清已登记的过期档，正常档不受影响', () => {
   const dir = makeDir();
   const staleKey = 'b'.repeat(32);
   const freshKey = 'c'.repeat(32);

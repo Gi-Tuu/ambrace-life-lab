@@ -74,7 +74,7 @@ test('N2 车道矩阵：无人禁付费、熔断只关免费路、两本账各�
   assert.equal(breakerOpenAt({ openUntil: Date.now() + 60000 }), true);
 });
 
-test('N3 无人运行：节点答活，付费端点一次都不许被碰到', async () => {
+test('LANE-N3 无人运行：节点答活，付费端点一次都不许被碰到', async () => {
   hits.node = 0; hits.money = 0; nodeMode = 'ok';
   host.setBackend({ providers: [NODE_URL, MONEY_URL], keys: ['k', 'k'], model: '', models: ['m-node', 'm-money'], brain: 'model' });
   await host.start(); host.stop(); // start 会把 viewers 归零 ⇒ 之后就是"无人"状态
@@ -90,7 +90,7 @@ test('N3 无人运行：节点答活，付费端点一次都不许被碰到', as
   assert.ok(Number(st.campT) > 0, 'healthz 要能看见营地刻数：否则只能打 /world 观测，而那一打就把观众状态点亮，测到的不是无人状态');
 });
 
-test('N4 中继坏了：熔断打开后停止白等，且无人时仍不花钱', async () => {
+test('LANE-N4 中继坏了：熔断打开后停止白等，且无人时仍不花钱', async () => {
   hits.node = 0; hits.money = 0; nodeMode = 'fail';
   await host.start(); host.stop();
   // 询问是事件驱动的（不是每拍都问），所以轮到熔断真的打开为止，而不是赌一个固定拍数——

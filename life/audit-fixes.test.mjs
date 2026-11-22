@@ -27,7 +27,7 @@ test('DATA-01 分名字营地重载后 districts/规则不丢', () => {
   assert.equal(b.sp.world.survival.settlementLife, true);
 });
 
-test('DATA-01 dump 的 rules 必须反映真实开关', () => {
+test('DATA-01-DUMP-RULES dump 的 rules 必须反映真实开关', () => {
   const sp = createSurvPlay(7, GAME);
   const d = dumpSurv(sp);
   assert.equal(d.rules.settlementLife, true);

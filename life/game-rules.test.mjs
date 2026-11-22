@@ -10,7 +10,7 @@ import { advanceSurvival } from './worldstate.mjs';
 import { dumpSurv, loadSurv } from './survplay.mjs';
 import { survView } from './survplay.mjs';
 
-test('R1 研究世界仍用原表（五面基线不被动到）', () => {
+test('GAMERULE-R1 研究世界仍用原表（五面基线不被动到）', () => {
   const { world } = createSurvPlay();
   assert.equal(world.independentWorld, false);
   assert.equal(buildingsFor(world), BUILDINGS, '研究世界必须拿到原表引用');
@@ -18,7 +18,7 @@ test('R1 研究世界仍用原表（五面基线不被动到）', () => {
   assert.deepEqual(BUILDINGS.shelter.cost, { wood: 4, stone: 2 });
 });
 
-test('R2 游戏世界用游戏表：奠基按游戏价扣材料，施工按游戏工时完工', () => {
+test('GAMERULE-R2 游戏世界用游戏表：奠基按游戏价扣材料，施工按游戏工时完工', () => {
   const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
   const w = sp.world; const s = w.survival;
   assert.equal(buildingsFor(w), GAME_BUILDINGS);
@@ -41,7 +41,7 @@ test('R2 游戏世界用游戏表：奠基按游戏价扣材料，施工按游�
   assert.equal(done.completed, 'granary');
 });
 
-test('R3 视图把游戏表交给前端（UI 显示新成本）', () => {
+test('GAMERULE-R3 视图把游戏表交给前端（UI 显示新成本）', () => {
   const sp = createSurvPlay(7, { independentWorld: true, gameRules: true });
   const { world } = sp;
   const { survView } = {};
@@ -50,7 +50,7 @@ test('R3 视图把游戏表交给前端（UI 显示新成本）', () => {
   assert.equal(buildingsFor({ independentWorld: true }).granary.cost.wood, 5, '只是游戏世界不够，必须显式 gameRules');
 });
 
-test('R4 分类粮仓：游戏世界按品类记账且总数守恒；研究世界没有 s.food', () => {
+test('GAMERULE-R4 分类粮仓：游戏世界按品类记账且总数守恒；研究世界没有 s.food', () => {
   const game = createSurvPlay(7, { gameRules: true });
   const gs = game.world.survival;
   assert.ok(gs.food, '游戏世界应初始化分类粮仓');
@@ -72,7 +72,7 @@ test('R4 分类粮仓：游戏世界按品类记账且总数守恒；研究世�
   assert.equal(rs.store, before);
 });
 
-test('R5 灯火燃料：游戏世界每天烧一份木料并记亮/灭；研究世界不烧也不记', () => {
+test('GAMERULE-R5 灯火燃料：游戏世界每天烧一份木料并记亮/灭；研究世界不烧也不记', () => {
   const game = createSurvPlay(7, { gameRules: true });
   const w = game.world; const s = w.survival;
   w.t = 24; s.lastDay = -1; s.inv.wood = 0; w.pinv.p1.wood = 0; s.fuelBurnDays = 0;

@@ -27,7 +27,7 @@ test('M7 第三人声誉：同处一室时，知道的人把关于第三者的�
   assert.ok(w.agents.a2.relations.get('a3').trust < before, `听者对持有者信任未下降（${before} → ${w.agents.a2.relations.get('a3').trust}）⇒ 第三人声誉只是登记`);
 });
 
-test('M7 负控：切断 ⑨ 通道时，登记照旧、信任不变（后果与认知分开）', () => {
+test('M7-NEG-CONTROL 负控：切断 ⑨ 通道时，登记照旧、信任不变（后果与认知分开）', () => {
   const { w, s } = room('C2', { gossip: 0 });
   const before = w.agents.a2.relations.get('a3').trust;
   socialRound(w);
@@ -35,7 +35,7 @@ test('M7 负控：切断 ⑨ 通道时，登记照旧、信任不变（后果与
   assert.equal(w.agents.a2.relations.get('a3').trust, before, '⑨ 切断后信任仍下降 ⇒ 负控不干净');
 });
 
-test('M7 规则不破：不知道的人不能转述，秘密不传给当事人', () => {
+test('M7-NO-RETRANSMIT 规则不破：不知道的人不能转述，秘密不传给当事人', () => {
   const { w } = room();
   // a2 不知道，让 a2 当 teller 什么也传不出去
   const w2 = makeWorld({ pantries: 6, stash: 3, socialGossip: 1 });
@@ -47,14 +47,14 @@ test('M7 规则不破：不知道的人不能转述，秘密不传给当事人',
   assert.equal(socialRound(w2).length, 0, '无人知情却传出消息 ⇒ 规则层没被走');
 });
 
-test('M7 关闭时与基线一致：传闻计数为 0，且同种子两跑逐位相同', async () => {
+test('M7-OFF-BASELINE 关闭时与基线一致：传闻计数为 0，且同种子两跑逐位相同', async () => {
   const a = await simulate({ seed: 7, ticks: 300, socialGossip: 0 });
   const b = await simulate({ seed: 7, ticks: 300, socialGossip: 0 });
   const seq = (x) => Object.values(x.agents).map((ag) => ag.trace.map((r) => `${r.t}:${r.kind}:${r.action}`).join('|')).join('#');
   assert.equal(seq(a), seq(b), '关闭时两跑结果不同 ⇒ 引入的层破坏了可复现');
 });
 
-test('M7 开启可复现：同种子两跑的 known 集合与行为序列逐位相同', async () => {
+test('M7-REPRODUCIBLE 开启可复现：同种子两跑的 known 集合与行为序列逐位相同', async () => {
   const a = await simulate({ seed: 7, ticks: 300, socialGossip: 1 });
   const b = await simulate({ seed: 7, ticks: 300, socialGossip: 1 });
   const known = (x) => (x.world.secrets ?? []).map((s) => [...s.known].sort().join(',')).join(';');
