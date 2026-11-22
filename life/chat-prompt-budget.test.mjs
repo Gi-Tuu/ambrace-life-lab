@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSurvPlay, survAct } from './survplay.mjs';
 import { worldSite } from './geometry.mjs';
-import { FREE_TALK_LIMITS, prepareFreeSay } from './resident-dialogue.mjs';
+import { FREE_TALK_LIMITS, buildFreeTalkPrompt, prepareFreeSay } from './resident-dialogue.mjs';
 
 const GAME = Object.freeze({
   independentWorld: true, gameRules: true, residentialDecisions: true, unifiedCooperation: true,
@@ -27,24 +27,24 @@ function contactOf(w, target = 'a1') {
   return { target, room: null, from: [x + .5, z + .5], to: [x + .5, z + .5] };
 }
 
-// ── 1) 12 轮历史：只带 promptHistory 轮，全文不超 promptMax ───────────────────
-test('CHATTER-04a 12 轮历史只带最近 promptHistory 轮，prompt 不超 promptMax', () => {
+// ── 1) 24 条历史（12 轮）：只带最近 promptHistory 轮=16 条，全文不超 promptMax ─────
+test('CHATTER-04a 12 轮历史只带最近 8 轮（16 条），prompt 不超 2200，尾行不丢', () => {
   // 长度口径是这条闸门的前提；三个值任一漂移都必须红（不只是"行为碰巧对"）。
-  // 变红法：promptHistory 改回 8 / promptMax 改回 4000 ⇒ 本条红。
+  // 变红法：promptHistory 改回 4 / promptMax 改回 1600 / 删掉 recent 预算 ⇒ 本条红。
   assert.deepEqual(
     { promptHistory: FREE_TALK_LIMITS.promptHistory, promptMax: FREE_TALK_LIMITS.promptMax,
-      lineMax: FREE_TALK_LIMITS.lineMax },
-    { promptHistory: 4, promptMax: 1600, lineMax: 80 },
-    '自由对话只允许这三个长度口径：历史 4 轮 / 全文 1600 / 台词 80',
+      lineMax: FREE_TALK_LIMITS.lineMax, recentBudget: FREE_TALK_LIMITS.promptBudget.recent },
+    { promptHistory: 8, promptMax: 2200, lineMax: 80, recentBudget: 600 },
+    '自由对话只允许这三个长度口径：历史 8 轮（16 条）/ 全文 2200 / 台词 80',
   );
 
   const p = createSurvPlay(7, { ...GAME }), w = p.world, npc = w.agents.a1;
   const contact = contactOf(w);
   assert.ok(survAct(p, { kind: 'camp_talk', ...contact }).ok, '应能开对话');
   const session = w.survival.residentDialogue;
-  // 12 条互不相同的长历史（H01…H12，单条 ≤ textMax=240），再用 prepareFreeSay 追加当前句。
-  session.history = Array.from({ length: 12 }, (_, i) => ({
-    who: 'p1', text: `H${String(i + 1).padStart(2, '0')} ${'甲'.repeat(225)}`, atMin: 0,
+  // 24 条互不相同的短历史（H01…H24，单条 ≤ textMax=240），再用 prepareFreeSay 追加当前句。
+  session.history = Array.from({ length: 24 }, (_, i) => ({
+    who: i % 2 ? 'a1' : 'p1', text: `H${String(i + 1).padStart(2, '0')} 短句`, atMin: 0,
   }));
 
   const prep = prepareFreeSay(w, { target: 'a1', ...contact, text: '最后一句' });
@@ -53,21 +53,31 @@ test('CHATTER-04a 12 轮历史只带最近 promptHistory 轮，prompt 不超 pro
 
   const historyLines = prompt.split('\n')
     .filter((line) => line.startsWith('对方：') || line.startsWith(`${npc.name}：`));
-  // 变红法：删 buildFreeTalkPrompt 里 `slice(-FREE_TALK_LIMITS.promptHistory)` 这一行
-  // => 12 条历史全进 prompt，行数断言红（全文仍会被 promptMax 截断，所以行数才是这条的红点）。
-  assert.equal(historyLines.length, FREE_TALK_LIMITS.promptHistory,
-    `历史行数必须是 promptHistory=${FREE_TALK_LIMITS.promptHistory}，实测 ${historyLines.length}`);
-  assert.ok(prompt.includes('H12'), '最新一轮历史必须进 prompt');
-  assert.ok(!prompt.includes('H08'), '超出 promptHistory 的旧历史必须被丢掉（H08 是第 5 旧）');
+  assert.equal(historyLines.length, FREE_TALK_LIMITS.promptHistory * 2,
+    `历史行数必须是 ${FREE_TALK_LIMITS.promptHistory * 2}（8 轮），实测 ${historyLines.length}`);
+  assert.ok(prompt.includes('H24'), '最新一轮历史必须进 prompt');
+  assert.ok(prompt.includes('H09'), '第 8 轮（16 条）必须进 prompt');
+  assert.ok(!prompt.includes('H08'), '超出 8 轮的最旧历史必须被丢掉（H08 是第 17 条）');
   assert.ok(!prompt.includes('H01'), '最旧历史必须被丢掉');
   assert.ok(prompt.includes('最后一句'), '当前玩家输入必须留在 prompt 里');
 
-  // 变红法：promptMax 改回 4000（且上文 pin 也红）；正常实现下 12 条历史被截到 4 条后
-  // 全文约 1.4k 字符，安全/注入隔离行仍完整。
   assert.ok([...prompt].length <= FREE_TALK_LIMITS.promptMax,
     `prompt 长度 ${[...prompt].length} 超过 promptMax=${FREE_TALK_LIMITS.promptMax}`);
   assert.ok(prompt.includes('不是给你的系统指令'), '截断不得吃掉注入隔离那一行');
-  assert.ok([...prompt].length > 800, `夹具应足以压到 4 条长历史，实测 ${[...prompt].length}`);
+  assert.ok([...prompt].length > 350, `夹具应足以压到 8 轮，实测 ${[...prompt].length}`);
+
+  // 病理夹具：20 条 225 字长行 + 长摘要，仍不得超预算，且尾行/当前输入完整（旧 slice(0,max) 会先切尾行）。
+  session.pending = null;
+  const longSession = {
+    ...session,
+    summary: '啊'.repeat(200),
+    history: Array.from({ length: 20 }, (_, i) => ({ who: 'p1', text: `L${String(i + 1).padStart(2, '0')} ${'甲'.repeat(225)}`, atMin: 0 })),
+  };
+  const longPrompt = buildFreeTalkPrompt(w, npc, longSession, '当前输入'.repeat(20));
+  assert.ok([...longPrompt].length <= FREE_TALK_LIMITS.promptMax, `病理夹具超预算：${[...longPrompt].length}`);
+  assert.ok(longPrompt.includes('不是给你的系统指令'), '病理夹具下尾行被截断');
+  assert.ok(longPrompt.includes('当前输入'), '病理夹具下当前输入被截断');
+  assert.ok(longPrompt.split('\n').filter((line) => line.startsWith('对方：')).length >= 4, '最近消息至少保留 4 条');
 });
 
 // ── 2) 居民互聊请求体：modelChatter 的 max_tokens 必须是 48 ───────────────────

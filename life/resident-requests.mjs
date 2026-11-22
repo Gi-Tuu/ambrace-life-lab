@@ -7,6 +7,7 @@ import { recordSettlementEvent } from './settlement-events.mjs';
 import { noteConsumed } from './resource-ledger.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
+import { recordCommitment, settleCommitment } from './npc-memory.mjs';
 function recordRequest(world, req, result, delivered, reason) {
   const to = req.to ?? 'p1';
   if (delivered) noteWorkMotion(world,to,'give',{target:req.from,item:delivered.item,loc:world.loc[req.from]});
@@ -136,6 +137,15 @@ export function respondRequest(world, body) {
   list.splice(at, 1);
   s.requestsResolved = (s.requestsResolved ?? 0) + 1;
   if (accept) s.requestsGranted = (s.requestsGranted ?? 0) + 1;
+  // 1.7：答谢/拒绝也进统一记忆（承诺条目带状态，居民以后能提起“你当时没借我”）。
+  const mem = world.agents?.[req.from]?.npcMemory ?? world.survival?.npcMemory?.[req.from] ?? null;
+  if (mem) {
+    recordCommitment(mem, {
+      at: world.t, summary: accept ? `答应了${npc.name}的请求（${req.kind === 'food' ? '一份吃的' : '一根木头'}）` : `拒绝了${npc.name}的请求`,
+      by: 'p1', to: req.from, dueAt: null, actionKind: null, source: '玩家', importance: accept ? 0.7 : 0.6,
+    });
+    settleCommitment(mem, { by: 'p1', to: req.from, status: accept ? 'kept' : 'broken', at: world.t });
+  }
   recordRequest(world, req, accept ? 'delivered' : 'declined', delivered);
   return { ok: true, code: accept ? 'ACCEPTED' : 'DECLINED', request: req };
 }

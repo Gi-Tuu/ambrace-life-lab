@@ -5,6 +5,7 @@ import { ModulatorBank } from './modulators.mjs';
 import { M5ModulatorBank } from './m5-bank.mjs';
 import { Drives } from './drives.mjs';
 import { EpisodicMemory } from './memory.mjs';
+import { ensureNpcMemory, stateBonus as npcStateBonus } from './npc-memory.mjs';
 import { Relations, REL_NEUTRAL } from './relations.mjs';
 import { appraise } from './appraisal.mjs';
 import { perceptsAt, affordancesFor, actuate, isHailed, SURV_COST } from './body.mjs';
@@ -88,6 +89,8 @@ export class Organism {
   }
 
   assess(evt, actionKind = null, actionSucceeded = null) {
+    // 1.7：正式世界的统一记忆层是决策/叙事的共同事实源；研究态不建容器（旧轨迹逐位不变）。
+    if (this.world?.gameRules) ensureNpcMemory(this.world, this);
     const a = appraise(evt, { traits: this.traits, drives: this.drives, memory: this.memory, relations: this.relations, t: this.world?.t ?? 0, m: this.bank.m });
     this.bank.inject(a.u);
     if (this.ch.m5) this.bank.observeEvent(evt, a);
@@ -305,7 +308,10 @@ export class Organism {
       paths = rest;
     }
 
-    const mem = this.condition === 'C0' ? { bonus: {}, retrieved: [] } : this.memory.stateBonus(this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights });
+    const mem = this.condition === 'C0' ? { bonus: {}, retrieved: [] }
+      : (this.npcMemory
+        ? npcStateBonus(this.npcMemory, this.memory, this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights })
+        : this.memory.stateBonus(this.bank.m, affs, t, { stateChannel: Boolean(ch.mem), precision: weights }));
     const memBonus = mem.bonus;
     this.lastMemories = mem.retrieved; // 通道④ 对模型可见的那一行：想起的事
     // 存续风险：⑤ 关着就传 0。注意 viab.tick() 在上面已经跑过了——**演化不受开关影响，只有"进不进比较"受**，
@@ -472,6 +478,7 @@ export class Organism {
     this.rollDay(dayOf(world.t));
     const t = this.dayTally;
     if (!t.decisions && !t.rejected) return null;
+    if (world?.gameRules) ensureNpcMemory(world, this);
     const tally = { ...t.byDriver };
     const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0] ?? ['none', 0];
     const text = `第 ${dayOf(world.t) + 1} 天：做了 ${t.decisions} 个决定，多数由「${top[0]}」驱动；越轨 ${t.norm} 次，被驳回 ${t.rejected} 次`;

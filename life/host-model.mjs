@@ -6,6 +6,7 @@ import { withNoThink, withoutNoThink } from './model-adapter.mjs';
 import { parseSay } from './intent.mjs';
 import { modelLaneFor } from './camp-lane.mjs';
 import { modelChannel, breakerOpenAt, budgetTick, pickProviderKey, createBudgetDomain, isFreeProvider as freeProvider } from './host-budget.mjs';
+import { decisionRecallLines } from './npc-memory.mjs';
 
 export function createModelDomain({ S, CFG, C, observerActive }) {
   const { BUDGET, NODE_BUDGET, PER_TICK_CAP, MODEL_TIMEOUT_MS, MODEL_TICK_BUDGET_MS,
@@ -66,11 +67,14 @@ async function postChat(provider, key, body, mdl, ac) {
   return res;
 }
 
+// 1.7：正式世界的决策提示词也走统一检索（decisionRecallLines，260 字符封顶）。
+// 只影响“模型看得到什么”，不参与确定性评分；研究态没有容器 ⇒ 这一行不出现，旧提示词逐字不变。
 function buildDeliberationPrompt({ agent, scored, world, rejected, memories, trigger, daySummary }) {
   const here = world.loc[agent.id];
   const bands = preferenceBands(scored, agent.ch);
   const present = (world.occupancy[here] ?? []).filter((x) => x !== agent.id && (world.survival || x !== 'p1')).map((x) => world.agents[x]?.name ?? x);
   const dom = agent.drives.dominant();
+  const recall = decisionRecallLines(agent, world, trigger);
   const lines = [
     `你是${agent.name}（${agent.traits.archetype}型）。第 ${world.t} 刻，你在${here}。`,
     `为什么现在问你：${trigger}`, // ⑧ 事件门控：没有事件就不会被问到，所以这行永远有内容
@@ -80,6 +84,8 @@ function buildDeliberationPrompt({ agent, scored, world, rejected, memories, tri
       ? `生存营地：公共食物 ${world.survival.store} 份，水 ${world.survival.water.toFixed(2)}，个人木料 ${world.pinv?.[agent.id]?.wood ?? 0}、石料 ${world.pinv?.[agent.id]?.stone ?? 0}。在场的人：${present.join('、') || '没有'}`
       : `世界事实：公仓余 ${world.pantry} 份；你自己门口存着 ${world.stash[agent.id]} 份（你以为该有 ${world.expect[agent.id]} 份）；在场的人：${present.join('、') || '没有'}`,
     `你想起的事：${memories?.length ? memories.map((m) => `${m.kind}(相似${m.sim})`).join('、') : '暂无'}`,
+    recall.length ? '你还记得：' : '',
+    ...recall,
     daySummary ? `上一天的自己：${daySummary}` : '', // ⑦ 反思回合的产物；关掉开关后这行必须消失
     '可做的事（只能选一项，id 照抄）：',
     ...[...scored].sort((a, b) => (a.id < b.id ? -1 : 1)).map((s) => `- ${s.id} | ${s.act.label} | ${bands[s.id] ?? '同档'}`),

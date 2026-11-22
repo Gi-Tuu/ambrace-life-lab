@@ -2602,6 +2602,7 @@ function openTalkDialog(target, contact, r) {
     ui.talk={target,name:r.name,contact};
     resetTalkPanelChrome();
     renderTalkMemory(r.memory);
+    renderTalkRecall(r.recalled);
     renderTalkAccess();
     $('talkTitle').textContent=`和 ${r.name} 交谈`;
     updateTalkPortrait();
@@ -2661,13 +2662,30 @@ async function openPlayerCall() {
   finally { campBusy=false; }
 }
 function resetTalkPanelChrome() {
-  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess'), pending=$('talkPending'), memory=$('talkMemory');
+  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess'), pending=$('talkPending'), memory=$('talkMemory'), recall=$('talkRecall');
   if (topics) { topics.hidden=true; topics.replaceChildren(); }
   if (row) row.hidden=false;
   if (pending) pending.hidden=true;
   if (memory) { memory.hidden=true; memory.textContent=''; }
+  if (recall) { recall.hidden=true; recall.replaceChildren(); }
   if (note) note.textContent='对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。';
   if (access) access.hidden=false;
+}
+const MEMORY_KIND_TEXT={episode:'旧事',dialogue:'聊过',commitment:'承诺',knowledge:'知道'};
+const MEMORY_SOURCE_TEXT={亲历:'亲历',玩家:'玩家'};
+function renderTalkRecall(recalled) {
+  const row=$('talkRecall'); if (!row) return;
+  const list=Array.isArray(recalled)?recalled:[];
+  if (!list.length) { row.hidden=true; row.replaceChildren(); return; }
+  row.hidden=false;
+  row.replaceChildren();
+  for (const item of list.slice(0,4)) {
+    const line=document.createElement('div');
+    const kind=MEMORY_KIND_TEXT[item.kind]??'旧事';
+    const source=MEMORY_SOURCE_TEXT[item.source]??(String(item.source||'').startsWith('听说')?'听说':String(item.source||''));
+    line.textContent=`${kind} · 第${item.day??'?'}天 · ${source}：${item.summary??''}`;
+    row.append(line);
+  }
 }
 function renderTalkMemory(memory) {
   const row=$('talkMemory'); if (!row) return;
@@ -2692,6 +2710,7 @@ function openLocalTalkPanel(target, contact, r, fromSpeech=false) {
   addTalk('npc',r.line);
   resetTalkPanelChrome();
   renderTalkMemory(r.memory);
+  renderTalkRecall(r.recalled);
   // 1.5：自由输入框与快捷话题同时存在；话题只是引导，不再是唯一入口。
   $('talkRow').hidden=false;
   $('talkAccess').hidden=true;
@@ -3108,7 +3127,7 @@ function renderVillage(s) {
     const cells = Array.from({ length: 5 }, (_, i) => `<b class="${(i + 0.5) / 5 <= (a.energy ?? 0) ? 'on' : ''}"></b>`).join('');
     const stage = a.stage && a.stage !== 'adult' ? `<span class="dim">${STAGE_ZH[a.stage] ?? a.stage}</span>` : (a.age != null ? `<span class="dim">${a.age}天</span>` : '');
     const injury=INJURY_ZH[a.injury] ? `<span class="bad">${INJURY_ZH[a.injury]}</span>` : '';
-    const memory=a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '';
+    const memory=(a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '') + (a.memory ? ` <span class="dim" title="${a.dead ? '已故 · ' : ''}长期记忆 ${a.memory.total} 条（重要 ${a.memory.pinned}）">${a.dead ? '已故 · ' : ''}记忆 ${a.memory.total} 条</span>` : '');
     return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name)}</b>${stage}${injury}<span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span>${memory}</div>`;
   }).join('');
   el.innerHTML = rows || '<div class="dim">无居民</div>';
@@ -3534,7 +3553,7 @@ function renderVillageDlg(s) {
     const v = Math.max(0, Math.min(1, a.viab ?? 1));
     const bar = `<span style="display:inline-block;width:70px;height:8px;border:1px solid var(--line);background:var(--sunken)"><span style="display:block;height:100%;width:${Math.round(v*100)}%;background:${v<.3?'#D58274':'#98BD51'}"></span></span>`;
     const status=a.dead?'已故':INJURY_ZH[a.injury];
-    const memory=a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '';
+    const memory=(a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '') + (a.memory ? ` <span class="dim" title="${a.dead ? '已故 · ' : ''}长期记忆 ${a.memory.total} 条（重要 ${a.memory.pinned}）">${a.dead ? '已故 · ' : ''}记忆 ${a.memory.total} 条</span>` : '');
     return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name ?? id)}</b><span>${STAGE_ZH[a.stage]??''}${status?' · '+status:''}</span>${bar}<span class="dim">${esc(s.rooms?.[s.loc?.[id]] ?? s.loc?.[id] ?? '')}</span><span>${esc(a.action ?? '待机')}</span>${memory}</div>`;
   }).join('');
   el.innerHTML = rows || '<p class="dim">暂无居民</p>';

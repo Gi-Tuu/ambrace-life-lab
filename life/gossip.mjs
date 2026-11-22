@@ -1,6 +1,7 @@
 // S3 传话：把"能不能说"（规则层）与"说了之后登记给谁"（认知）与"影响到谁"（评价注入）串起来。
 // 三段分开写，是为了让负向对照能落在**中间那刀**上：⑨ 关掉时登记照旧发生，但不许产生任何后果。
 import { canTell, markKnown } from './rules.mjs';
+import { recordKnowledge } from './npc-memory.mjs';
 
 export function tell(world, tellerId, targetId, secretId, opts = {}) {
   const v = canTell(world, tellerId, targetId, secretId, opts);
@@ -8,6 +9,16 @@ export function tell(world, tellerId, targetId, secretId, opts = {}) {
   markKnown(v.secret, targetId);
   const target = world.agents[targetId];
   if (target?.receive) target.receive(world, v.secret, tellerId);
+  // 1.7：听说也进统一记忆。摘要只说“谁提起关于谁的一件事”，秘密原文不落 view（来源可追、内容不泄露）。
+  const container = target?.npcMemory ?? world.survival?.npcMemory?.[targetId] ?? null;
+  if (container) {
+    const tellerName = world.agents?.[tellerId]?.name ?? tellerId;
+    const aboutName = world.agents?.[v.secret.about]?.name ?? v.secret.about ?? '别人';
+    recordKnowledge(container, {
+      at: world.t, summary: `听说${tellerName}提起${aboutName}的一件事`,
+      entities: [v.secret.about].filter(Boolean), source: `听说:${tellerId}`, importance: 0.5, secretId: v.secret.id,
+    });
+  }
   return { ok: true, code: 'OK', secret: v.secret.id, detail: v.secret.detail, target: targetId, told: true };
 }
 

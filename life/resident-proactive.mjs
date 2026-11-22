@@ -10,6 +10,7 @@ import { dayOf } from './clock.mjs';
 import { simMinuteNow } from './sim-clock.mjs';
 import { sanitizeModelLine } from './chat-text.mjs';
 import { speechLine } from './speech.mjs';
+import { retrieve, memoryPanelView } from './npc-memory.mjs';
 
 // 频率/距离的唯一声明处：测试与报告都引用它，避免上限在别处漂移。
 export const PROACTIVE_TALK = Object.freeze({
@@ -126,9 +127,20 @@ function pruneSpeech(world) {
   if (world?.survival?.playerSpeech && !activePlayerSpeech(world)) delete world.survival.playerSpeech;
 }
 
-// 模板：只引用已给的事实；优先级 = 上次对话 → 手上的活 → 饥饿 → 天气 → 关系 → 通用。
+// 模板：只引用已给的事实；优先级 = 统一记忆里的旧事 → 上次对话 → 手上的活 → 饥饿 → 天气 → 关系 → 通用。
 export function proactiveTemplate(world, npc) {
   const s = stateOf(world, npc), mem = world.survival?.talkMemory?.[npc.id];
+  const container = npc.npcMemory ?? world.survival?.npcMemory?.[npc.id] ?? null;
+  const recall = container
+    ? retrieve(container, { t: world.t, query: '上次 说好 答应 聊过', names: [], m: npc.bank?.m },
+      { chars: 120, maxEntries: 1, kinds: ['dialogue', 'episode', 'commitment'] }).entries[0]
+    : null;
+  if (recall && recall.source === '玩家' && recall.kind === 'dialogue') {
+    return `你上回说“${clip(recall.summary, 16)}”，我还记着。`;
+  }
+  if (recall && recall.kind === 'commitment' && recall.state?.to === npc.id) {
+    return `你还答应过我一件事：${clip(recall.summary.replace(/^答应过：/, ''), 20)}。`;
+  }
   const lastPlayer = [...(mem?.recent ?? [])].reverse().find((row) => row.who === 'p1');
   if (lastPlayer?.text) return `你上回说“${clip(lastPlayer.text, 16)}”，我还记着。`;
   const summaryTail = String(mem?.summary ?? '').split('；').filter(Boolean).at(-1);
@@ -149,6 +161,17 @@ export function buildProactivePrompt(world, npc, template = '') {
   const work = s.busy ? (WORK_WORD[s.busy.kind] ?? '手上的活') : '暂时空闲';
   const prior = (mem?.recent ?? []).slice(-2)
     .map((row) => `${row.who === 'p1' ? '对方' : npc.name}：${row.text}`);
+  const container = npc.npcMemory ?? world.survival?.npcMemory?.[npc.id] ?? null;
+  const dayTicks = world.dayTicks ?? 24;
+  const recall = container
+    ? retrieve(container, { t: world.t, query: `${template} 上次 答应`, names: [], m: npc.bank?.m },
+      { chars: 240, maxEntries: 3, kinds: ['episode', 'knowledge', 'commitment'] }).entries
+    : [];
+  const recallLines = recall.map((entry) => {
+    const day = Math.floor(entry.at / dayTicks) + 1;
+    const source = entry.source === '玩家' ? '玩家' : entry.source === '亲历' ? '亲历' : `听说·${entry.source.slice(3)}`;
+    return `· [${entry.kind === 'commitment' ? '承诺' : entry.kind === 'knowledge' ? '知道' : '旧事'}·第${day}天·${source}] ${entry.summary}`;
+  });
   const lines = [
     `你是${npc.name}（${npc.traits?.archetype ?? '谨慎'}型性格），第 ${dayOf(world.t) + 1} 天，此刻在${here}。`,
     '现在是你主动向玩家开口，不是被问；可以先打个招呼，或提一句你记得的事。',
@@ -156,6 +179,8 @@ export function buildProactivePrompt(world, npc, template = '') {
     `你的状态：能量 ${s.energy.toFixed(2)}${s.energy < 0.3 ? '（饿）' : ''}；和玩家（对方）的关系：信任 ${Math.round(s.trust)}/100，熟悉 ${s.familiarity.toFixed(2)}。`,
     `聚落：公仓 ${s.store} 份存粮，${s.residents} 口人${s.crisis ? '，正在缺粮' : ''}。`,
     mem?.summary ? `你们上次聊过：${mem.summary}` : '',
+    recallLines.length ? '你还记得：' : '',
+    ...recallLines,
     prior.length ? `最近的对话（旧→新）：` : '',
     ...prior,
     template ? `规则层已写好的模板是：「${template}」；可以更自然，但意思和事实不能变。` : '',

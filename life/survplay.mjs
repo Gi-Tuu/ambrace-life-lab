@@ -15,6 +15,7 @@ import { homeAccessView, homeEntry } from './home-access.mjs';
 import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
 import { talkAgentView } from './resident-dialogue.mjs';
+import { agentMemoryView } from './npc-memory.mjs';
 import { currentSpeechView, maybePlayerSpeech, playerSpeechView } from './resident-proactive.mjs';
 import { converse } from './intent.mjs';
 import { chatRound } from './resident-chatter.mjs';
@@ -858,7 +859,7 @@ export function survView(sp) {
     housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans, exits: s.coop.exits ?? 0 },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(residentAttentionView(w, a) ? { attention: residentAttentionView(w, a) } : {}), ...talkAgentView(w, a), ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(residentAttentionView(w, a) ? { attention: residentAttentionView(w, a) } : {}), ...talkAgentView(w, a), ...agentMemoryView(w, a), ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
     speech: currentSpeechView(w),
     ...(w.gameRules && playerSpeechView(w) ? { playerSpeech: playerSpeechView(w) } : {}),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,

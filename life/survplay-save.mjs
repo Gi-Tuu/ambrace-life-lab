@@ -15,6 +15,7 @@ import { adoptTravels, migratePositions, rebuildOccupancy, removeActor, setLocOn
 import { generateWildPlots, restoreWildExpansion, wildExpansionEnabled } from '../shared/wild-plots.mjs';
 import { restoreGhost } from './ghost.mjs';
 import { restoreTalkMemory } from './resident-dialogue.mjs';
+import { restoreNpcMemory } from './npc-memory.mjs';
 import { restoreProactiveState } from './resident-proactive.mjs';
 import { worldSite } from './geometry.mjs';
 import { DEATHS_CAP, trimDeaths } from './death.mjs';
@@ -238,6 +239,8 @@ function loadSurv(raw,seed=7,options) {
       a.dead = !!st.dead; a.death = st.death ?? null; a.hurtBy = st.hurtBy ?? null; // P0-1：读档恢复死亡事实
       if (st.rng != null && typeof a.rng?.restore === 'function') a.rng.restore(st.rng); // C2：继续原随机序列
     }
+    // 1.7：统一 NPC 记忆读档/旧档迁移（幂等；研究态删字段；旧 memory.rows 只做迁移来源）。
+    restoreNpcMemory(sp.world);
     if (w.independentWorld) {
       const s = w.survival;
       // 1.3 结局唯一：正式世界只有聚落灭绝（无存活居民）才是终局；玩家死亡是幽魂观察。

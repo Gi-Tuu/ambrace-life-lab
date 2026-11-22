@@ -6,7 +6,7 @@ const BETA_IMPORTANCE = 0.25;
 const GAMMA_RELEVANCE = 0.3;
 const DELTA_STATE = 0.5;
 
-const stateDistance = (a, b, precision) => {
+export const stateDistance = (a, b, precision) => {
   let s = 0;
   for (const d of DIMS) s += Math.pow((a?.[d] ?? 0) - (b?.[d] ?? 0), 2) * (precision?.[d] ?? 1);
   return Math.sqrt(s / DIMS.length);
@@ -35,7 +35,10 @@ export class EpisodicMemory {
   }
 
   add(t, { kind, actionKind = null, actionSucceeded = null, payload, mSnapshot, importance }) {
-    this.rows.push({ id: this.nextId++, t, kind, actionKind, actionSucceeded, payload, m: mSnapshot, importance: Math.min(1, importance) });
+    const row = { id: this.nextId++, t, kind, actionKind, actionSucceeded, payload, m: mSnapshot, importance: Math.min(1, importance) };
+    this.rows.push(row);
+    // 1.7：正式世界的统一记忆层在这里旁路镜像。`onAdd` 未设置时零行为变化（研究态/旧测试逐位不变）。
+    this.onAdd?.(row);
     if (this.rows.length > 400) this.rows.shift();
   }
 
