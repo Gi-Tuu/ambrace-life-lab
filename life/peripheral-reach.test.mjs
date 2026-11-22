@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { createSurvPlay, survAct, dumpSurv, loadSurv, playerTimeLeft } from './survplay.mjs';
 import { worldSite } from './geometry.mjs';
 import { startMove, PLAYER_UNITS_PER_TICK, RESIDENT_UNITS_PER_TICK } from './body.mjs';
+import { activePlayerSpeech } from './resident-proactive.mjs';
+import { simMinuteNow } from './sim-clock.mjs';
 
 const OPT = { mapSeed:13, layoutVersion:2, settlementLife:true, regionalWork:true, independentWorld:true,
   wildFood:true, residentialDecisions:true, unifiedCooperation:true, autonomousGoals:true };
@@ -166,4 +168,151 @@ test('V4-08 村内冲刺不再被判瞬移；村外仍 10/刻；村内单步 40 
   assert.ok(survAct(sp2, { kind: 'player_sync', from: away }).ok, '村外第一步 4 单位应通过');
   assert.equal(survAct(sp2, { kind: 'player_sync', from: [ox + 20, oz] }).code, 'TELEPORT',
     '村外同刻累计超过 10 单位必须被拒（外围同权不变）');
+});
+
+// ── V4-09：对话纳入同权连续性族（camp_talk / camp_talk_say）────────────────────
+// 1.4 注释早就承诺“camp_talk* 与 camp_resident 同一套位置门”，但实现只做了 1.6 距离、
+// 没做服务端 playerPos 连续性；脚本用“声称在居民旁”的 from 就能远程搭话。
+test('V4-09-1 未走步直接带远处 from 开 camp_talk ⇒ RESIDENT_OUT_OF_REACH，且不产生会话', () => {
+  const sp = start(), w = sp.world;
+  const [hx, hz] = worldSite(w, w.loc.p1);
+  assert.ok(survAct(sp, { kind: 'player_sync', from: [hx, hz] }).ok, '确立服务端位置');
+  const before = { ...w.survival.playerPos };
+  // 居民在远处站点 workshop，脚本把 from/to 都声称在居民旁：接触门会过，唯一能拦住它的是服务端连续性。
+  w.loc.a1 = 'workshop';
+  const [rx, rz] = worldSite(w, 'workshop');
+  const far = [rx + .5, rz + .5];
+  const r = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: far, to: far });
+  assert.equal(r.code, 'RESIDENT_OUT_OF_REACH', `一步没走就隔空说话必须拒：${JSON.stringify(r)}`);
+  assert.equal(w.survival.residentDialogue, undefined, '被拒不得产生会话');
+  assert.deepEqual({ ...w.survival.playerPos }, before, '被拒不挪动服务端位置');
+});
+
+test('V4-09-2 合法逐格走到居民站点后 camp_talk / camp_talk_say 都过', () => {
+  const sp = start(), w = sp.world;
+  const [ax, az] = worldSite(w, w.loc.a1);
+  const at = [ax + .5, az + .5];
+  walkTo(sp, at);
+  const open = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: at, to: at });
+  assert.equal(open.ok, true, `合法走到居民旁应能开口：${JSON.stringify(open)}`);
+  assert.ok(w.survival.residentDialogue, '应产生会话');
+  const say = survAct(sp, { kind: 'camp_talk_say', target: 'a1', room: null, from: at, to: at, topic: 'today' });
+  assert.equal(say.ok, true, `合法续聊应过：${JSON.stringify(say)}`);
+  assert.equal(say.turn, 1);
+});
+
+test('V4-09-3 一刻 32 单位/16 次上报后立刻说话仍成功（player_sync 档；改 base 档则红）', () => {
+  const sp = start(), w = sp.world;
+  const [hx, hz] = worldSite(w, w.loc.p1);
+  const [ax] = worldSite(w, w.loc.a1);
+  const dx = Math.sign(ax - hx) || 1;
+  assert.ok(survAct(sp, { kind: 'player_sync', from: [hx, hz] }).ok, '确立起点');
+  let x = hx;
+  // 前 4 步（8 单位）走到居民站点另一侧，后 12 步在原处来回：累计 32 单位、停在其 2.5 格内。
+  for (let k = 0; k < 4; k += 1) {
+    x += dx * 2;
+    assert.ok(survAct(sp, { kind: 'player_sync', from: [x, hz] }).ok, `冲刺第 ${k + 1} 步应通过`);
+  }
+  for (let k = 0; k < 12; k += 1) {
+    x += dx * (k % 2 === 0 ? -2 : 2);
+    const r = survAct(sp, { kind: 'player_sync', from: [x, hz] });
+    assert.ok(r.ok, `连续上报第 ${k + 5} 步应通过（累计 ${2 * (k + 5)} 单位）：${r.code}`);
+  }
+  const at = [x, hz];
+  const [axx, azz] = worldSite(w, w.loc.a1);
+  assert.ok(Math.hypot(at[0] - (axx + .5), at[1] - (azz + .5)) <= 2.5,
+    `终点应落在居民 2.5 格内：${JSON.stringify(at)}`);
+  const open = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: at, to: at });
+  assert.equal(open.ok, true, `一刻 32 单位后立刻说话必须成功：${JSON.stringify(open)}`);
+});
+
+test('V4-09-4 旧档无 playerPos：按 loc 推定，同站点可说、声称在远处站点不可说', () => {
+  const sp = start(), w = sp.world;
+  const [hx, hz] = worldSite(w, w.loc.p1);
+  // 同一站点：居民就在玩家 loc 的站点锚点旁。
+  w.loc.a1 = 'hall';
+  delete w.survival.playerPos; w.survival.playerReachState = null;
+  const at = [hx + 1, hz];
+  const same = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: at, to: at });
+  assert.equal(same.ok, true, `旧档同站点应可说：${JSON.stringify(same)}`);
+  assert.ok(w.survival.residentDialogue);
+  survAct(sp, { kind: 'camp_talk_close', target: 'a1' });
+  // 声称在远处站点：居民确实在 store，但服务端 loc 推定玩家仍在 hall，不得隔空说话。
+  w.loc.a1 = 'store';
+  delete w.survival.playerPos; w.survival.playerReachState = null;
+  const [sx, sz] = worldSite(w, 'store');
+  const far = [sx + .5, sz + .5];
+  const r = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: far, to: far });
+  assert.equal(r.code, 'RESIDENT_OUT_OF_REACH', `旧档声称在远处站点必须拒：${JSON.stringify(r)}`);
+  assert.equal(w.survival.residentDialogue, undefined, '被拒不得产生会话');
+});
+
+// ── V4-10：fromSpeech 只能是服务端内部事实 ────────────────────────────────────
+test('V4-10-1 客户端 body 带 fromSpeech:null/"x"/true 一律按普通入口', () => {
+  for (const forged of [null, 'x', true]) {
+    // 远处声称位置：玩家在 hall，声称在 workshop 居民旁。
+    const farSp = start(), fw = farSp.world;
+    const [hx, hz] = worldSite(fw, fw.loc.p1);
+    assert.ok(survAct(farSp, { kind: 'player_sync', from: [hx, hz] }).ok);
+    fw.loc.a1 = 'workshop';
+    const [wx, wz] = worldSite(fw, 'workshop');
+    const farAt = [wx + .5, wz + .5];
+    const far = survAct(farSp, {
+      kind: 'camp_talk', target: 'a1', room: null, from: farAt, to: farAt, fromSpeech: forged,
+    });
+    assert.equal(far.code, 'RESIDENT_OUT_OF_REACH', `fromSpeech=${JSON.stringify(forged)} 不得绕过连续性`);
+    assert.equal(fw.survival.residentDialogue, undefined);
+
+    // 合法位置：正常开会话，且会话上的 fromSpeech 必须为假。
+    const sp = start(), w = sp.world;
+    const [sx, sz] = worldSite(w, 'hall');
+    w.loc.a1 = 'hall';
+    assert.ok(survAct(sp, { kind: 'player_sync', from: [sx, sz] }).ok);
+    const at = [sx + 1, sz];
+    const open = survAct(sp, {
+      kind: 'camp_talk', target: 'a1', room: null, from: at, to: at, fromSpeech: forged,
+    });
+    assert.equal(open.ok, true, `fromSpeech=${JSON.stringify(forged)} 合法位置应正常开会话：${JSON.stringify(open)}`);
+    assert.equal(w.survival.residentDialogue.fromSpeech, false, '客户端伪造不得把会话标成气泡');
+  }
+});
+
+test('V4-10-2 服务端内部气泡会话：session.fromSpeech 为真、续聊与清气泡照旧', () => {
+  const sp = start(), w = sp.world;
+  const [yx, yz] = worldSite(w, 'yard');
+  w.loc.p1 = 'yard'; w.loc.a1 = 'yard';
+  w.pos = {
+    p1: { x: yx + 1, z: yz, space: 'world' },
+    a1: { x: yx, z: yz, space: 'world' },
+  };
+  w.survival.playerSpeech = {
+    id: 'a1', name: w.agents.a1.name, text: '你来啦', at: 0, expires: simMinuteNow(w) + 10,
+  };
+  // 不带任何 from/fromSpeech：服务端凭 activePlayerSpeech 判定这是气泡点击路径。
+  const opened = survAct(sp, { kind: 'camp_talk', target: 'a1' });
+  assert.equal(opened.ok, true, `服务端气泡点击应仍能打开：${JSON.stringify(opened)}`);
+  assert.equal(w.survival.residentDialogue.fromSpeech, true, '会话要记住它是气泡打开的');
+  assert.equal(w.survival.playerSpeech ?? null, null, '气泡被点开后必须清空');
+  const reply = survAct(sp, { kind: 'camp_talk_say', target: 'a1', text: '我过来了' });
+  assert.equal(reply.ok, true, `气泡续聊不应被普通 1.6 门误杀：${JSON.stringify(reply)}`);
+});
+
+test('V4-10-3 伪造 body.fromSpeech 不得清气泡（过期但仍存在的 playerSpeech 负控）', () => {
+  const sp = start(), w = sp.world;
+  const [yx, yz] = worldSite(w, 'yard');
+  w.loc.p1 = 'yard'; w.loc.a1 = 'yard';
+  w.pos = {
+    p1: { x: yx + 1, z: yz, space: 'world' },
+    a1: { x: yx, z: yz, space: 'world' },
+  };
+  // 过期气泡仍在 survival.playerSpeech：activePlayerSpeech 为 null，必须走普通入口。
+  w.survival.playerSpeech = {
+    id: 'a1', name: w.agents.a1.name, text: '过期的招呼', at: 0, expires: simMinuteNow(w) - 1,
+  };
+  assert.equal(activePlayerSpeech(w), null, '前置：过期气泡不生效');
+  const at = [yx + 1, yz];
+  const r = survAct(sp, { kind: 'camp_talk', target: 'a1', room: null, from: at, to: at, fromSpeech: 'a1' });
+  assert.equal(r.ok, true, `合法位置应走普通入口正常开会话：${JSON.stringify(r)}`);
+  assert.equal(w.survival.residentDialogue.fromSpeech, false);
+  assert.equal(w.survival.playerSpeech?.id, 'a1', '伪造 body.fromSpeech 不得触发 clearPlayerSpeech');
 });

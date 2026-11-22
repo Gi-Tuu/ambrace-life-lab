@@ -5,7 +5,7 @@
 //   · 主动搭话只在正式连续世界（gameRules + simClock + 非 compare + 非离线）触发；
 //     靠近 2.5、同空间同地点、每居民每日 ≤2、冷却 360 游戏分、同时 1 条、TTL 15 分；
 //   · 模型 fire-and-forget：先落模板，成功后只改 text；失败/超时/空/无效一律保留模板，不报错；
-//   · 气泡点击走 fromSpeech：服务端复核同空间 ≤2.5；普通 F 入口仍是 1.6，不放宽。
+//   · 气泡入口由服务端 activePlayerSpeech 判定（body.fromSpeech 不读）：服务端复核同空间 ≤2.5；普通 F 入口仍是 1.6，不放宽。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -302,19 +302,22 @@ test('SOUL-07 模型异步：先模板后替换、tick 不等；失败/空/无�
   assert.equal(lw.survival.playerSpeech.text, lateTemplate, '过期气泡不得被迟到模型改写');
 });
 
-test('SOUL-08 fromSpeech：2.5 格开面板与续聊；普通 F 仍 1.6；走远拒绝', async () => {
+test('SOUL-08 气泡入口：服务端 active speech 判定 2.5；普通 F 仍 1.6；走远拒绝', async () => {
   const p = formal(), w = p.world;
   standNear(w, 'a1', 2.2); freezeThinks(w);
+
+  // 普通 F 入口不放宽：没有气泡时，同一服务端位置下 2.2 格必须被 1.6 接触门拒绝。
+  const [x, z] = worldSite(w, 'yard');
+  w.survival.playerPos = { x: x + 2.2, z, t: w.t };
+  w.survival.playerReachState = { t: w.t, allowance: 100, sub: 0 };
+  const normal = survAct(p, { kind: 'camp_talk', target: 'a1', room: null, from: [x + 2.2, z], to: [x, z] });
+  assert.equal(normal.code, 'RESIDENT_OUT_OF_REACH', '普通入口仍是 1.6，不得被气泡档放宽');
+
   await tickSurvPlay(p, { minutes: 60 });
   const speech = w.survival.playerSpeech;
   assert.ok(speech, '前置：2.2 格内应触发主动搭话');
 
-  // 普通 F 入口不放宽：2.2 格必须拒绝。
-  const [x, z] = worldSite(w, 'yard');
-  const normal = survAct(p, { kind: 'camp_talk', target: 'a1', room: null, from: [x + 2.2, z], to: [x, z] });
-  assert.equal(normal.code, 'RESIDENT_OUT_OF_REACH', '普通入口仍是 1.6，不得被 fromSpeech 放宽');
-
-  // 点击气泡：同空间 ≤2.5 可以打开，并清掉气泡。
+  // 点击气泡：body.fromSpeech 已不是入口凭据（V4-10），服务端凭 activePlayerSpeech 判定气泡路径。
   const clicked = survAct(p, { kind: 'camp_talk', target: 'a1', fromSpeech: speech.id });
   assert.equal(clicked.ok, true, `点击气泡打不开对话：${JSON.stringify(clicked)}`);
   assert.equal(w.survival.playerSpeech ?? null, null, '气泡被点开后必须清空');
