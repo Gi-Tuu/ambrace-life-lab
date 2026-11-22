@@ -5,6 +5,9 @@
 //   4) 引擎纪律：库层不许 console.log（会撞 node --test 的子进程消息通道，本仓库踩过）；
 //      非测试模块不许用 Math.random（随机必须走 rng.mjs，否则轨迹不可复现）
 //   5) 测试纪律：不许 .only（会静默跳过同文件其它用例）；每个测试文件至少有一条 test()
+//   6) 入口真 import() 一遍（抓 node --check 漏报的尾部语法错）
+//   7) 架构闸门（scripts/arch-gates.mjs 的规则表）
+//   8) 仓库卫生：被跟踪却同时被 .gitignore 命中的文件不得新增，遗留登记也不许腐烂
 // 用法：node scripts/check.mjs   （失败时退出码 1）
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -174,6 +177,55 @@ try {
 //    规则表、白名单与逐条理由都在那个文件里；这里只负责汇总成 check 的失败项。
 const arch = archGateReport();
 for (const p of arch.problems) fail(p);
+
+// 8) 仓库卫生：被跟踪却同时被 .gitignore 命中的文件（`git add -f` 的产物）不得新增。
+//    背景：docs/ 在 .gitignore 第 14 行，但历史上已有 27 份内部文档被 force-add 进了公开仓；
+//    2026-11-22 又冒出一份 QA 回报，才把这条约定钉成规则。遗留清单原样登记、不假装它不存在，
+//    但**多一个就红**，并把补救写进消息；少一个也红——防止这份登记悄悄腐烂。
+const IGNORED_TRACKED_LEGACY = new Set([
+  'docs/PIXEL-EDITOR-使用说明.md',
+  'docs/README.md',
+  'docs/创作手记-v2.md',
+  'docs/参赛-评分冲刺.md',
+  'docs/回报-1.2-扩建室内-2026-11-21.md',
+  'docs/回报-P0-主线整合-2026-11-19.md',
+  'docs/回报-P1-2026-11-19.md',
+  'docs/回报-P1b-2026-11-19.md',
+  'docs/回报-P2-2026-11-19.md',
+  'docs/回报-P2b-2026-11-19.md',
+  'docs/回报-P2c-2026-11-20.md',
+  'docs/回报-P2收口-2026-11-21.md',
+  'docs/回报-P3-2026-11-20.md',
+  'docs/回报-体验修复-音频-2026-11-21.md',
+  'docs/回报-债务-台账测试-2026-11-20.md',
+  'docs/回报-债务-地图-2026-11-20.md',
+  'docs/回报-债务-性能-2026-11-20.md',
+  'docs/回报-债务-时间-2026-11-20.md',
+  'docs/回报-审计5修复-2026-11-18.md',
+  'docs/回报-审计修复-2026-11-18.md',
+  'docs/回报-收尾-2026-11-20.md',
+  'docs/回报-架构闸门-2026-11-20.md',
+  'docs/回报-评分拉满-2026-11-18.md',
+  'docs/回报-部署冒烟-2026-11-20.md',
+  'docs/文档状态-2026-11-21.md',
+  'docs/设计-审计5剩余-2026-11-18.md',
+  'docs/设计-审计遗留-2026-11-18.md',
+]);
+{
+  const r = spawnSync('git', ['ls-files', '-i', '-c', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' });
+  if (r.status !== 0) {
+    fail(`仓库卫生检查需要 git（当前不可用）：${String(r.stderr || r.error || '').split('\n')[0].slice(0, 120)}`);
+  } else {
+    const now = r.stdout.split(/\r?\n/).filter(Boolean);
+    for (const p of now.filter((x) => !IGNORED_TRACKED_LEGACY.has(x))) {
+      fail(`仓库卫生：${p} 被跟踪却同时被 .gitignore 命中（多半是 git add -f）⇒ 内部文档会进公开仓。`
+        + `补救：git rm --cached "${p}"（文件留在工作树，不删内容）`);
+    }
+    for (const p of [...IGNORED_TRACKED_LEGACY].filter((x) => !now.includes(x))) {
+      fail(`仓库卫生：遗留登记里的 ${p} 已不在"被跟踪且被忽略"集合里 ⇒ 请同步删掉这一行登记，别让它悄悄腐烂`);
+    }
+  }
+}
 
 // 汇总
 if (problems.length) {
