@@ -1,3 +1,8 @@
+// 家庭/住宅连续性闸门族。
+// 编号说明：本族原用 `V4-xx`（来自当轮工单的第四阶段）。2026-11-22 发现它与外围同权族
+// `V4-01…V4-10`（life/peripheral-reach.test.mjs，生产代码注释引用的就是这一族）撞号——
+// 7 个编号被两个不同判据同时占用。为避免"看到 V4-09 不知道指哪条"，本族整体改前缀为 `FAM-`，
+// **号码原样保留**（V4-09 → FAM-09），映射一一可见；历史 evidence 日志里仍是旧名，不改写。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurvPlay, dumpSurv, loadSurv, settleSurvival, tickSurvPlay, survAct } from './survplay.mjs';
@@ -15,7 +20,7 @@ const marry = (w, a, b) => {
   return houseAction(w, a, { kind: 'family_marry', target: b });
 };
 
-test('V4-01–04 丧偶保留亲子和关系，可按现有条件再婚，重复结算不改历史', () => {
+test('FAM-01–04 丧偶保留亲子和关系，可按现有条件再婚，重复结算不改历史', () => {
   const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
   assert.ok(marry(w, 'a1', 'a2').ok);
   h.residents.a3.parents = ['a1', 'a2'];
@@ -44,7 +49,7 @@ test('V4-01–04 丧偶保留亲子和关系，可按现有条件再婚，重复
   assert.deepEqual(bh.marriages[1].remarried, ['a1']);
 });
 
-test('V4-04 同刻双亡一次关闭婚姻，历史 V1 不迁移，旧 V2 读档补结算', () => {
+test('FAM-04 同刻双亡一次关闭婚姻，历史 V1 不迁移，旧 V2 读档补结算', () => {
   const sp = createSurvPlay(7, { ...options, eventRulesVersion: 1 }), w = sp.world;
   assert.ok(marry(w, 'a1', 'a2').ok);
   w.agents.a1.viab.v = w.agents.a2.viab.v = 0;
@@ -61,7 +66,7 @@ test('V4-04 同刻双亡一次关闭婚姻，历史 V1 不迁移，旧 V2 读档
 
 
 
-test('V4-05/06 59 岁开工、老年减产照常竣工，末次施工后死亡仍登记', () => {
+test('FAM-05/06 59 岁开工、老年减产照常竣工，末次施工后死亡仍登记', () => {
   for (const die of [false, true]) {
     let sp = createSurvPlay(7, options);
     let w = sp.world, h = w.survival.households;
@@ -95,7 +100,7 @@ test('V4-05/06 59 岁开工、老年减产照常竣工，末次施工后死亡�
   }
 });
 
-test('V4-06/07/10 暂停工程跨档，候选接续需做剩余劳动，无候选则释放地块', () => {
+test('FAM-06/07/10 暂停工程跨档，候选接续需做剩余劳动，无候选则释放地块', () => {
   for (const resume of [false, true]) {
     const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
     w.housing.a3 = 'house5';
@@ -140,7 +145,7 @@ test('V4-06/07/10 暂停工程跨档，候选接续需做剩余劳动，无候�
   }
 });
 
-test('V4-08/09/10 配偶和成年子女依序继承，无继承人的在住公房腾空后挂牌', () => {
+test('FAM-08/09/10 配偶和成年子女依序继承，无继承人的在住公房腾空后挂牌', () => {
   const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
   assert.ok(marry(w, 'a1', 'a2').ok);
   h.residents.a3.parents = ['a1', 'a2'];
@@ -166,7 +171,7 @@ test('V4-08/09/10 配偶和成年子女依序继承，无继承人的在住公�
   assert.deepEqual(back.world.survival.households.deeds, h.deeds);
 });
 
-test('V4-09 已故未成年子女不随迁，也不阻止三人房接纳一名配偶', () => {
+test('FAM-09 已故未成年子女不随迁，也不阻止三人房接纳一名配偶', () => {
   const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
   assert.ok(marry(w, 'a1', 'a2').ok);
   const from = w.housing.a1, to = w.housing.a2;
@@ -180,7 +185,7 @@ test('V4-09 已故未成年子女不随迁，也不阻止三人房接纳一名�
 });
 
 
-test('V4-12 分离伴侣独立冷却与单日出生上限，保留人口和粮门槛', async () => {
+test('FAM-12 分离伴侣独立冷却与单日出生上限，保留人口和粮门槛', async () => {
   const simulate = async (policy, cap = 10, store = 24) => {
     const sp = createSurvPlay(7, options), w = sp.world, h = w.survival.households;
     w.populationExperiment = { ...policy, residentCap: cap };
@@ -211,7 +216,7 @@ test('V4-12 分离伴侣独立冷却与单日出生上限，保留人口和粮�
 });
 
 
-test('V4-15 真实玩家采收同时结算背包、公仓和满仓丢弃', async () => {
+test('FAM-15 真实玩家采收同时结算背包、公仓和满仓丢弃', async () => {
   const sp = createSurvPlay(7, options), w = sp.world, s = w.survival;
   const flows = {};
   w.observeProduction = (channel, item, n) => { flows[channel + ':' + item] = n; };
@@ -233,7 +238,7 @@ test('V4-15 真实玩家采收同时结算背包、公仓和满仓丢弃', async
 });
 
 
-test('V4-05 私房施工经过 Organism 正常选择、规则验证、执行和存续扣费', async () => {
+test('FAM-05 私房施工经过 Organism 正常选择、规则验证、执行和存续扣费', async () => {
   const sp = createSurvPlay(13, options), w = sp.world, h = w.survival.households;
   w.housing.a3 = 'house5';
   w.pinv.a1 = { wood: 5, stone: 3 };
