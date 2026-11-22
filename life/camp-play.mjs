@@ -17,6 +17,7 @@ import { noteRes, noteConsumed } from './resource-ledger.mjs';
 import { campStaticPrecheck } from './camp-precheck.mjs';
 import { markResidentAttention } from './resident-attention.mjs';
 import { closeResidentDialogue, openResidentDialogue, sayInResidentDialogue } from './resident-dialogue.mjs';
+import { playerReach } from './survplay-camp.mjs';
 
 import { noteWorkMotion } from './work-motion.mjs';
 // P4：房间区域只有显式世界单位（16×12）判定；旧的隐式 16.01/12.01 回退开关已退役。
@@ -136,7 +137,16 @@ function outdoorSource(world, body) {
     ? {site:'yard'} : fail('OUT_OF_REACH');
 }
 
-export function campAction(world,body) {
+// V4-09：对话与 camp_resident 同一套连续性门。用 `player_sync` 档（玩家渲染位置＝玩家速度预算），
+// 不用 base 档——跑过去立刻说话是正常操作，base 档会把 11-19 那类正常移动误判成瞬移。
+// 失败统一 RESIDENT_OUT_OF_REACH：客户端已有对应文案，不新造 TELEPORT 这类没人处理的码。
+export function talkContinuity(world, body) {
+  if (!body || !Object.hasOwn(body, 'from')) return null;
+  const reach = playerReach(world, body.from, 'player_sync');
+  return reach.ok ? null : 'RESIDENT_OUT_OF_REACH';
+}
+
+export function campAction(world,body,{fromSpeech=false}={}) {
   const {kind,type:item,target,tool,plot}=body, s=world.survival;
   let site=world.loc.p1, node;
   if (!isAlive(world.agents.p1) || (!world.independentWorld && (s.ended || s.failed))) return fail('CAMP_ENDED');
@@ -146,10 +156,21 @@ export function campAction(world,body) {
   // 1.4 主动对话：camp_talk* 是零成本轻动作，但位置/房间/存活门与 camp_resident 同一套。
   if (kind==='camp_talk' || kind==='camp_talk_say' || kind==='camp_talk_close') {
     if (kind==='camp_talk_close') return closeResidentDialogue(world,body);
-    // 气泡打开/续聊由 resident-dialogue 用服务端 pos 复核 2.5 格；普通入口仍走 1.6 接触门。
-    const failure=body?.fromSpeech!==undefined ? null : residentContact(world,body);
-    if (failure) return fail(failure==='RESIDENT_GONE'?'RESIDENT_OUT_OF_REACH':failure);
-    return kind==='camp_talk' ? openResidentDialogue(world,body) : sayInResidentDialogue(world,body);
+    // V4-10：气泡来源是服务端内部事实（fromSpeech 形参），客户端 body 上的同名字段一律不读。
+    // 打开气泡只认 survplay-camp 注入的内部标记；续聊只认会话上的 fromSpeech。
+    const wanted=String(target ?? ''), session=s.residentDialogue;
+    const bubbleOpen=kind==='camp_talk' && fromSpeech===true;
+    const continueSpeech=kind==='camp_talk_say' && session?.fromSpeech===true && session.target===wanted;
+    if (!bubbleOpen && !continueSpeech) {
+      // V4-09：普通入口先做服务端位置的连续性校验，再做 1.6 接触门；失败不得写会话。
+      const continuity=talkContinuity(world,body);
+      if (continuity) return fail(continuity);
+      const failure=residentContact(world,body);
+      if (failure) return fail(failure==='RESIDENT_GONE'?'RESIDENT_OUT_OF_REACH':failure);
+    }
+    return kind==='camp_talk'
+      ? openResidentDialogue(world,body,{fromSpeech:bubbleOpen})
+      : sayInResidentDialogue(world,body);
   }
   if (kind==='camp_resident') return interactWithResident(world,body);
   const positioned = ['camp_chop','camp_plant','camp_water','camp_collect'].includes(kind);

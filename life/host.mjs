@@ -10,6 +10,7 @@ import { tell } from './gossip.mjs';
 import { phaseOf, scheduledLoc } from './clock.mjs';
 import { prepareSay, finishSay } from './dialogue.mjs';
 import { prepareFreeSay, finishFreeSay } from './resident-dialogue.mjs';
+import { talkContinuity } from './camp-play.mjs';
 import { createSurvPlay, setSurvivalDeliberator, survView, dumpSurv, settleSurvival } from './survplay.mjs';
 import { observerActive as observerActiveBase, modelChannel, breakerOpenAt, budgetTick, pickProviderKey } from './host-budget.mjs';
 import { DIMS } from './traits.mjs';
@@ -167,6 +168,15 @@ async function actTalkSayFast(sp, body, now) {
 }
 
 async function actFreeTalkFast(sp, body, now) {
+  // V4-09：自由文本是 camp_talk_say 的第二入口（绕过 campAction 的距离门）；
+  // 普通会话必须在这里补同一 `playerReach(...,'player_sync')` 连续性校验。
+  // 气泡会话（session.fromSpeech）走服务端 2.5 格复核，不跑普通 1.6 门。
+  const session = sp.world.survival?.residentDialogue;
+  const sameTarget = session && session.target === String(body?.target ?? '');
+  if (sameTarget && session.fromSpeech !== true) {
+    const continuity = talkContinuity(sp.world, body);
+    if (continuity) return { ok: false, code: continuity };
+  }
   const prep = await queueAct(() => prepareFreeSay(sp.world, body, now));
   let result = prep;
   if (prep?.pending) {

@@ -25,6 +25,7 @@ import { GAME_BASE_UNITS_PER_TICK, GAME_PLAYER_UNITS_PER_TICK, reachAllowanceFor
 import { LEGACY_RESEARCH_UNITS_PER_TICK } from './research-policy.mjs';
 import { CAMP_BODY_RADIUS } from '../shared/camp-physics.mjs';
 import { detachPlayerRoom, isRoomSpace, placeActor, posOf, roomOfSpace, roomSpaceId, WORLD_SPACE } from './actor-pos.mjs';
+import { activePlayerSpeech } from './resident-proactive.mjs';
 
 // P0-1：玩家外围位置 w.survival.playerPos={x,z,t}。带 from 的外围动作先做连续性校验。
 // 村内额度另行放宽：客户端在村里保留冲刺（SPEED 0.5×6fps=3.0 格/秒，冲刺 ×1.75=5.25），
@@ -365,7 +366,9 @@ export function survActInner(sp, body) {
     // ARCH4-07：营地动作先过规则层 validateCamp（kind/成本/reach），campAction 只做效果结算。
     const invalid = validateCamp(w, { ...body, kind }, playerReach);
     if (invalid) return invalid;
-    const result=campAction(w,body);
+    // V4-10：气泡来源只由服务端事实判定（当前这条气泡就是发给这个居民），客户端 body.fromSpeech 不读。
+    const fromSpeech = kind === 'camp_talk' && activePlayerSpeech(w)?.id === String(body?.target ?? '');
+    const result=campAction(w,body,{fromSpeech});
     sp.log.push({t:w.t,kind,ok:result.ok,code:result.code});
     if (sp.log.length>40) sp.log.shift();
     return result;
