@@ -1,0 +1,156 @@
+✖ SOUL-01 关面板→重开：摘要/最近轮次还在，prompt 能接“上次…” (19.6846ms)
+✖ SOUL-02 上限：≤200 字/≤3 段摘要、≤8 条最近轮次、单条 ≤120 字；不写世界/关系 (11.0578ms)
+✖ SOUL-03 入档/旧档/研究形状：记忆随档往返，旧档可读，研究与 compare 不多字段 (11.9246ms)
+✖ SOUL-04 面板/居民面板展示记忆，且不泄露 secrets (10.0267ms)
+✖ SOUL-05 靠近触发一次：/world 下五字段、模板引用真实状态、TTL 内不重复 (18.6537ms)
+✖ SOUL-06 冷却/日上限/太远/幽灵/对话中/离线都静默 (9.9518ms)
+✖ SOUL-07 模型异步：先模板后替换、tick 不等；失败/空/无效/过期都保留模板 (9.7392ms)
+✖ SOUL-08 fromSpeech：2.5 格开面板与续聊；普通 F 仍 1.6；走远拒绝 (8.0681ms)
+✖ SOUL-09 前端：可点击气泡、记忆行、居民面板上次聊天，且与 toast 区分 (2.038ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 0
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 243.3965
+
+✖ failing tests:
+
+test at life\v16-npc-soul.test.mjs:52:1
+✖ SOUL-01 关面板→重开：摘要/最近轮次还在，prompt 能接“上次…” (19.6846ms)
+  AssertionError [ERR_ASSERTION]: 对话中/关闭前必须写入 survival.talkMemory.a1
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:58:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:81:1
+✖ SOUL-02 上限：≤200 字/≤3 段摘要、≤8 条最近轮次、单条 ≤120 字；不写世界/关系 (11.0578ms)
+  TypeError: Cannot read properties of undefined (reading 'a1')
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:91:39)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at life\v16-npc-soul.test.mjs:108:1
+✖ SOUL-03 入档/旧档/研究形状：记忆随档往返，旧档可读，研究与 compare 不多字段 (11.9246ms)
+  AssertionError [ERR_ASSERTION]: 记忆必须入档
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:113:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:145:1
+✖ SOUL-04 面板/居民面板展示记忆，且不泄露 secrets (10.0267ms)
+  AssertionError [ERR_ASSERTION]: /world 的居民面板要有上次聊天
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:151:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:163:1
+✖ SOUL-05 靠近触发一次：/world 下五字段、模板引用真实状态、TTL 内不重复 (18.6537ms)
+  AssertionError [ERR_ASSERTION]: 玩家靠近时没有生成 playerSpeech
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:171:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:188:1
+✖ SOUL-06 冷却/日上限/太远/幽灵/对话中/离线都静默 (9.9518ms)
+  AssertionError [ERR_ASSERTION]: 前置：第一次应触发
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:194:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:246:1
+✖ SOUL-07 模型异步：先模板后替换、tick 不等；失败/空/无效/过期都保留模板 (9.7392ms)
+  AssertionError [ERR_ASSERTION]: 模型在途时也必须先落模板
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:258:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:301:1
+✖ SOUL-08 fromSpeech：2.5 格开面板与续聊；普通 F 仍 1.6；走远拒绝 (8.0681ms)
+  AssertionError [ERR_ASSERTION]: 前置：2.2 格内应触发主动搭话
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:306:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at life\v16-npc-soul.test.mjs:333:1
+✖ SOUL-09 前端：可点击气泡、记忆行、居民面板上次聊天，且与 toast 区分 (2.038ms)
+  AssertionError [ERR_ASSERTION]: index.html 要有独立气泡元素 #playerCall
+      at TestContext.<anonymous> (file:///E:/Competition/AMBRACElife/life/v16-npc-soul.test.mjs:337:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '<!DOCTYPE html>\r\n<html lang="zh-CN">\r\n<head>\r\n<meta charset="utf-8" />\r\n<meta name="viewport" content="width=device-width, initial-scale=1" />\r\n<link rel="icon" href="data:," />\r\n<title>拥爱生命实验室 · 仿生物 AI 生命世界</title>\r\n<!-- 首屏关键资源：/world 预取 + 模块图/字体提前拉取（与静态 ETag 缓存并存，不改变资源数量口径内的请求）。 -->\r\n<script src="/web/boot-prefetch.js"></script>\r\n<link rel="modulepreload" href="/web/app.js" />\r\n<link rel="modulepreload" href="/web/camp-3d-render.mjs" />\r\n<link rel="modulepreload" href="/shared/camp-scene.mjs" />\r\n<link rel="modulepreload" href="/shared/camp-scene-content.mjs" />\r\n<link rel="modulepreload" href="/life/space.mjs" />\r\n<link rel="preload" as="font" type="font/woff2" href="/web/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2" crossorigin />\r\n<link rel="stylesheet" href="/web/app.css" />\r\n</head>\r\n<body class="menu-mode">\r\n<main id="startMenu" aria-labelledby="startTitle">\r\n  <div class="start-shell">\r\n    <div class="start-copy">\r\n      <h1 id="startTitle" tabindex="-1">拥爱生命实验室</h1>\r\n      <p>和居民一起采集、耕作、修建住所，看聚落走过四季。</p>\r\n      <section class="start-card" aria-labelledby="startSurvivalTitle">\r\n        <h2 id="startSurvivalTitle">生存模式</h2>\r\n        <div class="start-actions">\r\n          <button id="startSurvival" class="primary" type="button" disabled>继续生存</button>\r\n          <button id="startNew" type="button" disabled>新开一局</button>\r\n        </div>\r\n        <form id="campForm" class="camp-form" autocomplete="off">\r\n          <label for="campName">名字（存档钥匙）</label>\r\n          <input id="campName" name="campName" maxlength="16" placeholder="输入名字，回车进入" />\r\n          <button id="campEnter" type="submit">进入 / 开新营地</button>\r\n        </form>\r\n        <details class="camp-list"><summary>已有营地</summary><div id="campList"></div></details>\r\n        <details class="converse-list" id="conversePanel"><summary>这一段他们之间发生了什么</summary><div id="converseLog"></div></details>\r\n        <p class="camp-note">名字就是钥匙：别人输一样的名字就能进同一个营地。</p>\r\n        <p class="camp-current"><span id="campCurrent">你当前在主营地</span> <button id="campBack" type="button" hidden>回主营地</button></p>\r\n        <p id="startStatus" role="status">正在连接世界…</p>\r\n      </section>\r\n      <section class="start-card compare" aria-labelledby="startCompareTitle">\r\n        <h2 id="startCompareTitle">A/B 对照模式</h2>\r\n        <p>从同一个起点出发，观察内部状态通道开关如何影响居民的选择。</p>\r\n        <div class="start-actions">\r\n          <button id="startCompare" type="button" disabled>进入对照</button>\r\n        </div>\r\n      </section>\r\n      <details class="start-guide"><summary>玩法指引</summary>\r\n        <div>\r\n          <p>采集木石、修建住所、耕作与储粮。居民会根据需求、信任和天气决定是否协助。</p>\r\n          <p>WASD 移动 · Shift 奔跑 · 1–8 选工具 · F 交互 · E 背包。靠近居民时可空手交谈。</p>\r\n        </div>\r\n      </details>\r\n    </div>\r\n    <figure class="start-cover" aria-label="黄昏聚落">\r\n      <canvas id="startScene" aria-hidden="true" width="640" height="520"></canvas>\r\n    </figure>\r\n  </div>\r\n</main>\r\n\r\n<header>\r\n  <h1>拥爱生命实验室<span id="tagline">无尽生存 · 在荒野与居民共同生活 ｜ 长期经营：维持食物、住所和生态，应对四季与灾害 ｜ 与居民同一套存续规则：不吃饭会死</span></h1>\r\n  <div id="backend" class="backend">后端：读取中…</div>\r\n</header>\r\n<div id="mapbar">\r\n  <button id="btnMenu" type="button">主菜单</button>\r\n  <div id="minimap" hidden></div>\r\n  <span class="lbl" id="visionInfo" hidden></span>\r\n  <span id="ctlCluster">\r\n    <button id="btnRun" class="on">▶ 运行</button>\r\n    <button id="btnStep">单步</button>\r\n    <button id="btnSleep" class="solo-only" title="假装容器休眠 45 分钟">休眠 45 分钟</button>\r\n    <button id="btnReset" class="compare-only">重跑对照</button>\r\n    <button id="btnCompareSnapshot" class="compare-only">用当前生存快照</button>\r\n    <button id="btnBrain" class="solo-only" title="切换内心来源">内心：本地替身</button>\r\n    <button id="btnM3" class="compare-only" title="M3 目标承诺层（默认关）">M3 承诺期</button>\r\n    <button id="btnM4" class="compare-only" title="M4 耦合调制权（默认关）">M4 耦合调制</button>\r\n  </span>\r\n  <span class="spacer"></span>\r\n  <button id="btnCampAngle" type="button" hidden>转视角</button>\r\n  <span id="campSunPhase" class="surv-only" aria-label="光照时段" hidden></span>\r\n  <button id="btnOverview" title="切换局部放大视角 / 完整世界全景">世界全景</button>\r\n  <button id="btnFull" title="把整张世界地图铺满屏幕（Esc 退出）">⛶ 全屏</button>\r\n  <button id="btnSurv" type="button" aria-pressed="false">生存游玩</button>\r\n  <button id="btnAudio" type="button" aria-pressed="true" title="声音：点击在 高 / 中 / 低 / 关 之间循环" aria-label="声音档位"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M2.4 4.6h1.7L6.7 2.4v7.2L4.1 7.4H2.4z" fill="#D8A667"/><path class="wave" d="M8 4.3q1.2 1.7 0 3.4M9.4 3.2q2 2.8 0 5.6" stroke="#9DA8A8" fill="none" stroke-width=".8"/><path class="mute" d="M8.2 4.4l2.2 2.4M10.4 4.4L8.2 6.8" stroke="#C0504D" stroke-width=".9"/></svg></button>\r\n  <button id="btnBagTop" type="button" aria-haspopup="dialog" hidden>背包（E）</button>\r\n  <button id="btnCompare" type="button" aria-pressed="false">研究对照 A/B</button>\r\n  <details id="keysHelp" hidden><summary>按键</summary>\r\n    <div>WASD/方向键 走路 · Shift 奔跑 · 1–8 选工具 · E 背包 · 靠近居民空手按 F 交谈（重工具会击伤） · 点家具走近使用 · 到门口进入 · Esc 关闭面板</div>\r\n  </details>\r\n</div>\r\n<section id="playNotice" role="status" aria-live="polite">\r\n  <p id="playNoticeText">正在连接生存世界…</p>\r\n  <a id="playPreviewLink" hidden>打开本机新版生存试玩</a>\r\n</section>\r\n<div id="hudGauges" class="surv-only" role="status" aria-label="聚落资源仪表"></div>\r\n<main id="worldMain" class="solo" hidden>\r\n  <div class="col">\r\n    <div class="world side-a">\r\n      <div id="hotbar" class="surv-only" role="toolbar" aria-label="工具栏">\r\n        <button class="slot on" data-tool="hand" title="空手（1）：公仓存取 / 查看">手<i>1</i></button>\r\n        <button class="slot" data-tool="axe" title="斧（2）：到伐木林砍木">斧<i>2</i></button>\r\n        <button class="slot" data-tool="pick" title="镐（3）：采石（瞭台/井台）">镐<i>3</i></button>\r\n        <button class="slot" data-tool="hoe" title="锄（4）：收获/播种（菜园）">锄<i>4</i></button>\r\n        <button class="slot" data-tool="hammer" title="锤（5）：奠基/施工/维修">锤<i>5</i></button>\r\n        <button class="slot" data-tool="basket" title="篮子（6）：采浆果、水果、蔬菜、鸡蛋">篮<i>6</i></button>\r\n        <button class="slot" data-tool="shears" title="剪刀（7）：剪羊毛">剪<i>7</i></button>\r\n        <button class="slot" data-tool="bucket" title="桶（8）：取水、挤奶、浇水">桶<i>8</i></button>\r\n        <button class="slot bag" id="btnBag" title="背包（E）" aria-label="打开背包">背包<i>E</i></button>\r\n        <button class="slot" id="btnUse" type="button" aria-label="交互">交互<i>F</i></button>\r\n        <span id="toolHint">手持 · 空手</span>\r\n  <button class="slot icon bare" id="btnExchange" type="button" title="收成兑换" aria-label="收成兑换"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M4 3h4l1 2 1 5H2l1-5z" fill="#C18F58"/><path d="M4 3h4" stroke="#5B4434" stroke-width=".8"/><path d="M4.4 1.6h3.2l-.5 1.5H4.9z" fill="#D8A667"/><circle cx="6" cy="7.2" r="1.3" fill="#FFEC27"/></svg></button>\r\n  <button class="slot icon bare" id="btnBuild" type="button" title="建造" aria-label="建造"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M8.5 2.2 10 3.7 8.9 4.8 7.4 3.3z" fill="#9DA8A8"/><path d="M7.6 3.1 2.6 8.1l1.4 1.4 5-5z" fill="#976744"/><path d="M2.2 8.5 4 10.3 2.6 11z" fill="#72513B"/></svg></button>\r\n  <button class="slot icon bare" id="btnVillage" type="button" title="聚落一览" aria-label="聚落一览"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1 5 3 3l2 2v5H1z" fill="#8D593F"/><path d="M7 5 9 3l2 2v5H7z" fill="#526B54"/><path d="M3.6 3h1v2h-1zM8.6 3h1v2h-1z" fill="#FFEC27"/><circle cx="6" cy="1.6" r="1.1" fill="#EDC787"/></svg></button>\r\n  <button class="slot" id="btnJournal" type="button" title="聚落事件记录">事件</button>\r\n  <button class="slot icon bare" id="btnManual" type="button" title="说明书 · 教程与注释" aria-label="打开说明书"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M1.5 2h4.2v8H1.5z" fill="#D8A667"/><path d="M6.3 2h4.2v8H6.3z" fill="#EDC787"/><path d="M6 2v8" stroke="#72513B" stroke-width=".7"/><path d="M2.3 3.6h2.4M2.3 5h2.4M7 3.6h2.4M7 5h2.4" stroke="#72513B" stroke-width=".45"/></svg></button>\r\n  <button class="slot icon bare" id="btnHousing" type="button" title="家庭与住房" aria-label="查看家庭与住房"><svg viewBox="0 0 12 12" width="26" height="26" aria-hidden="true"><path d="M6 .8 1 5h10z" fill="#AB5236"/><path d="M2 4.8h8v6.2H2z" fill="#BA8752"/><path d="M5 7h2v3.8H5z" fill="#514134"/><path d="M2.6 5.6h1.6v1.4H2.6zM7.8 5.6h1.6v1.4H7.8z" fill="#458996"/></svg></button>\r\n      </div>\r\n      \r\n      <div class="wtit"><b id="titA">A · 通道开</b><i id="tagA"></i></div>\r\n      <div id="gameViewport" class="game-viewport">\r\n        <canvas id="cvA" width="384" height="256"></canvas>\r\n        <div id="gameHud" class="surv-only">\r\n          <div id="seasonHud" aria-label="季节与时间">\r\n            <div id="seasonDate">—</div>\r\n            <div id="seasonWeather">—</div>\r\n          </div>\r\n          <div id="playerHud" aria-label="体力 / 存续 / 本刻时间"></div>\r\n          <div id="placeHud" aria-label="地点"></div>\r\n        <div id="objHud" aria-label="当前目标" hidden></div>\r\n        <div id="requestBar" aria-live="polite" hidden></div>\r\n          <div id="firstRun" aria-live="polite" hidden>\r\n            <b>第一次来？三步上手</b>\r\n            <ol>\r\n              <li>走近树或石头，按 F 采集一次</li>\r\n              <li>回屋，对着桌子按 F 吃一份饭</li>\r\n              <li>天黑前回屋，对着床按 F 睡一觉</li>\r\n            </ol>\r\n            <p class="firstrun-tip">自己弄饭：2 木料在<strong>工作坊或院子</strong>做一个托盘；带<strong>篮子</strong>（蛋/果/菜/羊毛）或水桶（奶/水）走到东西跟前采集；把食材放进<strong>家里桌上</strong>才算饭（最多 6 份）。一天只吃一份，<strong>饿了才吃</strong>。</p>\r\n            <button type="button" data-firstrun="skip">关闭新手指引</button>\r\n          </div>\r\n          <div id="residentSpeech" hidden><b id="residentSpeechName" hidden></b><span id="residentSpeechText"></span></div>\r\n        </div>\r\n      </div>\r\n      <details id="grpSurv" class="grp surv-only" open>\r\n      <summary>生存状态</summary>\r\n      <section id="survPanel"></section>\r\n    </details>\r\n      <div id="itemBar" class="surv-only" role="group" aria-label="物品栏"></div>\r\n      <div class="occ" id="occA"></div>\r\n      \r\n    </div>\r\n  </div>\r\n  <div class="col">\r\n    <div cl'... 6159 more characters,
+    expected: /id="playerCall"/,
+    operator: 'match',
+    diff: 'simple'
+  }

@@ -1,0 +1,6 @@
+
+> ambrace-life-lab@1.6.0 quickstart:browser
+> node scripts/quickstart-browser.mjs
+
+[quickstart] PASS {"ok":true,"result":"起服→继续生存→走→采集→吃→睡→HUD→死亡后转幽魂（世界推进/动作被拒/镜头可动）","hud":{"date":"夏季 第11天","weather":"00:00 下雨","player":"体力0.7存续1今日剩余1439 分","place":"走廊 · 户外"},"walkMoved":2.2,"walkTilesPerSecond":3.142,"gather":{"stone0":0,"stone1":2},"eat":{"energy":0.598,"store0":17,"store1":16},"sleep":{"ticks":4,"t0":966,"t1":970},"death":{"beforeDeathT":970,"tAfterDeath":972,"banner":"你已化为幽魂，聚落仍在继续：居民照常生活、繁衍、建房、经历灾害。WASD 平移镜头 · 滚轮缩放 · 点居民跟随 · 世界全景看聚落。","ghost":true},"ghost":{"hud":{"player":"幽魂观察WASD 平移 · 滚轮缩放 · 点居民跟随","panel":"\n    \n    你已化为幽魂，聚落仍在继续：居民照常生活、繁衍、建房、经历灾害。WASD 平移镜头 · 滚轮缩放 · 点居民跟随 · 世界全景看聚落。\n    \n      夏 11 / 41\n      昼 rain\n      幽魂观察\n      \n      \n      幽魂 · 观察中\n      \n      \n      clear\n      \n      \n      \n      暂停观察\n      倍速 ×1\n      跟随居民\n      聚落全景\n    \n      重新开始（放弃观察）\n    \n    ","body":true},"camera":{"panned":7,"zoomed":true,"span":22.492847767171238},"actionCode":"PLAYER_DEAD","syncCode":"PLAYER_DEAD"}}
+[quickstart] wrote E:\Competition\AMBRACElife\evidence\score\quickstart-browser.log

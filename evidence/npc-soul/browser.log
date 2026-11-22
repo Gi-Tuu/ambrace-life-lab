@@ -1,0 +1,6 @@
+{"at":"2026-11-22T04:31:26.625Z","kind":"inject","ok":true,"shown":true,"target":"p1","space":"world","hidden":false,"text":"你下雨呢，路滑，你慢点走。点击回应","buttons":"BUTTON","visibility":"hidden","rect":{"x":77,"y":208.625,"width":190,"height":66.375,"top":208.625,"right":267,"bottom":275,"left":77}}
+{"at":"2026-11-22T04:31:26.908Z","kind":"painted","hidden":false,"visibility":"visible","text":"你下雨呢，路滑，你慢点走。点击回应","rect":{"x":512,"y":416.625,"width":190,"height":66.375,"top":416.625,"right":702,"bottom":483,"left":512},"viewport":{"w":1280,"h":900},"hit":{"tag":"SPAN","id":"playerCallText"},"toast":""}
+{"at":"2026-11-22T04:31:27.085Z","kind":"clickPoint","cx":607,"cy":450}
+{"at":"2026-11-22T04:31:27.887Z","kind":"click","toast":"这句话已经过去了。","hidden":false}
+{"at":"2026-11-22T04:31:27.887Z","kind":"result","ok":true,"visibility":"visible","anchored":true}
+{"at":"2026-11-22T04:31:27.887Z","kind":"result","ok":true}

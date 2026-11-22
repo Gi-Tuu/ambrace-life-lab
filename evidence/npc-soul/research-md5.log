@@ -1,0 +1,10 @@
+
+> ambrace-life-lab@1.6.0 research:md5
+> node evidence/v11-research/run-research-md5.mjs --rerun
+
+[report] de764430c8bc88cd8dbbc24512621e4f 1886B · expected de764430c8bc88cd8dbbc24512621e4f · match · 8288ms
+[sweep] aadd4895e84ae657d5a1e22c132228b1 2850B · expected aadd4895e84ae657d5a1e22c132228b1 · match · 12870ms
+[viab] b923787830eb26c3853ecf959987cf9d 4526B · expected b923787830eb26c3853ecf959987cf9d · match · 2907ms
+[recover] fe198109386d048356f2fa69312e5183 12150B · expected fe198109386d048356f2fa69312e5183 · match · 4872ms
+[metab] 5ea0ae6473c4f0ff46f47b7a2463b409 13357B · expected 5ea0ae6473c4f0ff46f47b7a2463b409 · match · 4904ms
+研究五面 md5（rerun）与 P3 台账逐位相同：true · 总耗时 33846ms
