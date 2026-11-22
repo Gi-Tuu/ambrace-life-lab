@@ -376,9 +376,11 @@ export function restoreTalkMemory(world) {
 }
 
 // 打开面板：只认已经过距离/房间校验的 contact（camp-play 先跑 residentContact）。
-export function openResidentDialogue(world, body) {
-  // 点击气泡打开：服务端复核“气泡还是这条 + 同空间 ≤2.5”；普通入口仍由 camp-play 的 1.6 接触门把关。
-  if (body?.fromSpeech !== undefined) {
+// V4-10：`fromSpeech` 是服务端内部参数（气泡点击路径由 survplay-camp 判定后传入）；
+// 绝不再读 body.fromSpeech —— 那是公开请求体，客户端可以随便填。
+export function openResidentDialogue(world, body, { fromSpeech = false } = {}) {
+  // 点击气泡打开：服务端复核“气泡还是这条 + 同空间 ≤2.5”；普通入口仍由 camp-play 的连续性 + 1.6 接触门把关。
+  if (fromSpeech === true) {
     const speechCode = speechOpenGate(world, body);
     if (speechCode) return fail(speechCode);
   }
@@ -398,7 +400,7 @@ export function openResidentDialogue(world, body) {
     target: npc.id, openedAt: world.t, openedMin: simMinuteNow(world),
     turns: Math.max(0, Math.round(finiteOr(memory?.turns, 0))), lastTopic: null,
     engage: engagementOf(world, npc), history, summary: memory?.summary ?? '',
-    recallSummary: memory?.summary ?? '', fromSpeech: body?.fromSpeech !== undefined, pending: null,
+    recallSummary: memory?.summary ?? '', fromSpeech: fromSpeech === true, pending: null,
     trustGained: 0, famGained: 0, negGained: 0, modelTurns: 0, templateTurns: 0,
   };
   if (session.fromSpeech) clearPlayerSpeech(world, npc.id);
@@ -426,7 +428,7 @@ export function sayInResidentDialogue(world, body) {
   const npc = gate.npc;
   const session = sessionOf(world, npc.id);
   if (!session) return fail('NO_DIALOGUE');
-  if (body?.fromSpeech !== undefined && !session.fromSpeech) return fail('NO_DIALOGUE');
+  // V4-10：续聊只看服务端会话上的 fromSpeech；body 上的同名字段不参与任何判定。
   if (session.fromSpeech) {
     const speechCode = speechSessionGate(world, npc.id);
     if (speechCode) return fail(speechCode);
@@ -600,14 +602,11 @@ export function prepareFreeSay(world, body, now = Date.now()) {
   if (!session) return fail('NO_DIALOGUE');
   const text = normalizeChatText(body?.text, FREE_TALK_LIMITS.textMax);
   if (!text) return fail('EMPTY_TEXT');
-  const fromSpeech = body?.fromSpeech !== undefined;
+  // V4-10：气泡续聊只认服务端会话事实；body.fromSpeech 一律不读。
+  const fromSpeech = session.fromSpeech === true;
   // 自由文本走 host 的快路径，不经过 campAction 的距离门；这里必须自己补上同一套接触校验。
   // 气泡会话改用服务端复核的 2.5 格（不放宽普通 1.6 入口）。
   if (fromSpeech) {
-    if (!session.fromSpeech) return fail('NO_DIALOGUE');
-    const speechCode = speechSessionGate(world, npc.id);
-    if (speechCode) return fail(speechCode);
-  } else if (session.fromSpeech) {
     const speechCode = speechSessionGate(world, npc.id);
     if (speechCode) return fail(speechCode);
   } else if (Object.hasOwn(body, 'from')) {

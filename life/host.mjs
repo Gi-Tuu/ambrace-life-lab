@@ -168,16 +168,18 @@ async function actTalkSayFast(sp, body, now) {
 }
 
 async function actFreeTalkFast(sp, body, now) {
-  // V4-09：自由文本是 camp_talk_say 的第二入口（绕过 campAction 的距离门）；
-  // 普通会话必须在这里补同一 `playerReach(...,'player_sync')` 连续性校验。
-  // 气泡会话（session.fromSpeech）走服务端 2.5 格复核，不跑普通 1.6 门。
-  const session = sp.world.survival?.residentDialogue;
-  const sameTarget = session && session.target === String(body?.target ?? '');
-  if (sameTarget && session.fromSpeech !== true) {
-    const continuity = talkContinuity(sp.world, body);
-    if (continuity) return { ok: false, code: continuity };
-  }
-  const prep = await queueAct(() => prepareFreeSay(sp.world, body, now));
+  const prep = await queueAct(() => {
+    // V4-09：自由文本是 camp_talk_say 的第二入口（绕过 campAction 的距离门）；
+    // 普通会话必须在这里补同一 `playerReach(...,'player_sync')` 连续性校验（放在世界短锁内）。
+    // 气泡会话（session.fromSpeech）走服务端 2.5 格复核，不跑普通 1.6 门。
+    const session = sp.world.survival?.residentDialogue;
+    const sameTarget = session && session.target === String(body?.target ?? '');
+    if (sameTarget && session.fromSpeech !== true) {
+      const continuity = talkContinuity(sp.world, body);
+      if (continuity) return { ok: false, code: continuity };
+    }
+    return prepareFreeSay(sp.world, body, now);
+  });
   let result = prep;
   if (prep?.pending) {
     const pending = prep.pending;

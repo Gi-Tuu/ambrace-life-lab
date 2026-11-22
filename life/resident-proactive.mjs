@@ -93,10 +93,11 @@ export function clearPlayerSpeech(world, target = null) {
 }
 
 // 点击气泡打开面板的服务端复核：气泡必须还是当前这条、目标活着、同空间 ≤2.5。
+// V4-10：调用方只在服务端内部 fromSpeech 判定为真时进入；body.fromSpeech 不再参与（公开请求体不可信）。
 export function speechOpenGate(world, body) {
   const target = String(body?.target ?? '');
   const speech = world?.survival?.playerSpeech;
-  if (!speech || speech.id !== target || String(body?.fromSpeech ?? '') !== target) return 'NO_SPEECH';
+  if (!speech || speech.id !== target) return 'NO_SPEECH';
   if (world.compareSide) return 'TALK_UNSUPPORTED';
   const npc = world.agents?.[target];
   if (!npc || npc.isPlayer) return 'NO_RESIDENT';
