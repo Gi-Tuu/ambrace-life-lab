@@ -140,6 +140,7 @@
             <button type="button" data-firstrun="skip">关闭新手指引</button>
           </div>
           <div id="residentSpeech" hidden><b id="residentSpeechName" hidden></b><span id="residentSpeechText"></span></div>
+          <button id="playerCall" type="button" hidden><b id="playerCallName"></b><span id="playerCallText"></span><i>点击回应</i></button>
         </div>
       </div>
       <details id="grpSurv" class="grp surv-only" open>
@@ -237,6 +238,7 @@
     <button id="talkClose" type="button">走开（Esc）</button>
   </div>
   <div id="talkLog" role="log" aria-live="polite"></div>
+  <div id="talkMemory" class="bp-note" hidden></div>
   <div id="talkTopics" hidden aria-label="话题"></div>
   <div id="talkRow">
     <input id="talkText" maxlength="200" placeholder="直接说点什么…（他们可能冷淡、敷衍或不耐烦）" autocomplete="off" />

@@ -1148,6 +1148,47 @@ function paintResidentSpeech(cv, w, people, project, overview = false) {
   return residentSpeech.target;
 }
 
+// 1.6 B：主动搭话的气泡。独立 DOM 按钮（#playerCall），不是 toast，也不与居民互聊气泡抢位置。
+function hidePlayerCall() {
+  const el = $('playerCall');
+  if (el) { el.hidden = true; el.style.visibility = 'hidden'; }
+}
+function renderPlayerCall(view) {
+  const el = $('playerCall'); if (!el) return;
+  const speech = view?.playerSpeech;
+  const blocked = !S.playing || ui.menu || ui.compare || ui.overview || ui.surveyRoom || Boolean(ui.talk) || !speech;
+  if (blocked) { hidePlayerCall(); return; }
+  const key = `${speech.id}:${speech.at}`;
+  if (el.dataset.key !== key) {
+    el.dataset.key = key;
+    el.dataset.target = speech.id;
+    const name = $('playerCallName'), text = $('playerCallText');
+    if (name) name.textContent = speech.name ?? '';
+    if (text) text.textContent = speech.text ?? '';
+    el.title = `${speech.name ?? '居民'} 主动和你说话 · 点击回应`;
+    el.style.visibility = 'hidden'; // 新气泡等下一帧算出锚点再显示；同一句重复刷新不闪
+  }
+  el.hidden = false;
+}
+function paintPlayerCall(cv, w, people, project, overview = false) {
+  const el = $('playerCall');
+  if (!el || el.hidden || !S.playing || cv.id !== (ui.fullscreen ? 'cvFull' : 'cvA')) return;
+  if (overview || ui.surveyRoom || ui.talk || !w.playerSpeech) { hidePlayerCall(); return; }
+  const person = people.find((p) => p.who === w.playerSpeech.id);
+  const point = person && project(person);
+  const inFrame = ([x,y]) => x >= 0 && x < cv.width && y >= 0 && y < cv.height;
+  if (!point || !inFrame(point)) { el.style.visibility = 'hidden'; return; }
+  const hud = el.parentElement;
+  const x = point[0] * (hud.clientWidth + 4) / cv.width - 2;
+  const y = point[1] * (hud.clientHeight + 4) / cv.height - 2;
+  const width = el.offsetWidth, height = el.offsetHeight;
+  const left = Math.max(4, Math.min(x - width/2, hud.clientWidth - width - 4));
+  el.style.left = Math.round(left) + 'px';
+  el.style.top = Math.max(height + 4, Math.round(y) - 6) + 'px';
+  el.style.setProperty('--speech-anchor', Math.max(6, Math.min(x - left, width - 6)) + 'px');
+  el.style.visibility = 'visible';
+}
+
 const ACTION_TINT = {
   still:'#C2C3C7', move:'#29ADFF', work:'#C2C3C7', build:'#EDC787', repair:'#D58274',
   gather:'#98BD51', talk:'#A0D2C6', food:'#FFA300', social:'#FF77A8',
@@ -1764,6 +1805,7 @@ const sun=w.camp ? solarLight(w.t+Math.min(.98,elapsed/(S.tickMs??FALLBACK_TICK_
   // 贴地光圈：p1 黄、AI 绿抖动环；常驻，不穿屋顶。
   for(const p of people)campRing(g,camera,p,ratio,p.who==='p1'?'#FFEC27':'#C2C3C7',frame);
   const speaking = !historical && paintResidentSpeech(cv, w, people, (p) => camera.project(p.x, p.y+actorLabelHeight(p.stage), p.z), overview);
+  if (!historical) paintPlayerCall(cv, w, people, (p) => camera.project(p.x, p.y+actorLabelHeight(p.stage), p.z), overview);
   if (residentHint && residentHint.target !== speaking) {
     const [nx,nz]=residentHint.to, npc=w.agents[residentHint.target];
     // 室外问 space；室内视图没有 exterior，用房间 stage 的可站表面（旧标签高度口径）。
@@ -2559,6 +2601,7 @@ function openTalkDialog(target, contact, r) {
     clearResidentSpeech();
     ui.talk={target,name:r.name,contact};
     resetTalkPanelChrome();
+    renderTalkMemory(r.memory);
     renderTalkAccess();
     $('talkTitle').textContent=`和 ${r.name} 交谈`;
     updateTalkPortrait();
@@ -2596,27 +2639,59 @@ async function openResidentDialogue(target, contact) {
   } catch { toast('交谈未完成，请重试。'); }
   finally { campBusy=false; }
 }
+// 1.6 B：点击头顶气泡。走 fromSpeech 通道，服务端按同空间 2.5 格复核并清掉气泡。
+async function openPlayerCall() {
+  const speech=S.view?.playerSpeech;
+  if (!speech || campBusy) return;
+  if (typeof ghostActive === 'function' && ghostActive()) { toast('你已化为幽魂，只能观察：无法交谈。'); return; }
+  campBusy=true;
+  try {
+    const r=await playAct({kind:'camp_talk',target:speech.id,fromSpeech:speech.id});
+    if (!r.ok) {
+      toast(r.code==='RESIDENT_OUT_OF_REACH'?'走近一点再回应。':
+        r.code==='NO_SPEECH'?'这句话已经过去了。':
+        r.code==='BUSY'?'手上还有没做完的动作，等它完成再聊。':'现在没法回应。');
+      hidePlayerCall();
+      return;
+    }
+    hidePlayerCall();
+    if (S.view?.playerSpeech?.id===speech.id) S.view={...S.view,playerSpeech:null};
+    openLocalTalkPanel(speech.id, {}, r, true);
+  } catch { toast('交谈未完成，请重试。'); }
+  finally { campBusy=false; }
+}
 function resetTalkPanelChrome() {
-  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess'), pending=$('talkPending');
+  const topics=$('talkTopics'), row=$('talkRow'), note=$('talkNote'), access=$('talkAccess'), pending=$('talkPending'), memory=$('talkMemory');
   if (topics) { topics.hidden=true; topics.replaceChildren(); }
   if (row) row.hidden=false;
   if (pending) pending.hidden=true;
+  if (memory) { memory.hidden=true; memory.textContent=''; }
   if (note) note.textContent='对话是自由输入；居民会按自己的关系、心情与忙碌程度决定怎么回应。';
   if (access) access.hidden=false;
+}
+function renderTalkMemory(memory) {
+  const row=$('talkMemory'); if (!row) return;
+  const summary=String(memory?.summary ?? '').trim();
+  if (!summary) { row.hidden=true; row.textContent=''; return; }
+  row.hidden=false;
+  row.textContent=`他还记得：${summary}`;
+  row.title=`上次聊天：第 ${Math.floor((memory.lastAt ?? 0) / (S.view?.dayTicks ?? 24)) + 1} 天 · 累计 ${memory.turns ?? 0} 轮`;
 }
 function setTalkPending(on) {
   const pending=$('talkPending');
   if (pending) pending.hidden=!on;
 }
-function openLocalTalkPanel(target, contact, r) {
+function openLocalTalkPanel(target, contact, r, fromSpeech=false) {
   pendingLocalTalk=null;
   clearResidentSpeech();
-  ui.talk={target,name:r.name,contact,local:true,topics:r.topics??[]};
+  hidePlayerCall();
+  ui.talk={target,name:r.name,contact,local:true,topics:r.topics??[],...(fromSpeech?{fromSpeech:true}:{})};
   $('talkTitle').textContent=`和 ${r.name} 交谈`;
   updateTalkPortrait();
   $('talkLog').innerHTML='';
   addTalk('npc',r.line);
   resetTalkPanelChrome();
+  renderTalkMemory(r.memory);
   // 1.5：自由输入框与快捷话题同时存在；话题只是引导，不再是唯一入口。
   $('talkRow').hidden=false;
   $('talkAccess').hidden=true;
@@ -2646,7 +2721,9 @@ async function askLocalTopic(topic) {
   campBusy=true;
   addTalk('me',`你：${topic.label}`);
   try {
-    const r=await playAct({kind:'camp_talk_say',target:t.target,topic:topic.id,...currentTalkContact(t)});
+    const r=await playAct(t.fromSpeech
+      ? {kind:'camp_talk_say',target:t.target,fromSpeech:t.target,topic:topic.id}
+      : {kind:'camp_talk_say',target:t.target,topic:topic.id,...currentTalkContact(t)});
     if (r.ok) {
       addTalk('npc',r.line);
       focusResident(t.target, r.name ?? t.name, r.line, ui.interior);
@@ -2714,7 +2791,9 @@ async function sendLocalTalk() {
   $('talkSend').disabled=true;
   setTalkPending(true);
   try{
-    const r=await playAct({kind:'camp_talk_say',target:t.target,text,...currentTalkContact(t)});
+    const r=await playAct(t.fromSpeech
+      ? {kind:'camp_talk_say',target:t.target,fromSpeech:t.target,text}
+      : {kind:'camp_talk_say',target:t.target,text,...currentTalkContact(t)});
     if (ui.talk!==t) return;
     if(r.ok){
       addTalk('npc',r.line);
@@ -2990,6 +3069,7 @@ $('btnBagTop').onclick=openBackpack;
 $('btnBagFull').onclick=openBackpack;
 $('talkSend').onclick=sendTalk;
 $('talkClose').onclick=closeTalkDlg;
+$('playerCall').onclick=()=>{ void openPlayerCall(); };
 $('talkText').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendTalk(); } });
 $('talkDlg').addEventListener('cancel',(e)=>{ e.preventDefault(); closeTalkDlg(); });
 $('backpack').addEventListener('click', (e) => {
@@ -3028,7 +3108,8 @@ function renderVillage(s) {
     const cells = Array.from({ length: 5 }, (_, i) => `<b class="${(i + 0.5) / 5 <= (a.energy ?? 0) ? 'on' : ''}"></b>`).join('');
     const stage = a.stage && a.stage !== 'adult' ? `<span class="dim">${STAGE_ZH[a.stage] ?? a.stage}</span>` : (a.age != null ? `<span class="dim">${a.age}天</span>` : '');
     const injury=INJURY_ZH[a.injury] ? `<span class="bad">${INJURY_ZH[a.injury]}</span>` : '';
-    return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name)}</b>${stage}${injury}<span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span></div>`;
+    const memory=a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '';
+    return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name)}</b>${stage}${injury}<span class="vbar" title="饱食 ${a.energy ?? 0}">${cells}</span><span>${esc((s.rooms ?? {})[a.loc] ?? a.loc ?? '?')}</span><span class="dim">${esc(ACT_ZH[a.act] ?? a.act ?? 'idle')}</span>${memory}</div>`;
   }).join('');
   el.innerHTML = rows || '<div class="dim">无居民</div>';
 }
@@ -3453,7 +3534,8 @@ function renderVillageDlg(s) {
     const v = Math.max(0, Math.min(1, a.viab ?? 1));
     const bar = `<span style="display:inline-block;width:70px;height:8px;border:1px solid var(--line);background:var(--sunken)"><span style="display:block;height:100%;width:${Math.round(v*100)}%;background:${v<.3?'#D58274':'#98BD51'}"></span></span>`;
     const status=a.dead?'已故':INJURY_ZH[a.injury];
-    return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name ?? id)}</b><span>${STAGE_ZH[a.stage]??''}${status?' · '+status:''}</span>${bar}<span class="dim">${esc(s.rooms?.[s.loc?.[id]] ?? s.loc?.[id] ?? '')}</span><span>${esc(a.action ?? '待机')}</span></div>`;
+    const memory=a.lastTalk ? `<span class="dim" title="${esc(a.lastTalk.summary)}">上次聊天 · 第${Math.floor((a.lastTalk.lastAt ?? 0)/(s.dayTicks||24))+1}天</span>` : '';
+    return `<div class="vrow">${portraitImage(a)}<b>${esc(a.name ?? id)}</b><span>${STAGE_ZH[a.stage]??''}${status?' · '+status:''}</span>${bar}<span class="dim">${esc(s.rooms?.[s.loc?.[id]] ?? s.loc?.[id] ?? '')}</span><span>${esc(a.action ?? '待机')}</span>${memory}</div>`;
   }).join('');
   el.innerHTML = rows || '<p class="dim">暂无居民</p>';
 }
@@ -3926,6 +4008,8 @@ async function refresh() {
     }
     const viewA = sv;
     S.view = viewA;
+    // 1.6 B：主动搭话气泡只在正式单人世界出现；面板/全景/幽魂时隐藏。
+    renderPlayerCall(viewA);
     // 1.3：进入/退出幽魂观察。只做表现层状态（镜头/输入/HUD 类），世界仍由服务端 tick。
     syncGhostState(viewA);
     // 1.1：每次 /world 到达重锚世界分钟；插值只影响 HUD 显示，不影响服务端结算。
@@ -5372,6 +5456,8 @@ Object.assign(window.__lifeDebug, {
   fadeable: (ids) => fadeableCovered(ids),
   survFlash: () => survFlash,
   interact: () => survInteract(),
+  // 1.6 B 验收口：只把一帧 /world 视图交给渲染函数，不写世界；用于气泡 DOM 的可视化验收。
+  playerCall: (view) => { renderPlayerCall(view); return $('playerCall')?.hidden === false; },
   // 1.4 验收口：用当前行走器脚点打开/继续轻量对话（走真实 UI + 服务端 camp_talk）；不写世界位置。
   openDialogue: (target = 'a1') => {
     const npc = S.view?.agents?.[target], walker = WALK[walkKey('cvA', 'p1')], rw = WALK[walkKey('cvA', target)];

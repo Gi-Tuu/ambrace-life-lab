@@ -570,6 +570,28 @@
     display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2;
     overflow:hidden; overflow-wrap:anywhere;
   }
+  /* 1.6 B：居民主动找玩家说话。独立按钮，与普通 toast 明确区分：可点击、有名字、金色描边。 */
+  #playerCall {
+    position:absolute; width:max-content; max-width:min(16em, calc(100cqw - 12px));
+    padding:5px 9px 4px; line-height:1.4; font-size:14px; text-align:left;
+    border:2px solid var(--gold); border-radius:2px;
+    background:rgba(24,37,30,.9); color:var(--ink); text-shadow:1px 1px #000;
+    transform:translateY(-100%); cursor:pointer; pointer-events:auto;
+    box-shadow:2px 2px 0 0 rgba(0,0,0,.42);
+    z-index:3;
+  }
+  #playerCall:hover, #playerCall:focus-visible { background:rgba(42,58,46,.96); outline:none; }
+  #playerCall::after {
+    content:""; position:absolute; top:100%; left:var(--speech-anchor, 50%);
+    border:5px solid transparent; border-top-color:var(--gold); transform:translateX(-50%);
+  }
+  #playerCallName { display:block; margin-bottom:2px; color:var(--gold); font-size:12px; line-height:1.2; }
+  #playerCallText {
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2;
+    overflow:hidden; overflow-wrap:anywhere;
+  }
+  #playerCall i { display:block; margin-top:2px; color:var(--gold); font-size:11px; font-style:normal; opacity:.85; }
+  #talkMemory { color:var(--gold); }
   #seasonHud {
     position:absolute; top:0; right:0; max-width:54%;
     padding:5px 9px; border:2px solid #BA8752;
