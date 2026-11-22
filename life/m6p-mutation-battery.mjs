@@ -26,6 +26,9 @@ function run(dir) {
 }
 
 const root = mkdtempSync(join(tmpdir(), 'm6p-battery-'));
+for (const name of ['shared', 'web', 'seed', 'packs']) {
+  cpSync(join(LIFE, '..', name), join(root, name), { recursive: true });
+}
 let bad = 0;
 const cdir = join(root, 'control');
 cpSync(LIFE, cdir, { recursive: true });

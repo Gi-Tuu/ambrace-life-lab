@@ -79,6 +79,9 @@ function run(dir) {
 }
 
 const root = mkdtempSync(join(tmpdir(), 'm4-battery-'));
+for (const name of ['shared', 'web', 'seed', 'packs']) {
+  cpSync(join(LIFE, '..', name), join(root, name), { recursive: true });
+}
 const base = join(root, 'life');
 cpSync(LIFE, base, { recursive: true });
 

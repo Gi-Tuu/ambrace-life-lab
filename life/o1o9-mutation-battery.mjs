@@ -41,6 +41,9 @@ function run(test, dir) {
 }
 
 const root = mkdtempSync(join(tmpdir(), 'o1o9-battery-'));
+for (const name of ['shared', 'web', 'seed', 'packs']) {
+  cpSync(join(LIFE, '..', name), join(root, name), { recursive: true });
+}
 let bad = 0;
 for (const test of [O1, O9]) {
   const dir = join(root, `control-${test}`);
