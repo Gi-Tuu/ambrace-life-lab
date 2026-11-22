@@ -66,7 +66,7 @@ L8 与耦合调制权是两层**可选层**：机制侧默认关（`channelMask`
 │  ├─ ecology.mjs / households.mjs        # 生存 V2：轻量生态种群、家庭与生命周期（事件判定按版本派生）
 │  ├─ dialogue.mjs                        # 居民自由文本对话：服务端定态度，模型只写措辞
 │  ├─ home-roads.mjs / camp-animals.mjs   # 生存 V2：道路铺设、动物行为与蓄养
-│  ├─ *.test.mjs          #   221 个测试文件（闸门，含负向对照）
+│  ├─ *.test.mjs          #   233 个测试文件（闸门，含负向对照）
 │  └─ run.mjs / seed-gen.mjs / *-battery.mjs   # 离线复现 / 种子生成 / 变异电池
 ├─ shared/                # 服务端与浏览器共用的纯数据/几何（无 DOM/Node 副作用，22 个模块）
 │  ├─ camp-layout.mjs / layout-version.mjs     # 营地布局与版本（单一来源）
@@ -144,8 +144,9 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 221 个测试文件 / 1261 条检查（发现式点名，不会漏文件）
+npm test          # 233 个测试文件 / 1309 条检查（发现式点名 life/*.test.mjs，不会漏文件；2026-11-22 全绿口径）
 npm run coverage  # 同上 + Node 内建覆盖率（2026-11-21 实跑：行 90.58% / 分支 85.84% / 函数 89.62%；插桩下 1258/1261，2–3 条时序/环境用例红，**非全绿**，见 EVIDENCE.md §四）
+node scripts/test-ids.mjs # 判据编号盘点：1305 条 test/describe/it 标题 · 1028 条带 ID · 1028 个唯一 ID · 0 重复（重复即 exit 1，已钉进 npm run check 第 9 项）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
 npm run check     # lint + art:check + test
