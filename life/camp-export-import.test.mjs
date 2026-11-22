@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,14 +18,18 @@ const root = mkdtempSync(join(tmpdir(), 'export-'));
 const srcDir = join(root, 'src');
 const dstDir = join(root, 'dst');
 const offDir = join(root, 'off');
+const limDir = join(root, 'lim');      // EXPORT-06/07：小请求体上限 + 小令牌桶
+const orphanDir = join(root, 'orphan'); // EXPORT-08：存在但无主的旧档
 mkdirSync(srcDir, { recursive: true });
 mkdirSync(dstDir, { recursive: true });
 mkdirSync(offDir, { recursive: true });
+mkdirSync(limDir, { recursive: true });
+mkdirSync(orphanDir, { recursive: true });
 
 const portBase = 8340 + (process.pid % 40);
 const children = [];
 
-async function boot({ dataDir, port, token = '' }) {
+async function boot({ dataDir, port, token = '', extraEnv = {} }) {
   const child = spawn(process.execPath, ['serve.mjs'], {
     cwd: ROOT,
     env: {
@@ -33,7 +37,7 @@ async function boot({ dataDir, port, token = '' }) {
       PORT: String(port), HOST: '127.0.0.1', BRAIN: 'local',
       DATA_DIR: dataDir, SEED_FILE: join(ROOT, 'seed', 'world.json'),
       TICK_MS: '10000000', GAME_MS_PER_MINUTE: '10000000', GAME_RULES: '1', GAME_MODE: 'game', MODEL_UNATTENDED: '0',
-      SAVE_EXPORT_TOKEN: token,
+      SAVE_EXPORT_TOKEN: token, ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -49,6 +53,8 @@ async function boot({ dataDir, port, token = '' }) {
 const src = { base: '' };
 const dst = { base: '' };
 const off = { base: '' };
+const lim = { base: '' };
+const orphan = { base: '' };
 const post = (base, path, body, headers = {}) => fetch(base + path, {
   method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body),
 });
@@ -66,12 +72,15 @@ const camps = new Map();
 let exported = null;
 
 before(async () => {
-  const [s, d, o] = await Promise.all([
+  const [s, d, o, l, p] = await Promise.all([
     boot({ dataDir: srcDir, port: portBase, token: TOKEN }),
     boot({ dataDir: dstDir, port: portBase + 20, token: TOKEN }),
     boot({ dataDir: offDir, port: portBase + 40, token: '' }),
+    // EXPORT-06/07：请求体上限压到 4 KB、令牌桶压到 2 且几乎不回水，才能在小数据量下打到 413/429
+    boot({ dataDir: limDir, port: portBase + 60, token: TOKEN, extraEnv: { SAVE_IMPORT_MAX_BYTES: '4096', EXPORT_BURST: '2', EXPORT_REFILL_MS: '600000' } }),
+    boot({ dataDir: orphanDir, port: portBase + 80, token: TOKEN }),
   ]);
-  src.base = s.base; dst.base = d.base; off.base = o.base;
+  src.base = s.base; dst.base = d.base; off.base = o.base; lim.base = l.base; orphan.base = p.base;
 });
 after(() => { for (const child of children) child.kill(); });
 
@@ -176,4 +185,49 @@ test('EXPORT-05 越界 key 负控：零写入，saves/ 之外没有任何新文�
   assert.equal(existsSync(join(root, 'etc.json.gz')), false, 'saves/ 之外不得出现新档');
   // 合法文件仍在（零写入不是把别人的档删了）
   for (const key of camps.keys()) assert.ok(statSync(join(dstDir, 'saves', key + '.json.gz')).isFile());
+});
+
+// ─── 主会话复验时补的三条：对面回报"未单独验证"的那三面 ───
+
+test('EXPORT-06 超大请求体：/import 413 BODY_TOO_LARGE，响应不回显 token 与绝对路径', async () => {
+  const key = [...camps.keys()][0];
+  const huge = { version: 1, camps: { [key]: { archive: 'A'.repeat(64 * 1024), owner: null } } };
+  const res = await post(lim.base, '/import?export_token=' + encodeURIComponent(TOKEN), huge);
+  const text = await res.text();
+  assert.equal(res.status, 413, `超过 SAVE_IMPORT_MAX_BYTES 必须 413，实测 ${res.status}｜${text.slice(0, 120)}`);
+  assert.ok(text.includes('BODY_TOO_LARGE'), `413 必须给明确错误码：${text.slice(0, 120)}`);
+  assert.ok(!text.includes(TOKEN) && !text.includes(limDir), '413 响应不得出现 token 或 saves 绝对路径');
+});
+
+test('EXPORT-07 令牌桶限流：超过 EXPORT_BURST 后 429，且不按客户端 IP', async () => {
+  const statuses = [];
+  for (let i = 0; i < 4; i += 1) statuses.push((await fetch(lim.base + '/export?export_token=' + encodeURIComponent(TOKEN))).status);
+  assert.ok(statuses.includes(429), `桶容量 2、窗口 600 s，四次请求里必须出现 429：${statuses.join(',')}`);
+  assert.ok(statuses.filter((s) => s === 200).length <= 2, `200 的次数不得超过桶容量（含 EXPORT-06 消耗的那一枚）：${statuses.join(',')}`);
+  // 429 不得暗示"再试别的认证"：它只说明桶空了
+  const last = await fetch(lim.base + '/export?export_token=' + encodeURIComponent(TOKEN));
+  assert.equal(last.status, 429);
+  assert.ok((await last.text()).includes('RATE_LIMITED'), '限流必须给明确错误码');
+});
+
+test('EXPORT-08 无主旧档允许被合法导入覆盖（有主的绝不覆盖，见 EXPORT-04）', async () => {
+  const key = [...camps.keys()][0];
+  const rawNew = JSON.parse(gunzipSync(Buffer.from(exported.camps[key].archive, 'base64')).toString('utf8'));
+  const rawOld = structuredClone(rawNew);
+  rawOld.survival.store = (Number(rawOld.survival?.store) || 0) + 7;   // 可辨认的旧态
+  const dir = join(orphanDir, 'saves');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, key + '.json.gz'), gzipSync(Buffer.from(JSON.stringify(rawOld))));
+  // 索引里这条**不带 ownerHash**，也不写 owner 侧车 ⇒ "存在但无主"
+  writeFileSync(join(dir, 'index.json'), JSON.stringify({
+    generation: 1, entries: [{ key, name: '无主旧档', day: 40, population: 6, status: 'active', lastSeenAt: Date.now() }],
+  }));
+
+  const res = await post(orphan.base, '/import?export_token=' + encodeURIComponent(TOKEN), exported);
+  assert.equal(res.status, 200);
+  const result = await res.json();
+  assert.equal(result.skipped, 0, '无主旧档不该被 skipped：' + JSON.stringify(result));
+  assert.equal(result.imported, Object.keys(exported.camps).length, '无主旧档与全新档都应 imported');
+  const onDisk = JSON.parse(gunzipSync(readFileSync(join(dir, key + '.json.gz'))).toString('utf8'));
+  assert.equal(onDisk.survival.store, rawNew.survival.store, '无主旧档必须被包里的新态覆盖');
 });
