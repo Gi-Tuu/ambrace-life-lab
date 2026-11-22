@@ -423,6 +423,10 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes, off
     // 1.2 B：居民室内自由移动。只挪 w.pos（loc/占用/动作/需求都不动），每分钟一步。
     // 研究态没有 pos ⇒ 本调用是空操作；玩家不在室内走动的范围内。
     if (w.survival?.actTimeModel === true) stepRoomWalk(w, minute);
+    // 1.6 B：主动搭话按分钟检查（每 5 游戏分），不再等 60 分整拍；冷却/日上限仍由模块裁决。
+    if (minute % 5 === 0 && minute % 60 !== 0) {
+      try { maybePlayerSpeech(w, { offline }); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+    }
     // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
     if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false, offline });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;

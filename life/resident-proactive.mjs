@@ -16,7 +16,7 @@ export const PROACTIVE_TALK = Object.freeze({
   range: 2.5,          // 玩家与居民同一空间内的直线距离
   cooldownMin: 360,    // 同一居民两次主动开口之间至少 6 游戏小时
   perDay: 2,           // 同一居民每游戏日最多 2 次
-  ttlMin: 15,          // 气泡在 /world 的有效期（游戏分钟）
+  ttlMin: 75,          // 气泡在 /world 的有效期（游戏分钟；1:10 下约 7.5 现实分钟）
   lineMax: 60,
   promptMax: 1200,
   residentsMax: 16,
