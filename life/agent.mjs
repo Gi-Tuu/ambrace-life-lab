@@ -77,7 +77,7 @@ export class Organism {
     this.dayTally = { day: 0, decisions: 0, byDriver: {}, norm: 0, rejected: 0 };
   }
 
-  // R8：关系写入必须统一夹到 ceiling。viab 的"关系维护"侵蚀会降低 ceiling，
+  // HARD-R8：关系写入必须统一夹到 ceiling。viab 的"关系维护"侵蚀会降低 ceiling，
   // 而 assess() 的常规路径直接 ± 而不看 ceiling ⇒ 被侵蚀的上限可以被普通社交顶穿
   // （实测 ceiling 75 时 trust 被 6 次 contact 顶到 93），"不可逆降级"因此部分可逆。
   bumpRel(id, trustDelta = 0, famDelta = 0) {
@@ -211,7 +211,7 @@ export class Organism {
       const input = { m: this.bank.snapshot(), pending: { ...this.bank.pending }, traits: this.traits };
       const estimate = this.forwardModel.predict(input, { precision: Boolean(this.ch.precision) });
       // M6-P（PLAN §25.2）：木桶门控 = 最不可靠通道的相对精度。只在开关开时写这个状态；
-      // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（P2 负控）。
+      // 关时不写、不传 gate ⇒ 轨迹逐位不变。weights 在无样本/precision 关时全 1 ⇒ gate 恒 1（M6PL-P2 负控）。
       if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));
       const prediction = this.ch.forwardModel ? estimate : { ...estimate, mu: { ...input.m }, probability: null };
       this.bank.tick(step);
@@ -323,7 +323,7 @@ export class Organism {
     if (ch.cfUsage) this.noteInfluence({ world, paths, scored, memBonus, risk, weights });
 
     const hb = ch.habitChoice === 0 ? null : this.habit.best();
-    // R1（第二次审计 P0）：习惯分支**原先不做任何规则校验**就直接 execute ——
+    // HARD-R1（第二次审计 P0）：习惯分支**原先不做任何规则校验**就直接 execute ——
     // "规则层是唯一裁决者"因此是假的。实测 50159 次执行里 693 次非法动作真的改了世界：
     // 607 次夜里 look_out（LOCKED_HOUR）、86 次空缸 eat（DEPLETED）。这里先验一次：
     // 非法就不许走捷径，落回下面的审议层由规则层裁决（而不是静默什么都不做）。
@@ -619,7 +619,7 @@ export class Organism {
   }
 
   execute(world, action, layer, t, silent, extra = {}) {
-    // R1 的结构性兜底：execute 是唯一的效果器入口，所以裁决必须在这里也成立一次。
+    // HARD-R1 的结构性兜底：execute 是唯一的效果器入口，所以裁决必须在这里也成立一次。
     // 上面三条路径（反射/习惯/审议）各自都验过了，但"每个调用点各补一遍"正是这个 P0 得以存在的
     // 原因（习惯那条漏了三个月）。这里再验一次：非法就拒绝，并且**不消耗任何资源**。
     const gate = validate(world, this.id, action);

@@ -33,7 +33,7 @@ const MUTATIONS = [
     file: 'agent.mjs',
     from: 'const gain = this.ch.coupling && !world.couplingGainOff ? this.coupling.input : 1;',
     to: 'const gain = 1;',
-    expect: ['P6a/①'],
+    expect: ['P6a-INPUT-GAIN'],
   },
   {
     id: 'm4-m4 缓解标价不再进评价目标',
@@ -54,7 +54,7 @@ const MUTATIONS = [
     file: 'body.mjs',
     from: 'if (other?.coupling?.refuses()) {',
     to: 'if (false) {',
-    expect: ['P6b 拒绝是世界侧的'],
+    expect: ['P6b-REFUSE 拒绝是世界侧的'],
   },
   {
     // 默认关（channelsFor 里 coupling:0）由 life.test.mjs 与 host-layers.test.mjs 守，

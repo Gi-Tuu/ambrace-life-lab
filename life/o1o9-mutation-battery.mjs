@@ -16,16 +16,16 @@ const O9 = 'o9-event-first.test.mjs';
 // expect 用闸门名的子串匹配 TAP 的 "not ok N - <name>"
 const MUTATIONS = [
   { id: 'o1-m1 usage忽略开关', file: 'viability.mjs', from: 'const useCf = cf && decisions > 0 && sum > 0;', to: 'const useCf = false;', test: O1, expect: ['C2b 选择跟踪'] },
-  { id: 'o1-m2 测量没接', file: 'agent.mjs', from: 'if (ch.cfUsage) this.noteInfluence(', to: 'if (false) this.noteInfluence(', test: O1, expect: ['C1 同量纲', 'C2 装置交叉核对', 'C2b 选择跟踪', 'C1 影子路径'] },
+  { id: 'o1-m2 测量没接', file: 'agent.mjs', from: 'if (ch.cfUsage) this.noteInfluence(', to: 'if (false) this.noteInfluence(', test: O1, expect: ['C1-SCALE 同量纲', 'C2 装置交叉核对', 'C2b 选择跟踪', 'C1-SHADOW-LIVE 影子路径'] },
   { id: 'o1-m3 零测量不兜底', file: 'viability.mjs', from: 'const useCf = cf && decisions > 0 && sum > 0;', to: 'const useCf = cf;', test: O1, expect: ['C3 零影响度'] },
   { id: 'o1-m4 D1绕过⑥', file: 'agent.mjs', from: 'damage: Boolean(this.ch.erosion)', to: 'damage: true', test: O1, expect: ['C4 D1'] },
-  { id: 'o1-m5 影子不中性化', file: 'agent.mjs', from: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) };', to: 'this.relations = realRel;', test: O1, expect: ['C1 影子路径'] },
-  { id: 'o1-m6 中性值写错(50)', file: 'agent.mjs', from: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) };', to: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: 50 }) };', test: O1, expect: ['C1 关系自证'] },
+  { id: 'o1-m5 影子不中性化', file: 'agent.mjs', from: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) };', to: 'this.relations = realRel;', test: O1, expect: ['C1-SHADOW-LIVE 影子路径'] },
+  { id: 'o1-m6 中性值写错(50)', file: 'agent.mjs', from: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: REL_NEUTRAL.trust }) };', to: 'this.relations = { get: () => ({ familiarity: REL_NEUTRAL.familiarity, trust: 50 }) };', test: O1, expect: ['C1-REL-NEUTRAL 关系自证'] },
   { id: 'o1-m7 默认关写反(cfUsage)', file: 'model.mjs', from: 'cfUsage: 0', to: 'cfUsage: 1', firstOnly: true, test: O1, expect: ['C5 默认关'] },
   { id: 'o1-m8 分母翻倍', file: 'agent.mjs', from: 'this.counters.cfDecisions = (this.counters.cfDecisions ?? 0) + 1;', to: 'this.counters.cfDecisions = (this.counters.cfDecisions ?? 0) + 2;', test: O1, expect: ['C2 装置交叉核对'] },
-  { id: 'o9-m1 断开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: 'true', test: O9, expect: ['E1 事件优先'] },
-  { id: 'o9-m2 忽略开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: '!reason', test: O9, expect: ['E1 负控', 'E2 默认关'] },
-  { id: 'o9-m3 alarm改去home', file: 'agent.mjs', from: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },", to: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'home' }) },", test: O9, expect: ['E3 生存语义'] },
+  { id: 'o9-m1 断开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: 'true', test: O9, expect: ['O9-E1-EVENT-FIRST 事件优先'] },
+  { id: 'o9-m2 忽略开关', file: 'agent.mjs', from: '!(ch.eventFirst && reason)', to: '!reason', test: O9, expect: ['O9-E1-OFF-BASELINE 负控', 'E2 默认关'] },
+  { id: 'o9-m3 alarm改去home', file: 'agent.mjs', from: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'hall' }) },", to: "{ when: (p) => p.kind === 'alarm', then: () => ({ kind: 'move_to', to: 'home' }) },", test: O9, expect: ['O9-E3 生存语义'] },
   { id: 'o9-m4 驳回不重问', file: 'agent.mjs', from: "const ask = Boolean(this.deliberator) && Boolean(ch.ask) && reason !== null;", to: "const ask = Boolean(this.deliberator) && Boolean(ch.ask) && reason !== null && reason !== '驳回重决策';", test: O9, expect: ['E5 不吞并'] },
   { id: 'o9-m5 默认关写反(eventFirst)', file: 'model.mjs', from: 'eventFirst: 0', to: 'eventFirst: 1', firstOnly: true, test: O9, expect: ['E2 默认关'] },
 ];

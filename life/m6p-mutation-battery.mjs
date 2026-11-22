@@ -9,10 +9,10 @@ import { execFileSync } from 'node:child_process';
 const LIFE = fileURLToPath(new URL('.', import.meta.url));
 const TEST = 'm6-plastic.test.mjs';
 const MUTATIONS = [
-  { id: 'pg-m1 忽略开关', file: 'agent.mjs', from: 'this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1', to: '1', expect: ['P1 承重'] },
-  { id: 'pg-m2 gate恒1', file: 'agent.mjs', from: 'if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));', to: 'if (this.ch.plasticGate) this.plasticGateNow = 1;', expect: ['P1 承重'] },
-  { id: 'pg-m3 默认关写反', file: 'model.mjs', from: 'plasticGate: 0', to: 'plasticGate: 1', firstOnly: true, expect: ['P4 默认关'] },
-  { id: 'pg-m4 gate漏进效用', file: 'model.mjs', from: 'const base = Object.values(bd).reduce((a, b) => a + b, 0);', to: 'const base = Object.values(bd).reduce((a, b) => a + b, 0) + (ch.plasticGate ? 0.01 : 0);', expect: ['P3 不进效用'] },
+  { id: 'pg-m1 忽略开关', file: 'agent.mjs', from: 'this.ch.plasticGate ? (this.plasticGateNow ?? 1) : 1', to: '1', expect: ['M6PL-P1 承重'] },
+  { id: 'pg-m2 gate恒1', file: 'agent.mjs', from: 'if (this.ch.plasticGate) this.plasticGateNow = Math.min(...Object.values(estimate.weights));', to: 'if (this.ch.plasticGate) this.plasticGateNow = 1;', expect: ['M6PL-P1 承重'] },
+  { id: 'pg-m3 默认关写反', file: 'model.mjs', from: 'plasticGate: 0', to: 'plasticGate: 1', firstOnly: true, expect: ['M6PL-P4 默认关'] },
+  { id: 'pg-m4 gate漏进效用', file: 'model.mjs', from: 'const base = Object.values(bd).reduce((a, b) => a + b, 0);', to: 'const base = Object.values(bd).reduce((a, b) => a + b, 0) + (ch.plasticGate ? 0.01 : 0);', expect: ['M6PL-P3 不进效用'] },
 ];
 
 function run(dir) {

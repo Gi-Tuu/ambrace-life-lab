@@ -8,6 +8,8 @@
 //   6) 入口真 import() 一遍（抓 node --check 漏报的尾部语法错）
 //   7) 架构闸门（scripts/arch-gates.mjs 的规则表）
 //   8) 仓库卫生：被跟踪却同时被 .gitignore 命中的文件不得新增，遗留登记也不许腐烂
+//   9) 判据 ID：life/*.test.mjs 里 test/describe/it 标题开头的编号必须全仓唯一；
+//      重复即红并打印“重复 ID + 文件:行 + 测试名”（口径见 scripts/test-ids.mjs 文件头）
 // 用法：node scripts/check.mjs   （失败时退出码 1）
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -15,6 +17,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { archGateReport } from './arch-gates.mjs';
+import { scanTestIds } from './test-ids.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const rel = (p) => p.split(sep).join('/');
@@ -227,10 +230,24 @@ const IGNORED_TRACKED_LEGACY = new Set([
   }
 }
 
+// 9) 判据 ID 唯一性：测试标题开头的编号是判据的对外名字，重复会让“V4-09 指哪条”
+//    这类歧义无法从测试名自证。这里不设基线棘轮：历史重复也一并要求清零，
+//    新增重复与遗留重复走同一条红/绿线（交接文档里 141 个重复 ID 的债务即由此收口）。
+//    抽取口径（大小写、区间、`P1a` 与 `P1` 的区分、只认标题开头）见 scripts/test-ids.mjs。
+const idScan = scanTestIds(ROOT);
+if (idScan.files === 0) fail('判据 ID 检查：life/ 下没有发现 *.test.mjs');
+else if (idScan.withId === 0) fail('判据 ID 检查：没有任何标题带判据 ID（抽取口径可能失效）');
+for (const group of idScan.duplicates) {
+  fail(`判据 ID 重复：${group.id} 被 ${group.entries.length} 条测试共用 ⇒ 判据名不再唯一。`
+    + '同一要求多夹具请加场景后缀（如 -SAVE/-OPEN），不同要求请按域改前缀（如 FAM-/REACH-）；'
+    + '禁止只加无语义数字后缀。出现位置：');
+  for (const entry of group.entries) fail(`  ${group.id}  ${entry.file}:${entry.line}  ${entry.title}`);
+}
+
 // 汇总
 if (problems.length) {
   console.error(`✖ 静态检查失败：${problems.length} 项`);
   for (const p of problems) console.error(`  - ${p}`);
   process.exit(1);
 }
-console.log(`✔ 静态检查通过：语法 ${checked} 个文件 · import 图已解析 · JSON ${jsons.length} 份 · 引擎纪律 ${ENGINE.length} 个模块 · 测试文件 ${testFiles.length} 个 · 架构闸门 ${arch.scanned} 文件/${arch.allowed.length} 白名单`);
+console.log(`✔ 静态检查通过：语法 ${checked} 个文件 · import 图已解析 · JSON ${jsons.length} 份 · 引擎纪律 ${ENGINE.length} 个模块 · 测试文件 ${testFiles.length} 个 · 判据 ID ${idScan.uniqueIds} 个全仓唯一 · 架构闸门 ${arch.scanned} 文件/${arch.allowed.length} 白名单`);
