@@ -14,7 +14,8 @@ import { facilityOf } from '../shared/camp-facility.mjs';
 import { homeAccessView, homeEntry } from './home-access.mjs';
 import { finishDiscussion, socialNetwork } from './settlement-social.mjs';
 import { leaveTalk, talkInRange } from './dialogue.mjs';
-import { speechLine } from './speech.mjs';
+import { talkAgentView } from './resident-dialogue.mjs';
+import { currentSpeechView, maybePlayerSpeech, playerSpeechView } from './resident-proactive.mjs';
 import { converse } from './intent.mjs';
 import { chatRound } from './resident-chatter.mjs';
 import { maybeResidentRequest, maybePeerRequest, stepPeerRequests } from './resident-requests.mjs';
@@ -100,7 +101,7 @@ function lastAct(a, t) {
 }
 export const sexOf = (seed, id) => (hashSeed(seed, `sex:${id}`) % 2 === 0 ? 'M' : 'F');
 
-export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,chatModel=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null,wildExpansion=false}={}) {
+export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=false,deliberator=null,chatModel=null,playerSpeechModel=null,mapSeed=0,layoutVersion=0,ecosystem=false,unifiedCooperation=false,independentWorld=false,wildFood=false,autonomousGoals=false,farmLife=false,settlementLife=false,regionalWork=false,discussions=true,residentChannelMask=null,residentCondition='C2',eventRulesVersion=LEGACY_EVENT_RULES,playerRation=false,actTimeModel=null,lifecycle=null,simTime=false,simClock=null,minuteMetab=null,wildExpansion=false}={}) {
   const world = makeWorld({ preset: 'survival', seed, pantries: 0, coop: true });
   // P1 连续时钟只属于正式游戏（gameRules）且必须显式开启；研究态/旧参数路径不创建、不写字段。
   const continuous = simTime === true && gameRules === true;
@@ -152,6 +153,7 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
   restoreFarmPlots(world);
   world.survivalDeliberator = deliberator;
   if (chatModel) world.chatModel = chatModel;
+  if (playerSpeechModel) world.playerSpeechModel = playerSpeechModel;
   world.residentChannelMask = residentChannelMask;
   world.residentCondition = residentCondition;
   // §15 P2-B：初始 roster 保证两性在场（否则开局即"无异性对"终局）；其余性别确定哈希
@@ -244,12 +246,16 @@ export function createSurvPlay(seed=7,{gameRules=false,residentialDecisions=fals
 }
 
 // E1 安全网觅食（保留供对照；默认关）：全聚落每日预算 1 收＋1 种。
-export function setSurvivalDeliberator(sp, deliberator, chatModel) {
+export function setSurvivalDeliberator(sp, deliberator, chatModel, playerSpeechModel) {
   sp.world.survivalDeliberator = deliberator;
   for (const a of Object.values(sp.world.agents)) if (!a.isPlayer) a.deliberator = deliberator;
   if (chatModel !== undefined) {
     if (chatModel) sp.world.chatModel = chatModel;
     else delete sp.world.chatModel;
+  }
+  if (playerSpeechModel !== undefined) {
+    if (playerSpeechModel) sp.world.playerSpeechModel = playerSpeechModel;
+    else delete sp.world.playerSpeechModel;
   }
 }
 
@@ -355,10 +361,10 @@ function restoreDistricts(world) {
 // 每分钟只做"身体在时间轴上该发生的事"（玩家/居民 busy 完成、think 到期）；
 // 天气/感知/日界/生态/配给/合作/关系等世界重结算只在跨 60 分边界跑一次，
 // 避免把 60 次重结算塞进一刻（旧的 60 分保底已删除）。
-export async function tickSurvPlay(sp, { now, onResidentAction, advanceMinutes, minutes } = {}) {
+export async function tickSurvPlay(sp, { now, onResidentAction, advanceMinutes, minutes, offline } = {}) {
   const w = sp.world;
   if (!w.simClock) return tickLegacy(sp, { now, onResidentAction });
-  return tickSim(sp, { now, onResidentAction, advanceMinutes, minutes });
+  return tickSim(sp, { now, onResidentAction, advanceMinutes, minutes, offline });
 }
 
 async function tickLegacy(sp, { now, onResidentAction }) {
@@ -371,7 +377,7 @@ async function tickLegacy(sp, { now, onResidentAction }) {
   return worldTick(sp, { now, onResidentAction, think: legacyPerTickThink() });
 }
 
-async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
+async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes, offline }) {
   const w = sp.world, clock = w.simClock;
   // 目标分钟来自时钟 + 本次显式步长；不再先把时钟整段推到头，再逐分钟处理——
   // 否则 w.t 在整段循环里都是终点派生的刻，分钟边界/感知/日界会错位。
@@ -418,7 +424,7 @@ async function tickSim(sp, { now, onResidentAction, advanceMinutes, minutes }) {
     // 研究态没有 pos ⇒ 本调用是空操作；玩家不在室内走动的范围内。
     if (w.survival?.actTimeModel === true) stepRoomWalk(w, minute);
     // 只在跨 60 分边界跑一次世界重结算（天气/percepts/扫描/日界/生态/配给/关系等）。
-    if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false });
+    if (minute % 60 === 0) await worldTick(sp, { now, onResidentAction, think: false, offline });
     if (residentMinutePass(w, sp, minute, { now, onResidentAction, explicit })) dispatched = true;
     // 1.4：当拍那一分钟过完就清注意力；再下一分钟居民继续原任务/行程。
     expireResidentAttention(w);
@@ -540,7 +546,7 @@ function drainThinkQueue(w, sp) {
   }
 }
 
-async function worldTick(sp, { now, onResidentAction, think }) {
+async function worldTick(sp, { now, onResidentAction, think, offline }) {
   const w = sp.world;
   // 1.4：整刻边界清一次（旧夹具直接调 worldTick 时不经过 tickLegacy）；连续世界在分钟末清。
   if (!w.simClock) expireResidentAttention(w);
@@ -698,6 +704,8 @@ async function worldTick(sp, { now, onResidentAction, think }) {
   }
   // S2：每刻至多一次遭遇对话（只在游戏态）。规则层先裁决，模型只负责"怎么说"。
   try { chatRound(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
+  // 1.6 B：居民主动向玩家开口（模板先落，模型异步；离线补时不触发）。
+  try { maybePlayerSpeech(w, { offline }); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // SOC-01：居民也会主动开口——每刻至多一条请求，等玩家接受/拒绝。
   try { maybeResidentRequest(w); maybePeerRequest(w); stepPeerRequests(w); } catch (e) { w.survival.intentErrors = (w.survival.intentErrors ?? 0) + 1; }
   // V7.1：老年额外代谢对玩家同规则（居民在主循环里处理；分钟身体路径在 body-clock 里处理）。
@@ -818,21 +826,6 @@ function crisisGoals(w) {
 }
 
 // 台词只取本刻已经成功执行的自主交谈。读快照不推进世界，也不调用模型。
-function currentSpeech(w) {
-  const speech = {};
-  for (const a of livingResidents(w)) {
-    const trace = a.trace ?? [];
-    let act;
-    for (let i = trace.length - 1; i >= 0 && trace[i].t === w.t; i--) {
-      if (trace[i].ok && trace[i].kind === 'talk') { act = trace[i]; break; }
-    }
-    if (act && isAlive(w.agents[act.target]) && w.loc[a.id] === w.loc[act.target]) {
-      speech[a.id] = speechLine(a, { world: w, kind: act.kind, actionId: act.action, t: act.t });
-    }
-  }
-  return speech;
-}
-
 export function survView(sp) {
   const w = sp.world; const s = w.survival; const mods = effectiveMods(w);
   const playerDead = Boolean(s.playerDead) || !isAlive(w.agents.p1);
@@ -861,8 +854,9 @@ export function survView(sp) {
     housing: w.housing, homeRoads:s.homeRoads??{}, wildTrust:s.wildTrust??{}, settlementLife: Boolean(s.settlementLife), homeAccess: homeAccessView(w,'p1'), campPlayerRoom:w.campPlayerRoom??null, social: socialNetwork(w),
     households: s.households ? { ...s.households, adultDays: ADULT_DAYS } : null,
     coop: { enabled: s.coop.enabled, task: s.coop.task, completions: s.coop.completions.slice(-10), refusals: s.coop.refusals, replans: s.coop.replans, exits: s.coop.exits ?? 0 },
-    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(residentAttentionView(w, a) ? { attention: residentAttentionView(w, a) } : {}), ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
-    speech: currentSpeech(w),
+    agents: Object.fromEntries(Object.values(w.agents).map((a) => [a.id, { id: a.id, name: a.name, isPlayer: !!a.isPlayer, stage: residentStage(w, a.id), age: Math.floor(ageDays(w, a.id)), sex: w.sex?.[a.id] ?? null, injury: residentInjury(w,a), act: a.isPlayer ? 'idle' : lastAct(a, w.t), energy: Number((a.drives?.v?.energy ?? 0).toFixed(2)), loc: w.loc[a.id] ?? null, viab: Number((a.viab?.v ?? 1).toFixed(2)), dead: !!a.dead, death: a.death ?? null, counters: a.counters ?? null, ...(residentAttentionView(w, a) ? { attention: residentAttentionView(w, a) } : {}), ...talkAgentView(w, a), ...(w.pos?.[a.id] ? { pos: w.pos[a.id] } : {}) }])),
+    speech: currentSpeechView(w),
+    ...(w.gameRules && playerSpeechView(w) ? { playerSpeech: playerSpeechView(w) } : {}),
     talk: s.talk ? { target: s.talk.target, engage: s.talk.engage, patienceMs: s.talk.patienceMs } : null,
     player: { energy: Number((w.agents.p1?.drives?.v?.energy ?? 0).toFixed(2)), viab: Number((w.agents.p1?.viab?.v ?? 1).toFixed(2)), dead: playerDead, stage: residentStage(w, 'p1'), age: Math.floor(ageDays(w, 'p1')), timeLeft: w.independentWorld ? playerTimeLeft(w) : null, timeMax: w.independentWorld ? playerTimeMax(w) : null,
       ...(w.independentWorld ? {

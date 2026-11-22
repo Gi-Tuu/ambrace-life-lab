@@ -80,6 +80,8 @@ function makeComparison(origin, revision = 0, saved) {
       residentChannelMask: masks[key],
       deliberator: null,
     });
+    // 1.6：对照分支不是“玩家生活的那个世界”：标记后既有的拒谈/拒主动搭话都走同一条判据。
+    play.world.compareSide = key;
     // 读档的 setGameMinutes 在各自加载时刻发生；这里用同一 startNow 重锚，保证同起点。
     if (play.world.simClock) {
       play.world.simClock.setGameMinutes(startMinutes, startNow);

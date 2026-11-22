@@ -104,7 +104,7 @@ model = createModelDomain({ S, CFG, C, observerActive });
 replay = createReplayDomain({ S, CFG, C, world });
 const {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-  modelBrain, modelTalk, modelChat, modelConfigured, buildDeliberationPrompt, deliberationPrompt, chatterNote,
+  modelBrain, modelTalk, modelChat, modelChatter, modelPlayerSpeech, modelConfigured, buildDeliberationPrompt, deliberationPrompt, chatterNote,
 } = model;
 const { replayQuery, makeComparison, publishComparison, saveComparison, tickComparison, actInComparison, controlComparison } = replay;
 const {
@@ -120,7 +120,7 @@ export {
   configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
   buildDeliberationPrompt, deliberationPrompt, flushWrites, survivalOptions,
   sweepCamps, validCampKey, campViewerKeys, campSurv, listCamps, guestCampView, campOwnerHash,
-  claimCamp, openCamp, backToMainCamp,
+  claimCamp, openCamp, backToMainCamp, modelPlayerSpeech,
 };
 
 // P1：正式生存动作走短串行（只保护状态提交），不再等当前 tick / 模型。
@@ -517,8 +517,8 @@ export const host = {
         // 正确做法是只换审议后端，世界不动：deliberator 是角色对象上的引用，就地换掉即可。
         configure({ brain: body.brain });
         const opts = survivalOptions();
-        if (S.surv) setSurvivalDeliberator(S.surv, opts.deliberator, opts.chatModel);
-    if (S.camps) for (const entry of S.camps.live.values()) setSurvivalDeliberator(entry.sp, opts.deliberator, opts.chatModel);
+        if (S.surv) setSurvivalDeliberator(S.surv, opts.deliberator, opts.chatModel, opts.playerSpeechModel);
+    if (S.camps) for (const entry of S.camps.live.values()) setSurvivalDeliberator(entry.sp, opts.deliberator, opts.chatModel, opts.playerSpeechModel);
         for (const key of ['A', 'B']) {
           for (const a of Object.values(S.packs[key].agents)) a.deliberator = CFG.brain === 'model' ? modelBrain : null;
           S.packs[key].log.push({ t: S.packs[key].world.t, who: '系统', kind: 'mask', text: `内心切到${CFG.brain === 'model' ? '真实模型' : '本地替身'}（世界不重置）` });

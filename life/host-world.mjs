@@ -41,6 +41,7 @@ export function createHostWorld({ S, CFG, C, getModel, getReplay, observerActive
   const nextComparisonDelayMs = (...a) => getReplay().nextComparisonDelayMs?.(...a) ?? Infinity;
   const modelBrain = (...a) => getModel().modelBrain(...a);
   const modelChatter = (...a) => getModel().modelChatter(...a);
+  const modelPlayerSpeech = (...a) => getModel().modelPlayerSpeech(...a);
   let sigHandlers = null;
   let shuttingDown = false;
 async function onSignal() {
@@ -321,7 +322,7 @@ async function backToMainCampInQueue() {
 // V7.2 阶段 B：正式游戏默认走角色个人时间（一天 1440 分）；V72_TIME=0 是退回旧"每刻 100 点预算"的兼容开关。
 function survivalOptions() {
   const gameRules = process.env.GAME_RULES === '1';
-  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, wildExpansion: true, actTimeModel: process.env.V72_TIME !== '0', gameRules, simTime: process.env.SIM_TIME !== '0', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null, chatModel: gameRules ? modelChatter : null };
+  return { residentialDecisions: true, eventRulesVersion: CURRENT_EVENT_RULES, ecosystem: true, unifiedCooperation: true, independentWorld: true, wildFood: true, autonomousGoals: true, farmLife: true, settlementLife: true, regionalWork: true, playerRation: true, wildExpansion: true, actTimeModel: process.env.V72_TIME !== '0', gameRules, simTime: process.env.SIM_TIME !== '0', discussions: process.env.SETTLEMENT_DISCUSSIONS !== '0', deliberator: CFG.brain === 'model' ? modelBrain : null, chatModel: gameRules ? modelChatter : null, playerSpeechModel: gameRules ? modelPlayerSpeech : null };
 }
 
 async function advanceWorlds(onError = null, auto = false) {
@@ -590,7 +591,8 @@ async function catchUpSurvival(minutes, sp = S.surv) {
   if (!sp || !(minutes > 0)) return;
   const savedDelib = sp.world.survivalDeliberator;
   const savedChat = sp.world.chatModel;
-  setSurvivalDeliberator(sp, null, null); // 离线补时走本地替身，也不让互聊偷调模型
+  const savedSpeech = sp.world.playerSpeechModel;
+  setSurvivalDeliberator(sp, null, null, null); // 离线补时走本地替身，也不让互聊/主动搭话偷调模型
   const start = sp.world.t;
   let summary;
   try {
@@ -626,7 +628,7 @@ async function catchUpSurvival(minutes, sp = S.surv) {
       summary = { applied: sp.world.t - start, capped: want > SURV_CATCHUP_CAP };
     }
   } finally {
-    setSurvivalDeliberator(sp, savedDelib, savedChat);
+    setSurvivalDeliberator(sp, savedDelib, savedChat, savedSpeech);
   }
   if (sp === S.surv) S.missed = {...S.missed,survival:summary};
   sp.log.push({ t: sp.world.t, kind: 'catchup', ok: true, code: `离线补 ${summary.applied} 刻${summary.capped ? '（超上限截断）' : ''}` });

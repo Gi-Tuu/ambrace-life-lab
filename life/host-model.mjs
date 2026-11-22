@@ -27,6 +27,11 @@ const chatterNote = (key, n = 1) => {
   const c = S.model.chatter ??= { asked: 0, ok: 0, timeout: 0, http: 0, empty: 0, invalid: 0 };
   c[key] = (c[key] ?? 0) + n;
 };
+// 主动搭话单独记账：它不属于玩家发起的对话，不能把 chatter 的落地率搅浑。
+const proactiveNote = (key, n = 1) => {
+  const c = S.model.playerSpeech ??= { asked: 0, ok: 0, timeout: 0, http: 0, empty: 0 };
+  c[key] = (c[key] ?? 0) + n;
+};
 const isAbort = (e) => /abort/i.test(`${String(e?.name ?? '')} ${String(e?.message ?? '')}`);
 
 function isFreeProvider(base) {
@@ -229,7 +234,7 @@ async function modelTalk({ npc, world, history, text, trust }) {
 // 1.5 自由对话/居民互聊：只负责"把一句话说自然"。
 // 与 modelTalk 共用 provider 循环、观众判据、每日预算与 breaker；不预扣 gate，
 // 因为这两条路都由短锁外的调用方驱动，失败一律返回 null 让调用方退模板。
-async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag = 'CHAT' } = {}) {
+async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag = 'CHAT', note = chatterNote, maxChars = 240 } = {}) {
   if (!CFG.providers.length) { budget.attempt(`${tag}:NO_PROVIDER`); return null; }
   if (!CFG.keys.some(Boolean)) { budget.attempt(`${tag}:NO_KEY`); return null; }
   if (CFG.brain !== 'model') { budget.attempt(`${tag}:BRAIN_LOCAL`); return null; }
@@ -239,45 +244,45 @@ async function askLine({ world, prompt, maxTokens = 120, temperature = 0.9, tag 
   if (!observerActive(lastVisitor, Date.now())) return null;
   if (!continuousWorld() && PER_TICK_CAP > 0 && (S.asksThisTick ?? 0) >= PER_TICK_CAP) return null;
   S.asksThisTick = (S.asksThisTick ?? 0) + 1;
-  chatterNote('asked');
-  const note = (msg) => budget.attempt(`${tag}:${msg}`);
+  note('asked');
+  const diagnostic = (msg) => budget.attempt(`${tag}:${msg}`);
   let refusal = null;
   for (let i = 0; i < CFG.providers.length; i++) {
     const mdl = CFG.models[i] || CFG.model;
     const key = providerKey(i);
-    if (!mdl) { note('NO_MODEL'); continue; }
-    if (!key) { note('NO_KEY'); continue; }
+    if (!mdl) { diagnostic('NO_MODEL'); continue; }
+    if (!key) { diagnostic('NO_KEY'); continue; }
     const free = isFreeProvider(CFG.providers[i]);
     const lane = modelChannel({
       watched: true, free,
       moneyCalls: S.model.moneyCalls ?? 0, nodeCalls: S.model.nodeCalls ?? 0,
       moneyBudget: BUDGET, nodeBudget: NODE_BUDGET, breakerOpen: breakerOpenAt(S.breaker),
     });
-    if (!lane.go) { refusal = lane.why; note(`LANE:${lane.why}`); continue; }
+    if (!lane.go) { refusal = lane.why; diagnostic(`LANE:${lane.why}`); continue; }
     const ac = new AbortController();
     const waitMs = Math.min(MODEL_TIMEOUT_MS, S.modelDeadline ? Math.max(0, S.modelDeadline - Date.now()) : MODEL_TIMEOUT_MS);
-    if (waitMs <= 0) { chatterNote('timeout'); return null; }   // 本刻模型时限已耗尽：玩家那侧同样是"没等到回话"
+    if (waitMs <= 0) { note('timeout'); return null; }   // 本刻模型时限已耗尽：调用方同样"没等到回话"
     const to = setTimeout(() => ac.abort(), waitMs);
     try {
       const res = await postChat(CFG.providers[i], key, {
         model: mdl, temperature, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens,
       }, mdl, ac);
-      if (!res.ok) { note(`HTTP ${res.status}`); budget.see(free, false); chatterNote('http'); continue; }
+      if (!res.ok) { diagnostic(`HTTP ${res.status}`); budget.see(free, false); note('http'); continue; }
       const j = await res.json();
       budget.recordCall({ free, tokens: j.usage?.total_tokens ?? 0 });
       budget.see(free, true);
       const line = String(j.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').trim();
-      if (line) { chatterNote('ok'); return [...line].slice(0, 240).join(''); }
-      chatterNote('empty');
+      if (line) { note('ok'); return [...line].slice(0, maxChars).join(''); }
+      note('empty');
     } catch (e) {
-      note(String(e?.message ?? e).slice(0, 40));
+      diagnostic(String(e?.message ?? e).slice(0, 40));
       budget.see(free, false);
-      chatterNote(isAbort(e) ? 'timeout' : 'http');
+      note(isAbort(e) ? 'timeout' : 'http');
     } finally {
       clearTimeout(to);
     }
   }
-  if (refusal) note(`LANE:${refusal}`);
+  if (refusal) diagnostic(`LANE:${refusal}`);
   return null;
 }
 
@@ -290,9 +295,18 @@ function modelChatter({ world, prompt } = {}) {
   return askLine({ world, prompt, maxTokens: 48, temperature: 0.85, tag: 'CHATTER' });
 }
 
+// 1.6 B：居民主动搭话。只负责“把模板说得更自然”，不决定说不说/对谁说。
+// 80 token 够一句 60 字；失败一律 null，world 侧保留模板。
+function modelPlayerSpeech({ world, prompt } = {}) {
+  return askLine({
+    world, prompt, maxTokens: 80, temperature: 0.85, tag: 'CALL',
+    note: proactiveNote, maxChars: 60,
+  });
+}
+
   return {
     configure, isFreeProvider, modelGate, modelRelease, modelChargeLane, modelCharged,
-    modelBrain, modelTalk, modelChat, modelChatter, modelConfigured, chatterNote,
+    modelBrain, modelTalk, modelChat, modelChatter, modelPlayerSpeech, modelConfigured, chatterNote,
     buildDeliberationPrompt, deliberationPrompt, budget,
   };
 }

@@ -146,7 +146,8 @@ export function campAction(world,body) {
   // 1.4 主动对话：camp_talk* 是零成本轻动作，但位置/房间/存活门与 camp_resident 同一套。
   if (kind==='camp_talk' || kind==='camp_talk_say' || kind==='camp_talk_close') {
     if (kind==='camp_talk_close') return closeResidentDialogue(world,body);
-    const failure=residentContact(world,body);
+    // 气泡打开/续聊由 resident-dialogue 用服务端 pos 复核 2.5 格；普通入口仍走 1.6 接触门。
+    const failure=body?.fromSpeech!==undefined ? null : residentContact(world,body);
     if (failure) return fail(failure==='RESIDENT_GONE'?'RESIDENT_OUT_OF_REACH':failure);
     return kind==='camp_talk' ? openResidentDialogue(world,body) : sayInResidentDialogue(world,body);
   }

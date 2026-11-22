@@ -14,6 +14,10 @@ import { dayOf } from './clock.mjs';
 import { classifySay } from './speech.mjs';
 import { markResidentAttention } from './resident-attention.mjs';
 import { simMinuteNow } from './sim-clock.mjs';
+import { normalizeChatText, sanitizeModelLine } from './chat-text.mjs';
+import { clearPlayerSpeech, speechOpenGate, speechSessionGate } from './resident-proactive.mjs';
+// 旧测试/调用方仍从本文件拿这两个清洗函数：这里只做 re-export，实现只有 chat-text 一份。
+export { normalizeChatText, sanitizeModelLine } from './chat-text.mjs';
 
 export const RESIDENT_TOPICS = Object.freeze([
   { id: 'today', label: '今天怎么样' },
@@ -48,7 +52,6 @@ const WORK_WORD = Object.freeze({
   road_lay: '铺路', road_remove: '拆路', deposit: '入库', withdraw: '取料', exchange: '换东西',
 });
 
-const CONTROL = /[\u0000-\u001f\u007f\u200b-\u200f\u2028\u2029\ufeff]/g;
 // 旧 dialogue.mjs 的冒犯词表；自由输入沿用同一把尺子，但不做"走开/动手"这类世界动作。
 const INSULT = /滚|闭嘴|废物|蠢|傻|去死|没用|垃圾|讨厌你|烦人/;
 
@@ -59,41 +62,18 @@ const hashOf = (s) => {
 };
 const pick = (arr, seed) => arr[hashOf(seed) % arr.length];
 
-export function normalizeChatText(value, max = FREE_TALK_LIMITS.textMax) {
-  const clean = String(value ?? '').replace(CONTROL, ' ').replace(/\s+/g, ' ').trim();
-  return [...clean].slice(0, max).join('');
-}
+// A：持久对话记忆的上限只在这里声明一次。它存的是“聊过什么”，不是世界事实。
+export const TALK_MEMORY_LIMITS = Object.freeze({
+  summaryMax: 200,
+  summarySegments: 3,
+  recentMax: 8,      // 4 轮 = 玩家一句 + 居民一句
+  textMax: 120,
+  residentsMax: 12,  // 正常存活上限 10；留出刚死/刚离场者的余量
+});
 
 // 已付过成本的回答：27B 偶尔用决策腔回话（{"id":"rest","reason":"…","text":"…"}）。
 // 只在对象上找台词字段，先取到一句再交给 sanitize 走原有清洗；id/act/reason 绝不解释成动作，
 // 也绝不写世界——文件头第 2 条的边界不变（模型只负责把已定的态度说成人话）。
-const LINE_FIELDS = Object.freeze(['text', 'line', 'speech']);
-function lineFieldOf(value) {
-  const raw = String(value ?? '').replace(CONTROL, ' ').trim();
-  if (!/^[\[{]/.test(raw)) return '';
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
-    // 带 act 的是决策体：动作语义必须由服务端裁决，绝不从决策体里捡台词
-    // （say.test 的 S2-5 负控就钉着"非法 act 的 text 不得进 converse"）。
-    if (Object.hasOwn(parsed, 'act')) return '';
-    for (const key of LINE_FIELDS) {
-      const picked = parsed[key];
-      if (typeof picked === 'string' && picked.trim()) return picked;
-    }
-  } catch { /* 解析失败：仍按今天的规则整段拒 */ }
-  return '';
-}
-
-// 模型输出只当"一句台词"：去控制符/零宽、去引号、去 URL、压空白、截断。绝不解析成动作。
-export function sanitizeModelLine(value, max = FREE_TALK_LIMITS.lineMax) {
-  let text = normalizeChatText(lineFieldOf(value) || value, max + 40);
-  text = text.replace(/^["“「『]|["”」』]$/g, '').trim();
-  text = text.replace(/https?:\/\/\S+/gi, '').replace(/\s+/g, ' ').trim();
-  // 基本注入隔离：模型若吐回非白名单 JSON/决策体（旧端点或错提示词），绝不把它当台词展示。
-  if (/^[\[{]/.test(text) || /"(?:id|reason|act|topic|text|served)"\s*:/.test(text)) return '';
-  return [...text].slice(0, max).join('');
-}
 
 function relationOf(npc) {
   // 只读：不经过 Relations.get()，避免连"看一眼关系"都新建一条关系。
@@ -220,20 +200,153 @@ function summarizeHistory(npc, history) {
     .slice(0, 240);
 }
 
+const finiteOr = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+
+// 摘要合并：按“；”切段，只留最新 ≤3 段且总长 ≤200；旧内容从最旧一段开始丢。
+export function mergeTalkSummary(...parts) {
+  const segments = [];
+  for (const part of parts) {
+    for (const raw of String(part ?? '').split('；')) {
+      const seg = normalizeChatText(raw, TALK_MEMORY_LIMITS.summaryMax);
+      if (seg) segments.push(seg);
+    }
+  }
+  const kept = [];
+  let total = 0;
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    if (kept.length >= TALK_MEMORY_LIMITS.summarySegments) break;
+    const seg = segments[i];
+    const room = TALK_MEMORY_LIMITS.summaryMax - total - (kept.length ? 1 : 0);
+    if (room <= 0) break;
+    const take = [...seg].slice(-room).join('');
+    if (!take) break;
+    kept.unshift(take);
+    total += [...take].length + (kept.length > 1 ? 1 : 0);
+    if ([...seg].length > room) break; // 这一段已经吃满：更旧的不再进
+  }
+  return kept.join('；');
+}
+
+// 对话记忆视图：只给摘要/轮次/上次时间；面板与 /world 共用同一份，绝不带 secrets/关系。
+export function talkMemoryView(world, id) {
+  const row = world?.survival?.talkMemory?.[id];
+  if (!row) return null;
+  return {
+    summary: String(row.summary ?? ''),
+    lastAt: finiteOr(row.lastAt, 0),
+    turns: finiteOr(row.turns, 0),
+  };
+}
+
+// 居民面板/悬停用：只在正式游戏出现，研究/compare 的形状逐位不变。
+export function talkAgentView(world, agent) {
+  if (!world?.gameRules || !agent || agent.isPlayer) return {};
+  const view = talkMemoryView(world, agent.id);
+  return view ? { lastTalk: view } : {};
+}
+
+// 关面板/每轮落地：只写 survival.talkMemory，不碰关系/位置/库存/动作。
+export function rememberDialogue(world, session) {
+  const s = world?.survival;
+  const npc = world?.agents?.[session?.target];
+  if (!s || !npc || !world.gameRules) return null;
+  const history = Array.isArray(session.history) ? session.history : [];
+  const recent = history.slice(-TALK_MEMORY_LIMITS.recentMax).map((h) => ({
+    who: h.who === 'p1' ? 'p1' : npc.id,
+    text: normalizeChatText(h.text, TALK_MEMORY_LIMITS.textMax),
+    atMin: finiteOr(h.atMin, simMinuteNow(world)),
+  })).filter((h) => h.text && (h.who === 'p1' || h.who === npc.id));
+  if (!recent.length && !session.summary) return null;
+  const mem = s.talkMemory = (s.talkMemory && typeof s.talkMemory === 'object' && !Array.isArray(s.talkMemory))
+    ? s.talkMemory : {};
+  mem[npc.id] = {
+    summary: mergeTalkSummary(session.recallSummary ?? '', summarizeHistory(npc, history)),
+    recent,
+    lastAt: world.t,
+    turns: Math.max(0, Math.round(finiteOr(session.turns, 0))),
+    updatedDay: dayOf(world.t),
+  };
+  // 容量：只留最近聊过的 residentsMax 位；死者/已离场者不留。
+  const ids = Object.keys(mem).sort((a, b) => finiteOr(mem[b].lastAt, 0) - finiteOr(mem[a].lastAt, 0));
+  for (const id of ids) {
+    if (id === npc.id) continue;
+    if (ids.indexOf(id) >= TALK_MEMORY_LIMITS.residentsMax || !world.agents?.[id] || world.agents[id].dead) delete mem[id];
+  }
+  return mem[npc.id];
+}
+
+// 读档清洗：坏类型/坏条目/超长字段一律丢，旧档没有这个字段就是没有。
+export function restoreTalkMemory(world) {
+  const s = world?.survival;
+  if (!s) return;
+  const raw = s.talkMemory;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    delete s.talkMemory;
+  } else {
+    const out = {};
+    for (const [id, row] of Object.entries(raw)) {
+      if (typeof id !== 'string' || !/^[A-Za-z0-9_]+$/.test(id)) continue;
+      if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+      const recent = Array.isArray(row.recent) ? row.recent
+        .filter((h) => h && typeof h === 'object' && (h.who === 'p1' || h.who === id)
+          && typeof h.text === 'string' && h.text.trim())
+        .slice(-TALK_MEMORY_LIMITS.recentMax)
+        .map((h) => ({
+          who: h.who,
+          text: normalizeChatText(h.text, TALK_MEMORY_LIMITS.textMax),
+          atMin: finiteOr(h.atMin, 0),
+        })) : [];
+      const summary = normalizeChatText(row.summary, TALK_MEMORY_LIMITS.summaryMax);
+      if (!recent.length && !summary) continue;
+      out[id] = {
+        summary,
+        recent,
+        lastAt: finiteOr(row.lastAt, 0),
+        turns: Math.max(0, Math.round(finiteOr(row.turns, 0))),
+        updatedDay: Math.max(0, Math.round(finiteOr(row.updatedDay, 0))),
+      };
+    }
+    const ids = Object.keys(out).sort((a, b) => out[b].lastAt - out[a].lastAt);
+    for (const id of ids) {
+      if (ids.indexOf(id) >= TALK_MEMORY_LIMITS.residentsMax || !world.agents?.[id] || world.agents[id].dead) delete out[id];
+    }
+    if (Object.keys(out).length) s.talkMemory = out;
+    else delete s.talkMemory;
+  }
+  // 主动搭话的气泡是瞬态的：读档不复活任何旧气泡；冷却/日计数保留。
+  if (s.playerSpeech !== undefined) delete s.playerSpeech;
+}
+
 // 打开面板：只认已经过距离/房间校验的 contact（camp-play 先跑 residentContact）。
 export function openResidentDialogue(world, body) {
+  // 点击气泡打开：服务端复核“气泡还是这条 + 同空间 ≤2.5”；普通入口仍由 camp-play 的 1.6 接触门把关。
+  if (body?.fromSpeech !== undefined) {
+    const speechCode = speechOpenGate(world, body);
+    if (speechCode) return fail(speechCode);
+  }
   const gate = talkable(world, body);
   if (gate.code) return fail(gate.code);
   const npc = gate.npc;
   const state = stateOf(world, npc);
+  const memory = world.survival.talkMemory?.[npc.id] ?? null;
+  const history = Array.isArray(memory?.recent)
+    ? memory.recent.map((h) => ({ who: h.who, text: h.text, atMin: h.atMin })).slice(-FREE_TALK_LIMITS.historyMax)
+    : [];
   const session = world.survival.residentDialogue = {
-    target: npc.id, openedAt: world.t, openedMin: simMinuteNow(world), turns: 0, lastTopic: null,
-    engage: engagementOf(world, npc), history: [], summary: '', pending: null,
+    target: npc.id, openedAt: world.t, openedMin: simMinuteNow(world),
+    turns: Math.max(0, Math.round(finiteOr(memory?.turns, 0))), lastTopic: null,
+    engage: engagementOf(world, npc), history, summary: memory?.summary ?? '',
+    recallSummary: memory?.summary ?? '', fromSpeech: body?.fromSpeech !== undefined, pending: null,
     trustGained: 0, famGained: 0, negGained: 0, modelTurns: 0, templateTurns: 0,
   };
+  if (session.fromSpeech) clearPlayerSpeech(world, npc.id);
   // 不写关系：旧 camp_resident 的"当天首次 trust+4"仍然只属于旧入口。
   const attention = markResidentAttention(world, npc.id, { about: 'p1' });
-  return { ...response(world, npc, null, openingLine(world, npc, state), session.turns), attention };
+  return {
+    ...response(world, npc, null, openingLine(world, npc, state), session.turns),
+    attention,
+    ...(memory ? { memory: talkMemoryView(world, npc.id) } : {}),
+  };
 }
 
 // 一次话题：多轮、零成本；每轮刷新 attention（当拍继续看着玩家）。
@@ -249,6 +362,11 @@ export function sayInResidentDialogue(world, body) {
   const npc = gate.npc;
   const session = sessionOf(world, npc.id);
   if (!session) return fail('NO_DIALOGUE');
+  if (body?.fromSpeech !== undefined && !session.fromSpeech) return fail('NO_DIALOGUE');
+  if (session.fromSpeech) {
+    const speechCode = speechSessionGate(world, npc.id);
+    if (speechCode) return fail(speechCode);
+  }
   if (session.pending) return fail('SAY_PENDING');
   const topic = String(body?.topic ?? '');
   if (!TOPIC_IDS.has(topic)) return fail('BAD_TOPIC');
@@ -368,8 +486,17 @@ export function prepareFreeSay(world, body, now = Date.now()) {
   if (!session) return fail('NO_DIALOGUE');
   const text = normalizeChatText(body?.text, FREE_TALK_LIMITS.textMax);
   if (!text) return fail('EMPTY_TEXT');
+  const fromSpeech = body?.fromSpeech !== undefined;
   // 自由文本走 host 的快路径，不经过 campAction 的距离门；这里必须自己补上同一套接触校验。
-  if (Object.hasOwn(body, 'from')) {
+  // 气泡会话改用服务端复核的 2.5 格（不放宽普通 1.6 入口）。
+  if (fromSpeech) {
+    if (!session.fromSpeech) return fail('NO_DIALOGUE');
+    const speechCode = speechSessionGate(world, npc.id);
+    if (speechCode) return fail(speechCode);
+  } else if (session.fromSpeech) {
+    const speechCode = speechSessionGate(world, npc.id);
+    if (speechCode) return fail(speechCode);
+  } else if (Object.hasOwn(body, 'from')) {
     const contactCode = residentContact(world, { target: npc.id, room: body.room, from: body.from, to: body.to });
     if (contactCode) return fail(contactCode);
   }
@@ -382,7 +509,7 @@ export function prepareFreeSay(world, body, now = Date.now()) {
   trimHistory(session);
   const intent = freeIntentOf(text);
   const token = `${npc.id}:${session.turns}:${now}`;
-  const contact = Object.hasOwn(body, 'from')
+  const contact = !fromSpeech && Object.hasOwn(body, 'from')
     ? { target: npc.id, room: body.room, from: body.from, to: body.to }
     : null;
   const pending = {
@@ -403,6 +530,10 @@ export function finishFreeSay(world, pending, line = null, now = Date.now()) {
   if (session.pending?.token !== token) return fail('SAY_STALE');
   session.pending = null;
   if (!isAlive(npc)) { delete world.survival.residentDialogue; return fail('RESIDENT_GONE'); }
+  if (session.fromSpeech) {
+    const speechCode = speechSessionGate(world, npc.id);
+    if (speechCode) { delete world.survival.residentDialogue; return fail(speechCode); }
+  }
   if (pending.contact) {
     const code = residentContact(world, pending.contact);
     if (code) { delete world.survival.residentDialogue; return { ok: false, code }; }
@@ -419,10 +550,11 @@ export function finishFreeSay(world, pending, line = null, now = Date.now()) {
   }
   session.history.push({ who: npc.id, text: out, atMin: simMinuteNow(world) });
   trimHistory(session);
-  session.summary = summarizeHistory(npc, session.history);
+  session.summary = mergeTalkSummary(session.recallSummary, summarizeHistory(npc, session.history));
   session.lastAt = world.t;
   if (served === 'model') session.modelTurns = (session.modelTurns ?? 0) + 1;
   else session.templateTurns = (session.templateTurns ?? 0) + 1;
+  rememberDialogue(world, session);
   markResidentAttention(world, npc.id, { about: 'p1' });
   const relation = applyFreeRelationship(world, npc, session, intent);
   return {
@@ -432,10 +564,13 @@ export function finishFreeSay(world, pending, line = null, now = Date.now()) {
   };
 }
 
-// 关闭：只清会话；attention 仍按 1 游戏分/下一拍自动到期，居民继续原任务。
+// 关闭：先落对话记忆，再清会话；attention 仍按 1 游戏分/下一拍自动到期，居民继续原任务。
 export function closeResidentDialogue(world, body) {
   const target = String(body?.target ?? '');
   const session = sessionOf(world, target);
-  if (session) delete world.survival.residentDialogue;
+  if (session) {
+    rememberDialogue(world, session);
+    delete world.survival.residentDialogue;
+  }
   return { ok: true, code: 'RESIDENT_TALK_CLOSED', closed: Boolean(session) };
 }

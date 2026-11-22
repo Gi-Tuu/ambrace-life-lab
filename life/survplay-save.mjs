@@ -14,6 +14,8 @@ import { LEGACY_EVENT_RULES } from './rng.mjs';
 import { adoptTravels, migratePositions, rebuildOccupancy, removeActor, setLocOnly, setPlayerRoom } from './actor-pos.mjs';
 import { generateWildPlots, restoreWildExpansion, wildExpansionEnabled } from '../shared/wild-plots.mjs';
 import { restoreGhost } from './ghost.mjs';
+import { restoreTalkMemory } from './resident-dialogue.mjs';
+import { restoreProactiveState } from './resident-proactive.mjs';
 import { worldSite } from './geometry.mjs';
 import { DEATHS_CAP, trimDeaths } from './death.mjs';
 
@@ -40,8 +42,14 @@ function dumpSurv(sp) {
   // SAV-02：规则开关随档走。否则换个 env 读同一份档就会静默改世界规则。
   const rules = { independentWorld: !!w.independentWorld, gameRules: !!w.gameRules, unifiedCooperation: !!w.unifiedCooperation, autonomousGoals: !!w.autonomousGoals, regionalWork: !!w.survival.regionalWork, settlementLife: !!w.survival.settlementLife, farmLife: !!w.survival.farmLife, ecosystem: !!w.survival.ecosystem, playerRation: !!w.survival.playerRation };
   // 1.5：pending 是"这一句还在等模型"的瞬态占位，绝不入档；会话/历史/摘要照常随 survival 走。
-  const survival = w.survival?.residentDialogue?.pending
-    ? { ...w.survival, residentDialogue: { ...w.survival.residentDialogue, pending: null } }
+  // 1.6：主动搭话的气泡也是瞬态（读档不复活旧气泡）；对话记忆/冷却计数照常入档。
+  const pending = w.survival?.residentDialogue?.pending;
+  const survival = (pending || w.survival?.playerSpeech)
+    ? {
+      ...w.survival,
+      ...(pending ? { residentDialogue: { ...w.survival.residentDialogue, pending: null } } : {}),
+      ...(w.survival?.playerSpeech ? { playerSpeech: null } : {}),
+    }
     : w.survival;
   return { t: w.t, rules, campPlayerRoom:w.campPlayerRoom, seed: w.seed, eventRulesVersion: w.eventRulesVersion, mapSeed: w.mapSeed, layoutVersion: w.layoutVersion, ...(w.districts && {regionalWork:true}), loc: w.loc, occupancy: w.occupancy, locs: w.locs, residentTravel: w.residentTravel, outdoor: w.outdoor, stash: w.stash, expect: w.expect, pantry: w.pantry, riskyPortion: w.riskyPortion, weatherEnabled: w.weatherEnabled, secrets: (w.secrets ?? []).map((x) => ({ ...x, known: [...x.known] })), pending: structuredClone(w.pending ?? []), survival, log: sp.log,
     // P2c：位置唯一事实只在正式游戏入档（研究态 dumpSurv 逐位不变）。
@@ -138,6 +146,10 @@ function loadSurv(raw,seed=7,options) {
       if (!Array.isArray(dialogue.history)) dialogue.history = [];
       if (typeof dialogue.summary !== 'string') dialogue.summary = '';
     }
+    // 1.6 A：对话记忆读档清洗（旧档没有这个字段就保持没有）。
+    restoreTalkMemory(sp.world);
+    // 1.6 B：主动搭话气泡是瞬态；冷却/日计数保留，坏行清洗。
+    restoreProactiveState(sp.world);
     // 证据优先：坏 rules/survival 的 false 不能把已经证明存在的分城区吞掉。
     if (settlementEvidence && !sp.world.survival.settlementLife) sp.world.survival.settlementLife = true;
     restoreSettlementEvents(w.survival);
