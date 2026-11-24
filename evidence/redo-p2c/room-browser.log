@@ -2,7 +2,7 @@
   "ok": true,
   "lines": [
     {
-      "at": "2026-11-19T18:11:54.961Z",
+      "at": "2026-11-24T12:10:30.689Z",
       "kind": "roomSpace",
       "door": {
         "x": 7,
@@ -26,16 +26,28 @@
       }
     },
     {
-      "at": "2026-11-19T18:11:56.398Z",
+      "at": "2026-11-24T12:10:31.686Z",
       "kind": "keyboardWalk",
       "before": {
         "x": 120,
         "y": 112
       },
       "after": {
-        "x": 83.19839999999999,
+        "x": 113.59680000000002,
         "y": 150,
         "walkable": true
+      }
+    },
+    {
+      "at": "2026-11-24T12:10:33.063Z",
+      "kind": "roomSyncRace",
+      "staleRoom": {
+        "ui": "store",
+        "room": null
+      },
+      "freshRoom": {
+        "ui": "store",
+        "room": "store"
       }
     }
   ]

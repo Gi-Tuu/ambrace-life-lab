@@ -67,11 +67,15 @@ test('F7 菜单与终局重开共用确认后的生存重置', () => {
   assert.match(APP, /code==='UNAUTHORIZED' \|\| code==='CAMP_NOT_OWNER'/);
 });
 
-test('F24 服务端房间是唯一真相：核心房间出门后也必须清掉室内视角', () => {
-  assert.match(APP, /if \(S\.playing && sv\.settlementLife && !enteringRoom && !leavingRoom && !ui\.surveyRoom && ui\.interior\)/,
-    '只要本地在室内，就必须接受服务端房间状态，不能按房间类型挑例外');
+test('F24 服务端房间是唯一真相：旧回包不得清掉新视角，空房间也必须能恢复室外', () => {
+  assert.match(APP, /id>roomStateFloor && S\.playing && sv\.settlementLife && !enteringRoom && !leavingRoom && !ui\.surveyRoom/,
+    '房间迁移前的旧 /world 回包必须被 roomStateFloor 挡住');
+  assert.doesNotMatch(APP, /!ui\.surveyRoom && ui\.interior\)/,
+    '不能再要求本地已经在室内，否则旧回包清掉 ui.interior 后无法恢复');
   assert.match(APP, /const room=sv\.campPlayerRoom \?\? null;/,
     '服务端 campPlayerRoom 为空就是室外，不能保留 home/hall/store 的旧镜头');
+  assert.match(APP, /roomStateFloor=refreshIssued;/,
+    '进门完成与出门完成都必须抬高房间回包下限');
   assert.doesNotMatch(APP, /residentialSite\(ui\.interior,sv\.peripheralHomes\) \|\| sv\.campPlayerRoom/,
     '旧条件会让核心房间在服务端出门后永久残留 ui.interior');
 });

@@ -2215,6 +2215,7 @@ function closeRoom(redraw=true, exit=true) {
   if (leaving) {
     leavingRoom=true;
     void playAct({kind:'camp_exit'}).catch(()=>{}).finally(()=>{
+      roomStateFloor=refreshIssued;
       leavingRoom=false;
       if (redraw) void refresh();
     });
@@ -2945,7 +2946,7 @@ async function survInteract() {
   }
   toast(SURV_CODE_ZH.NOTHING_HERE);
 }
-let enteringRoom=false;
+let enteringRoom=false, roomStateFloor=0;
 async function enterRoom(room,force=false) {
   if (enteringRoom || leavingRoom) return;
   enteringRoom=true;
@@ -2989,6 +2990,7 @@ async function enterRoom(room,force=false) {
     }
     keys.clear();
     ui.overview=false;
+    roomStateFloor=refreshIssued;
     ui.interior=room;
     ui.room=room;
     ui.camRoom=null;
@@ -3958,7 +3960,8 @@ async function refresh() {
         walker.path=[]; walker.pi=0; walker.moving=false;
       }
     }
-    if (S.playing && sv.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom && ui.interior) {
+    // 迁移前的旧 /world 回包不能覆盖新房间；服务端为空时也要能恢复室外。
+    if (id>roomStateFloor && S.playing && sv.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom) {
       const room=sv.campPlayerRoom ?? null;
       if (ui.interior!==room) {
         ui.interior=room;
@@ -5497,6 +5500,7 @@ Object.assign(window.__lifeDebug, {
   fadeable: (ids) => fadeableCovered(ids),
   survFlash: () => survFlash,
   interact: () => survInteract(),
+  enterRoom: (room) => enterRoom(room),
   // 1.6 B 验收口：只把一帧 /world 视图交给渲染函数，不写世界；用于气泡 DOM 的可视化验收。
   playerCall: (view) => { renderPlayerCall(view); return $('playerCall')?.hidden === false; },
   // 1.4 验收口：用当前行走器脚点打开/继续轻量对话（走真实 UI + 服务端 camp_talk）；不写世界位置。
