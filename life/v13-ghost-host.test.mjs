@@ -50,7 +50,8 @@ test('V13-GHOST-HOST 睡梦中饿死→睡眠当刻中断（转幽魂），世�
   await host.ctl({ action: 'step' });
   const after = await state();
   assert.ok(after.t > before.t, `幽魂态世界刻度应继续推进：${before.t} → ${after.t}`);
-  assert.ok(after.clockMinutes >= before.minutes + 60 - 0.01, `幽魂态游戏分钟应继续推进：${before.minutes} → ${after.clockMinutes}`);
+  // tickSim 的目标分钟会向下取整；从亚分钟锚点显式推进 60 分，实际增量介于 59–60 分。
+  assert.ok(after.clockMinutes >= before.minutes + 59 - 0.01, `幽魂态游戏分钟应继续推进：${before.minutes} → ${after.clockMinutes}`);
   assert.ok(sumActions(after) > before.actions, `幽魂态居民仍应行动：${before.actions} → ${sumActions(after)}`);
   assert.ok(after.population >= 1, '聚落仍应有存活居民');
   assert.equal(after.ended, false, '聚落未灭绝不得 ended');
