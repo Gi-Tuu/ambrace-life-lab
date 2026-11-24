@@ -687,3 +687,55 @@ test('A-36 幽魂观察不静音：回到季节曲并压到 GHOST 档', () => {
   assert.match(app, /musicWindow\(sv, \{ now: sv\.t \?\? 0, ghost \}\)/, 'app.js 必须把 ghost 传给窗口');
   assert.match(app, /proximity: proximity\(sv\), ghost \}\)/, 'app.js 必须把 ghost 传给 audio.scene');
 });
+
+const flushAudio = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('A-37 首载异步解码完成后自动起播：菜单与游戏都不再静音', async () => {
+  const { mod } = await mountAudio();
+  mod.menu(true);
+  assert.equal(mod.audioDebug().musicKey, 'menu:day');
+  assert.equal(mod.audioDebug().musicPlaying, true);
+  await flushAudio();
+  assert.equal(mod.audioDebug().musicSrc, true, '菜单曲解码完成后必须自己开始播，不能等下一次 menu(true)');
+  mod.scene(sceneArgs({ window: { play: true, theme: 'summer', day: true, t: 0 } }));
+  await flushAudio();
+  assert.equal(mod.audioDebug().musicKey, 'summer:day');
+  assert.equal(mod.audioDebug().musicSrc, true, '游戏曲首载也必须自动起播');
+  const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
+  assert.match(wired, /m\.playing && !m\.src && m\.key\?\.startsWith\(theme \+ ':'\)/,
+    '没有这条首载回调，startMusic 的 m.key/m.playing 会让后续调用直接 return');
+});
+
+test('A-38 回菜单立即停掉世界环境层与一次性音效', async () => {
+  const { mod, ctx } = await mountAudio();
+  mod.scene(sceneArgs({
+    proximity: 0.4, settlement: 'crisis', weather: 'rain', climate: { rain: true },
+    window: { play: true, theme: 'crisis', day: true, t: 0 },
+  }));
+  mod.sfx('click', { position: [0, 0] });
+  assert.equal(mod.audioDebug().beds.length, 4);
+  assert.equal(mod.audioDebug().oneShots, 1);
+  mod.menu(true);
+  assert.deepEqual(mod.audioDebug().beds, [], '菜单不得继承营地天气/昼夜/风/危机床');
+  assert.equal(mod.audioDebug().oneShots, 0, '菜单不得继承还没放完的游戏动作音');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.ok(ctx.sources.filter((s) => s.stopCount > 0).length >= 5, '循环床与一次性音都必须真的 stop');
+});
+
+test('A-39 互动音按听者距离衰减，缺位置时保持 UI 音全音量', async () => {
+  const { mod, ctx } = await mountAudio();
+  assert.equal(mod.spatialGain([0, 0], [0, 0]), 1);
+  assert.equal(mod.spatialGain(null, [0, 0]), 1);
+  assert.ok(mod.spatialGain([30, 0], [0, 0]) < 0.1, '30 格外必须显著衰减');
+  mod.setListener([0, 0]);
+  mod.sfx('click', { gain: 0.5, position: [30, 0] });
+  const source = ctx.sources.at(-1);
+  assert.ok(source, '空间音必须真的创建声源');
+  assert.ok(source.target.gain.value < 0.05, '远端互动音的实际 GainNode 必须被衰减');
+  const app = readFileSync(resolve(process.cwd(), 'web', 'app.js'), 'utf8');
+  assert.match(app, /audio\.setListener\(sv\.playerPos/, '每轮世界快照必须更新听者位置');
+  assert.match(app, /position: audioEventSource\(sv, cues\[0\]\)/, '世界事件音也必须带声源位置');
+  const wired = readFileSync(resolve(process.cwd(), 'web', 'audio.mjs'), 'utf8');
+  assert.match(wired, /const position = pointOf\(body\?\.to\) \?\? pointOf\(body\?\.from\)/,
+    '动作结果音必须优先用目标位置，其次用动作发生位置');
+});

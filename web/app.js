@@ -3726,6 +3726,21 @@ function renderPlayMode(sv, comparison = S.comparison) {
 let audioSceneSig = null;
 let audioWindowSig = null;
 let audioPrev = null;
+function audioEventSource(sv, id) {
+  if (['foundation','frameUp','complete','damaged'].includes(id)) {
+    const site = (sv.sites ?? []).find((s) => s.phase !== 'complete') ?? (sv.sites ?? [])[0]
+      ?? (sv.buildings ?? []).find((b) => b.integrity < 1) ?? (sv.buildings ?? [])[0];
+    return site?.loc ? (sv.locs?.[site.loc] ?? site.at ?? null) : (site?.at ?? null);
+  }
+  if (['chicken','cow','sheep','regrow'].includes(id)) return sv.locs?.yard ?? sv.locs?.garden ?? sv.playerPos ?? null;
+  if (['storm','cold','drought','crisisEnter','recover','shortfall','ration'].includes(id)) return sv.locs?.hall ?? sv.playerPos ?? null;
+  const agents = Object.values(sv.agents ?? {}).filter((a) => !a.isPlayer);
+  const actor = id === 'death' || id === 'widow'
+    ? agents.find((a) => a.dead)
+    : id === 'adult' ? agents.find((a) => a.stage === 'adult')
+      : id === 'elder' ? agents.find((a) => a.stage === 'elder') : agents[0];
+  return actor?.pos ? [actor.pos.x, actor.pos.z] : (sv.playerPos ?? null);
+}
 function syncAudioScene(sv) {
   if (!sv) return;
   // 审计 2026-11-15 POTENTIAL #1：菜单用独立主题（audio.menu），世界场景音频不得接管。
@@ -3733,6 +3748,7 @@ function syncAudioScene(sv) {
   // 点「主菜单」后菜单曲最多活一次轮询（≤900ms）就被营地音乐顶掉。
   // 同时把签名清空：回到游玩时下一轮会重新应用世界场景。
   if (ui.menu) { audioSceneSig = null; audioWindowSig = null; return; }
+  audio.setListener(sv.playerPos ?? sv.locs?.[sv.loc?.p1] ?? null);
   const sig = sceneSignature(sv);
   // 播放窗口每轮都重算（纯函数，成本可忽略）：它比场景签名变得频繁，音乐该淡出时就淡出。
   const ghost = ghostActive();
@@ -3750,7 +3766,7 @@ function syncAudioScene(sv) {
   const cues = diffAudioEvents(audioPrev, next);
   audioPrev = next;
   // 一次轮询最多一条事件音：世界同时发生很多事时，声音要挑最该听见的。
-  if (cues.length) audio.cue(cues[0], { gain: 0.8 });
+  if (cues.length) audio.cue(cues[0], { gain: 0.8, position: audioEventSource(sv, cues[0]) });
 }
 
 // 弹窗与背包的开合音：挂在 <dialog> 的 toggle 上，一处覆盖九个界面。
@@ -4396,6 +4412,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.querySelector('#startMenu') && !document.querySelector('#startMenu').hidden) { loadCampList(); renderCampCurrent(); loadConverse(); }
 });
 function showStart() {
+  audioPrev = null;
   audio.menu(true);
   if (campBusy || enteringRoom || leavingRoom) return;
   if (ui.talk) closeTalkDlg();

@@ -22,6 +22,7 @@ const state = {
   music: { key: null, bar: 0, nextAt: 0, timer: 0, playing: false, want: false, src: null, tick: 0, fileTheme: null }, musicBus: null,
   tracks: new Map(), loading: new Map(),
   voices: 0, lastAt: new Map(), menu: false,
+  oneShots: new Set(), listener: { x: 0, z: 0 },
 };
 
 function loadPrefs() {
@@ -90,6 +91,25 @@ function interleave(stereo, channel) {
   return out;
 }
 
+const SPATIAL_NEAR = 2;
+const SPATIAL_ROLLOFF = 1.4;
+const pointOf = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  ? { x: p[0], z: p[1] }
+  : p && Number.isFinite(p.x) && Number.isFinite(p.z) ? p : null;
+
+export function setListener(position) {
+  const p = pointOf(position);
+  if (p) state.listener = { x: p.x, z: p.z };
+}
+
+export function spatialGain(position, listener = state.listener) {
+  const p = pointOf(position), l = pointOf(listener);
+  if (!p || !l) return 1;
+  const d = Math.hypot(p.x - l.x, p.z - l.z);
+  if (!Number.isFinite(d) || d <= SPATIAL_NEAR) return 1;
+  return SPATIAL_NEAR / (SPATIAL_NEAR + SPATIAL_ROLLOFF * (d - SPATIAL_NEAR));
+}
+
 function play(buf, { gain = 1, at = 0, loop = false } = {}) {
   if (!state.ctx || !buf) return null;
   const src = state.ctx.createBufferSource();
@@ -98,14 +118,25 @@ function play(buf, { gain = 1, at = 0, loop = false } = {}) {
   g.gain.value = gain;
   src.connect(g); g.connect(state.master);
   src.start(Math.max(state.ctx.currentTime, state.ctx.currentTime + at));
+  const voice = { src, gain: g };
   if (!loop) {
     state.voices++;
-    src.onended = () => { state.voices--; };
+    state.oneShots.add(voice);
+    src.onended = () => { state.voices--; state.oneShots.delete(voice); };
   }
-  return { src, gain: g };
+  return voice;
 }
 
-export function sfx(name, { gain = 1 } = {}) {
+function stopOneShots() {
+  for (const voice of [...state.oneShots]) {
+    voice.src.onended = null;
+    try { voice.src.stop(); } catch { /* 已结束 */ }
+    voice.src.disconnect(); voice.gain.disconnect();
+  }
+  state.oneShots.clear(); state.voices = 0;
+}
+
+export function sfx(name, { gain = 1, position = null } = {}) {
   if (!state.ready || state.muted || !name) return;
   const now = performance.now();
   const last = state.lastAt.get(name) ?? -1e9;
@@ -113,18 +144,19 @@ export function sfx(name, { gain = 1 } = {}) {
   if (state.voices >= VOICE_LIMIT) return;
   state.lastAt.set(name, now);
   const buf = monoBuffer(`sfx:${name}`, () => renderSfx(name));
-  if (buf) play(buf, { gain });
+  if (buf) play(buf, { gain: gain * spatialGain(position) });
 }
 
 // 动作结果 → 音效：成功按动作族，失败统一一声"被拒"，个别码另有专属音。
 export function result(body, res) {
   if (!res || !state.ready) return;
   const code = res.code ?? res.error;
-  if (res.ok === false) { sfx(SFX_BY_CODE[code] ?? 'deny', { gain: 0.8 }); return; }
+  const position = pointOf(body?.to) ?? pointOf(body?.from);
+  if (res.ok === false) { sfx(SFX_BY_CODE[code] ?? 'deny', { gain: 0.8, position }); return; }
   const named = SFX_BY_CODE[code];
-  if (named) { sfx(named); return; }
+  if (named) { sfx(named, { position }); return; }
   const kind = SFX_BY_KIND[body?.kind];
-  if (kind) sfx(kind);
+  if (kind) sfx(kind, { position });
 }
 
 export const click = () => sfx('click', { gain: 0.5 });
@@ -150,7 +182,14 @@ function loadTrack(theme) {
   const p = fetch(`/web/${MUSIC_TRACKS[theme].file}`)
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((b) => state.ctx.decodeAudioData(b))
-    .then((buf) => { state.tracks.set(theme, buf); state.loading.delete(theme); })
+    .then((buf) => {
+      state.tracks.set(theme, buf); state.loading.delete(theme);
+      const m = state.music;
+      if (m.playing && !m.src && m.key?.startsWith(theme + ':')) {
+        const start = musicStartFor(theme, m.tick);
+        if (start !== null) playFile(theme, start);
+      }
+    })
     .catch(() => { state.loading.delete(theme); });   // 拉不到就静音、下截再试：不回落合成器、不刷屏
   state.loading.set(theme, p);
 }
@@ -212,6 +251,8 @@ export function menu(on) {
   if (!state.ready) return;
   if (!on) { state.menu = false; return; }
   state.menu = true;
+  stopOneShots();
+  clearBeds();
   startMusic('menu:day', 0);
   fadeMusic(musicTarget({ play: true, theme: 'menu' }, 'active'));
 }
@@ -219,9 +260,20 @@ export function menu(on) {
 // 环境声床：最多四层（天气 / 昼夜 / 风 / 危机），换状态时 1.5 秒交叉淡入淡出。
 // 第一参数是**槽位名**，第二参数是 **renderAmbience 的素材名**；缓存键跟着素材走，
 // 否则 weather 槽先 rain 后 cold 会复用同一份缓冲（审计 P0 的第二个坑）。
-function fadeOutBed(voice) {
-  voice.gain.gain.setTargetAtTime(0.0001, state.ctx.currentTime, 0.5);
-  setTimeout(() => { try { voice.src.stop(); } catch { /* 已停 */ } }, 1600);
+function fadeOutBed(voice, seconds = 1.6) {
+  voice.gain.gain.setTargetAtTime(0.0001, state.ctx.currentTime, seconds / 3);
+  setTimeout(() => {
+    try { voice.src.stop(); } catch { /* 已停 */ }
+    voice.src.disconnect(); voice.gain.disconnect();
+  }, seconds * 1000);
+}
+function clearBeds() {
+  for (const slot of Object.keys(BED_SLOTS)) {
+    const current = state.beds.get(slot);
+    if (!current) continue;
+    state.beds.delete(slot);
+    fadeOutBed(current, 0.18);
+  }
 }
 
 function setBed(slot, material, gain) {
@@ -332,6 +384,11 @@ export const audioDebug = () => ({
   beds: [...state.beds].map(([slot, v]) => ({ slot, material: v.material, gain: v.gain.gain.value })),
   buffers: [...state.buffers.keys()],
   music: state.musicBus ? state.musicBus.gain.value : 0,
+  musicKey: state.music.key,
+  musicPlaying: state.music.playing,
+  musicSrc: Boolean(state.music.src),
+  oneShots: state.oneShots.size,
+  listener: { ...state.listener },
 });
 
 loadPrefs();
