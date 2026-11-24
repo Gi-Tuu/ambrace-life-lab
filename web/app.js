@@ -732,7 +732,7 @@ const TONE_CACHE=new Map();
 const WALK = {};                 // `${cvId}:${who}` -> {x,y,path,pi,moving,face,auth}
 const SPEED = 0.5;               // 每动画帧推进的 tile 数（6fps ⇒ 约 3 tile/秒）
 const walkKey = (cvId, who) => `${cvId}:${who}`;
-// 室内玩家位置（逻辑像素，tile-top 锚点）：WASD 在房间内走动，走到下门自动出屋。纯表现层。
+// 室内玩家位置（逻辑像素，tile-top 锚点）：WASD 在房间内走动，靠近门按 F 离开。纯表现层。
 const IPOS = { site: null, x: 120, y: 150, moving: false, direction: 'down', face: 1 };
 const compareInterior = { ...IPOS };
 function roomPlayerPosition(pos, site) {
@@ -2186,12 +2186,13 @@ const ROOM_PROPS = {
   pen: ['养殖围栏','查看存栏、兑换收成或用公仓材料扩建。'],
 };
 
+const ROOM_DOOR_REACH = TILE * .75;
 function atRoomDoor(site, walking=false) {
   const x=IPOS.x+8, z=IPOS.y+16;
   if (walking && site==='hall') return hallExitAt(hallFront,x,z,true);
   const [left,top,w,d]=roomDoor(site);
   if (walking) return x>=left && x<=left+w && z>=top+d-2;
-  return rectGap(x,z,left,top,w,d)<=7;
+  return rectGap(x,z,left,top,w,d)<=ROOM_DOOR_REACH;
 }
 function propDistance(prop) {
   return rectGap((IPOS.x+8)/TILE,(IPOS.y+16)/TILE,prop.x,prop.z,prop.w,prop.d);
@@ -3957,11 +3958,12 @@ async function refresh() {
         walker.path=[]; walker.pi=0; walker.moving=false;
       }
     }
-    if (S.playing && sv.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom &&
-        (ui.interior?.startsWith('facility:') || residentialSite(ui.interior,sv.peripheralHomes) || sv.campPlayerRoom)) {
-      const room=sv.campPlayerRoom;
+    if (S.playing && sv.settlementLife && !enteringRoom && !leavingRoom && !ui.surveyRoom && ui.interior) {
+      const room=sv.campPlayerRoom ?? null;
       if (ui.interior!==room) {
         ui.interior=room;
+        ui.room=room;
+        ui.camRoom=null;
         IPOS.site=null;
         roomRoute=null;
         $('campPropDialog').close();
@@ -4422,8 +4424,10 @@ async function newSurvival() {
   $('startStatus').textContent='正在生成新的生存地图…';
   $('startNew').disabled=$('startSurvival').disabled=$('startCompare').disabled=true;
   try {
-    const result=await api('/ctl',{action:'survival_reset',confirm:true});
-    if (!result.ok || result.saveError) throw new Error('RESET_FAILED');
+    const capability = await postJson('/ctl/reset-ticket');
+    if (!capability?.ticket) throw Object.assign(new Error('RESET_TICKET_FAILED'), { code: 'RESET_TICKET_FAILED' });
+    const result=await api('/ctl',{action:'survival_reset',confirm:true,resetTicket:capability.ticket});
+    if (!result.ok || result.saveError) throw Object.assign(new Error('RESET_FAILED'), { code: result.error ?? (result.saveError ? 'SAVE_FAILED' : 'RESET_FAILED') });
     closeRoom(false);
     closeBackpack();
     ui.surveyRoom=null;
@@ -4434,11 +4438,19 @@ async function newSurvival() {
     ui.room='hall';
     resettingSurvival=false;
     selectWorld(false);
-  } catch {
+  } catch (error) {
     resettingSurvival=false;
     startError=true;
-    $('startStatus').textContent='新地图保存失败，请再试一次。';
-    if (!ui.menu) toast('新地图保存失败，请再试一次。');
+    const code=error?.code;
+    const message=code==='UNAUTHORIZED' || code==='CAMP_NOT_OWNER'
+      ? '没有权限重开这张地图，请回主营地或重新进入自己的营地。'
+      : code==='RESET_RATE_LIMITED'
+        ? '重开太频繁，稍等一分钟再试。'
+        : code==='SAVE_FAILED'
+          ? '新地图保存失败，请再试一次。'
+          : '新地图生成失败，请再试一次。';
+    $('startStatus').textContent=message;
+    if (!ui.menu) toast(message);
     $('startNew').disabled=$('startSurvival').disabled=$('startCompare').disabled=false;
   }
 }
@@ -4637,7 +4649,11 @@ function roomWaypoint() {
   if (prop) {
     const target=roomProps(site).find(p=>p.id===prop);
     if (target && propDistance(target)<=PROP_REACH) inspectRoomProp(target);
-  } else if (exit && atRoomDoor(site)) closeRoom();
+  } else if (exit && atRoomDoor(site)) {
+    guidance={site,until:performance.now()+5000};
+    forceRepaint=true;
+    toast('按 F 离开。');
+  }
   return null;
 }
 
@@ -4960,10 +4976,15 @@ function sceneGuidance(view,w,player,hover,right) {
     else if (entry?.unreachableAt) hints.push({kind:'unreachable',point:entry.unreachableAt,label:'路线不通'});
   };
   if (view.site) {
+    const [dx,dz,dw,dd]=roomDoor(view.site);
+    const exitPoint=[(dx+dw/2)/TILE,(dz+dd/2)/TILE];
+    const doorGap=rectGap(player.x,player.z,dx/TILE,dz/TILE,dw/TILE,dd/TILE);
+    if (!right && !roomRoute && (hover?.kind==='exit' || doorGap<=1.5)) {
+      hints.push({kind:'door',point:exitPoint,label:doorGap<=ROOM_DOOR_REACH/TILE?'F 离开':'出口'});
+    }
     const goal=!right && roomRoute?.site===view.site && (roomRoute.prop || roomRoute.exit) && roomRoute.path.at(-1);
     if (goal) hints.push({kind:roomRoute.exit?'door':'stand',point:goal.map(v=>v/TILE),
       label:roomRoute.exit?'出口':'操作位'});
-    if (hover?.kind==='exit' && !roomRoute) hints.push({kind:'door',point:hover.at,label:'出口'});
     if (hover?.kind==='prop' && !goal) {
       const rect=hover.prop, site=view.site, space=roomSpaceFor(site), crowd=roomCrowd(w,site);
       const allows=(x,z)=>space.walkable(x,z,CAMP_BODY_RADIUS) && separates(x,z,x,z,crowd) &&
@@ -5062,7 +5083,8 @@ function advanceOutdoorIntent(view,w,player) {
   if (entityGap(from,e)<=e.reach && atPoint) {
     outdoorIntent=null;walker.path=[];walker.pi=0;walker.moving=false;
     rememberGuidance(e);
-    if (outdoorSight(view,e,from)) void useOutdoorEntity(e,from);
+    if (e.kind==='door') toast('按 F 进入。');
+    else if (outdoorSight(view,e,from)) void useOutdoorEntity(e,from);
     else toast('视线被挡住了，请换个位置。');
   } else if (walker.pi>=walker.path.length || performance.now()>outdoorIntent.deadline) {
     const timedOut=performance.now()>outdoorIntent.deadline;
@@ -5156,7 +5178,7 @@ function pickRoom(ev, cv) {
     }
     if (hit?.kind==='exit') {
       const [x,z,w]=roomDoor(site);
-      if (atRoomDoor(site)) closeRoom();
+      if (atRoomDoor(site)) toast('按 F 离开。');
       else walkInside(site,x+w/2,z+2,null,true);
       return;
     }
@@ -5174,7 +5196,7 @@ function pickRoom(ev, cv) {
     } else {
       const [x,z,w,d]=roomDoor(site);
       const exit=rectGap(lx,ly,x,z,w,d)<=4 || (site==='hall' && hallExitAt(hallFront,lx,ly));
-      if (exit && atRoomDoor(site)) closeRoom();
+      if (exit && atRoomDoor(site)) toast('按 F 离开。');
       else walkInside(site,exit?x+w/2:lx,exit?z+2:ly,null,exit);
     }
     return;
@@ -5206,7 +5228,8 @@ function pickRoom(ev, cv) {
     const standing=!guidedOutdoor(hit) || approachAllows(world)(...from);
     if (standing && entityGap(from,hit)<=hit.reach && outdoorSight(cv._cam,hit,from) && !reposition) {
       rememberGuidance(hit);
-      void useOutdoorEntity(hit,from);
+      if (hit.kind==='door') toast('按 F 进入。');
+      else void useOutdoorEntity(hit,from);
     } else {
       const approach=approachEntity(world,walker,hit);
       if (approach.path) {
@@ -5358,7 +5381,7 @@ loadAssets();
     S.moving=walking;
     S.moving=walking;
     const repaint3d=forceRepaint || changed || walking || (!reduced.matches && Math.floor(elapsed*24)!==Math.floor((elapsed-dt)*24));
-    // 室内：WASD 在房间地板范围内走动（撞墙停），走到下门自动出屋。
+    // 室内：WASD 在房间地板范围内走动（撞墙停）；出门必须按 F，靠近门会显示提示。
     let pairedDX=mdx, pairedDZ=mdy, pairedStep=playerStep*TILE;
     if (ui.interior && !ghost) {
       if (mdx || mdy) roomRoute=null;
@@ -5391,7 +5414,6 @@ loadAssets();
           forceRepaint=true;
           toast('路上有障碍，换个方向试试。');
         }
-        if (!campCart?.attached && space.portalAt((IPOS.x+8)/TILE,(IPOS.y+16)/TILE,0.35)) { closeRoom(); return; }
       } else { IPOS.moving = false; pairedDX=pairedDZ=0; }
     }
     const siteB=S.viewB?.campPlayerRoom;

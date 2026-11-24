@@ -104,6 +104,7 @@ try {
   assert(await h.waitFor(async () => !(await h.evaluate(`document.querySelector('#startSurvival')?.disabled`, roomSid)), 20000, roomSid), '室内页继续按钮禁用');
   await h.evaluate(`document.querySelector('#startSurvival').click()`, roomSid);
   assert(await h.waitFor(async () => await h.evaluate('window.__lifeDebug.S.playing === true', roomSid), 15000, roomSid), '室内未进入游戏');
+  await h.evaluate(`(()=>{const d=window.__lifeDebug;d.S.view.campPlayerRoom='hall';d.S.view.loc.p1='hall';d.ui.interior='hall';d.ui.room='hall';})()`, roomSid);
   await h.evaluate(`document.querySelector('#firstRun [data-firstrun="skip"]')?.click()`, roomSid);
   await h.wait(500);
   const indoor = await (async () => {

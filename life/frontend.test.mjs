@@ -62,7 +62,33 @@ test('F7 菜单与终局重开共用确认后的生存重置', () => {
   assert.match(APP, /startNew.*onclick=newSurvival/);
   assert.match(APP, /btnSurvReset.*newSurvival/);
   assert.match(APP, /confirm\('新开一局/);
-  assert.match(APP, /action:'survival_reset',confirm:true/);
+  assert.match(APP, /action:'survival_reset',confirm:true,resetTicket:capability\.ticket/);
+  assert.match(APP, /postJson\('\/ctl\/reset-ticket'\)/);
+  assert.match(APP, /code==='UNAUTHORIZED' \|\| code==='CAMP_NOT_OWNER'/);
+});
+
+test('F24 服务端房间是唯一真相：核心房间出门后也必须清掉室内视角', () => {
+  assert.match(APP, /if \(S\.playing && sv\.settlementLife && !enteringRoom && !leavingRoom && !ui\.surveyRoom && ui\.interior\)/,
+    '只要本地在室内，就必须接受服务端房间状态，不能按房间类型挑例外');
+  assert.match(APP, /const room=sv\.campPlayerRoom \?\? null;/,
+    '服务端 campPlayerRoom 为空就是室外，不能保留 home/hall/store 的旧镜头');
+  assert.doesNotMatch(APP, /residentialSite\(ui\.interior,sv\.peripheralHomes\) \|\| sv\.campPlayerRoom/,
+    '旧条件会让核心房间在服务端出门后永久残留 ui.interior');
+});
+
+test('F25 进出统一按 F：门内持续提示 F 离开，WASD 不自动出门', () => {
+  assert.match(APP, /label:doorGap<=ROOM_DOOR_REACH\/TILE\?'F 离开':'出口'/,
+    '靠近室内门必须持续显示 F 离开，而不是只在悬停时给提示');
+  assert.match(APP, /if \(atRoomDoor\(site\)\) \{ closeRoom\(\); return; \}/,
+    'F 交互必须走同一个出门动作');
+  assert.doesNotMatch(APP, /space\.portalAt\([^\n]+closeRoom\(\)/,
+    'WASD 走近门不得自动触发 camp_exit');
+  assert.match(APP, /if \(e\.kind==='door'\) toast\('按 F 进入。'\)/,
+    '点击门外走近后不得代替 F 自动进门');
+  assert.match(APP, /if \(hit\.kind==='door'\) toast\('按 F 进入。'\)/,
+    '已经在门口点击门也必须按 F 才进门');
+  assert.doesNotMatch(APP, /else if \(exit && atRoomDoor\(site\)\) closeRoom\(\)/,
+    '点击出口/寻路到门口不得代替 F 自动出门');
 });
 
 import { chromeGate } from './chrome-gate.mjs';

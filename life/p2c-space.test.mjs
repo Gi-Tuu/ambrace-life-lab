@@ -111,7 +111,10 @@ test('P2c-03 静态闸门：旧位置字段只在 actor-pos/迁移/研究快照�
   const app = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
   assert.match(app, /roomSpaceFor\(/);
   assert.match(app, /roomSurface\(/);
-  assert.match(app, /portalAt\(/);
+  assert.match(app, /ROOM_DOOR_REACH/);
+  assert.match(app, /label:doorGap<=ROOM_DOOR_REACH\/TILE\?'F 离开':'出口'/);
+  assert.doesNotMatch(app, /space\.portalAt\([^\n]+closeRoom\(\)/,
+    '室内走近门不得自动出门；进出统一按 F');
   assert.match(app, /moveRoomSurface\(/);
   assert.equal(/roomPixelWalk|moveRoomFeet|roomBodyFits|roomAllows|SPACE_LEGACY/.test(app), false,
     '正式室内路径仍含旧像素实现');

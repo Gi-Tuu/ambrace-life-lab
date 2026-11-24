@@ -123,6 +123,73 @@ test('SEC5-05-TTL HTTP：MAIN reset nonce 短 TTL，过期后必须重新取', a
   } finally { await stopAudit5(h); }
 });
 
+test('SEC5-05-RESET-TICKET HTTP：无 Strict cookie 的一次性票据可重开 MAIN，复用即拒', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: '' });
+  try {
+    const issued = await jsonGet(h.base, '/ctl/reset-ticket');
+    assert.equal(issued.status, 200);
+    assert.match(issued.headers.get('cache-control') ?? '', /no-store/);
+    const { ticket } = await issued.json();
+    assert.match(ticket, /^[A-Za-z0-9_-]{32}$/);
+    const reset = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true, resetTicket: ticket });
+    assert.equal(reset.status, 200, JSON.stringify(await reset.json()));
+    const replay = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true, resetTicket: ticket });
+    assert.equal(replay.status, 403, '一次性票据消耗后不得复用');
+    const wrongTarget = await jsonGet(h.base, '/ctl/reset-ticket');
+    const other = await (await wrongTarget.json()).ticket;
+    const crossCamp = await jsonPost(h.base, '/ctl?camp=' + 'a'.repeat(32), {
+      action: 'survival_reset', confirm: true, resetTicket: other,
+    });
+    assert.equal(crossCamp.status, 403, 'MAIN 票据不得挪给具名营地');
+  } finally { await stopAudit5(h); }
+});
+
+test('SEC5-05-RESET-TICKET-TTL HTTP：重置票据过期后必须重新获取', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: '', RESET_TICKET_TTL_MS: '300' });
+  try {
+    const issued = await jsonGet(h.base, '/ctl/reset-ticket');
+    const { ticket } = await issued.json();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const stale = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true, resetTicket: ticket });
+    assert.equal(stale.status, 403, '过期票据不得授权重置');
+  } finally { await stopAudit5(h); }
+});
+
+test('SEC5-05-RESET-TICKET-OWNER HTTP：具名营地重置仍要 owner，票据只补 iframe 授权', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: '' });
+  try {
+    const opened = await jsonPost(h.base, '/saves/open', { name: '票据营地' });
+    const body = await opened.json();
+    assert.ok(body.ok && body.key, JSON.stringify(body));
+    const owner = (/camp_owner=([^;]+)/.exec(opened.headers.getSetCookie().join('\n')) ?? [])[1] ?? '';
+    assert.ok(owner, '建档必须签发 owner');
+    const issued = await jsonGet(h.base, '/ctl/reset-ticket?camp=' + body.key);
+    const { ticket } = await issued.json();
+    const anonymous = await jsonPost(h.base, '/ctl?camp=' + body.key, {
+      action: 'survival_reset', confirm: true, resetTicket: ticket,
+    });
+    assert.equal(anonymous.status, 403, '没有 owner 时票据不得重置别人的营地');
+    const owned = await jsonPost(h.base, '/ctl?camp=' + body.key, {
+      action: 'survival_reset', confirm: true, resetTicket: ticket,
+    }, { headers: { cookie: 'camp_owner=' + owner } });
+    assert.equal(owned.status, 200, JSON.stringify(await owned.json()));
+  } finally { await stopAudit5(h); }
+});
+
+test('SEC5-05-RESET-TICKET-TOKEN HTTP：配置 CTL_TOKEN 时票据不能绕过令牌', async () => {
+  const h = await bootAudit5({ CTL_TOKEN: 'top-secret' });
+  try {
+    const issued = await jsonGet(h.base, '/ctl/reset-ticket');
+    const { ticket } = await issued.json();
+    const anon = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true, resetTicket: ticket });
+    assert.equal(anon.status, 403, '令牌姿态下票据不得成为第三套授权');
+    const bearer = await jsonPost(h.base, '/ctl', { action: 'survival_reset', confirm: true }, {
+      headers: { authorization: 'Bearer top-secret' },
+    });
+    assert.equal(bearer.status, 200, '运维令牌路径保持可用');
+  } finally { await stopAudit5(h); }
+});
+
 test('DATA5-05-REOPEN-OWNER 索引删除后重开仍归原 owner；重启从侧车重建索引', async () => {
   const { rmSync } = await import('node:fs');
   const { join } = await import('node:path');

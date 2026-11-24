@@ -346,6 +346,11 @@ const CTL_SESSION_MAX = positiveInt(process.env.CTL_SESSION_MAX, 5000);
 const CTL_NONCE_TTL_MS = positiveInt(process.env.CTL_NONCE_TTL_MS, 60_000);
 const MAIN_RESET_LIMIT = positiveInt(process.env.MAIN_RESET_LIMIT, 3);
 const MAIN_RESET_WINDOW_MS = positiveInt(process.env.MAIN_RESET_WINDOW_MS, 60_000);
+// 第三方 iframe 不会发送 SameSite=Strict 的 ctl_sid/ctl_nonce。重置票据是浏览器可读的
+// 一次性能力：60 秒、绑定目标营地、消耗前还要过 owner/令牌/限速，不降低 cookie 的 CSRF 属性。
+const RESET_TICKET_TTL_MS = positiveInt(process.env.RESET_TICKET_TTL_MS, 60_000);
+const RESET_TICKET_MAX = positiveInt(process.env.RESET_TICKET_MAX, 1000);
+const resetTickets = new Map();
 const ctlSessions = new Map();
 const mainResetTimes = [];
 const secureCookie = (req) => process.env.COOKIE_SECURE === '1'
@@ -372,6 +377,25 @@ function pruneSessions(now) {
   // 极端覆盖：按过期时间删最旧的一半，保证表有界。
   const olds = [...ctlSessions.entries()].sort((a, b) => a[1].expires - b[1].expires);
   for (let i = 0; i < Math.ceil(olds.length / 2); i += 1) ctlSessions.delete(olds[i][0]);
+}
+function pruneResetTickets(now = Date.now()) {
+  for (const [token, rec] of resetTickets) if (rec.expires <= now) resetTickets.delete(token);
+  if (resetTickets.size <= RESET_TICKET_MAX) return;
+  const olds = [...resetTickets.entries()].sort((a, b) => a[1].expires - b[1].expires);
+  for (const [token] of olds.slice(0, resetTickets.size - RESET_TICKET_MAX)) resetTickets.delete(token);
+}
+function issueResetTicket(campKey) {
+  pruneResetTickets();
+  const token = randomBytes(24).toString('base64url');
+  resetTickets.set(token, { campKey, expires: Date.now() + RESET_TICKET_TTL_MS });
+  return token;
+}
+function resetTicketValid(token, campKey) {
+  const rec = resetTickets.get(String(token ?? ''));
+  return Boolean(rec && rec.expires > Date.now() && rec.campKey === campKey);
+}
+function consumeResetTicket(token) {
+  return resetTickets.delete(String(token ?? ''));
 }
 function issueCtlSession(req, res) {
   const now = Date.now();
@@ -532,6 +556,13 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
   const campKey = url.searchParams.get('camp') ??
     (req.headers.cookie ?? '').split(';').map(x => x.trim()).find(x => x.startsWith('camp='))?.slice(5);
 
+  if (p === '/ctl/reset-ticket' && req.method === 'GET') {
+    const target = campKey && campKey !== 'MAIN' ? campKey : 'MAIN';
+    if (target !== 'MAIN' && !/^[0-9a-f]{32}$/.test(target)) return json(res, 400, { error: 'BAD_CAMP' });
+    res.setHeader('cache-control', 'no-store');
+    return json(res, 200, { ticket: issueResetTicket(target), expiresInMs: RESET_TICKET_TTL_MS });
+  }
+
   if (req.method === 'GET' && p === '/healthz') {
     const st = host.status();
     // H-16：不再回显每个供应商的完整 base URL 与 DATA_DIR 绝对路径（实测曾回显内网地址）。
@@ -590,13 +621,17 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
     // SEC3-01：普通交互（/act）配了令牌也允许同源浏览器；破坏性 /ctl 才要令牌（SEC3-02）。
-    // SEC5-05：只有 MAIN 的 survival_reset 允许“服务端会话 nonce”作为令牌姿态下的浏览器授权；
-    // 全局 reset / 具名营地仍只认 Bearer 或 owner（nonce 不越权）。
+    // SEC5-05：MAIN 的 survival_reset 可用会话 nonce；未配令牌时，MAIN 与具名营地都可用一次性票据。
+    // 具名营地即使有票据，后面仍必须过 owner；配置 CTL_TOKEN 时票据不参与授权。
     const isMainCamp = !campKey || campKey === 'MAIN';
     const allowNonce = p === '/ctl' && body?.action === 'survival_reset' && isMainCamp;
+    const resetTarget = isMainCamp ? 'MAIN' : campKey;
+    const resetTicket = String(body?.resetTicket ?? '');
+    const ticketAuthorized = !CTL_TOKEN && p === '/ctl' && body?.action === 'survival_reset'
+      && resetTicketValid(resetTicket, resetTarget);
     const denied = p === '/act'
       ? interactionDenied(req, CTL_TOKEN)
-      : ctlDenied(req, body, CTL_TOKEN, () => ctlNonceValid(req), { allowNonce });
+      : ctlDenied(req, body, CTL_TOKEN, () => ctlNonceValid(req) || ticketAuthorized, { allowNonce });
     if (denied) return json(res, p === '/ctl' ? 403 : (denied === 'UNAUTHORIZED' ? 401 : 403), { error: denied });
     // nonce 一次性：任何“靠 nonce 放行”的破坏性动作成功后立即轮换（响应里带回新 cookie）。
     const tokenAuthorized = Boolean(CTL_TOKEN) && tokenMatches(bearerOf(req), CTL_TOKEN);
@@ -634,6 +669,8 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
       }
       mainResetTimes.push(now);
     }
+    const usedResetTicket = ticketAuthorized && !ctlNonceValid(req);
+    if (usedResetTicket) consumeResetTicket(resetTicket);
     try {
       const out = await (p==='/act' ? host.act(body,campKey || undefined) : host.ctl(body,campKey || undefined));
       if (mainReset) auditMainReset(req, out?.ok ? 'ok' : (out?.error ?? 'rejected'));

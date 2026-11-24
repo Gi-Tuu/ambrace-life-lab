@@ -62,7 +62,7 @@ try {
   assert(probe.doorMove.z >= 11.6 * 16 && probe.doorMove.z <= 12 * 16 + .5, `门口必须可到且不得越过 12×16，实测 z=${probe.doorMove.z}`);
 
   // 真实 animate 路径：把 ui.interior 设成 hall，按 A 向右（左）走，看 IPOS 真的动且不穿墙。
-  const before = await h.evaluate(`(()=>{const d=window.__lifeDebug;d.ui.interior='hall';d.ui.room='hall';d.IPOS.x=8*16-8;d.IPOS.y=8*16-16;return {x:d.IPOS.x,y:d.IPOS.y}})()`, sid);
+  const before = await h.evaluate(`(()=>{const d=window.__lifeDebug;d.S.view.campPlayerRoom='hall';d.S.view.loc.p1='hall';d.ui.interior='hall';d.ui.room='hall';d.IPOS.x=8*16-8;d.IPOS.y=8*16-16;return {x:d.IPOS.x,y:d.IPOS.y}})()`, sid);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',key:'a',bubbles:true}))`, sid);
   await h.wait(700);
   await h.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyA',key:'a',bubbles:true}))`, sid);
