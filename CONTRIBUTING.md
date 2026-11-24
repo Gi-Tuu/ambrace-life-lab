@@ -39,3 +39,8 @@ npm run coverage  # 同上，附带 Node 内建覆盖率
 ## 反馈
 
 见 `README.md` 的「反馈」一节。
+
+
+## Contributor License Agreement
+
+Before merging a contribution, its author must explicitly agree to [CLA.md](CLA.md). The maintainer verifies the agreement and records the CLA revision. Organizational contributions require authorization by a person empowered to bind the organization. Submitting a pull request alone does not indicate agreement.
