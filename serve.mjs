@@ -11,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { normalizeName, buildCampExport, importCampExport } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
+import { createTokenBucket } from './life/sim-clock.mjs';
 
 const ROOT = resolve('.');
 // 魔搭创空间 Docker 约定监听 0.0.0.0:7860
@@ -217,6 +218,34 @@ const CTL_TOKEN = process.env.CTL_TOKEN ?? '';
 // 按 IP 限等于给整站设一个"每分钟 5 人建档"的总闸（第 6 人起 429）。现在按**营地名**分桶，
 // 另设一个显式的全局桶当防滥用层；两层都是限速，回显的错误码不区分是哪一层挡的（不透露内部阈值）。
 const positiveInt = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : d; };
+
+// 独立测试入口：默认关闭；令牌优先用 MODEL_TEST_TOKEN，未配置时复用中继令牌。
+// 它与游戏共用节点，但最多 2 个在途、6 次/分钟，不能把 16 槽游戏队列灌满。
+const MODEL_TEST_ENABLED = process.env.MODEL_TEST_ENABLED === '1';
+const MODEL_TEST_TOKEN = String(process.env.MODEL_TEST_TOKEN ?? RELAY_TOKEN);
+const MODEL_TEST_MODEL = String(process.env.MODEL_TEST_MODEL ?? 'qwen3.8-27b');
+const MODEL_TEST_MAX_TOKENS = positiveInt(process.env.MODEL_TEST_MAX_TOKENS, 512);
+const MODEL_TEST_MAX_BYTES = positiveInt(process.env.MODEL_TEST_MAX_BYTES, 16 * 1024);
+const MODEL_TEST_MAX_INFLIGHT = positiveInt(process.env.MODEL_TEST_MAX_INFLIGHT, 2);
+const modelTestRate = createTokenBucket({
+  capacity: positiveInt(process.env.MODEL_TEST_RATE_CAPACITY, 2),
+  refillMs: positiveInt(process.env.MODEL_TEST_RATE_REFILL_MS, 10_000),
+});
+let modelTestInFlight = 0;
+function testTokenPresented(req) {
+  try {
+    const q = new URL(req.url, 'http://test.local').searchParams.get('test_token');
+    if (q) return String(q);
+  } catch { /* 畸形 URL 由路由前段处理 */ }
+  const h = String(req.headers.authorization ?? '');
+  return h.startsWith('Bearer ') ? h.slice(7) : String(req.headers['x-test-token'] ?? '');
+}
+const modelTestAuthorized = (req) => constantTimeEqual(testTokenPresented(req), MODEL_TEST_TOKEN);
+const completionPayload = (r) => ({
+  object: 'chat.completion',
+  choices: [{ index: 0, message: { role: 'assistant', content: String(r.content ?? '') }, finish_reason: String(r.finish_reason ?? 'stop') }],
+  usage: r.usage && typeof r.usage === 'object' ? r.usage : {},
+});
 const OPEN_LIMIT = positiveInt(process.env.OPEN_LIMIT, 5);          // 同一个营地名，每分钟最多这么多次
 const OPEN_LIMIT_GLOBAL = positiveInt(process.env.OPEN_LIMIT_GLOBAL, 60); // 整站每分钟总量（防刷名造营地）
 const OPEN_SESSION_LIMIT = positiveInt(process.env.OPEN_SESSION_LIMIT, 5); // 同一个浏览器会话最多建几个营地/分钟
@@ -571,7 +600,14 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
       ok: status === 200,
       model: MODEL,
       providers: PROVIDERS.map((_b, i) => ({ configured: Boolean(providerKey(i)), model: MODELS[i] || MODEL })),
-      relay: RELAY_TOKEN ? { ...brainRelay.view(), limits: brainRelay.limits } : { off: true },
+      relay: RELAY_TOKEN ? {
+        ...brainRelay.view(),
+        limits: brainRelay.limits,
+        test: MODEL_TEST_ENABLED ? {
+          enabled: true, inFlight: modelTestInFlight, rate: modelTestRate.state(),
+          maxTokens: MODEL_TEST_MAX_TOKENS, maxBytes: MODEL_TEST_MAX_BYTES, model: MODEL_TEST_MODEL,
+        } : { enabled: false },
+      } : { off: true },
       engine: 'life-architecture',
       listen: `${HOST}:${PORT}`,
       world: st,
@@ -682,6 +718,43 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     }
   }
 
+  // 所有者的小项目测试入口：OpenAI 兼容、默认关闭、独立限流；不经过游戏预算/在场闸门。
+  if (req.method === 'POST' && p === '/test/v1/chat/completions') {
+    if (!MODEL_TEST_ENABLED || !MODEL_TEST_TOKEN) return json(res, 404, { error: 'NOT_FOUND' });
+    if (!modelTestAuthorized(req)) return json(res, 401, { error: 'UNAUTHORIZED' });
+    res.setHeader('cache-control', 'no-store');
+    if (modelTestInFlight >= MODEL_TEST_MAX_INFLIGHT) return json(res, 429, { error: 'TEST_BUSY' });
+    let raw;
+    try { raw = await readBody(req, MODEL_TEST_MAX_BYTES); }
+    catch (error) {
+      return json(res, error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: error.code === 'BODY_TOO_LARGE' ? 'BODY_TOO_LARGE' : 'BAD_BODY' });
+    }
+    let body;
+    try { body = JSON.parse(raw); } catch { return json(res, 400, { error: 'BAD_JSON' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'BAD_JSON' });
+    if (!Array.isArray(body.messages) || body.messages.length === 0) return json(res, 400, { error: 'BAD_MESSAGES' });
+    if (body.model !== undefined && body.model !== MODEL_TEST_MODEL) return json(res, 400, { error: 'MODEL_NOT_ALLOWED' });
+    if (body.stream === true) return json(res, 400, { error: 'STREAM_UNSUPPORTED' });
+    const maxTokens = body.max_tokens === undefined ? 256 : Number(body.max_tokens);
+    if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > MODEL_TEST_MAX_TOKENS) {
+      return json(res, 400, { error: 'BAD_MAX_TOKENS', max: MODEL_TEST_MAX_TOKENS });
+    }
+    if (!modelTestRate.take()) {
+      res.setHeader('retry-after', String(Math.ceil(modelTestRate.state().refillMs / 1000)));
+      return json(res, 429, { error: 'RATE_LIMITED' });
+    }
+    modelTestInFlight += 1;
+    try {
+      const job = brainRelay.submit({ ...body, model: MODEL_TEST_MODEL, max_tokens: maxTokens });
+      if (!job) return json(res, 503, { error: 'RELAY_BUSY' });
+      const r = await job.promise;
+      if (!r.ok) return json(res, r.code === 'RELAY_TIMEOUT' ? 504 : 502, { error: String(r.code ?? 'RELAY_FAILED') });
+      return json(res, 200, completionPayload(r));
+    } finally {
+      modelTestInFlight -= 1;
+    }
+  }
+
   // BUG-8：鉴权 → 与 modelBrain 同一套预算/在场闸门 → 才转发。
   // 引擎侧入口：请求体原样转给节点，这层绝不解释内容；响应拼成 OpenAI 形状给 host.postChat 读。
   if (req.method === 'POST' && p === '/brain/v1/chat/completions') {
@@ -693,11 +766,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     if (!job) return json(res, 503, { error: 'RELAY_BUSY' }); // 队列满：让引擎立刻退回下一个供应商，不排队堆积
     const r = await job.promise;
     if (!r.ok) return json(res, r.code === 'RELAY_TIMEOUT' ? 504 : 502, { error: String(r.code ?? 'RELAY_FAILED') });
-    return json(res, 200, {
-      object: 'chat.completion',
-      choices: [{ index: 0, message: { role: 'assistant', content: String(r.content ?? '') }, finish_reason: String(r.finish_reason ?? 'stop') }],
-      usage: r.usage && typeof r.usage === 'object' ? r.usage : {}
-    });
+    return json(res, 200, completionPayload(r));
   }
   if (req.method !== 'GET' && (p === '/brain/claim' || p === '/brain/result' || p === '/brain/stats')) {
     if (!RELAY_TOKEN) return json(res, 404, { error: 'NOT_FOUND' });

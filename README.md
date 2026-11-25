@@ -147,16 +147,29 @@ MAX_CALLS_PER_TICK= # 单拍模型调用上限；0＝不设上限（默认）
 
 ```bash
 npm run lint      # 静态检查：语法 + import 图 + JSON + 引擎纪律 + 测试纪律
-npm test          # 233 个测试文件 / 1315 条检查（发现式点名 life/*.test.mjs，不会漏文件；2026-11-22 全绿口径）
+npm test          # 234 个测试文件 / 1324 条检查（发现式点名 life/*.test.mjs，不会漏文件；2026-11-25 全绿口径）
 npm run coverage  # 同上 + Node 内建覆盖率（2026-11-21 实跑：行 90.58% / 分支 85.84% / 函数 89.62%；插桩下 1258/1261，2–3 条时序/环境用例红，**非全绿**，见 EVIDENCE.md §四）
-node scripts/test-ids.mjs # 判据编号盘点：1311 条 test/describe/it 标题 · 1034 条带 ID · 1034 个唯一 ID · 0 重复（重复即 exit 1，已钉进 npm run check 第 9 项）
+node scripts/test-ids.mjs # 判据编号盘点：1320 条 test/describe/it 标题 · 1043 条带 ID · 1043 个唯一 ID · 0 重复（重复即 exit 1，已钉进 npm run check 第 9 项）
 npm run art       # 重钉美术指纹：对 web/assets 每张 PNG 取 sha256 写入 art-hashes.json（改图后必须显式跑）
 npm run art:check # 校验美术指纹：任何一张与留底不一致即 exit 1
 npm run check     # lint + art:check + test
 npm run smoke:online # 线上冒烟：只读检查 + 写路径拒绝检查（SMOKE_URL / SMOKE_COOKIE / SMOKE_TOKEN）
 ```
 
-本次口径依据本地日志 `docs/battery-harness-check-20261122.log`（未随仓库发布，可运行上述命令复核）：233 个测试文件、1309/1309 检查通过。ID 按标题开头的**完整记号**统计：1028 个唯一 ID；复合号不拆分，0 重复不表示拆号后无歧义。历史覆盖率与研究读数保留原日期，不以本地测试证明线上状态。当前线上 token 配置/轮换、浏览器验收及多人采样尚未找到当前证据，均待核实。
+本次口径依据本地日志 `docs/evidence/model-test-check.log`（未随仓库发布，可运行上述命令复核）：234 个测试文件、1324/1324 检查通过。ID 按标题开头的**完整记号**统计：1043 个唯一 ID；复合号不拆分，0 重复不表示拆号后无歧义。历史覆盖率与研究读数保留原日期，不以本地测试证明线上状态。
+
+### 独立模型测试入口
+
+生产镜像默认启用 `/test/v1/chat/completions`，本地默认关闭。它复用赛事节点模型，但限制为每分钟 6 次、最多 2 个在途、单次 512 token、请求体 16KB；令牌优先读 `MODEL_TEST_TOKEN`，未配置时复用 `BRAIN_RELAY_TOKEN`。
+
+```bash
+# 令牌放在环境变量或用户目录的 0600 文件，不要写进仓库/前端
+set -a; source ~/.ambrace-model-test.env; set +a
+npm run test:model -- "用一句话解释递归"
+npm run test:model -- --json --max-tokens 128 "列出三种排序"
+```
+
+CLI 使用浏览器 UA 和 `test_token` 查询参数，不带 `Authorization`；适合低频小测试，不适合压测或批量任务。
 
 **为什么美术也要指纹**：研究面早有"五份面 md5"钉死，但素材没有指纹时，"改图"只能靠肉眼发现——重生成、覆盖稿、别人提交一张图都可能在无人察觉时改变游戏外观。`art:check` 把外观也纳入"改了就必须在提交里承认"的纪律（与五份面同源思路）。哈希对 PNG 字节取，Node 大版本升级可能改变压缩输出（像素相同、字节不同）⇒ 那时 `--check` 会红，逼你显式重钉并在 CHANGELOG 说明"只是压缩器变了"。
 

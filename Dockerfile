@@ -10,6 +10,7 @@ WORKDIR /app
 # 对话车道（玩家自由输入 + 话题按钮）会往同一个队列里加请求，而审议/居民互聊也在里面；
 # 队列满时引擎拿到 RELAY_BUSY 直接退模板。平台变量表里没有这个键，所以镜像 ENV 说得出话
 # （已列出的 TTL/超时那类只能平台侧改：容器运行时 env 优先于镜像 ENV）。
+# MODEL_TEST_* 只是公开测试入口的非敏感限额；令牌仍从运行时 BRAIN_RELAY_TOKEN / MODEL_TEST_TOKEN 读。
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=7860 \
@@ -17,6 +18,12 @@ ENV NODE_ENV=production \
     GAME_RULES=1 \
     GAME_MS_PER_MINUTE=6000 \
     BRAIN_RELAY_PENDING=16 \
+    MODEL_TEST_ENABLED=1 \
+    MODEL_TEST_MAX_TOKENS=512 \
+    MODEL_TEST_MAX_BYTES=16384 \
+    MODEL_TEST_MAX_INFLIGHT=2 \
+    MODEL_TEST_RATE_CAPACITY=2 \
+    MODEL_TEST_RATE_REFILL_MS=10000 \
     TICK_MS=360000 \
     DATA_DIR=/data
 

@@ -27,6 +27,7 @@
     "actions": "node scripts/gen-actions.mjs",
     "serve": "node serve.mjs",
     "smoke:online": "node scripts/smoke-online.mjs",
+    "test:model": "node scripts/model-test.mjs",
     "benchmark": "node scripts/score-baseline.mjs",
     "quickstart:browser": "node scripts/quickstart-browser.mjs",
     "ghost:browser": "node scripts/v13-ghost-browser.mjs"
