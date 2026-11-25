@@ -68,6 +68,7 @@ test('MODELTEST-02 查询参数令牌可走通 OpenAI 兼容往返，模型由�
     });
     assert.equal(res.status, 200);
     assert.equal(job.body.model, 'qwen3.8-27b');
+    assert.equal(job.body.chat_template_kwargs?.enable_thinking, false, '测试入口必须关闭 Qwen3.8 思考，避免思考标签泄漏到正文');
     assert.equal(json.object, 'chat.completion');
     assert.equal(json.choices[0].message.content, '测试回复');
     assert.equal(json.usage.total_tokens, 7);

@@ -12,6 +12,7 @@ import { gzipSync } from 'node:zlib';
 import { normalizeName, buildCampExport, importCampExport } from './life/camp-instances.mjs';
 import { createRelay, constantTimeEqual } from './life/brain-relay.mjs';
 import { createTokenBucket } from './life/sim-clock.mjs';
+import { withNoThink } from './life/model-adapter.mjs';
 
 const ROOT = resolve('.');
 // 魔搭创空间 Docker 约定监听 0.0.0.0:7860
@@ -745,7 +746,7 @@ if (req.method === 'GET' && (p === '/' || p === '/index.html')) host.touch('entr
     }
     modelTestInFlight += 1;
     try {
-      const job = brainRelay.submit({ ...body, model: MODEL_TEST_MODEL, max_tokens: maxTokens });
+      const job = brainRelay.submit(withNoThink({ ...body, model: MODEL_TEST_MODEL, max_tokens: maxTokens }, MODEL_TEST_MODEL));
       if (!job) return json(res, 503, { error: 'RELAY_BUSY' });
       const r = await job.promise;
       if (!r.ok) return json(res, r.code === 'RELAY_TIMEOUT' ? 504 : 502, { error: String(r.code ?? 'RELAY_FAILED') });
